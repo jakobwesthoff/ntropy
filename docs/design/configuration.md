@@ -46,8 +46,23 @@ field = "status"
 Templates are not in config; they live as files under `<vault>/.ntropy/templates/`
 (`default.md` in v1, ADR 0017).
 
+## Project-local vault pointer
+
+A directory anywhere above the cwd may carry a `.ntropy-vault` marker file
+(ADR 0026) whose single line is a path to the vault — relative to the marker's
+own directory, or absolute, or `~`-prefixed. The cwd walk-up honors it, so a
+project can point at a vault (nested or external) and ntropy uses it from any
+subdirectory. The pointer wins over a `.ntropy/` dir in the same directory; a
+broken pointer is a hard error.
+
+```text
+# project/.ntropy-vault
+./notes
+```
+
 ## Reserved names
 
 Within a vault, `all-notes`, `.ntropy`, and any configured view `name` are
 reserved (ADR 0007). A view `name` must not collide with `all-notes` or another
-view.
+view. `.ntropy-vault` is reserved as the pointer-file name during walk-up
+(ADR 0026).
