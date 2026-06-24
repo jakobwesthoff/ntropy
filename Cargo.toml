@@ -2,5 +2,10 @@
 name = "ntropy"
 version = "0.1.0"
 edition = "2024"
+authors = ["Jakob Westhoff <jakob@westhoffswelt.de>"]
+description = "An opinionated Markdown note-taking and management CLI."
+homepage = "http://westhoffswelt.de"
+repository = "https://github.com/jakobwesthoff/ntropy"
+license = "MPL-2.0"
 
 [dependencies]
