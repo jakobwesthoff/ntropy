@@ -31,6 +31,10 @@ clap-based subcommands. v1 surface:
   definitions.
 - `tags` — list all tags with counts.
 
+`search` and `new` take their free text as the joined trailing arguments
+(`ntropy search tag:work and status:done`, `ntropy new My great note`). A bare
+`ntropy` with no subcommand prints help.
+
 ## Consequences
 
 - One verb (`search`) covers filtering and full-text via the DSL, so there is

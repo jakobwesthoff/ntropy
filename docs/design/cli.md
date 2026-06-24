@@ -9,8 +9,10 @@ The command surface and its behavior. Consolidates
 
 ## Global behavior
 
-- **Vault resolution:** `--vault <path>` > `$NTROPY_VAULT` > cwd walk-up to the
-  nearest ancestor containing `.ntropy/` > global config default vault.
+- **Vault resolution:** `--vault <path>` > `$NTROPY_VAULT` > cwd walk-up
+  (nearest ancestor with either a `.ntropy-vault` pointer file or a `.ntropy/`
+  dir; the pointer wins in the same dir) > global config default vault. See
+  [ADR 0026](../adr/0026-project-local-vault-pointer-file.md).
 - **Interactivity:** interactive on a TTY, non-interactive when piped.
   `--non-interactive` / `-n` forces non-interactive.
 - **Output:** decorated for a TTY; when piped/`-n`, a tab-separated table of
@@ -18,6 +20,9 @@ The command surface and its behavior. Consolidates
   JSON in v1.
 - **Ordering:** results are newest first (creation time descending) by default.
 - **Editor:** `$VISUAL` then `$EDITOR`; error if neither is set.
+- **Bare `ntropy`:** with no subcommand, prints help.
+- **Free-text args:** `search` and `new` join their trailing arguments into one
+  string (the query / the title).
 
 ## Commands
 
@@ -48,8 +53,8 @@ Examples:
 
     ntropy search                       # all notes
     ntropy search tag:work
-    ntropy search 'tag:work and not status:done'
-    ntropy search 'text:"deadline"'
+    ntropy search tag:work and not status:done   # trailing args joined
+    ntropy search 'text:"deadline"'     # quote phrases for the shell
     ntropy search tag:work -n           # print, don't pick
 
 ### `edit <id|query>`
