@@ -18,11 +18,17 @@ convention:
 
     tags: [programming/rust, programming/cli, area/work]
 
-ntropy interprets the slash for prefix filtering (`programming` matches both
-children) and for nested view directories (`programming/rust` →
-`programming/rust/`). The slash maps onto directories and matches the Obsidian
-convention. A nested YAML structure was rejected as harder to author and
-parse with no advantage.
+ntropy interprets the slash for filtering and for nested view directories
+(`programming/rust` → `programming/rust/`). The slash maps onto directories and
+matches the Obsidian convention. A nested YAML structure was rejected as harder
+to author and parse with no advantage.
+
+Filter matching is a segment sub-path match (refined in
+[ADR 0023](0023-slug-tag-and-disambiguator-normalization-rules.md) and the
+query design): a query's `/`-separated segments match a tag when they occur as a
+contiguous run of full segments anywhere within that tag, so `programming`
+matches `programming`, `programming/rust` and `area/programming`. This is
+broader than an ancestor-only prefix match.
 
 ## Consequences
 

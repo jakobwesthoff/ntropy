@@ -24,6 +24,7 @@ pub mod id;
 pub mod text;
 
 pub mod note;
+pub mod query;
 pub mod scan;
 
 /// Common re-exports for callers of the library.

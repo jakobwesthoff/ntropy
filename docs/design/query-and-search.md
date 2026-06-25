@@ -23,27 +23,36 @@ Precedence: `not` > `and` > `or`. Parentheses override.
     unary   := "not" unary | primary
     primary := "(" or ")" | predicate
     predicate :=
-          "tag" ":" value      -- hierarchical prefix match
-        | "text" ":" string    -- full-text in the body
-        | field ":" value      -- frontmatter equality / list membership
-        | value                -- bare term: shorthand for text:value
-        | string               -- bare quoted phrase: shorthand for text:phrase
+          "tag" ":" (value | string)   -- segment sub-path match
+        | "text" ":" (value | string)  -- full-text regex over the body
+        | field ":" (value | string)   -- frontmatter equality / list membership
+        | value                        -- bare term: shorthand for text:value
+        | string                       -- bare quoted phrase: shorthand for text:phrase
 
-`value` is a bare word (letters, digits, `/`, `_`, `-`); `string` is
-double-quoted. Keywords (`and`/`or`/`not`) are lexed as ordinary words and
-disambiguated by position, so `field:or` is a valid predicate. A bare word or
-quoted string that is not followed by `:` is shorthand for a `text:` predicate,
-so `ntropy search foobar` searches bodies and `foobar and tag:work` combines
-with operators.
+`value` is a bare word (Unicode letters, digits, `/`, `_`, `-`); `string` is
+double-quoted and may contain spaces and regex metacharacters (with `\"` and
+`\\` escapes). Any predicate value may be either form, so a multi-word value is
+written quoted (`status:"in progress"`). Keywords (`and`/`or`/`not`) are lexed
+as ordinary words and disambiguated by position, so `field:or` is a valid
+predicate. A bare word or quoted string that is not followed by `:` is
+shorthand for a `text:` predicate, so `ntropy search foobar` searches bodies and
+`foobar and tag:work` combines with operators.
 
 ### Predicate semantics
 
-- `tag:programming` matches a note whose `tags` contain `programming` or any
-  descendant (`programming/rust`), per the slash hierarchy (ADR 0006).
+- `tag:Q` is a **segment sub-path match**: `Q` and each note tag are split on
+  `/`, and `Q` matches when its segment list appears as a contiguous run of full
+  segments anywhere within a note tag's segments. So `tag:programming` matches
+  `programming`, `programming/rust`, `area/programming` and
+  `area/programming/cli`; `tag:programming/rust` matches any tag containing that
+  consecutive chain. Segments are normalized (ADR 0023), so the match is
+  case-insensitive (ADR 0006).
 - `field:value` matches when the frontmatter scalar equals `value`, or when a
-  list-valued field contains it.
-- `text:"phrase"` matches when the note body matches, evaluated by the embedded
-  grep engine (ADR 0011).
+  list-valued field contains it (exact, case-sensitive).
+- `text:` (and the bare-term shorthand) is a **regex** evaluated by the embedded
+  grep engine over the note body (ADR 0011), compiled with **smart-case**:
+  case-insensitive unless the pattern contains an uppercase letter. An invalid
+  regex is a query error.
 
 Comparison operators (`>`, `<`, `>=`, `<=`, for date/value ranges) are out of
 v1 scope; the grammar is designed to add them as new tokens plus one predicate

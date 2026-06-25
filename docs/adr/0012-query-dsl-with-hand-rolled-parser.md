@@ -20,8 +20,13 @@ A query DSL is the single filtering mechanism, unifying `list` and full-text
 
 v1 grammar (precedence `not > and > or`):
 
-- predicates: `tag:value` (hierarchical prefix match), `field:value`
-  (equality; membership for list fields), `text:"phrase"` (body full-text)
+- predicates: `tag:value` (segment sub-path match, ADRs 0006/0023),
+  `field:value` (equality; membership for list fields), `text:value` (body
+  full-text regex)
+- any predicate value is a bare word or a double-quoted string, so multi-word
+  values are quoted (`status:"in progress"`)
+- `text:` and bare-term patterns are regexes evaluated by the embedded grep
+  engine with smart-case (ADR 0011); an invalid regex is a query error
 - bare-term shorthand: a bare word or quoted string not followed by `:` is a
   `text:` predicate, combinable with operators (`foobar and tag:work`)
 - operators: `and`, `or`, `not`, parentheses

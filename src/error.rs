@@ -16,6 +16,7 @@ use crate::datetime::DateError;
 use crate::fsutil::FsError;
 use crate::id::IdError;
 use crate::note::NoteError;
+use crate::query::QueryError;
 use crate::scan::ScanError;
 
 /// The unified error type returned across the library surface.
@@ -40,6 +41,10 @@ pub enum Error {
     /// A vault scan could not run.
     #[error(transparent)]
     Scan(#[from] ScanError),
+
+    /// A query could not be parsed or compiled.
+    #[error(transparent)]
+    Query(#[from] QueryError),
 }
 
 /// Convenience alias for results carrying the crate [`Error`].
