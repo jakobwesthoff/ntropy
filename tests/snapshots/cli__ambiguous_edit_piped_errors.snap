@@ -1,0 +1,22 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "--vault"
+    - /var/folders/sy/j_tvsf5n5g3055p026gwzw1c0000gn/T/.tmpmslBu0
+    - edit
+    - "tag:work"
+    - "-n"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: `tag:work` is ambiguous (2 matches):
+  [ULID]	Beta
+  [ULID]	Alpha
+refine the query or pass a full ULID

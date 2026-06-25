@@ -4,31 +4,28 @@
 
 //! The `ntropy` binary: a thin CLI/UI/process shell over the headless library.
 //!
-//! Top-level error handling uses `anyhow` (ADR 0013); the library's semantic
-//! errors collapse to human-facing messages here. Cargo auto-discovers this
-//! file as the `ntropy` binary because it lives at `src/bin/ntropy/main.rs`,
-//! so there is no `[[bin]]` stanza and no `src/main.rs`.
+//! Top-level error handling uses `anyhow` (ADR 0013): the library's semantic
+//! errors collapse to one human-facing message printed to stderr, and the
+//! process exits non-zero. Cargo auto-discovers this file as the `ntropy`
+//! binary because it lives at `src/bin/ntropy/main.rs`.
 
-use anyhow::Result;
-use clap::{CommandFactory, Parser};
+mod cli;
+mod run;
 
-/// The full command surface is built out in a later phase. For now the binary
-/// establishes the entrypoint and honors the "bare `ntropy` prints help"
-/// contract (ADR 0018).
-#[derive(Parser)]
-#[command(
-    name = "ntropy",
-    version,
-    about = "An opinionated Markdown note-taking and management CLI."
-)]
-struct Cli {}
+use std::process::ExitCode;
 
-fn main() -> Result<()> {
-    let _cli = Cli::parse();
+use clap::Parser;
 
-    // With no subcommands wired up yet, every successful parse means a bare
-    // invocation, which prints help.
-    Cli::command().print_help()?;
-    println!();
-    Ok(())
+use crate::cli::Cli;
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    match run::run(cli) {
+        Ok(code) => code,
+        Err(error) => {
+            // `{:#}` renders the full anyhow context chain on one line.
+            eprintln!("error: {error:#}");
+            ExitCode::FAILURE
+        }
+    }
 }

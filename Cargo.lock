@@ -731,6 +731,7 @@ dependencies = [
  "jiff",
  "nucleo",
  "nucleo-picker",
+ "regex",
  "serde",
  "serde_yaml_ng",
  "tempfile",

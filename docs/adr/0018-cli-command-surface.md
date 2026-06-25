@@ -25,11 +25,17 @@ clap-based subcommands. v1 surface:
   piped or with `-n`/`--non-interactive` it prints plainly. There is no
   separate `list` command.
 - `edit <id|query>` — open a specific note directly, bypassing the picker when
-  unambiguous.
+  unambiguous. The selector is a full 26-char ULID (resolved to that id) or
+  otherwise a DSL query.
+- `delete <id|query>` — remove a note and refresh views; `--force`/`-f` skips
+  the confirmation prompt. Same selector rule as `edit`.
 - `reconcile` — realign filenames and rebuild views.
-- `view list|add|edit|remove` — CRUD over per-vault materialized view
-  definitions.
-- `tags` — list all tags with counts.
+- `view list|add|remove` — manage per-vault materialized view definitions.
+  There is no `view edit` (editing is remove + add).
+- `tags` — list distinct full tags with note counts.
+
+`init` is idempotent and only writes the global default vault when passed
+`--set-default`.
 
 `search` and `new` take their free text as the joined trailing arguments
 (`ntropy search tag:work and status:done`, `ntropy new My great note`). A bare

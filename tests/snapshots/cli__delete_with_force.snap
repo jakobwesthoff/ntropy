@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "--vault"
+    - /var/folders/sy/j_tvsf5n5g3055p026gwzw1c0000gn/T/.tmpNkLIDh
+    - delete
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - "-f"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Deleted [ULID]-doomed.md
+
+----- stderr -----

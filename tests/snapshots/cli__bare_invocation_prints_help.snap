@@ -9,11 +9,25 @@ exit_code: 0
 ----- stdout -----
 An opinionated Markdown note-taking and management CLI.
 
-Usage: ntropy
+Usage: ntropy [OPTIONS] [COMMAND]
+
+Commands:
+  init       Initialize a vault (idempotent)
+  new        Create a note from the default template and open it
+  search     Browse, filter or full-text search notes
+  edit       Open a specific note by id or query
+  reconcile  Realign drifted filenames and rebuild views
+  delete     Delete a note by id or query
+  view       Manage materialized view definitions
+  tags       List all tags with note counts
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
-  -h, --help     Print help
-  -V, --version  Print version
+      --vault <PATH>     Operate on the vault at this path (overrides all other resolution)
+  -n, --non-interactive  Force non-interactive (plain) behavior even on a TTY
+      --strict           Treat malformed/badly-named notes as errors instead of warnings
+  -h, --help             Print help
+  -V, --version          Print version
 
 
 ----- stderr -----

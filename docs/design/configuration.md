@@ -20,8 +20,10 @@ v1 holds a single field:
 default_vault = "/Users/jakob/notes"
 ```
 
-The editor is taken from `$VISUAL`/`$EDITOR` (ADR 0015), not config. There is
-no color setting (v1 is plain, ADR 0024).
+`default_vault` is written only by `ntropy init --set-default` (or by editing
+the file by hand). Without `--set-default`, `init` never touches the global
+config. The editor is taken from `$VISUAL`/`$EDITOR` (ADR 0015), not config.
+There is no color setting (v1 is plain, ADR 0024).
 
 ## Per-vault config
 

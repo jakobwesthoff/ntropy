@@ -17,6 +17,7 @@ use crate::datetime::DateError;
 use crate::fsutil::FsError;
 use crate::id::IdError;
 use crate::note::NoteError;
+use crate::ops::ViewAdminError;
 use crate::query::QueryError;
 use crate::scan::ScanError;
 use crate::template::TemplateError;
@@ -60,6 +61,10 @@ pub enum Error {
     /// A template file could not be read.
     #[error(transparent)]
     Template(#[from] TemplateError),
+
+    /// A view administration command was rejected.
+    #[error(transparent)]
+    ViewAdmin(#[from] ViewAdminError),
 }
 
 /// Convenience alias for results carrying the crate [`Error`].

@@ -9,5 +9,15 @@
 //! editor. The binary's `run` layer supplies all of that around these.
 
 pub mod create;
+pub mod delete;
+pub mod init;
+pub mod select;
+pub mod tags;
+pub mod view_admin;
 
 pub use create::create_note;
+pub use delete::delete_note;
+pub use init::init_vault;
+pub use select::{Candidate, Matches, resolve_selection, search, to_candidates};
+pub use tags::{TagCount, list_tags};
+pub use view_admin::{ViewAdminError, add_view, list_views, remove_view};

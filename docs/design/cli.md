@@ -29,7 +29,16 @@ The command surface and its behavior. Consolidates
 ### `init [path]`
 
 Initialize a vault at `path` (or the current directory): create `all-notes/`,
-`.ntropy/`, a default template, and per-vault config.
+`.ntropy/`, the default template (`.ntropy/templates/default.md`), and the
+per-vault config seeded with a `by-tag` view (and its `by-tag/` directory).
+
+The default template is frontmatter `title: {{title}}` plus `tags: []` followed
+by a `# {{title}}` body heading.
+
+`init` is **idempotent**: it creates whatever is missing, leaves existing
+pieces untouched, and succeeds either way. It does **not** touch the global
+config unless `--set-default` is passed, which records this vault as the global
+`default_vault`.
 
 ### `new <title>`
 
@@ -64,24 +73,38 @@ to a single note. Reconciles on exit like `new`. On an ambiguous match: a TTY
 opens the picker pre-filtered to the matches; piped/`-n` errors and prints the
 matches to stderr (non-zero exit).
 
+The selector rule (shared with `delete`): an argument that is a full 26-char
+ULID resolves directly to that note's id; anything else is parsed as a DSL
+query.
+
+### `delete <id|query>`
+
+Remove a note (its canonical file) and refresh the views. The selector follows
+the same id-or-query rule as `edit`. Deletion prompts for confirmation unless
+`--force`/`-f` is given. An ambiguous selector behaves like `edit` (a TTY opens
+the picker pre-filtered; piped/`-n` errors with a non-zero exit). In
+non-interactive mode `--force` is required, since there is no prompt.
+
 ### `reconcile`
 
 Realign filenames whose slugs drifted from their titles after out-of-band
 edits, and rebuild the materialized view trees.
 
-### `view list|add|edit|remove`
+### `view list|add|remove`
 
-CRUD over per-vault materialized view definitions (each pairs an output
-directory with a frontmatter field; see
-[vault-layout-and-views.md](vault-layout-and-views.md)).
+Manage per-vault materialized view definitions (each pairs an output directory
+with a frontmatter field; see
+[vault-layout-and-views.md](vault-layout-and-views.md)). There is no `view
+edit` in v1; editing a view is remove + add.
 
-- `view list` — list configured views.
-- `view add <name> --field <field>` — define a new view (the view's directory
-  is its name; grouping values are always normalized, ADR 0009/0023, so there
-  is no case flag).
-- `view edit <name> …` — modify a view.
+- `view list` — list configured views (`name<TAB>field`).
+- `view add <name> --field <field>` — define a new view and materialize it (the
+  view's directory is its name; grouping values are always normalized, ADR
+  0009/0023, so there is no case flag). The name must not be reserved
+  (`all-notes`, `.ntropy`) or already in use.
 - `view remove <name>` — delete a view definition and its directory.
 
 ### `tags`
 
-List all tags across the vault with note counts.
+List all distinct full tag strings across the vault with their note counts,
+sorted alphabetically (`tag<TAB>count`).

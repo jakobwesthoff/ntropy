@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "--vault"
+    - /var/folders/sy/j_tvsf5n5g3055p026gwzw1c0000gn/T/.tmptiAeEf
+    - search
+    - "-n"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[ULID]	Good	[VAULT]/all-notes/[ULID]-good.md
+
+----- stderr -----
+warning: skipped `[ULID]-bad.md`: the frontmatter has no `title` field

@@ -1,0 +1,18 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "--vault"
+    - /var/folders/sy/j_tvsf5n5g3055p026gwzw1c0000gn/T/.tmpFXLbOl
+    - tags
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+area/work	2
+programming/rust	1
+
+----- stderr -----
