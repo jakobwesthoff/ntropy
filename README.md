@@ -13,8 +13,93 @@ note's identity is stable and independent of its title, and any hierarchy you
 want to browse is a derived projection of the metadata rather than the
 canonical storage.
 
-The design is documented as decision records under [`docs/adr/`](docs/adr/) and
-narrative design documents under [`docs/design/`](docs/design/).
+## How it works
+
+A vault is a directory with a few well-known children:
+
+    <vault>/
+      all-notes/   canonical notes, named <ulid>-<slug>.md (the source of truth)
+      by-tag/      a materialized view: a symlink tree grouped by the tags field
+      .ntropy/     config and templates
+
+Each note's identity is the leading ULID in its filename, so renaming the title
+never breaks links. The readable date and any browsable hierarchy are *derived*:
+views are symlink trees pointing back into `all-notes/`, regenerated on demand.
+
+Unix only (macOS, Linux); views rely on symlinks.
+
+## Install
+
+    cargo install --path .   # from a checkout
+
+Set `$VISUAL` or `$EDITOR`; ntropy opens notes in it and refuses to guess.
+
+## Quick start
+
+    ntropy init ~/notes          # scaffold a vault (seeds a by-tag view)
+    cd ~/notes
+    ntropy new My first note     # create from the template, then open the editor
+
+Inside a vault, ntropy finds it by walking up from the current directory, so no
+flags are needed. From elsewhere, point at it with `--vault <path>`,
+`$NTROPY_VAULT`, a `.ntropy-vault` pointer file, or a global default vault
+(`ntropy init --set-default`).
+
+## Commands
+
+- `init [path]` — scaffold (or complete) a vault; idempotent. `--set-default`
+  records it as the global default.
+- `new <title>` — create a note from the template and open it. `--no-edit`
+  (`--print`) just prints the path.
+- `search [query]` — the one browse/filter/full-text entry point. On a TTY it
+  opens an interactive fuzzy picker; piped or with `-n` it prints plain lines.
+- `edit <id|query>` — open a note directly. A full ULID resolves to that note;
+  anything else is a query. Ambiguous matches open a pre-filtered picker (or
+  error when non-interactive).
+- `delete <id|query>` — remove a note and refresh views (`-f` skips the prompt).
+- `reconcile` — realign filenames whose slug drifted from the title, and rebuild
+  every view (catches up after edits made outside ntropy).
+- `view list|add|remove` — manage views, e.g. `ntropy view add by-status --field status`.
+- `tags` — list every tag with its note count.
+
+Global flags (any command): `--vault <path>`, `-n`/`--non-interactive`,
+`--strict` (treat malformed/badly-named notes as errors instead of warnings).
+
+Non-interactive output is a tab-separated `id<TAB>title<TAB>path` table, newest
+first, so `awk`/`cut` and pipelines work directly.
+
+## Query language
+
+`search`, `edit` and `delete` share one DSL (precedence `not` > `and` > `or`,
+parentheses override):
+
+    ntropy search tag:work and not status:done
+    ntropy search 'status:"in progress"'
+    ntropy search 'text:"deadline" or tag:urgent'
+    ntropy search rust            # a bare word is shorthand for text:rust
+
+- `tag:x` — hierarchical match: `x`'s `/`-segments must appear as a contiguous
+  run anywhere in a note tag (`tag:programming` matches `programming/rust` and
+  `area/programming`). Case-insensitive.
+- `field:value` — frontmatter equality, or membership for a list field. Quote
+  multi-word values.
+- `text:…` (and bare words/phrases) — a regex over the note body, smart-case
+  (case-insensitive unless the pattern has an uppercase letter).
+
+## Views
+
+A view pairs an output directory with a frontmatter field. `by-tag` (on `tags`)
+is seeded by `init`; add more like `ntropy view add by-status --field status`.
+List fields fan a note out across values, a `/` in a value nests into
+subdirectories, and grouping values are normalized (lowercased, slugified). The
+result is a browsable symlink tree any tool (a file manager, `grep`, your
+editor) can navigate, kept fresh after every ntropy mutation and by
+`reconcile`.
+
+## Design
+
+The full design is recorded as decision records under [`docs/adr/`](docs/adr/)
+and narrative documents under [`docs/design/`](docs/design/).
 
 ## License
 
