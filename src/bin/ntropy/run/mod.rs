@@ -41,7 +41,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     // `init` is the one command that does not operate on an already-resolved
     // vault, so it is handled before resolution.
     if let Command::Init { path, set_default } = command {
-        return cmd_init(path, set_default);
+        return cmd_init(path, cli.global.vault.clone(), set_default);
     }
 
     let vault = resolve_vault(&cli.global)?;
@@ -83,10 +83,17 @@ fn resolve_vault(global: &GlobalArgs) -> Result<Vault> {
 // Commands
 // =============================================================================
 
-fn cmd_init(path: Option<PathBuf>, set_default: bool) -> Result<ExitCode> {
-    let target = match path {
-        Some(p) => p,
-        None => std::env::current_dir().context("while reading the current directory")?,
+fn cmd_init(path: Option<PathBuf>, vault: Option<PathBuf>, set_default: bool) -> Result<ExitCode> {
+    // The positional path and the global `--vault` are two ways to name the same
+    // target, so requiring exactly one keeps the destination unambiguous. With
+    // neither, `init` scaffolds the current directory.
+    let target = match (path, vault) {
+        (Some(_), Some(_)) => {
+            bail!("pass the target as either `--vault` or the positional path, not both")
+        }
+        (Some(p), None) => p,
+        (None, Some(v)) => v,
+        (None, None) => std::env::current_dir().context("while reading the current directory")?,
     };
     let report = ops::init_vault(&target).context("while initializing the vault")?;
 

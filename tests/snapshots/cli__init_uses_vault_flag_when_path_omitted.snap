@@ -1,0 +1,15 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "--vault"
+    - via-flag
+    - init
+---
+success: true
+exit_code: 0
+----- stdout -----
+Initialized vault at via-flag
+
+----- stderr -----

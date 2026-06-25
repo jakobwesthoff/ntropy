@@ -1,0 +1,16 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "--vault"
+    - from-flag
+    - init
+    - from-arg
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: pass the target as either `--vault` or the positional path, not both

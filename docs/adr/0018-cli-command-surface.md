@@ -35,7 +35,9 @@ clap-based subcommands. v1 surface:
 - `tags` — list distinct full tags with note counts.
 
 `init` is idempotent and only writes the global default vault when passed
-`--set-default`.
+`--set-default`. Its target is the positional path or, when that is omitted, the
+global `--vault`; passing both is an error, and with neither it scaffolds the
+current directory.
 
 `search` and `new` take their free text as the joined trailing arguments
 (`ntropy search tag:work and status:done`, `ntropy new My great note`). A bare

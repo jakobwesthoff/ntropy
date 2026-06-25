@@ -28,9 +28,13 @@ The command surface and its behavior. Consolidates
 
 ### `init [path]`
 
-Initialize a vault at `path` (or the current directory): create `all-notes/`,
-`.ntropy/`, the default template (`.ntropy/templates/default.md`), and the
-per-vault config seeded with a `by-tag` view (and its `by-tag/` directory).
+Initialize a vault at `path`: create `all-notes/`, `.ntropy/`, the default
+template (`.ntropy/templates/default.md`), and the per-vault config seeded with
+a `by-tag` view (and its `by-tag/` directory).
+
+The target is the positional `path` or, when it is omitted, the global
+`--vault`. Passing both is an error (they name the same thing two ways); with
+neither, `init` scaffolds the current directory.
 
 The default template is frontmatter `title: {{title}}` plus `tags: []` followed
 by a `# {{title}}` body heading.

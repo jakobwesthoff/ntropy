@@ -47,8 +47,9 @@ flags are needed. From elsewhere, point at it with `--vault <path>`,
 
 ## Commands
 
-- `init [path]` — scaffold (or complete) a vault; idempotent. `--set-default`
-  records it as the global default.
+- `init [path]` — scaffold (or complete) a vault; idempotent. The target is
+  `path` or, if omitted, `--vault` (passing both is an error; with neither it
+  uses the current directory). `--set-default` records it as the global default.
 - `new <title>` — create a note from the template and open it. `--no-edit`
   (`--print`) just prints the path.
 - `search [query]` — the one browse/filter/full-text entry point. On a TTY it

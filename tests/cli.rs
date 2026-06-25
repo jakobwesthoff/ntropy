@@ -90,6 +90,38 @@ fn init_creates_and_is_idempotent() {
 }
 
 #[test]
+fn init_uses_vault_flag_when_path_omitted() {
+    let dir = tempfile::tempdir().expect("temp dir");
+
+    // Run from the temp dir with a relative `--vault`, so the printed path is
+    // stable and the cwd (which has no vault) is clearly not the target.
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
+    cmd.current_dir(dir.path());
+    cmd.args(["--vault", "via-flag", "init"]);
+    cmd.env_remove("NTROPY_VAULT");
+    assert_cmd_snapshot!(cmd);
+
+    assert!(dir.path().join("via-flag/.ntropy").exists());
+    // The cwd itself must not have become a vault.
+    assert!(!dir.path().join(".ntropy").exists());
+}
+
+#[test]
+fn init_rejects_path_and_vault_together() {
+    let dir = tempfile::tempdir().expect("temp dir");
+
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
+    cmd.current_dir(dir.path());
+    cmd.args(["--vault", "from-flag", "init", "from-arg"]);
+    cmd.env_remove("NTROPY_VAULT");
+    assert_cmd_snapshot!(cmd);
+
+    // Neither candidate target is created on the conflict.
+    assert!(!dir.path().join("from-flag").exists());
+    assert!(!dir.path().join("from-arg").exists());
+}
+
+#[test]
 fn new_no_edit_prints_path() {
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {

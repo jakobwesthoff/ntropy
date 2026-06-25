@@ -8,6 +8,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- `init` now honors the global `--vault` flag as the target when no positional
+  path is given, instead of silently scaffolding the current directory. Passing
+  both a path and `--vault` is rejected as a conflict.
+
 ### Changed
 
 - The interactive fuzzy picker is now rendered in-house over `nucleo` and
