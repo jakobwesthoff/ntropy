@@ -78,8 +78,9 @@ The single browse / filter / full-text entry point (visible alias: `list`).
 - Piped or `-n`: prints matching notes as plain lines.
 
 The picker (ADR 0027) draws on the alternate screen, bottom-anchored: the prompt
-sits on the last line above a divider carrying the `m/n` counter, and the result
-list grows upward with the best match nearest the prompt. Rows are an aligned
+is framed by a blue divider line above and below it, with the `m/n` counter
+dimmed and right-aligned beneath the lower divider, and the result list grows
+upward above the top divider with the best match nearest the prompt. Rows are an aligned
 title/date/tags grid (widths in Unicode display columns) with the note's ULID
 trailing dimmed and never matched. Type to filter; Backspace, Ctrl-W (delete
 word) and Ctrl-U (clear) edit the query; Up / Ctrl-P move toward worse matches

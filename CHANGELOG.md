@@ -36,8 +36,9 @@ and this project adheres to
   uppercase column header (docker-style). Strip it with `tail -n +2` if needed.
 - The interactive fuzzy picker is now rendered in-house over `nucleo` and
   `crossterm` instead of `nucleo-picker`. It is bottom-anchored: the query
-  prompt sits on the last line above a divider carrying the `m/n` counter, and
-  the result list grows upward with the best match nearest the prompt. Rows are
+  prompt is framed by a blue divider line above and below it, with the `m/n`
+  counter dimmed beneath the lower divider, and the result list grows upward
+  with the best match nearest the prompt. Rows are
   an aligned title/date/tags grid (widths measured in Unicode display columns)
   with the note's ULID shown dimmed and never matched. Matched characters are
   highlighted in yellow and the selected row in cyan with a `❯` pointer, all

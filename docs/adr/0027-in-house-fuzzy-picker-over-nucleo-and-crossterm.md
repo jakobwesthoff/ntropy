@@ -26,10 +26,11 @@ Render the picker in-house over the `nucleo` matcher (already a dependency) and
   replaced without touching call sites. `render_all` turns the whole item set
   into its rows in one pass so columns can be aligned across every candidate;
   each row's matchable text is also its fuzzy-match haystack.
-- The layout is bottom-anchored: the prompt sits on the last line, a divider
-  carrying the `m/n` counter (right-aligned) runs above it, and the result list
-  grows upward with the best match nearest the prompt. Rows are an aligned grid
-  of title, date and tags; the ULID trails as a dimmed, display-only suffix.
+- The layout is bottom-anchored: the prompt is framed by a (blue) divider line
+  above and below it, with the `m/n` counter shown dimmed and right-aligned
+  beneath the lower divider; the result list grows upward above the top divider
+  with the best match nearest the prompt. Rows are an aligned grid of title,
+  date and tags; the ULID trails as a dimmed, display-only suffix.
 - Matched characters are drawn in yellow and the selected row in cyan with a
   `❯` pointer. The colors come from the terminal's own ANSI palette, so the
   picker adapts to any light or dark theme. Match positions come from `nucleo`.

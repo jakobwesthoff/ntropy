@@ -127,13 +127,16 @@ fn run_loop<T>(
     }
 }
 
-/// The number of list rows that fit below the prompt and counter lines.
+/// The color of the divider lines that frame the prompt.
+const DIVIDER_COLOR: style::Color = style::Color::Blue;
+
+/// The number of list rows that fit above the divider/prompt/divider/stats chrome.
 fn list_height(terminal_rows: u16) -> usize {
-    (terminal_rows as usize).saturating_sub(2).max(1)
+    (terminal_rows as usize).saturating_sub(4).max(1)
 }
 
 /// Draw the whole picker, bottom-anchored: the list region (best match at the
-/// bottom), a divider carrying the counter, then the prompt on the last line.
+/// bottom), a divider, the prompt, a second divider, then the dimmed `m/n` stats.
 fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result<()> {
     queue!(
         stdout,
@@ -152,19 +155,31 @@ fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result
         }
     }
 
-    // Divider with the counter, directly above the prompt.
-    let (matching, total) = state.counter();
+    // Divider directly above the prompt.
     queue!(stdout, cursor::MoveTo(0, list_rows))?;
-    draw_divider(stdout, cols, matching, total)?;
+    draw_divider(stdout, cols)?;
 
-    // Prompt pinned to the bottom line; park the cursor at its end so typing
-    // reads naturally.
+    // Prompt, framed by a second divider below it.
     let prompt_row = list_rows + 1;
     queue!(
         stdout,
         cursor::MoveTo(0, prompt_row),
         style::Print(format!("❯ {}", state.query())),
+        cursor::MoveTo(0, prompt_row + 1),
     )?;
+    draw_divider(stdout, cols)?;
+
+    // Dimmed `m/n` stats under the second divider, right-aligned.
+    let (matching, total) = state.counter();
+    queue!(
+        stdout,
+        cursor::MoveTo(0, prompt_row + 2),
+        style::SetAttribute(Attribute::Dim),
+        style::Print(stats_line(cols as usize, matching, total)),
+        style::SetAttribute(Attribute::Reset),
+    )?;
+
+    // Park the cursor at the end of the query so typing reads naturally.
     let prompt_col = 2 + state.query().width() as u16;
     queue!(stdout, cursor::MoveTo(prompt_col, prompt_row))?;
 
@@ -172,31 +187,30 @@ fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result
     Ok(())
 }
 
-/// Draw the divider line that separates the list from the prompt, with the
-/// `m/n` counter right-aligned near the right edge.
-fn draw_divider(stdout: &mut io::Stdout, cols: u16, matching: usize, total: usize) -> Result<()> {
+/// Draw a full-width colored divider line.
+fn draw_divider(stdout: &mut io::Stdout, cols: u16) -> Result<()> {
     queue!(
         stdout,
-        style::Print(divider_line(cols as usize, matching, total, '─')),
+        style::SetForegroundColor(DIVIDER_COLOR),
+        style::Print(divider_line(cols as usize, '─')),
+        style::ResetColor,
     )?;
     Ok(())
 }
 
-/// Build the divider string: a run of `fill`, the counter right-aligned with one
-/// trailing `fill`, padded to `width`. Narrower than the counter, it degrades to
-/// just the (truncated) counter.
-fn divider_line(width: usize, matching: usize, total: usize, fill: char) -> String {
-    let label = format!(" {matching}/{total} ");
-    let label_len = label.chars().count();
-    if width <= label_len {
+/// A run of `fill` exactly `width` columns wide.
+fn divider_line(width: usize, fill: char) -> String {
+    std::iter::repeat_n(fill, width).collect()
+}
+
+/// The `m/n` stats string, right-aligned within `width` with one trailing space
+/// so it sits just off the right edge. Too narrow, it degrades to a truncation.
+fn stats_line(width: usize, matching: usize, total: usize) -> String {
+    let label = format!("{matching}/{total} ");
+    if label.chars().count() >= width {
         return label.chars().take(width).collect();
     }
-    // One trailing fill keeps the counter off the very edge; the rest leads.
-    let leading = width - label_len - 1;
-    let mut line: String = std::iter::repeat_n(fill, leading).collect();
-    line.push_str(&label);
-    line.push(fill);
-    line
+    format!("{label:>width$}")
 }
 
 /// Draw a single list row. The selected row is drawn in cyan with a `❯ `
@@ -274,29 +288,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn divider_right_aligns_the_counter_with_one_trailing_fill() {
-        let line = divider_line(20, 12, 40, '-');
-        assert_eq!(line.chars().count(), 20);
-        assert!(line.ends_with('-'));
-        assert!(line.contains(" 12/40 "));
-        // The counter hugs the right edge: only one fill follows it.
-        assert!(line.ends_with("12/40 -"));
-        assert!(line.starts_with("------"));
-    }
-
-    #[test]
-    fn divider_degrades_to_the_counter_when_too_narrow() {
-        // Width below the counter label just shows a truncated counter.
-        let line = divider_line(4, 1, 2, '-');
-        assert_eq!(line.chars().count(), 4);
-        assert!(!line.contains('-'));
-    }
-
-    #[test]
-    fn divider_fills_the_full_width() {
-        let line = divider_line(30, 3, 3, '─');
+    fn divider_fills_the_full_width_with_the_glyph() {
+        let line = divider_line(30, '─');
         assert_eq!(line.chars().count(), 30);
-        assert!(line.starts_with('─'));
-        assert!(line.contains(" 3/3 "));
+        assert!(line.chars().all(|c| c == '─'));
+    }
+
+    #[test]
+    fn divider_of_zero_width_is_empty() {
+        assert_eq!(divider_line(0, '─'), "");
+    }
+
+    #[test]
+    fn stats_right_align_the_counter_with_one_trailing_space() {
+        let line = stats_line(20, 12, 40);
+        assert_eq!(line.chars().count(), 20);
+        // The counter hugs the right edge with a single trailing space.
+        assert!(line.ends_with("12/40 "));
+        assert!(line.starts_with("        "));
+    }
+
+    #[test]
+    fn stats_degrade_to_a_truncated_counter_when_too_narrow() {
+        let line = stats_line(4, 100, 200);
+        assert_eq!(line.chars().count(), 4);
     }
 }
