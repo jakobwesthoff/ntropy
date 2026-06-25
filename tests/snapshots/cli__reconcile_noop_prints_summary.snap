@@ -11,7 +11,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 Reconciling vault at [VAULT]...
-renamed [ULID]-old.md -> [ULID]-brand-new.md
-Scanned 1 note, renamed 1 file, rebuilt 1 view, 0 warnings.
+Scanned 1 note, renamed 0 files, rebuilt 1 view, 0 warnings.
 
 ----- stderr -----

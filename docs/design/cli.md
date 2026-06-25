@@ -100,6 +100,11 @@ non-interactive mode `--force` is required, since there is no prompt.
 Realign filenames whose slugs drifted from their titles after out-of-band
 edits, and rebuild the materialized view trees.
 
+It prints a `Reconciling vault at <path>...` line, one `renamed <from> -> <to>`
+line per realignment, and a closing summary of the notes scanned, files
+renamed, views rebuilt and warnings. The summary always prints, so a no-op run
+is no longer silent.
+
 ### `view list|add|remove`
 
 Manage per-vault materialized view definitions (each pairs an output directory

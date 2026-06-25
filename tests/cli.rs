@@ -340,6 +340,18 @@ fn reconcile_renames_and_reports() {
 }
 
 #[test]
+fn reconcile_noop_prints_summary() {
+    let dir = setup_vault();
+    // An aligned note: nothing to rename, but the summary still prints.
+    write_note(dir.path(), ULID_A, "aligned", "---\ntitle: Aligned\n---\n");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("reconcile");
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
 fn edit_no_match_errors() {
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {

@@ -176,6 +176,7 @@ fn cmd_edit(vault: &Vault, selector: String, interactive: bool) -> Result<ExitCo
 }
 
 fn cmd_reconcile(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
+    println!("Reconciling vault at {}...", vault.root().display());
     let report = reconcile::reconcile(vault).context("while reconciling")?;
     output::print_warnings(&report.warnings);
     for rename in &report.renamed {
@@ -185,6 +186,14 @@ fn cmd_reconcile(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
             file_name(&rename.to)
         );
     }
+    // A summary always prints, so even a no-op run confirms what happened.
+    println!(
+        "Scanned {}, renamed {}, rebuilt {}, {}.",
+        plural(report.notes_scanned, "note", "notes"),
+        plural(report.renamed.len(), "file", "files"),
+        plural(report.views_rebuilt, "view", "views"),
+        plural(report.warnings.len(), "warning", "warnings"),
+    );
     Ok(exit_for_warnings(global.strict, &report.warnings))
 }
 
@@ -330,6 +339,12 @@ fn exit_for_warnings(strict: bool, warnings: &[ScanWarning]) -> ExitCode {
     } else {
         ExitCode::SUCCESS
     }
+}
+
+/// Format a count with its unit, choosing the singular or plural form.
+fn plural(count: usize, singular: &str, plural: &str) -> String {
+    let unit = if count == 1 { singular } else { plural };
+    format!("{count} {unit}")
 }
 
 /// The file-name component of a path as a lossy string.

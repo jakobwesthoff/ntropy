@@ -14,6 +14,12 @@ and this project adheres to
   path is given, instead of silently scaffolding the current directory. Passing
   both a path and `--vault` is rejected as a conflict.
 
+### Added
+
+- `reconcile` now prints a start line and a closing summary (notes scanned,
+  files renamed, views rebuilt, warnings). The summary always prints, so a
+  no-op run is no longer silent.
+
 ### Changed
 
 - The interactive fuzzy picker is now rendered in-house over `nucleo` and

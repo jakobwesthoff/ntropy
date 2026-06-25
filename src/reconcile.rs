@@ -32,6 +32,10 @@ pub struct Rename {
 /// The outcome of a full `reconcile`.
 #[derive(Debug, Default)]
 pub struct ReconcileReport {
+    /// Number of valid notes scanned in `all-notes/`.
+    pub notes_scanned: usize,
+    /// Number of materialized views rebuilt.
+    pub views_rebuilt: usize,
     /// Files renamed because their slug had drifted.
     pub renamed: Vec<Rename>,
     /// Warnings from scanning `all-notes/` (malformed/badly-named files).
@@ -72,6 +76,8 @@ pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
     view::rebuild_all(vault, &views, &notes)?;
 
     Ok(ReconcileReport {
+        notes_scanned: notes.len(),
+        views_rebuilt: views.len(),
         renamed,
         warnings: scan.warnings,
     })
@@ -209,6 +215,27 @@ mod tests {
             "---\ntitle: Aligned\n---\nbody\n",
         );
         let report = reconcile(&vault).expect("reconcile");
+        assert!(report.renamed.is_empty());
+    }
+
+    #[test]
+    fn reconcile_reports_scan_and_view_counts() {
+        let (_guard, vault) = vault_with_view();
+        write_note(
+            &vault,
+            &format!("{ULID}-aligned.md"),
+            "---\ntitle: Aligned\n---\nbody\n",
+        );
+        // A second note with a missing title is skipped with a warning.
+        write_note(
+            &vault,
+            "01BRZ3NDEKTSV4RRFFQ69G5FAV-bad.md",
+            "---\ntags: [x]\n---\nbody\n",
+        );
+        let report = reconcile(&vault).expect("reconcile");
+        assert_eq!(report.notes_scanned, 1);
+        assert_eq!(report.views_rebuilt, 1);
+        assert_eq!(report.warnings.len(), 1);
         assert!(report.renamed.is_empty());
     }
 

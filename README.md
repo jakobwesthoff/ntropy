@@ -63,7 +63,8 @@ flags are needed. From elsewhere, point at it with `--vault <path>`,
   error when non-interactive).
 - `delete <id|query>` — remove a note and refresh views (`-f` skips the prompt).
 - `reconcile` — realign filenames whose slug drifted from the title, and rebuild
-  every view (catches up after edits made outside ntropy).
+  every view (catches up after edits made outside ntropy). Prints each rename
+  and a summary of notes scanned, files renamed, views rebuilt and warnings.
 - `view list|add|remove` — manage views, e.g. `ntropy view add by-status --field status`.
 - `tags` — list every tag with its note count.
 
