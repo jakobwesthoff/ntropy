@@ -1,0 +1,9 @@
+---
+source: src/bin/ntropy/run/picker/state.rs
+expression: s.debug_render()
+---
+> a
+3/3
+> [a]lpha
+  bet[a]
+  g[a]mma

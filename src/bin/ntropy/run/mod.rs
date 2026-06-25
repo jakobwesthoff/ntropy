@@ -116,7 +116,7 @@ fn cmd_search(
 
     if interactive {
         let candidates = ops::to_candidates(&matches.notes)?;
-        if let Some(selected) = picker::pick(candidates)? {
+        if let Some(selected) = picker::pick(candidates, picker::render_candidate)? {
             open_and_refresh(vault, &selected.path)?;
         }
     } else {
@@ -156,7 +156,7 @@ fn cmd_edit(vault: &Vault, selector: String, interactive: bool) -> Result<ExitCo
         notes => {
             if interactive {
                 let candidates = ops::to_candidates(notes)?;
-                if let Some(selected) = picker::pick(candidates)? {
+                if let Some(selected) = picker::pick(candidates, picker::render_candidate)? {
                     open_and_refresh(vault, &selected.path)?;
                 }
                 Ok(ExitCode::SUCCESS)
@@ -197,7 +197,7 @@ fn cmd_delete(vault: &Vault, selector: String, force: bool, interactive: bool) -
         notes => {
             if interactive {
                 let candidates = ops::to_candidates(notes)?;
-                match picker::pick(candidates)? {
+                match picker::pick(candidates, picker::render_candidate)? {
                     Some(selected) => (selected.path, selected.title),
                     None => return Ok(ExitCode::SUCCESS),
                 }

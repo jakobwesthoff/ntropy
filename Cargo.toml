@@ -11,13 +11,13 @@ license = "MPL-2.0"
 [dependencies]
 anyhow = "1.0.102"
 clap = { version = "4.6.1", features = ["derive"] }
+crossterm = "0.29.0"
 directories = "6.0.0"
 grep-regex = "0.1.14"
 grep-searcher = "0.1.16"
 ignore = "0.4.26"
 jiff = "0.2.29"
 nucleo = "0.5.0"
-nucleo-picker = "0.11.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_yaml_ng = "0.10.0"
 thiserror = "2.0.18"

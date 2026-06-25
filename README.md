@@ -53,6 +53,10 @@ flags are needed. From elsewhere, point at it with `--vault <path>`,
   (`--print`) just prints the path.
 - `search [query]` — the one browse/filter/full-text entry point. On a TTY it
   opens an interactive fuzzy picker; piped or with `-n` it prints plain lines.
+  In the picker, type to filter; Ctrl-W deletes a word and Ctrl-U clears the
+  query; Up/Ctrl-P and Down/Ctrl-N move; Enter opens the selection; Esc/Ctrl-C
+  aborts. The selection bar uses reverse video, so it adapts to your terminal
+  theme.
 - `edit <id|query>` — open a note directly. A full ULID resolves to that note;
   anything else is a query. Ambiguous matches open a pre-filtered picker (or
   error when non-interactive).

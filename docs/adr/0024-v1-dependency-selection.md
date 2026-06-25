@@ -27,7 +27,9 @@ Adopt:
 - `ignore` — ripgrep's traversal crate, used as the directory walker with
   standard filters disabled (`standard_filters(false)`, `max_depth=1`) and its
   parallel walker, so no separate parallelism crate (`rayon`) is needed.
-- `nucleo` + `nucleo-picker` — interactive fuzzy picker.
+- `nucleo` — fuzzy matcher for the interactive picker.
+- `crossterm` — terminal control for the in-house picker UI
+  ([ADR 0027](0027-in-house-fuzzy-picker-over-nucleo-and-crossterm.md)).
 - `thiserror` (library), `anyhow` (binary) — errors.
 - Dev: `insta`, `insta-cmd`, `tempfile`/`assert_fs` — tests.
 
@@ -39,7 +41,8 @@ Build (no dependency):
 - Slug/tag normalization, including German-aware transliteration.
 - TTY detection via `std::io::IsTerminal`.
 
-No terminal-coloring crate in v1 (plain output).
+Plain (non-TTY) output uses no coloring; terminal styling is confined to the
+interactive picker via `crossterm`.
 
 ## Consequences
 

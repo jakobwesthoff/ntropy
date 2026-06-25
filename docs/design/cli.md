@@ -58,6 +58,12 @@ expression; omitted means all notes.
   the editor.
 - Piped or `-n`: prints matching notes as plain lines.
 
+The picker (ADR 0027) draws on the alternate screen with a prompt and an `m/n`
+match counter. Type to filter; Backspace, Ctrl-W (delete word) and Ctrl-U
+(clear) edit the query; Up / Ctrl-P and Down / Ctrl-N move the selection; Enter
+selects; Esc / Ctrl-C aborts. The selection bar uses reverse video, so it
+adapts to the terminal's theme.
+
 Examples:
 
     ntropy search                       # all notes

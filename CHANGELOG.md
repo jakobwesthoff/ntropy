@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- The interactive fuzzy picker is now rendered in-house over `nucleo` and
+  `crossterm` instead of `nucleo-picker`. The selection bar uses reverse video
+  so it adapts to the terminal's light/dark theme, matched characters are
+  highlighted, and the picker supports Ctrl-W (delete word), Ctrl-U (clear),
+  and Ctrl-P/Ctrl-N navigation (ADR 0027).
+
 ## [0.9.0] - 2026-06-25
 
 Initial release: a working, Unix-only (macOS, Linux) v1 of the ntropy CLI.
