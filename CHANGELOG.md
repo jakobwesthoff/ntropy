@@ -1,0 +1,44 @@
+# Changelog
+
+All notable changes to ntropy are documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
+and this project adheres to
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [0.9.0] - 2026-06-25
+
+Initial release: a working, Unix-only (macOS, Linux) v1 of the ntropy CLI.
+
+### Added
+
+- Flat single-vault storage with canonical notes as
+  `all-notes/<ulid>-<slug>.md`; identity is carried by the filename ULID and
+  never stored in frontmatter.
+- Permissive YAML frontmatter with recognized `title` (required) and `tags`,
+  plus arbitrary preserved fields, and slash-separated hierarchical tags with
+  German-aware slug/tag normalization.
+- Stateless parallel scan of `all-notes/` that warns and skips malformed or
+  badly-named notes; `--strict` promotes those warnings to errors.
+- Query DSL (precedence `not` > `and` > `or`, parentheses) with `tag:` segment
+  sub-path matching, `field:` equality and list membership, and regex `text:`
+  full-text search with smart-case via the embedded ripgrep libraries.
+- Materialized symlink views: group by any frontmatter field, list fan-out,
+  `/`-nesting, normalized grouping values, `<date>-<slug>.md` leaves with
+  trailing-ULID collision disambiguation, and relocatable relative link targets.
+- `reconcile` to realign drifted filenames and rebuild views; views are also
+  refreshed after every mutation.
+- Note templates with `{{title}}`/`{{id}}`/`{{date}}`/`{{slug}}` substitution
+  and a default template.
+- Two-tier TOML configuration (global default vault, per-vault view
+  definitions) and vault resolution order `--vault` > `$NTROPY_VAULT` > cwd
+  walk-up (honoring a `.ntropy-vault` pointer) > global default.
+- Commands: `init` (idempotent, `--set-default`), `new`
+  (`--no-edit`/`--print`), `search`, `edit`, `delete` (`--force`),
+  `reconcile`, `view list|add|remove`, and `tags`; with global `--vault`,
+  `-n`/`--non-interactive`, and `--strict`.
+- Interactive fuzzy picker on a TTY and `$VISUAL`/`$EDITOR` integration, with a
+  plain newest-first `id<TAB>title<TAB>path` table when piped or run with `-n`.
+- Derived dates rendered in the system-local timezone.
+
+[0.9.0]: https://github.com/jakobwesthoff/ntropy/releases/tag/v0.9.0
