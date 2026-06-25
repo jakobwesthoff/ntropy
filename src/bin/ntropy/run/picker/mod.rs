@@ -161,7 +161,7 @@ fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result
     queue!(
         stdout,
         cursor::MoveTo(0, prompt_row),
-        style::Print(format!("> {}", state.query())),
+        style::Print(format!("❯ {}", state.query())),
     )?;
     let prompt_col = 2 + state.query().chars().count() as u16;
     queue!(stdout, cursor::MoveTo(prompt_col, prompt_row))?;
@@ -175,7 +175,7 @@ fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result
 fn draw_divider(stdout: &mut io::Stdout, cols: u16, matching: usize, total: usize) -> Result<()> {
     queue!(
         stdout,
-        style::Print(divider_line(cols as usize, matching, total, '-')),
+        style::Print(divider_line(cols as usize, matching, total, '─')),
     )?;
     Ok(())
 }
@@ -197,23 +197,25 @@ fn divider_line(width: usize, matching: usize, total: usize, fill: char) -> Stri
     line
 }
 
-/// Draw a single list row: a `> ` pointer for the selection, matched characters
-/// in the matchable part bold, the display-only suffix dimmed, and (for the
-/// selection) a reverse-video bar padded to the full width so it reads as a
-/// highlighted line on any terminal theme.
+/// Draw a single list row. The selected row is drawn in cyan with a `❯ `
+/// pointer; matched characters are yellow on either row; the display-only ULID
+/// suffix is dimmed (or rides the cyan body on the selected row). All colors are
+/// the terminal's own ANSI palette, so the picker adapts to its theme.
 fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<()> {
     let width = cols as usize;
-    if row.selected {
-        queue!(stdout, style::SetAttribute(Attribute::Reverse))?;
-    }
+    let selected = row.selected;
+    let pointer = if selected { "❯ " } else { "  " };
 
-    let pointer = if row.selected { "> " } else { "  " };
+    // The selected row's body is cyan; the pointer shares that accent.
+    if selected {
+        queue!(stdout, style::SetForegroundColor(style::Color::Cyan))?;
+    }
     queue!(stdout, style::Print(pointer))?;
 
     // Truncate to the terminal width so a long row never wraps and breaks the
-    // layout. The matchable part is drawn first (highlighted), then the dimmed
-    // suffix fills whatever budget remains.
-    let mut drawn = pointer.len();
+    // layout. The matchable part is drawn first (matches in yellow), then the
+    // suffix fills whatever budget remains. `❯ ` is two display columns.
+    let mut drawn = pointer.chars().count();
     let positions = row.positions;
     for (i, c) in row.matchable.chars().enumerate() {
         if drawn >= width {
@@ -221,17 +223,26 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
         }
         let matched = positions.binary_search(&(i as u32)).is_ok();
         if matched {
-            queue!(stdout, style::SetAttribute(Attribute::Bold))?;
+            queue!(stdout, style::SetForegroundColor(style::Color::Yellow))?;
         }
         queue!(stdout, style::Print(c))?;
         if matched {
-            queue!(stdout, style::SetAttribute(Attribute::NormalIntensity))?;
+            // Restore the row's base color after a highlighted character.
+            if selected {
+                queue!(stdout, style::SetForegroundColor(style::Color::Cyan))?;
+            } else {
+                queue!(stdout, style::ResetColor)?;
+            }
         }
         drawn += 1;
     }
 
     if !row.suffix.is_empty() && drawn < width {
-        queue!(stdout, style::SetAttribute(Attribute::Dim))?;
+        // The ULID is dimmed on unselected rows; on the selected row it simply
+        // rides the cyan body color.
+        if !selected {
+            queue!(stdout, style::SetAttribute(Attribute::Dim))?;
+        }
         for c in row.suffix.chars() {
             if drawn >= width {
                 break;
@@ -239,17 +250,17 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
             queue!(stdout, style::Print(c))?;
             drawn += 1;
         }
-        queue!(stdout, style::SetAttribute(Attribute::NormalIntensity))?;
+        if !selected {
+            queue!(stdout, style::SetAttribute(Attribute::NormalIntensity))?;
+        }
     }
 
-    if row.selected {
-        // Pad the reverse-video bar across the rest of the line.
-        if drawn < width {
-            let pad: String = " ".repeat(width - drawn);
-            queue!(stdout, style::Print(pad))?;
-        }
-        queue!(stdout, style::SetAttribute(Attribute::Reset))?;
-    }
+    // Reset styling so it never bleeds into the next line or a blank area.
+    queue!(
+        stdout,
+        style::SetAttribute(Attribute::Reset),
+        style::ResetColor
+    )?;
     Ok(())
 }
 
