@@ -119,8 +119,14 @@ entry is derived.
 
 View links are refreshed two ways:
 
-- Incrementally, during normal ntropy mutations (create, edit, retitle), so
-  views stay current in day-to-day use.
+- After any ntropy mutation (create, edit, retitle, delete), so views stay
+  current in day-to-day use. In v1 this is implemented as a **full rebuild** of
+  the configured view trees rather than true incremental per-link updates: each
+  view directory is removed and regenerated from the current note set. This is
+  a deliberate, pragmatic deviation from ADR 0008's literal "incremental",
+  justified by the soft performance target (ADR 0020); it is always correct and
+  prunes stale links for free. Incremental updates are deferred (see
+  `todos/`).
 - Fully, by `reconcile`, which rebuilds the view trees and catches up after
   edits made outside ntropy (direct `$EDITOR` use, scripts, manual changes).
 

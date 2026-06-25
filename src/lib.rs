@@ -28,8 +28,10 @@ pub mod vault;
 
 pub mod config;
 pub mod query;
+pub mod reconcile;
 pub mod scan;
 pub mod template;
+pub mod view;
 
 pub mod ops;
 
