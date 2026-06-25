@@ -119,11 +119,17 @@ non-interactive mode `--force` is required, since there is no prompt.
 ### `reconcile`
 
 Realign filenames whose slugs drifted from their titles after out-of-band
-edits, and rebuild the materialized view trees.
+edits, refresh inter-note link targets to the current filenames, and rebuild
+the materialized view trees.
+
+After renaming, it rewrites stale link targets in note bodies so links keep
+resolving and stay clickable in plain Markdown viewers (ADR 0028); links inside
+fenced or inline code are left untouched.
 
 It prints a `Reconciling vault at <path>...` line, one `renamed <from> -> <to>`
-line per realignment, and a closing summary of the notes scanned, files
-renamed, views rebuilt and warnings. The summary always prints, so a no-op run
+line per realignment, one `relinked <from> -> <to> in <file>` line per refreshed
+link, and a closing summary of the notes scanned, files renamed, links
+relinked, views rebuilt and warnings. The summary always prints, so a no-op run
 is no longer silent.
 
 ### `view list|add|remove`

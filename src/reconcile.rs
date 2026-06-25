@@ -17,7 +17,8 @@ use std::path::{Path, PathBuf};
 use crate::config::PerVaultConfig;
 use crate::error::Result;
 use crate::fsutil;
-use crate::note::Note;
+use crate::link;
+use crate::note::{Note, frontmatter};
 use crate::scan::{self, ScanWarning};
 use crate::vault::Vault;
 use crate::view::{self, ViewDef};
@@ -29,6 +30,17 @@ pub struct Rename {
     pub to: PathBuf,
 }
 
+/// A link target refreshed in a note body because its slug had drifted.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkRewrite {
+    /// The note whose body was rewritten.
+    pub note: PathBuf,
+    /// The stale target as it appeared in the body.
+    pub from: String,
+    /// The refreshed target pointing at the current filename.
+    pub to: String,
+}
+
 /// The outcome of a full `reconcile`.
 #[derive(Debug, Default)]
 pub struct ReconcileReport {
@@ -38,6 +50,8 @@ pub struct ReconcileReport {
     pub views_rebuilt: usize,
     /// Files renamed because their slug had drifted.
     pub renamed: Vec<Rename>,
+    /// Link targets refreshed to point at their notes' current filenames.
+    pub links_rewritten: Vec<LinkRewrite>,
     /// Warnings from scanning `all-notes/` (malformed/badly-named files).
     pub warnings: Vec<ScanWarning>,
 }
@@ -72,6 +86,10 @@ pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
         note.path = new_path;
     }
 
+    // With every filename settled, refresh stale link targets so links keep
+    // resolving and stay clickable in plain Markdown viewers (ADR 0028).
+    let links_rewritten = rewrite_links(&notes)?;
+
     let views = load_views(vault)?;
     view::rebuild_all(vault, &views, &notes)?;
 
@@ -79,8 +97,40 @@ pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
         notes_scanned: notes.len(),
         views_rebuilt: views.len(),
         renamed,
+        links_rewritten,
         warnings: scan.warnings,
     })
+}
+
+/// Rewrite stale link targets in every note body to the current filenames.
+///
+/// Each note is re-read so its frontmatter is preserved byte-for-byte; only the
+/// body's link targets are touched, and only when at least one drifted, so an
+/// up-to-date note is never rewritten.
+fn rewrite_links(notes: &[Note]) -> Result<Vec<LinkRewrite>> {
+    let mut rewritten = Vec::new();
+    for note in notes {
+        let Ok(content) = std::fs::read_to_string(&note.path) else {
+            continue;
+        };
+        let body = frontmatter::split(&content).body;
+        let body_start = content.len() - body.len();
+        let Some(rewrite) = link::rewrite_body(body, notes) else {
+            continue;
+        };
+        let mut updated = String::with_capacity(content.len());
+        updated.push_str(&content[..body_start]);
+        updated.push_str(&rewrite.body);
+        fsutil::atomic_write(&note.path, updated.as_bytes())?;
+        for change in rewrite.rewrites {
+            rewritten.push(LinkRewrite {
+                note: note.path.clone(),
+                from: change.from,
+                to: change.to,
+            });
+        }
+    }
+    Ok(rewritten)
 }
 
 /// Realign one note's filename if its slug has drifted from its title.
@@ -257,6 +307,119 @@ mod tests {
         let rename = realign(&drifted).expect("realign").expect("renamed");
         assert!(rename.to.ends_with(format!("{ULID}-fresh-title.md")));
         assert!(!drifted.exists());
+    }
+
+    const ULID_B: &str = "01BX5ZZKBKACTAV9WEVGEMMVRZ";
+
+    #[test]
+    fn reconcile_rewrites_a_stale_link_target() {
+        let (_guard, vault) = vault_with_view();
+        write_note(
+            &vault,
+            &format!("{ULID}-target.md"),
+            "---\ntitle: Target\n---\nbody\n",
+        );
+        let source = write_note(
+            &vault,
+            &format!("{ULID_B}-source.md"),
+            &format!("---\ntitle: Source\n---\nsee [Target]({ULID}-old.md)\n"),
+        );
+
+        let report = reconcile(&vault).expect("reconcile");
+        assert_eq!(report.links_rewritten.len(), 1);
+        let content = std::fs::read_to_string(&source).expect("read source");
+        assert!(content.contains(&format!("[Target]({ULID}-target.md)")));
+    }
+
+    #[test]
+    fn reconcile_leaves_aligned_links_untouched() {
+        let (_guard, vault) = vault_with_view();
+        write_note(
+            &vault,
+            &format!("{ULID}-target.md"),
+            "---\ntitle: Target\n---\nx\n",
+        );
+        let original = format!("---\ntitle: Source\n---\n[T]({ULID}-target.md)\n");
+        let source = write_note(&vault, &format!("{ULID_B}-source.md"), &original);
+
+        let report = reconcile(&vault).expect("reconcile");
+        assert!(report.links_rewritten.is_empty());
+        assert_eq!(std::fs::read_to_string(&source).expect("read"), original);
+    }
+
+    #[test]
+    fn reconcile_leaves_dangling_links_untouched() {
+        let (_guard, vault) = vault_with_view();
+        let original = format!("---\ntitle: Source\n---\n[gone]({ULID}-missing.md)\n");
+        let source = write_note(&vault, &format!("{ULID_B}-source.md"), &original);
+
+        let report = reconcile(&vault).expect("reconcile");
+        assert!(report.links_rewritten.is_empty());
+        assert_eq!(std::fs::read_to_string(&source).expect("read"), original);
+    }
+
+    #[test]
+    fn reconcile_renames_then_rewrites_a_self_link() {
+        let (_guard, vault) = vault_with_view();
+        let drifted = write_note(
+            &vault,
+            &format!("{ULID}-old.md"),
+            &format!("---\ntitle: New Title\n---\n[self]({ULID}-old.md)\n"),
+        );
+
+        let report = reconcile(&vault).expect("reconcile");
+        assert_eq!(report.renamed.len(), 1);
+        assert_eq!(report.links_rewritten.len(), 1);
+        assert!(!drifted.exists());
+        let new = vault
+            .layout()
+            .all_notes()
+            .join(format!("{ULID}-new-title.md"));
+        let content = std::fs::read_to_string(&new).expect("read renamed");
+        assert!(content.contains(&format!("[self]({ULID}-new-title.md)")));
+    }
+
+    #[test]
+    fn reconcile_updates_links_to_a_renamed_note() {
+        let (_guard, vault) = vault_with_view();
+        // The target's slug `old` has drifted from its title `Alpha One`.
+        write_note(
+            &vault,
+            &format!("{ULID}-old.md"),
+            "---\ntitle: Alpha One\n---\nx\n",
+        );
+        let linker = write_note(
+            &vault,
+            &format!("{ULID_B}-linker.md"),
+            &format!("---\ntitle: Linker\n---\n[a]({ULID}-old.md)\n"),
+        );
+
+        reconcile(&vault).expect("reconcile");
+        let content = std::fs::read_to_string(&linker).expect("read linker");
+        assert!(content.contains(&format!("[a]({ULID}-alpha-one.md)")));
+    }
+
+    #[test]
+    fn reconcile_link_rewrite_is_idempotent() {
+        let (_guard, vault) = vault_with_view();
+        write_note(
+            &vault,
+            &format!("{ULID}-target.md"),
+            "---\ntitle: Target\n---\nx\n",
+        );
+        write_note(
+            &vault,
+            &format!("{ULID_B}-source.md"),
+            &format!("---\ntitle: Source\n---\n[T]({ULID}-old.md)\n"),
+        );
+
+        assert_eq!(reconcile(&vault).expect("first").links_rewritten.len(), 1);
+        assert!(
+            reconcile(&vault)
+                .expect("second")
+                .links_rewritten
+                .is_empty()
+        );
     }
 
     #[test]

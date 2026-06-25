@@ -234,11 +234,20 @@ fn cmd_reconcile(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
             file_name(&rename.to)
         );
     }
+    for rewrite in &report.links_rewritten {
+        println!(
+            "relinked {} -> {} in {}",
+            rewrite.from,
+            rewrite.to,
+            file_name(&rewrite.note)
+        );
+    }
     // A summary always prints, so even a no-op run confirms what happened.
     println!(
-        "Scanned {}, renamed {}, rebuilt {}, {}.",
+        "Scanned {}, renamed {}, relinked {}, rebuilt {}, {}.",
         plural(report.notes_scanned, "note", "notes"),
         plural(report.renamed.len(), "file", "files"),
+        plural(report.links_rewritten.len(), "link", "links"),
         plural(report.views_rebuilt, "view", "views"),
         plural(report.warnings.len(), "warning", "warnings"),
     );

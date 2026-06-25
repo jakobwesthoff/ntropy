@@ -11,6 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 Reconciling vault at [VAULT]...
-Scanned 1 note, renamed 0 files, relinked 0 links, rebuilt 1 view, 0 warnings.
+relinked [ULID]-old.md -> [ULID]-target.md in [ULID]-source.md
+Scanned 2 notes, renamed 0 files, relinked 1 link, rebuilt 1 view, 0 warnings.
 
 ----- stderr -----

@@ -476,6 +476,27 @@ fn reconcile_renames_and_reports() {
 }
 
 #[test]
+fn reconcile_rewrites_stale_link_targets() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "target", "---\ntitle: Target\n---\n");
+    // The source links to the target with a stale slug.
+    write_note(
+        dir.path(),
+        ULID_B,
+        "source",
+        &format!("---\ntitle: Source\n---\nsee [Target]({ULID_A}-old.md)\n"),
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("reconcile");
+        assert_cmd_snapshot!(cmd);
+    });
+    let source = std::fs::read_to_string(dir.path().join(format!("all-notes/{ULID_B}-source.md")))
+        .expect("read source");
+    assert!(source.contains(&format!("[Target]({ULID_A}-target.md)")));
+}
+
+#[test]
 fn reconcile_noop_prints_summary() {
     let dir = setup_vault();
     // An aligned note: nothing to rename, but the summary still prints.

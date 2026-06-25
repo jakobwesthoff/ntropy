@@ -27,8 +27,13 @@ and this project adheres to
   the flag, `default.md` is used as before. See the README Templates section.
 - `list` is now a visible alias for `search`.
 - `reconcile` now prints a start line and a closing summary (notes scanned,
-  files renamed, views rebuilt, warnings). The summary always prints, so a
-  no-op run is no longer silent.
+  files renamed, links relinked, views rebuilt, warnings). The summary always
+  prints, so a no-op run is no longer silent.
+- Inter-note links: a standard Markdown link whose target is the note filename,
+  `[text](<ulid>-<slug>.md)`, is recognized by its leading 26-character ULID.
+  `reconcile` refreshes stale link slugs to a note's current filename, keeping
+  links resolvable and clickable after a rename. Links inside fenced or inline
+  code are left untouched.
 
 ### Changed
 

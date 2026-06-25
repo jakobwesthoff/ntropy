@@ -92,6 +92,59 @@ pub fn at_offset<'l, 'b>(links: &'l [Link<'b>], offset: usize) -> Option<&'l Lin
     links.iter().find(|link| link.range.contains(&offset))
 }
 
+/// A body whose stale link targets were refreshed by [`rewrite_body`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BodyRewrite {
+    /// The rewritten body.
+    pub body: String,
+    /// Each target that changed, in document order.
+    pub rewrites: Vec<TargetRewrite>,
+}
+
+/// A single link target that was refreshed to its note's current filename.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TargetRewrite {
+    pub from: String,
+    pub to: String,
+}
+
+/// Refresh stale link targets in `body` so each resolvable link points at its
+/// target note's current filename (ADR 0028).
+///
+/// Returns the new body and the changes made, or `None` when nothing needs
+/// rewriting. Dangling links, external links and links inside code are left
+/// untouched (the latter two are never extracted in the first place), so an
+/// already-aligned body produces no write.
+pub fn rewrite_body(body: &str, notes: &[Note]) -> Option<BodyRewrite> {
+    let mut out = String::new();
+    let mut rewrites = Vec::new();
+    let mut cursor = 0;
+    for link in extract(body) {
+        let Some(note) = resolve(link.id, notes) else {
+            continue;
+        };
+        let desired = note.canonical_filename();
+        if link.target == desired {
+            continue;
+        }
+        out.push_str(&body[cursor..link.target_range.start]);
+        out.push_str(&desired);
+        cursor = link.target_range.end;
+        rewrites.push(TargetRewrite {
+            from: link.target.to_owned(),
+            to: desired,
+        });
+    }
+    if rewrites.is_empty() {
+        return None;
+    }
+    out.push_str(&body[cursor..]);
+    Some(BodyRewrite {
+        body: out,
+        rewrites,
+    })
+}
+
 /// Parse a link target into a note identity, accepting only
 /// `<26-char ULID>` optionally followed by `-<slug>`, ending in `.md`.
 fn parse_target(target: &str) -> Option<Id> {
@@ -241,5 +294,64 @@ mod tests {
         let inside = body.find("a]").unwrap();
         assert!(at_offset(&links, inside).is_some());
         assert!(at_offset(&links, 0).is_none());
+    }
+
+    #[test]
+    fn rewrite_refreshes_a_stale_slug() {
+        // The note's title is `T`, so its canonical filename is `<ULID>-t.md`.
+        let notes = vec![note(ULID)];
+        let body = format!("see [Display]({ULID}-stale.md) end");
+        let rewrite = rewrite_body(&body, &notes).expect("a rewrite happens");
+        assert_eq!(rewrite.body, format!("see [Display]({ULID}-t.md) end"));
+        assert_eq!(rewrite.rewrites.len(), 1);
+        assert_eq!(rewrite.rewrites[0].from, format!("{ULID}-stale.md"));
+        assert_eq!(rewrite.rewrites[0].to, format!("{ULID}-t.md"));
+    }
+
+    #[test]
+    fn rewrite_upgrades_a_bare_ulid_target() {
+        let notes = vec![note(ULID)];
+        let body = format!("[x]({ULID}.md)");
+        let rewrite = rewrite_body(&body, &notes).expect("a rewrite happens");
+        assert_eq!(rewrite.body, format!("[x]({ULID}-t.md)"));
+    }
+
+    #[test]
+    fn aligned_links_produce_no_rewrite() {
+        let notes = vec![note(ULID)];
+        let body = format!("[x]({ULID}-t.md)");
+        assert!(rewrite_body(&body, &notes).is_none());
+    }
+
+    #[test]
+    fn dangling_and_coded_links_are_left_untouched() {
+        let notes = vec![note(ULID)];
+        let other = "01BX5ZZKBKACTAV9WEVGEMMVRZ";
+        let body = format!("[x]({other}-stale.md) and `[y]({ULID}-stale.md)`");
+        assert!(rewrite_body(&body, &notes).is_none());
+    }
+
+    #[test]
+    fn mixed_body_rewrites_only_the_stale_resolvable_link() {
+        let notes = vec![note(ULID)];
+        let dangling = "01BX5ZZKBKACTAV9WEVGEMMVRZ";
+        let body = format!("[a]({ULID}-stale.md) [b]({dangling}-x.md) [c](https://e.com)");
+        let rewrite = rewrite_body(&body, &notes).expect("one rewrite");
+        assert_eq!(rewrite.rewrites.len(), 1);
+        assert_eq!(
+            rewrite.body,
+            format!("[a]({ULID}-t.md) [b]({dangling}-x.md) [c](https://e.com)")
+        );
+    }
+
+    #[test]
+    fn rewrite_preserves_crlf_body() {
+        let notes = vec![note(ULID)];
+        let body = format!("line one\r\n[a]({ULID}-stale.md)\r\nlast");
+        let rewrite = rewrite_body(&body, &notes).expect("a rewrite happens");
+        assert_eq!(
+            rewrite.body,
+            format!("line one\r\n[a]({ULID}-t.md)\r\nlast")
+        );
     }
 }
