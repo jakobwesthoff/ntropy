@@ -11,6 +11,7 @@
 
 mod editor;
 mod interact;
+mod lsp;
 mod output;
 mod picker;
 
@@ -49,6 +50,12 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         return cmd_info(&cli.global);
     }
 
+    // The language server resolves a vault per document, so it starts without
+    // one (ADR 0029).
+    if let Command::Lsp = command {
+        return lsp::run();
+    }
+
     let vault = resolve_vault(&cli.global)?;
     let interactive = interact::is_interactive(cli.global.non_interactive);
 
@@ -71,6 +78,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Command::Tags => cmd_tags(&cli.global, &vault),
         // Handled above, before vault resolution.
         Command::Info => unreachable!("info is dispatched before vault resolution"),
+        Command::Lsp => unreachable!("lsp is dispatched before vault resolution"),
     }
 }
 

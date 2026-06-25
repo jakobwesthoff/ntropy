@@ -117,6 +117,9 @@ pub enum Command {
 
     /// Show the active vault, its resolution, and vault statistics.
     Info,
+
+    /// Run the language server over stdin/stdout (ADR 0029).
+    Lsp,
 }
 
 #[derive(Subcommand, Debug)]

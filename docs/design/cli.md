@@ -153,3 +153,11 @@ default), the configured global default vault, and vault statistics: note, tag,
 view and template counts, the number of notes skipped with warnings, the
 creation-date span, the most-used tags, and the template names. Unlike the data
 commands this is a human report, printed the same way piped or on a TTY.
+
+### `lsp`
+
+Run the ntropy language server over stdin/stdout, for an editor's LSP client to
+spawn. Unlike the other commands it does not resolve a vault from the global
+flags; it resolves one per open document (ADR 0029). The capabilities and
+editor setup are documented in
+[language-server.md](language-server.md).

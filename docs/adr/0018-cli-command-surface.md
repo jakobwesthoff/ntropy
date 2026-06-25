@@ -41,6 +41,9 @@ clap-based subcommands. v1 surface:
   vault, and vault statistics (note/tag/view/template counts, skipped-note
   warnings, creation-date span, most-used tags). A human report, shown
   identically piped or on a TTY.
+- `lsp` — run the language server over stdin/stdout (added by
+  [ADR 0029](0029-language-server-over-lsp-server-with-a-session-scan-cache.md);
+  resolves a vault per document rather than from the global flags).
 
 `init` is idempotent and only writes the global default vault when passed
 `--set-default`. Its target is the positional path or, when that is omitted, the

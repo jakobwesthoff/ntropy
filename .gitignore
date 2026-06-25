@@ -3,3 +3,6 @@
 # insta leaves these next to snapshots until reviewed/accepted.
 *.pending-snap
 *.snap.new
+
+# Transient commit-message file used by the commit workflow.
+.tmp-commit-msg
