@@ -39,5 +39,5 @@ tempfile = "3.27.0"
 # and stripping symbols shrinks it further. Runtime stays at the default
 # release opt-level 3 (ADR 0020's soft performance target needs no more).
 [profile.release]
-lto = "thin"
+lto = true
 strip = true
