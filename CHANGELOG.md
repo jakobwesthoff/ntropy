@@ -32,6 +32,8 @@ and this project adheres to
 
 ### Changed
 
+- Plain tab-separated tables (`search -n`, `tags`, `view list`) now start with an
+  uppercase column header (docker-style). Strip it with `tail -n +2` if needed.
 - The interactive fuzzy picker is now rendered in-house over `nucleo` and
   `crossterm` instead of `nucleo-picker`. The selection bar uses reverse video
   so it adapts to the terminal's light/dark theme, matched characters are

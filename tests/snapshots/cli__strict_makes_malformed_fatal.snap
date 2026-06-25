@@ -12,6 +12,7 @@ info:
 success: false
 exit_code: 1
 ----- stdout -----
+ID	DATE	TITLE	TAGS	PATH
 [ULID]	[DATE]	Good		[VAULT]/all-notes/[ULID]-good.md
 
 ----- stderr -----

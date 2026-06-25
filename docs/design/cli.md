@@ -16,10 +16,11 @@ The command surface and its behavior. Consolidates
 - **Interactivity:** interactive on a TTY, non-interactive when piped.
   `--non-interactive` / `-n` forces non-interactive.
 - **Output:** decorated for a TTY; when piped/`-n`, a tab-separated table of
-  `id<TAB>date<TAB>title<TAB>tags<TAB>path`, one note per line, no header
-  (awk/cut-friendly; tags comma-joined). No JSON in v1. Where a note is named to
-  a human (delete prompts/confirmations, ambiguous-match lists) it is shown as
-  the reference `date  title  [tags]  (id)`.
+  `id<TAB>date<TAB>title<TAB>tags<TAB>path`, one note per line, led by an
+  uppercase column header (awk/cut-friendly; tags comma-joined; `tail -n +2`
+  drops the header). All plain tab tables carry a header. No JSON in v1. Where a
+  note is named to a human (delete prompts/confirmations, ambiguous-match lists)
+  it is shown as the reference `date  title  [tags]  (id)`.
 - **Ordering:** results are newest first (creation time descending) by default.
 - **Editor:** `$VISUAL` then `$EDITOR`; error if neither is set.
 - **Bare `ntropy`:** with no subcommand, prints help.

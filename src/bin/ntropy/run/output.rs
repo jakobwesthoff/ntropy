@@ -5,11 +5,11 @@
 //! Plain, machine-friendly output (ADRs 0019, 0025).
 //!
 //! The non-interactive note table is `id<TAB>date<TAB>title<TAB>tags<TAB>path`,
-//! one note per line, no header, so `awk`/`cut` can split it; tags are
-//! comma-joined within their field. Scan warnings go to stderr by file name
-//! (stdout stays clean for piping). Tags (the `tags` command) print as
-//! `tag<TAB>count`. The same note fields render as a human reference via
-//! [`note_reference`].
+//! one note per line led by an uppercase column header, so `awk`/`cut` can split
+//! it and `tail -n +2` strips the header; tags are comma-joined within their
+//! field. Scan warnings go to stderr by file name (stdout stays clean for
+//! piping). Tags (the `tags` command) print as `tag<TAB>count`. The same note
+//! fields render as a human reference via [`note_reference`].
 
 use std::fmt::Display;
 use std::io::Write;
@@ -22,10 +22,11 @@ use ntropy::scan::ScanWarning;
 use ntropy::vault::{ResolveSource, Vault};
 
 /// Print notes as a tab-separated `id<TAB>date<TAB>title<TAB>tags<TAB>path`
-/// table, newest first (ADR 0025).
+/// table, newest first, led by a column header (ADR 0025).
 pub fn print_notes(notes: &[Note]) -> Result<()> {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
+    writeln!(out, "ID\tDATE\tTITLE\tTAGS\tPATH")?;
     for note in notes {
         writeln!(
             out,
@@ -65,10 +66,11 @@ pub fn note_reference(note: &Note) -> Result<String> {
     ))
 }
 
-/// Print tags as a tab-separated `tag<TAB>count` table.
+/// Print tags as a tab-separated `tag<TAB>count` table, led by a column header.
 pub fn print_tags(tags: &[TagCount]) -> Result<()> {
     let stdout = std::io::stdout();
     let mut out = stdout.lock();
+    writeln!(out, "TAG\tCOUNT")?;
     for entry in tags {
         writeln!(out, "{}\t{}", entry.tag, entry.count)?;
     }

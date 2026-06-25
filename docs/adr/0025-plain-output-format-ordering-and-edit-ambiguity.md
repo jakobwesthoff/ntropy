@@ -15,7 +15,10 @@ The non-interactive output format, default result ordering, and the behavior of
 
 - Non-interactive output is a tab-separated table, one note per line:
   `id<TAB>date<TAB>title<TAB>tags<TAB>path` (tags comma-joined within their
-  field). No header or decoration, so `awk`/`cut` can split it directly.
+  field). It is led by an uppercase column header (`ID DATE TITLE TAGS PATH`)
+  so the output is self-describing; `awk`/`cut` still split each row, and
+  `tail -n +2` strips the header. All plain tab tables follow this rule: `tags`
+  prints `TAG<TAB>COUNT` and `view list` prints `NAME<TAB>FIELD`.
 - Default result ordering is newest first (ULID / creation time descending). A
   `--sort` flag is left for later.
 - `edit <query>` on an ambiguous match: on a TTY, open the picker pre-filtered
@@ -27,7 +30,7 @@ The non-interactive output format, default result ordering, and the behavior of
 ## Consequences
 
 - Pipelines get id, date, title, tags, and path in one pass without extra
-  lookups.
+  lookups; the header row is dropped with `tail -n +2` when not wanted.
 - Recency-first matches the common note-taking expectation.
 - Ambiguous `edit` is smooth interactively and safe (no silent wrong-note open)
   in scripts.

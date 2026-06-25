@@ -79,9 +79,11 @@ Global flags (any command): `--vault <path>`, `-n`/`--non-interactive`,
 `--strict` (treat malformed/badly-named notes as errors instead of warnings).
 
 Non-interactive output is a tab-separated `id<TAB>date<TAB>title<TAB>tags<TAB>path`
-table, newest first (tags comma-joined), so `awk`/`cut` and pipelines work
-directly. Where a note is named to you (delete prompts, ambiguous matches) it is
-shown as `date  title  [tags]  (id)`.
+table, newest first (tags comma-joined), led by an uppercase column header so it
+is self-describing; `awk`/`cut` still work directly and `tail -n +2` drops the
+header. The `tags` and `view list` tables carry a header too. Where a note is
+named to you (delete prompts, ambiguous matches) it is shown as
+`date  title  [tags]  (id)`.
 
 ## Query language
 
