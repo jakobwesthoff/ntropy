@@ -62,18 +62,24 @@ pub struct PickerState<T> {
 }
 
 impl<T> PickerState<T> {
-    /// Build the state from `items`, rendering each via `render`.
+    /// Build the state from `items` and their pre-rendered `rows`.
     ///
+    /// `rows` is index-aligned with `items` (one [`Row`] per item); the renderer
+    /// produces them in one batch so it can align columns across every item.
     /// `height` is the number of list rows the viewport can show; it is clamped
     /// to at least one so movement and scrolling always have room.
-    pub fn new(items: Vec<T>, render: impl Fn(&T) -> Row, height: usize) -> Self {
-        let rendered: Vec<Row> = items.iter().map(&render).collect();
-        let haystacks: Vec<Utf32String> = rendered
+    pub fn new(items: Vec<T>, rows: Vec<Row>, height: usize) -> Self {
+        debug_assert_eq!(items.len(), rows.len(), "one row per item");
+        let haystacks: Vec<Utf32String> = rows
             .iter()
             .map(|r| Utf32String::from(r.matchable.as_str()))
             .collect();
-        let matchable: Vec<String> = rendered.iter().map(|r| r.matchable.clone()).collect();
-        let suffix: Vec<String> = rendered.into_iter().map(|r| r.suffix).collect();
+        let mut matchable: Vec<String> = Vec::with_capacity(rows.len());
+        let mut suffix: Vec<String> = Vec::with_capacity(rows.len());
+        for row in rows {
+            matchable.push(row.matchable);
+            suffix.push(row.suffix);
+        }
         let mut state = Self {
             items,
             matchable,
@@ -267,14 +273,14 @@ mod tests {
     /// A fixed candidate set rendered by its own string identity (no suffix).
     fn state(rows: &[&str], height: usize) -> PickerState<String> {
         let items: Vec<String> = rows.iter().map(|s| s.to_string()).collect();
-        PickerState::new(
-            items,
-            |s: &String| Row {
+        let picker_rows = items
+            .iter()
+            .map(|s| Row {
                 matchable: s.clone(),
                 suffix: String::new(),
-            },
-            height,
-        )
+            })
+            .collect();
+        PickerState::new(items, picker_rows, height)
     }
 
     #[test]
@@ -404,14 +410,11 @@ mod tests {
     #[test]
     fn suffix_is_shown_but_not_matched() {
         let items = vec!["alpha".to_string()];
-        let mut s = PickerState::new(
-            items,
-            |t: &String| Row {
-                matchable: t.clone(),
-                suffix: "  (ZID)".into(),
-            },
-            10,
-        );
+        let rows = vec![Row {
+            matchable: "alpha".to_string(),
+            suffix: "  (ZID)".into(),
+        }];
+        let mut s = PickerState::new(items, rows, 10);
         // The suffix is part of the displayed row...
         insta::assert_snapshot!(s.debug_render(), @r"
         >
@@ -425,14 +428,7 @@ mod tests {
 
     #[test]
     fn empty_item_set_selects_nothing() {
-        let s: PickerState<String> = PickerState::new(
-            Vec::new(),
-            |s: &String| Row {
-                matchable: s.clone(),
-                suffix: String::new(),
-            },
-            10,
-        );
+        let s: PickerState<String> = PickerState::new(Vec::new(), Vec::new(), 10);
         assert_eq!(s.counter(), (0, 0));
         assert_eq!(s.into_selected(), None);
     }

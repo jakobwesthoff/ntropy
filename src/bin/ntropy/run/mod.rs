@@ -142,7 +142,7 @@ fn cmd_search(
 
     if interactive {
         let candidates = ops::to_candidates(&matches.notes)?;
-        if let Some(selected) = picker::pick(candidates, picker::render_candidate)? {
+        if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
             open_and_refresh(vault, &selected.path)?;
         }
     } else {
@@ -203,7 +203,7 @@ fn cmd_edit(vault: &Vault, selector: String, interactive: bool) -> Result<ExitCo
         notes => {
             if interactive {
                 let candidates = ops::to_candidates(notes)?;
-                if let Some(selected) = picker::pick(candidates, picker::render_candidate)? {
+                if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
                     open_and_refresh(vault, &selected.path)?;
                 }
                 Ok(ExitCode::SUCCESS)
@@ -253,7 +253,7 @@ fn cmd_delete(vault: &Vault, selector: String, force: bool, interactive: bool) -
         notes => {
             if interactive {
                 let candidates = ops::to_candidates(notes)?;
-                match picker::pick(candidates, picker::render_candidate)? {
+                match picker::pick(candidates, picker::align_candidates)? {
                     Some(selected) => {
                         let reference = output::reference(
                             selected.id,

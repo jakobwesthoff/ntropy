@@ -15,6 +15,7 @@
 //! without a TTY (ADR 0021). This module is the thin glue that maps `crossterm`
 //! key events onto that state and draws it.
 
+mod layout;
 mod state;
 
 use std::io::{self, Write};
@@ -26,8 +27,8 @@ use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
     execute, queue, style, terminal,
 };
-use ntropy::ops::Candidate;
 
+pub use layout::align_candidates;
 use state::{PickerState, VisibleRow};
 
 /// One picker row split into its matchable and display-only parts.
@@ -42,25 +43,13 @@ pub struct Row {
     pub suffix: String,
 }
 
-/// Render a note [`Candidate`] as one picker row: title, local date and tags
-/// are matchable; the ULID trails as a display-only suffix (ADR 0014, ADR 0027).
-pub fn render_candidate(candidate: &Candidate) -> Row {
-    let mut matchable = format!("{}  ({})", candidate.title, candidate.date);
-    if !candidate.tags.is_empty() {
-        matchable.push_str(&format!("  [{}]", candidate.tags.join(", ")));
-    }
-    Row {
-        matchable,
-        suffix: format!("  ({})", candidate.id),
-    }
-}
-
 /// Present `items` in the interactive picker and return the chosen one.
 ///
-/// `render` turns each item into its [`Row`] (matchable text plus a display-only
-/// suffix). Returns `Ok(None)` when there are no items or the user aborts
-/// (Esc / Ctrl-C) without selecting.
-pub fn pick<T>(items: Vec<T>, render: impl Fn(&T) -> Row) -> Result<Option<T>> {
+/// `render_all` turns the whole item set into its [`Row`]s in one pass, which
+/// lets the renderer align columns across every candidate (see [`layout`]).
+/// Returns `Ok(None)` when there are no items or the user aborts (Esc / Ctrl-C)
+/// without selecting.
+pub fn pick<T>(items: Vec<T>, render_all: impl FnOnce(&[T]) -> Vec<Row>) -> Result<Option<T>> {
     // Nothing to pick: never touch the terminal so non-interactive callers and
     // empty result sets stay side-effect free.
     if items.is_empty() {
@@ -75,7 +64,7 @@ pub fn pick<T>(items: Vec<T>, render: impl Fn(&T) -> Row) -> Result<Option<T>> {
     // panics, so a failure mid-loop never leaves the user in raw mode.
     let _guard = TerminalGuard;
 
-    run_loop(&mut stdout, items, render)
+    run_loop(&mut stdout, items, render_all)
 }
 
 /// Restores the terminal to its normal mode when the picker exits.
@@ -93,10 +82,11 @@ impl Drop for TerminalGuard {
 fn run_loop<T>(
     stdout: &mut io::Stdout,
     items: Vec<T>,
-    render: impl Fn(&T) -> Row,
+    render_all: impl FnOnce(&[T]) -> Vec<Row>,
 ) -> Result<Option<T>> {
     let (mut cols, rows) = terminal::size().context("while querying the terminal size")?;
-    let mut state = PickerState::new(items, render, list_height(rows));
+    let picker_rows = render_all(&items);
+    let mut state = PickerState::new(items, picker_rows, list_height(rows));
 
     loop {
         draw(stdout, &state, cols).context("while drawing the picker")?;
