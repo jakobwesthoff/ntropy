@@ -29,7 +29,10 @@ pub struct Matches {
     pub warnings: Vec<ScanWarning>,
 }
 
-/// A picker candidate: the display fields plus the fuzzy-match string.
+/// A picker candidate: the fields shown in one picker row.
+///
+/// The binary renders these into the matchable row text and the display-only
+/// ULID suffix; what is matched is decided there (ADR 0027), not here.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
     pub id: Id,
@@ -37,8 +40,6 @@ pub struct Candidate {
     pub date: String,
     pub tags: Vec<String>,
     pub path: PathBuf,
-    /// The text the fuzzy matcher runs against: title plus tags (ADR 0014).
-    pub match_text: String,
 }
 
 /// Run an optional query over the vault, returning matches newest-first.
@@ -95,19 +96,12 @@ pub fn to_candidates(notes: &[Note]) -> Result<Vec<Candidate>> {
         .iter()
         .map(|note| {
             let date = note.created_date()?;
-            // Tags follow the title so a fuzzy query can hit either.
-            let match_text = if note.tags.is_empty() {
-                note.title.clone()
-            } else {
-                format!("{} {}", note.title, note.tags.join(" "))
-            };
             Ok(Candidate {
                 id: note.id,
                 title: note.title.clone(),
                 date,
                 tags: note.tags.clone(),
                 path: note.path.clone(),
-                match_text,
             })
         })
         .collect()
@@ -195,7 +189,7 @@ mod tests {
     }
 
     #[test]
-    fn candidates_carry_title_and_tags_in_match_text() {
+    fn candidates_carry_title_tags_and_date() {
         let (_g, v) = temp_vault();
         write(
             &v,
@@ -206,7 +200,8 @@ mod tests {
         let m = search(&v, None).expect("search");
         let cands = to_candidates(&m.notes).expect("candidates");
         assert_eq!(cands.len(), 1);
-        assert_eq!(cands[0].match_text, "Alpha area/work home");
         assert_eq!(cands[0].title, "Alpha");
+        assert_eq!(cands[0].tags, vec!["area/work", "home"]);
+        assert!(!cands[0].date.is_empty());
     }
 }
