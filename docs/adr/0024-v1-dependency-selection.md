@@ -30,6 +30,8 @@ Adopt:
 - `nucleo` — fuzzy matcher for the interactive picker.
 - `crossterm` — terminal control for the in-house picker UI
   ([ADR 0027](0027-in-house-fuzzy-picker-over-nucleo-and-crossterm.md)).
+- `unicode-width` — display-column widths for aligning the picker's columns and
+  truncating rows without wide characters straddling the terminal edge.
 - `thiserror` (library), `anyhow` (binary) — errors.
 - Dev: `insta`, `insta-cmd`, `tempfile`/`assert_fs` — tests.
 

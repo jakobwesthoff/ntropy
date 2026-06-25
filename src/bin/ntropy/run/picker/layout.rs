@@ -16,12 +16,13 @@
 //! draw loop reacts to width.
 
 use ntropy::ops::Candidate;
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use super::Row;
 
-/// Max display width (in chars) of the title column before ellipsis truncation.
+/// Max display width (in columns) of the title column before ellipsis truncation.
 const TITLE_CAP: usize = 48;
-/// Max display width (in chars) of the bracketed tags column.
+/// Max display width (in columns) of the bracketed tags column.
 const TAGS_CAP: usize = 32;
 
 /// Render every candidate into an aligned [`Row`].
@@ -75,36 +76,46 @@ fn render_tags(tags: &[String]) -> String {
     format!("[{inner}]")
 }
 
-/// The widest cell (in chars) across a column, or zero for an empty column.
+/// The widest cell (in display columns) across a column, or zero when empty.
 fn max_width(cells: &[String]) -> usize {
-    cells.iter().map(|c| c.chars().count()).max().unwrap_or(0)
+    cells.iter().map(|c| c.width()).max().unwrap_or(0)
 }
 
-/// Truncate `s` to at most `max` chars, marking a cut with a trailing `…`.
+/// Truncate `s` to at most `max` display columns, marking a cut with `…`.
 ///
-/// Widths are counted in `char`s, not display columns, so a string of wide or
-/// combining characters can still render wider than `max` cells. That matches
-/// the rest of the picker's char-based truncation.
-// TODO: account for Unicode display width (e.g. via unicode-width) if wide-char
-// titles ever misalign the grid in practice.
+/// Widths are Unicode display columns (via `unicode-width`), so a wide CJK
+/// character counts as two and a zero-width combining mark as none. The ellipsis
+/// occupies one column, reserved out of the budget on a cut.
 fn truncate(s: &str, max: usize) -> String {
-    if s.chars().count() <= max {
+    if s.width() <= max {
         return s.to_string();
     }
     if max == 0 {
         return String::new();
     }
-    let mut out: String = s.chars().take(max - 1).collect();
+    // Reserve one column for the trailing `…`, then take whole characters while
+    // they still fit so a wide character never straddles the boundary.
+    let budget = max - 1;
+    let mut out = String::new();
+    let mut used = 0;
+    for c in s.chars() {
+        let w = c.width().unwrap_or(0);
+        if used + w > budget {
+            break;
+        }
+        out.push(c);
+        used += w;
+    }
     out.push('…');
     out
 }
 
-/// Right-pad `s` with spaces to `width` chars (never truncates).
+/// Right-pad `s` with spaces to `width` display columns (never truncates).
 fn pad(s: &str, width: usize) -> String {
-    let count = s.chars().count();
+    let w = s.width();
     let mut out = s.to_string();
-    if count < width {
-        out.push_str(&" ".repeat(width - count));
+    if w < width {
+        out.push_str(&" ".repeat(width - w));
     }
     out
 }
@@ -114,6 +125,7 @@ mod tests {
     use std::path::PathBuf;
 
     use ntropy::id::Id;
+    use unicode_width::UnicodeWidthStr;
 
     use super::*;
 
@@ -240,5 +252,42 @@ mod tests {
         let rows = align_candidates(&[candidate(ULID_A, "solo", "2026-06-25", &["x"])]);
         assert_eq!(rows.len(), 1);
         assert!(rows[0].matchable.starts_with("solo  (2026-06-25)  [x]"));
+    }
+
+    /// The display column at which the date starts (each `(` opens the date).
+    fn date_column(matchable: &str) -> usize {
+        let prefix: String = matchable.chars().take_while(|c| *c != '(').collect();
+        prefix.width()
+    }
+
+    #[test]
+    fn wide_title_truncates_by_display_width() {
+        // 30 CJK chars span 60 display columns, well over the 48-column cap.
+        let wide = "ナ".repeat(30);
+        let rows = align_candidates(&[candidate(ULID_A, &wide, "2026-06-25", &[])]);
+        let title: String = rows[0]
+            .matchable
+            .chars()
+            .take_while(|c| *c != '(')
+            .collect();
+        let title = title.trim_end();
+        assert!(title.ends_with('…'));
+        // The whole title column never exceeds the cap in display columns.
+        assert!(title.width() <= TITLE_CAP);
+    }
+
+    #[test]
+    fn wide_and_ascii_titles_align_by_display_width() {
+        let rows = align_candidates(&[
+            candidate(ULID_A, "日本語", "2026-06-25", &[]),
+            candidate(ULID_B, "ascii", "2026-06-25", &[]),
+        ]);
+        // Despite different char counts, both dates begin at the same column.
+        assert_eq!(
+            date_column(&rows[0].matchable),
+            date_column(&rows[1].matchable)
+        );
+        // The CJK title (3 chars, 6 columns) is the widest, so it sets the cap.
+        assert_eq!(date_column(&rows[0].matchable), 6 + 2);
     }
 }

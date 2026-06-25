@@ -28,6 +28,8 @@ use crossterm::{
     execute, queue, style, terminal,
 };
 
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+
 pub use layout::align_candidates;
 use state::{PickerState, VisibleRow};
 
@@ -163,7 +165,7 @@ fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result
         cursor::MoveTo(0, prompt_row),
         style::Print(format!("❯ {}", state.query())),
     )?;
-    let prompt_col = 2 + state.query().chars().count() as u16;
+    let prompt_col = 2 + state.query().width() as u16;
     queue!(stdout, cursor::MoveTo(prompt_col, prompt_row))?;
 
     stdout.flush().context("while flushing the picker frame")?;
@@ -212,13 +214,15 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
     }
     queue!(stdout, style::Print(pointer))?;
 
-    // Truncate to the terminal width so a long row never wraps and breaks the
-    // layout. The matchable part is drawn first (matches in yellow), then the
-    // suffix fills whatever budget remains. `❯ ` is two display columns.
-    let mut drawn = pointer.chars().count();
+    // Truncate to the terminal width (in display columns) so a long row never
+    // wraps and breaks the layout. The matchable part is drawn first (matches in
+    // yellow), then the suffix fills whatever budget remains. A wide character is
+    // dropped whole rather than allowed to straddle the right edge.
+    let mut drawn = UnicodeWidthStr::width(pointer);
     let positions = row.positions;
     for (i, c) in row.matchable.chars().enumerate() {
-        if drawn >= width {
+        let w = c.width().unwrap_or(0);
+        if drawn + w > width {
             break;
         }
         let matched = positions.binary_search(&(i as u32)).is_ok();
@@ -234,7 +238,7 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
                 queue!(stdout, style::ResetColor)?;
             }
         }
-        drawn += 1;
+        drawn += w;
     }
 
     if !row.suffix.is_empty() && drawn < width {
@@ -244,11 +248,12 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
             queue!(stdout, style::SetAttribute(Attribute::Dim))?;
         }
         for c in row.suffix.chars() {
-            if drawn >= width {
+            let w = c.width().unwrap_or(0);
+            if drawn + w > width {
                 break;
             }
             queue!(stdout, style::Print(c))?;
-            drawn += 1;
+            drawn += w;
         }
         if !selected {
             queue!(stdout, style::SetAttribute(Attribute::NormalIntensity))?;
