@@ -57,8 +57,8 @@ On editor exit, ntropy reconciles the note (slug realignment, view links).
 
 ### `search [query]`
 
-The single browse / filter / full-text entry point. `query` is an optional DSL
-expression; omitted means all notes.
+The single browse / filter / full-text entry point (visible alias: `list`).
+`query` is an optional DSL expression; omitted means all notes.
 
 - On a TTY: launches the interactive picker; Enter opens the selected note in
   the editor.

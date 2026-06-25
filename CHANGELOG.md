@@ -16,6 +16,7 @@ and this project adheres to
 
 ### Added
 
+- `list` is now a visible alias for `search`.
 - `reconcile` now prints a start line and a closing summary (notes scanned,
   files renamed, views rebuilt, warnings). The summary always prints, so a
   no-op run is no longer silent.

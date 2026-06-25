@@ -22,8 +22,8 @@ clap-based subcommands. v1 surface:
 - `search [query]` — the single browse/filter/full-text entry point. The query
   is a DSL expression (ADR 0012) and is optional (omitted = all notes). On a
   TTY it launches the interactive picker and opens the selection in `$EDITOR`;
-  piped or with `-n`/`--non-interactive` it prints plainly. There is no
-  separate `list` command.
+  piped or with `-n`/`--non-interactive` it prints plainly. `list` is a visible
+  alias for it; there is no distinct list command.
 - `edit <id|query>` — open a specific note directly, bypassing the picker when
   unambiguous. The selector is a full 26-char ULID (resolved to that id) or
   otherwise a DSL query.

@@ -67,6 +67,7 @@ pub enum Command {
     },
 
     /// Browse, filter or full-text search notes.
+    #[command(visible_alias = "list")]
     Search {
         /// A query DSL expression (joined from trailing arguments; omitted =
         /// all notes).

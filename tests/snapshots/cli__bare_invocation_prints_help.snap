@@ -14,7 +14,7 @@ Usage: ntropy [OPTIONS] [COMMAND]
 Commands:
   init       Initialize a vault (idempotent)
   new        Create a note from the default template and open it
-  search     Browse, filter or full-text search notes
+  search     Browse, filter or full-text search notes [aliases: list]
   edit       Open a specific note by id or query
   reconcile  Realign drifted filenames and rebuild views
   delete     Delete a note by id or query

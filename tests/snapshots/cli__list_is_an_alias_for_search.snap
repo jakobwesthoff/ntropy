@@ -1,0 +1,16 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - list
+    - "-n"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[ULID]	[DATE]	A		[VAULT]/all-notes/[ULID]-a.md
+
+----- stderr -----
