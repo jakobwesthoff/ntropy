@@ -6,7 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## 1.0.0 - 2026-06-26
+
+First stable release: the user-facing interface is polished and initial
+language-server support is added.
 
 ### Fixed
 
@@ -98,5 +101,3 @@ Initial release: a working, Unix-only (macOS, Linux) v1 of the ntropy CLI.
 - Interactive fuzzy picker on a TTY and `$VISUAL`/`$EDITOR` integration, with a
   plain newest-first `id<TAB>title<TAB>path` table when piped or run with `-n`.
 - Derived dates rendered in the system-local timezone.
-
-[0.9.0]: https://github.com/jakobwesthoff/ntropy/releases/tag/v0.9.0
