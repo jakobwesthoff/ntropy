@@ -10,6 +10,7 @@
 
 pub mod create;
 pub mod delete;
+pub mod info;
 pub mod init;
 pub mod select;
 pub mod tags;
@@ -17,6 +18,7 @@ pub mod view_admin;
 
 pub use create::{TodayOutcome, create_note, today_note};
 pub use delete::delete_note;
+pub use info::{VaultStats, vault_stats};
 pub use init::init_vault;
 pub use select::{Candidate, Matches, resolve_selection, search, to_candidates};
 pub use tags::{TagCount, list_tags};

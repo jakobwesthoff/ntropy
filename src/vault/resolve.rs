@@ -29,6 +29,21 @@ pub struct ResolveOptions {
     pub global_default: Option<PathBuf>,
 }
 
+/// Which rule resolved the active vault, for reporting (`info`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolveSource {
+    /// The `--vault` flag.
+    Explicit,
+    /// The `$NTROPY_VAULT` environment variable.
+    Env,
+    /// A `.ntropy-vault` pointer file found during walk-up (its path).
+    Pointer(PathBuf),
+    /// A `.ntropy/` directory found by walking up from the start directory.
+    WalkUp,
+    /// The global config's default vault.
+    GlobalDefault,
+}
+
 /// Why a vault could not be resolved.
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
@@ -44,14 +59,21 @@ pub enum ResolveError {
 
 /// Resolve the vault root directory from the given options.
 pub fn resolve(opts: &ResolveOptions) -> Result<PathBuf, ResolveError> {
+    resolve_with_source(opts).map(|(root, _)| root)
+}
+
+/// Resolve the vault root, also reporting which rule matched (for `info`).
+pub fn resolve_with_source(
+    opts: &ResolveOptions,
+) -> Result<(PathBuf, ResolveSource), ResolveError> {
     // 1. Explicit `--vault` wins outright; it must already be a vault.
     if let Some(path) = &opts.explicit {
-        return require_vault(path);
+        return Ok((require_vault(path)?, ResolveSource::Explicit));
     }
 
     // 2. Then `$NTROPY_VAULT`.
     if let Some(path) = &opts.env {
-        return require_vault(path);
+        return Ok((require_vault(path)?, ResolveSource::Env));
     }
 
     // 3. Then the cwd walk-up.
@@ -63,7 +85,7 @@ pub fn resolve(opts: &ResolveOptions) -> Result<PathBuf, ResolveError> {
 
     // 4. Finally the global default.
     if let Some(path) = &opts.global_default {
-        return require_vault(path);
+        return Ok((require_vault(path)?, ResolveSource::GlobalDefault));
     }
 
     Err(ResolveError::NoVault)
@@ -79,14 +101,15 @@ fn require_vault(path: &Path) -> Result<PathBuf, ResolveError> {
 
 /// Walk from `start` up to the filesystem root, returning the first vault found
 /// via either signal. The pointer is checked first so it wins in a tie.
-fn walk_up(start: &Path) -> Result<Option<PathBuf>, ResolveError> {
+fn walk_up(start: &Path) -> Result<Option<(PathBuf, ResolveSource)>, ResolveError> {
     for dir in start.ancestors() {
         let pointer = dir.join(POINTER_FILE);
         if pointer.is_file() {
-            return resolve_pointer(&pointer).map(Some);
+            let target = resolve_pointer(&pointer)?;
+            return Ok(Some((target, ResolveSource::Pointer(pointer))));
         }
         if layout::is_vault(dir) {
-            return Ok(canonicalize(dir));
+            return Ok(canonicalize(dir).map(|root| (root, ResolveSource::WalkUp)));
         }
     }
     Ok(None)
@@ -338,6 +361,70 @@ mod tests {
         })
         .expect("resolve");
         assert_eq!(resolved, canonical(&vault));
+    }
+
+    #[test]
+    fn reports_the_resolution_source() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let explicit = dir.path().join("explicit");
+        let env = dir.path().join("env");
+        let walk = dir.path().join("walk");
+        let dflt = dir.path().join("default");
+        for v in [&explicit, &env, &walk, &dflt] {
+            make_vault(v);
+        }
+
+        let source = |opts: &ResolveOptions| resolve_with_source(opts).expect("resolve").1;
+
+        assert_eq!(
+            source(&ResolveOptions {
+                explicit: Some(explicit.clone()),
+                ..Default::default()
+            }),
+            ResolveSource::Explicit
+        );
+        assert_eq!(
+            source(&ResolveOptions {
+                env: Some(env.clone()),
+                ..Default::default()
+            }),
+            ResolveSource::Env
+        );
+        assert_eq!(
+            source(&ResolveOptions {
+                start_dir: Some(walk.clone()),
+                ..Default::default()
+            }),
+            ResolveSource::WalkUp
+        );
+        assert_eq!(
+            source(&ResolveOptions {
+                start_dir: Some(dir.path().join("nowhere")),
+                global_default: Some(dflt.clone()),
+                ..Default::default()
+            }),
+            ResolveSource::GlobalDefault
+        );
+    }
+
+    #[test]
+    fn reports_pointer_as_the_source() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = dir.path().join("project");
+        let vault = dir.path().join("notes");
+        make_vault(&vault);
+        fs::create_dir_all(&project).expect("project");
+        fs::write(project.join(".ntropy-vault"), "../notes\n").expect("pointer");
+
+        let (_root, source) = resolve_with_source(&ResolveOptions {
+            start_dir: Some(project.clone()),
+            ..Default::default()
+        })
+        .expect("resolve");
+        assert_eq!(
+            source,
+            ResolveSource::Pointer(project.join(".ntropy-vault"))
+        );
     }
 
     #[test]

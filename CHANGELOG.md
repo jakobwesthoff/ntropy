@@ -16,6 +16,9 @@ and this project adheres to
 
 ### Added
 
+- `info` command: reports the active vault and how it resolved, the global
+  default vault, and vault statistics (note/tag/view/template counts, warnings,
+  creation-date span, top tags, and template names).
 - `today` command: opens today's note (titled by the date), creating it from the
   seeded `today` template on first use each day and reopening it afterward. `init`
   now also seeds `.ntropy/templates/today.md`.

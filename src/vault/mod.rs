@@ -16,7 +16,7 @@ pub mod resolve;
 use std::path::{Path, PathBuf};
 
 pub use layout::Layout;
-pub use resolve::{ResolveError, ResolveOptions};
+pub use resolve::{ResolveError, ResolveOptions, ResolveSource};
 
 /// A resolved vault.
 #[derive(Debug, Clone, PartialEq, Eq)]

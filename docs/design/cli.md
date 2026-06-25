@@ -137,3 +137,12 @@ edit` in v1; editing a view is remove + add.
 
 List all distinct full tag strings across the vault with their note counts,
 sorted alphabetically (`tag<TAB>count`).
+
+### `info`
+
+Report the active vault and which rule resolved it (`--vault`, `$NTROPY_VAULT`,
+a `.ntropy-vault` pointer, the current-directory walk-up, or the global
+default), the configured global default vault, and vault statistics: note, tag,
+view and template counts, the number of notes skipped with warnings, the
+creation-date span, the most-used tags, and the template names. Unlike the data
+commands this is a human report, printed the same way piped or on a TTY.

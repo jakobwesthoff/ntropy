@@ -13,11 +13,13 @@
 
 use std::fmt::Display;
 use std::io::Write;
+use std::path::Path;
 
 use anyhow::Result;
 use ntropy::note::Note;
-use ntropy::ops::TagCount;
+use ntropy::ops::{TagCount, VaultStats};
 use ntropy::scan::ScanWarning;
+use ntropy::vault::{ResolveSource, Vault};
 
 /// Print notes as a tab-separated `id<TAB>date<TAB>title<TAB>tags<TAB>path`
 /// table, newest first (ADR 0025).
@@ -71,6 +73,70 @@ pub fn print_tags(tags: &[TagCount]) -> Result<()> {
         writeln!(out, "{}\t{}", entry.tag, entry.count)?;
     }
     Ok(())
+}
+
+/// Print the `info` report: the active vault and how it resolved, the global
+/// default, and the vault statistics. This is a human report shown identically
+/// whether interactive or piped (it is not a machine table).
+pub fn print_info(
+    vault: &Vault,
+    source: &ResolveSource,
+    default_vault: Option<&Path>,
+    stats: &VaultStats,
+) {
+    println!(
+        "Active vault:  {} (via {})",
+        vault.root().display(),
+        describe_source(source)
+    );
+    match default_vault {
+        Some(path) => println!("Default vault: {}", path.display()),
+        None => println!("Default vault: (not set)"),
+    }
+
+    println!();
+    println!("Notes:     {}", stats.notes);
+    println!("Tags:      {}", stats.distinct_tags);
+    println!("Views:     {}", stats.views);
+    println!("Templates: {}", stats.templates.len());
+    println!("Warnings:  {}", stats.warnings);
+    match (&stats.oldest_date, &stats.newest_date) {
+        (Some(oldest), Some(newest)) => println!("Span:      {oldest} .. {newest}"),
+        _ => println!("Span:      (no notes)"),
+    }
+
+    if !stats.top_tags.is_empty() {
+        println!();
+        println!("Top tags:");
+        let width = stats
+            .top_tags
+            .iter()
+            .map(|t| t.tag.len())
+            .max()
+            .unwrap_or(0);
+        for entry in &stats.top_tags {
+            println!("  {:<width$}  {}", entry.tag, entry.count, width = width);
+        }
+    }
+
+    if !stats.templates.is_empty() {
+        println!();
+        println!("Templates:");
+        for name in &stats.templates {
+            println!("  {name}");
+        }
+    }
+}
+
+/// A human description of which rule resolved the active vault.
+fn describe_source(source: &ResolveSource) -> String {
+    match source {
+        ResolveSource::Explicit => "--vault flag".to_string(),
+        ResolveSource::Env => "$NTROPY_VAULT".to_string(),
+        ResolveSource::Pointer(path) => format!("pointer file {}", path.display()),
+        ResolveSource::WalkUp => "current directory".to_string(),
+        ResolveSource::GlobalDefault => "global default".to_string(),
+    }
 }
 
 /// Print scan warnings to stderr, one per line, identified by file name.

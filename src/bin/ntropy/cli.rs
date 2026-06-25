@@ -114,6 +114,9 @@ pub enum Command {
 
     /// List all tags with note counts.
     Tags,
+
+    /// Show the active vault, its resolution, and vault statistics.
+    Info,
 }
 
 #[derive(Subcommand, Debug)]

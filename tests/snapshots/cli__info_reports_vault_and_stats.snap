@@ -1,0 +1,31 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - info
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Active vault:  [VAULT] (via current directory)
+Default vault: [DEFAULT]
+
+Notes:     2
+Tags:      2
+Views:     1
+Templates: 2
+Warnings:  0
+Span:      [DATE] .. [DATE]
+
+Top tags:
+  area/work  2
+  daily      1
+
+Templates:
+  default
+  meeting
+
+----- stderr -----

@@ -25,7 +25,7 @@ use ntropy::config::global;
 use ntropy::ops;
 use ntropy::reconcile;
 use ntropy::scan::ScanWarning;
-use ntropy::vault::{ResolveOptions, Vault};
+use ntropy::vault::{ResolveOptions, Vault, resolve};
 
 use crate::cli::{Cli, Command, GlobalArgs, ViewCommand, join};
 
@@ -42,6 +42,11 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     // vault, so it is handled before resolution.
     if let Command::Init { path, set_default } = command {
         return cmd_init(path, cli.global.vault.clone(), set_default);
+    }
+
+    // `info` resolves the vault itself so it can report which rule matched.
+    if let Command::Info = command {
+        return cmd_info(&cli.global);
     }
 
     let vault = resolve_vault(&cli.global)?;
@@ -64,23 +69,32 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::View(sub) => cmd_view(&vault, sub),
         Command::Tags => cmd_tags(&cli.global, &vault),
+        // Handled above, before vault resolution.
+        Command::Info => unreachable!("info is dispatched before vault resolution"),
     }
 }
+
+/// How many of the most-used tags `info` reports.
+const TOP_TAGS: usize = 5;
 
 // =============================================================================
 // Vault resolution
 // =============================================================================
 
-fn resolve_vault(global: &GlobalArgs) -> Result<Vault> {
+fn resolve_options(global: &GlobalArgs) -> Result<ResolveOptions> {
     let global_default = global::load()
         .context("while loading the global config")?
         .default_vault;
-    let opts = ResolveOptions {
+    Ok(ResolveOptions {
         explicit: global.vault.clone(),
         env: std::env::var_os("NTROPY_VAULT").map(PathBuf::from),
         start_dir: std::env::current_dir().ok(),
         global_default,
-    };
+    })
+}
+
+fn resolve_vault(global: &GlobalArgs) -> Result<Vault> {
+    let opts = resolve_options(global)?;
     Vault::resolve(&opts).context("while resolving the vault")
 }
 
@@ -296,6 +310,16 @@ fn cmd_view(vault: &Vault, sub: ViewCommand) -> Result<ExitCode> {
             println!("Removed view `{name}`.");
         }
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_info(global: &GlobalArgs) -> Result<ExitCode> {
+    let opts = resolve_options(global)?;
+    let (root, source) =
+        resolve::resolve_with_source(&opts).context("while resolving the vault")?;
+    let vault = Vault::new(root);
+    let stats = ops::vault_stats(&vault, TOP_TAGS).context("while gathering vault info")?;
+    output::print_info(&vault, &source, opts.global_default.as_deref(), &stats);
     Ok(ExitCode::SUCCESS)
 }
 

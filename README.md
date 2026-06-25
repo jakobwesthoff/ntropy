@@ -71,6 +71,9 @@ flags are needed. From elsewhere, point at it with `--vault <path>`,
   and a summary of notes scanned, files renamed, views rebuilt and warnings.
 - `view list|add|remove` — manage views, e.g. `ntropy view add by-status --field status`.
 - `tags` — list every tag with its note count.
+- `info` — show the active vault and how it was resolved, the global default
+  vault, and stats: note/tag/view/template counts, skipped-note warnings, the
+  creation-date span, the top tags, and the template names.
 
 Global flags (any command): `--vault <path>`, `-n`/`--non-interactive`,
 `--strict` (treat malformed/badly-named notes as errors instead of warnings).

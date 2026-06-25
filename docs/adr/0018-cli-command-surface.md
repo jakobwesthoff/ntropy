@@ -37,6 +37,10 @@ clap-based subcommands. v1 surface:
 - `view list|add|remove` — manage per-vault materialized view definitions.
   There is no `view edit` (editing is remove + add).
 - `tags` — list distinct full tags with note counts.
+- `info` — report the active vault and how it resolved, the global default
+  vault, and vault statistics (note/tag/view/template counts, skipped-note
+  warnings, creation-date span, most-used tags). A human report, shown
+  identically piped or on a TTY.
 
 `init` is idempotent and only writes the global default vault when passed
 `--set-default`. Its target is the positional path or, when that is omitted, the

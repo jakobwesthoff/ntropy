@@ -304,6 +304,36 @@ fn search_full_text() {
 }
 
 #[test]
+fn info_reports_vault_and_stats() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "a",
+        "---\ntitle: A\ntags: [area/work, daily]\n---\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "b",
+        "---\ntitle: B\ntags: [area/work]\n---\n",
+    );
+    let templates = dir.path().join(".ntropy/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(templates.join("default.md"), "x").expect("default template");
+    fs::write(templates.join("meeting.md"), "x").expect("meeting template");
+
+    let mut settings = redacted(dir.path());
+    // The global default vault is host-specific, so redact that whole line.
+    settings.add_filter(r"(?m)^Default vault: .*$", "Default vault: [DEFAULT]");
+    settings.bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("info");
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
 fn tags_lists_counts() {
     let dir = setup_vault();
     write_note(
