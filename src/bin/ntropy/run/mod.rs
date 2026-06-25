@@ -219,8 +219,10 @@ fn cmd_delete(vault: &Vault, selector: String, force: bool, interactive: bool) -
         }
     }
 
-    let warnings = ops::delete_note(vault, &path).context("while deleting the note")?;
-    output::print_warnings(&warnings);
+    // The resolution scan above already surfaced any warnings; the rebuild
+    // scans the same vault, so its warnings are discarded to avoid printing
+    // each one twice.
+    ops::delete_note(vault, &path).context("while deleting the note")?;
     println!("Deleted {}", file_name(&path));
     Ok(ExitCode::SUCCESS)
 }

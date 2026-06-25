@@ -1,0 +1,17 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - edit
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - "-n"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: no note matches `[ULID]`

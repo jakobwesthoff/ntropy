@@ -286,6 +286,48 @@ fn delete_non_interactive_without_force_refuses() {
 }
 
 #[test]
+fn reconcile_renames_and_reports() {
+    let dir = setup_vault();
+    // The on-disk slug `old` no longer matches the title `Brand New`.
+    write_note(
+        dir.path(),
+        ULID_A,
+        "old",
+        "---\ntitle: Brand New\ntags: [x]\n---\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("reconcile");
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(
+        dir.path()
+            .join(format!("all-notes/{ULID_A}-brand-new.md"))
+            .exists()
+    );
+}
+
+#[test]
+fn edit_no_match_errors() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["edit", ULID_A, "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn delete_no_match_errors() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["delete", "tag:nonexistent", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
 fn query_parse_error_is_reported() {
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {

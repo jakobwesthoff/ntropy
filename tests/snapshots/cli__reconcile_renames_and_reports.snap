@@ -1,0 +1,15 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - reconcile
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+renamed [ULID]-old.md -> [ULID]-brand-new.md
+
+----- stderr -----

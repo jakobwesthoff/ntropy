@@ -167,6 +167,15 @@ mod tests {
     }
 
     #[test]
+    fn uppercase_transliteration_folds_then_lowercases() {
+        // Uppercase German and accented Latin transliterate before the
+        // lowercase step, so they fold to the same forms as their lowercase
+        // counterparts.
+        assert_eq!(slugify("ÄÖÜ"), "aeoeue");
+        assert_eq!(slugify("ÀÉÎÕÚ Ñ Ç"), "aeiou-n-c");
+    }
+
+    #[test]
     fn punctuation_is_removed_not_replaced() {
         assert_eq!(slugify("C++ vs. Rust!"), "c-vs-rust");
         assert_eq!(slugify("a & b"), "a-b");
