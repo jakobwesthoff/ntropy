@@ -100,6 +100,25 @@ result is a browsable symlink tree any tool (a file manager, `grep`, your
 editor) can navigate, kept fresh after every ntropy mutation and by
 `reconcile`.
 
+## Development
+
+Common tasks are wrapped as [`just`](https://github.com/casey/just) recipes
+(`just --list`):
+
+    just test      # cargo test
+    just clippy    # cargo clippy --all-targets -- -D warnings
+    just fmt       # cargo fmt
+    just check     # clippy + tests + fmt --check (the CI gate)
+    just coverage  # cargo llvm-cov
+
+Tests use [`insta`](https://insta.rs) snapshots across all layers (ADR 0021).
+When a change alters output, the snapshot assertions fail and write
+`.pending-snap` files; review and accept them with
+[`cargo-insta`](https://insta.rs/docs/cli/):
+
+    cargo insta review   # interactively accept/reject pending snapshots
+    cargo insta accept   # accept all pending snapshots
+
 ## Design
 
 The full design is recorded as decision records under [`docs/adr/`](docs/adr/)

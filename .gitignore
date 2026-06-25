@@ -1,1 +1,5 @@
 /target
+
+# insta leaves these next to snapshots until reviewed/accepted.
+*.pending-snap
+*.snap.new
