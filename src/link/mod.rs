@@ -92,6 +92,12 @@ pub fn at_offset<'l, 'b>(links: &'l [Link<'b>], offset: usize) -> Option<&'l Lin
     links.iter().find(|link| link.range.contains(&offset))
 }
 
+/// Whether `offset` (a byte offset into `body`) falls inside fenced or inline
+/// code. The language server uses this to suppress link completion in code.
+pub fn in_code(body: &str, offset: usize) -> bool {
+    code::is_masked(&code::masked_ranges(body), offset)
+}
+
 /// A body whose stale link targets were refreshed by [`rewrite_body`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BodyRewrite {

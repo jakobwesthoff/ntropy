@@ -10,18 +10,10 @@
 //! picker keeps its terminal loop out of tests (ADR 0021, ADR 0027). The pure
 //! logic it drives lives in unit-tested submodules.
 
-// The offset conversions are the tested foundation that ranges depend on. Their
-// callers (link/tag completion and navigation) land in later phases, so the
-// module has no non-test caller yet; the allow is removed once it is wired in.
-#[allow(dead_code)]
-mod offset;
-
-// The note cache reads (`entries`, `CacheEntry`) are consumed by completion in
-// the next phase, so the module keeps a grounded dead-code allow until then;
-// its `invalidate` path is already wired below.
-#[allow(dead_code)]
 mod cache;
+mod completion;
 mod documents;
+mod offset;
 mod uri;
 mod vault;
 
@@ -34,11 +26,11 @@ use lsp_types::notification::{
     DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument, Exit,
     Notification as _, ShowMessage,
 };
-use lsp_types::request::{RegisterCapability, Request as _};
+use lsp_types::request::{Completion, RegisterCapability, Request as _};
 use lsp_types::{
-    DidChangeTextDocumentParams, DidChangeWatchedFilesParams, DidCloseTextDocumentParams,
-    DidOpenTextDocumentParams, InitializeParams, PositionEncodingKind, ServerCapabilities,
-    TextDocumentSyncCapability, TextDocumentSyncKind, Uri,
+    CompletionOptions, CompletionParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
+    DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, PositionEncodingKind,
+    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, Uri,
 };
 use serde_json::json;
 
@@ -84,6 +76,7 @@ fn serve(connection: &Connection) -> Result<Outcome> {
         serde_json::from_value(params).context("while parsing the initialize parameters")?;
     let encoding = negotiate_encoding(&params);
     let dynamic_watchers = wants_dynamic_watchers(&params);
+    let snippet_support = wants_snippets(&params);
 
     let result = json!({
         "capabilities": server_capabilities(encoding),
@@ -93,7 +86,7 @@ fn serve(connection: &Connection) -> Result<Outcome> {
         .initialize_finish(id, result)
         .context("while finishing initialization")?;
 
-    let mut server = Server::new(connection, encoding, dynamic_watchers);
+    let mut server = Server::new(connection, encoding, dynamic_watchers, snippet_support);
     // `initialize_finish` already consumed the `initialized` notification, so the
     // registration is sent here rather than from the dispatch loop.
     server.register_watchers()?;
@@ -124,11 +117,27 @@ fn wants_dynamic_watchers(params: &InitializeParams) -> bool {
         .unwrap_or(false)
 }
 
+/// Whether the client renders snippet completion items (`$0` placeholders).
+fn wants_snippets(params: &InitializeParams) -> bool {
+    params
+        .capabilities
+        .text_document
+        .as_ref()
+        .and_then(|doc| doc.completion.as_ref())
+        .and_then(|completion| completion.completion_item.as_ref())
+        .and_then(|item| item.snippet_support)
+        .unwrap_or(false)
+}
+
 /// The capabilities advertised to the client. Feature phases extend this.
 fn server_capabilities(encoding: Encoding) -> ServerCapabilities {
     ServerCapabilities {
         position_encoding: Some(encoding_kind(encoding)),
         text_document_sync: Some(TextDocumentSyncCapability::Kind(TextDocumentSyncKind::FULL)),
+        completion_provider: Some(CompletionOptions {
+            trigger_characters: Some(vec!["[".to_owned(), "(".to_owned()]),
+            ..Default::default()
+        }),
         ..Default::default()
     }
 }
@@ -143,21 +152,25 @@ fn encoding_kind(encoding: Encoding) -> PositionEncodingKind {
 /// The running server: connection, negotiated settings, and session state.
 struct Server<'c> {
     connection: &'c Connection,
-    // Consumed by completion in the next phase; the dispatch loop does not use
-    // the encoding yet.
-    #[allow(dead_code)]
     encoding: Encoding,
     dynamic_watchers: bool,
+    snippet_support: bool,
     documents: Documents,
     cache: Cache,
 }
 
 impl<'c> Server<'c> {
-    fn new(connection: &'c Connection, encoding: Encoding, dynamic_watchers: bool) -> Self {
+    fn new(
+        connection: &'c Connection,
+        encoding: Encoding,
+        dynamic_watchers: bool,
+        snippet_support: bool,
+    ) -> Self {
         Self {
             connection,
             encoding,
             dynamic_watchers,
+            snippet_support,
             documents: Documents::new(),
             cache: Cache::new(),
         }
@@ -175,7 +188,7 @@ impl<'c> Server<'c> {
                     {
                         return Ok(Outcome::Shutdown);
                     }
-                    self.respond_unhandled(request)?;
+                    self.handle_request(request)?;
                 }
                 Message::Notification(notification) => {
                     if let Some(outcome) = self.handle_notification(notification)? {
@@ -188,6 +201,45 @@ impl<'c> Server<'c> {
         }
         // The channel closed without a clean shutdown handshake.
         Ok(Outcome::Aborted)
+    }
+
+    /// Dispatch a request to its handler, falling back to `MethodNotFound`.
+    fn handle_request(&mut self, request: Request) -> Result<()> {
+        match request.method.as_str() {
+            Completion::METHOD => self.on_completion(request),
+            _ => self.respond_unhandled(request),
+        }
+    }
+
+    /// Answer a `textDocument/completion` request.
+    fn on_completion(&mut self, request: Request) -> Result<()> {
+        let id = request.id.clone();
+        let result = match serde_json::from_value::<CompletionParams>(request.params) {
+            Ok(params) => self.completion(&params),
+            Err(_) => None,
+        };
+        let response = match result {
+            Some(list) => Response::new_ok(id, list),
+            None => Response::new_ok(id, serde_json::Value::Null),
+        };
+        self.connection
+            .sender
+            .send(Message::Response(response))
+            .context("while sending the completion response")
+    }
+
+    /// Compute completions for a request, or `None` when there is nothing to
+    /// offer (document not open, not in a vault, or no link context).
+    fn completion(&mut self, params: &CompletionParams) -> Option<lsp_types::CompletionList> {
+        let uri = &params.text_document_position.text_document.uri;
+        let position = params.text_document_position.position;
+        let text = self.documents.get(uri)?.to_owned();
+        let vault::Lookup::Found(vault) = vault::for_document(uri) else {
+            return None;
+        };
+        let entries = self.cache.entries(&vault);
+        let offset = offset::position_to_offset(&text, position, self.encoding);
+        completion::complete(&text, offset, self.encoding, entries, self.snippet_support)
     }
 
     /// Handle a notification, returning an [`Outcome`] only when it ends serving.

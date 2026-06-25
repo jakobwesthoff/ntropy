@@ -36,10 +36,8 @@ impl Documents {
 
     /// The current text of an open document, if any.
     ///
-    /// Read by completion in the next phase to determine cursor context; the
-    /// dispatch loop only writes the store, so the allow is removed once
-    /// completion is wired in.
-    #[allow(dead_code)]
+    /// Read by completion to determine cursor context; the dispatch loop only
+    /// writes the store.
     pub fn get(&self, uri: &Uri) -> Option<&str> {
         self.texts.get(uri).map(String::as_str)
     }
