@@ -76,6 +76,8 @@ flags are needed. From elsewhere, point at it with `--vault <path>`,
 - `info` — show the active vault and how it was resolved, the global default
   vault, and stats: note/tag/view/template counts, skipped-note warnings, the
   creation-date span, the top tags, and the template names.
+- `lsp` — run the language server over stdin/stdout for your editor (see
+  [Linking and the language server](#linking-and-the-language-server)).
 
 Global flags (any command): `--vault <path>`, `-n`/`--non-interactive`,
 `--strict` (treat malformed/badly-named notes as errors instead of warnings).
@@ -152,6 +154,60 @@ The first run on a given day creates it from this template; later runs the same
 day reopen the same note rather than making a new one. Customize `today.md` to
 change what your daily note looks like (it must exist; a vault created before
 this feature can re-run `ntropy init` to seed it).
+
+## Linking and the language server
+
+Notes link to each other with ordinary Markdown links whose target is the note's
+filename, `[display](<ulid>-<slug>.md)`. The leading 26-character ULID carries
+identity, so a link keeps resolving even after the target's title (and slug)
+change; `ntropy reconcile` refreshes the slug in existing links so they stay
+clickable in any Markdown viewer. You can write these by hand, but the ergonomic
+way is the language server.
+
+`ntropy lsp` speaks the Language Server Protocol over stdin/stdout, so any
+LSP-capable editor can use it. It provides:
+
+- **Link completion** — type `[` and pick a note (fuzzy-matched on title and
+  tags); the whole `[Title](<ulid>-<slug>.md)` is inserted. Typing inside a
+  hand-written `](…)` completes just the target.
+- **Tag completion** — inside a note's `tags:` frontmatter (both `[a, b]` and
+  `- a` list forms), hierarchy-aware against the tags already in your vault.
+- **Go to definition** and **document links** — jump to or click a link's target.
+- **Workspace symbols** — jump to any note by title across the vault.
+
+The server resolves the vault per open document (the same rules the CLI uses), so
+no project configuration is required beyond pointing your editor at the binary.
+
+### Neovim
+
+For a recent Neovim (0.11+), start the server for Markdown buffers that live in a
+vault. Put this in your config:
+
+```lua
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "markdown",
+  callback = function(args)
+    local root = vim.fs.root(args.buf, { ".ntropy", ".ntropy-vault" })
+    if not root then
+      return -- not inside an ntropy vault
+    end
+    vim.lsp.start({
+      name = "ntropy",
+      cmd = { "ntropy", "lsp" },
+      root_dir = root,
+    })
+  end,
+})
+
+-- Optional: snippet support makes `[` completion place the cursor after the link.
+-- (Neovim's built-in client advertises it; nvim-cmp/blink users get it too.)
+vim.keymap.set("n", "gd", vim.lsp.buf.definition)
+vim.keymap.set("n", "<leader>fn", vim.lsp.buf.workspace_symbol) -- find note by title
+```
+
+`ntropy` must be on your `PATH` (e.g. via `cargo install ntropy`). Open a note
+under `all-notes/`, type `[`, and the completion menu lists your notes; `gd`
+follows a link, and the workspace-symbol picker jumps to any note by title.
 
 ## Development
 
