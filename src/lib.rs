@@ -24,6 +24,9 @@ pub mod id;
 pub mod text;
 
 pub mod note;
+pub mod vault;
+
+pub mod config;
 pub mod query;
 pub mod scan;
 

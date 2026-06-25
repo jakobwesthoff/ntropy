@@ -12,12 +12,14 @@
 //! through a single crate `Result` while still being able to match on the
 //! specific variant.
 
+use crate::config::ConfigError;
 use crate::datetime::DateError;
 use crate::fsutil::FsError;
 use crate::id::IdError;
 use crate::note::NoteError;
 use crate::query::QueryError;
 use crate::scan::ScanError;
+use crate::vault::ResolveError;
 
 /// The unified error type returned across the library surface.
 #[derive(Debug, thiserror::Error)]
@@ -45,6 +47,14 @@ pub enum Error {
     /// A query could not be parsed or compiled.
     #[error(transparent)]
     Query(#[from] QueryError),
+
+    /// A configuration file could not be read, parsed or written.
+    #[error(transparent)]
+    Config(#[from] ConfigError),
+
+    /// A vault could not be resolved.
+    #[error(transparent)]
+    Resolve(#[from] ResolveError),
 }
 
 /// Convenience alias for results carrying the crate [`Error`].
