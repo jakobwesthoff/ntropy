@@ -19,7 +19,12 @@
 pub mod error;
 pub mod fsutil;
 
+pub mod datetime;
+pub mod id;
+pub mod text;
+
 /// Common re-exports for callers of the library.
 pub mod prelude {
     pub use crate::error::{Error, Result};
+    pub use crate::id::Id;
 }

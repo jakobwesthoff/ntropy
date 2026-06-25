@@ -12,7 +12,9 @@
 //! through a single crate `Result` while still being able to match on the
 //! specific variant.
 
+use crate::datetime::DateError;
 use crate::fsutil::FsError;
+use crate::id::IdError;
 
 /// The unified error type returned across the library surface.
 #[derive(Debug, thiserror::Error)]
@@ -20,6 +22,14 @@ pub enum Error {
     /// A filesystem primitive (write, symlink, rename, dir wipe) failed.
     #[error(transparent)]
     Fs(#[from] FsError),
+
+    /// A string was not a valid note identity (ULID).
+    #[error(transparent)]
+    Id(#[from] IdError),
+
+    /// A derived date could not be rendered.
+    #[error(transparent)]
+    Date(#[from] DateError),
 }
 
 /// Convenience alias for results carrying the crate [`Error`].
