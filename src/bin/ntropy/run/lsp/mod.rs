@@ -13,6 +13,7 @@
 mod cache;
 mod completion;
 mod documents;
+mod navigation;
 mod offset;
 mod uri;
 mod vault;
@@ -26,12 +27,18 @@ use lsp_types::notification::{
     DidChangeTextDocument, DidChangeWatchedFiles, DidCloseTextDocument, DidOpenTextDocument, Exit,
     Notification as _, ShowMessage,
 };
-use lsp_types::request::{Completion, RegisterCapability, Request as _};
+use lsp_types::request::{
+    Completion, DocumentLinkRequest, GotoDefinition, RegisterCapability, Request as _,
+    WorkspaceSymbolRequest,
+};
 use lsp_types::{
     CompletionOptions, CompletionParams, DidChangeTextDocumentParams, DidChangeWatchedFilesParams,
-    DidCloseTextDocumentParams, DidOpenTextDocumentParams, InitializeParams, PositionEncodingKind,
-    ServerCapabilities, TextDocumentSyncCapability, TextDocumentSyncKind, Uri,
+    DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentLinkOptions, DocumentLinkParams,
+    GotoDefinitionParams, InitializeParams, OneOf, PositionEncodingKind, ServerCapabilities,
+    TextDocumentSyncCapability, TextDocumentSyncKind, Uri, WorkspaceSymbolParams,
+    WorkspaceSymbolResponse,
 };
+use serde::Serialize;
 use serde_json::json;
 
 use cache::Cache;
@@ -138,6 +145,12 @@ fn server_capabilities(encoding: Encoding) -> ServerCapabilities {
             trigger_characters: Some(vec!["[".to_owned(), "(".to_owned()]),
             ..Default::default()
         }),
+        definition_provider: Some(OneOf::Left(true)),
+        document_link_provider: Some(DocumentLinkOptions {
+            resolve_provider: Some(false),
+            work_done_progress_options: Default::default(),
+        }),
+        workspace_symbol_provider: Some(OneOf::Left(true)),
         ..Default::default()
     }
 }
@@ -207,6 +220,9 @@ impl<'c> Server<'c> {
     fn handle_request(&mut self, request: Request) -> Result<()> {
         match request.method.as_str() {
             Completion::METHOD => self.on_completion(request),
+            GotoDefinition::METHOD => self.on_definition(request),
+            DocumentLinkRequest::METHOD => self.on_document_link(request),
+            WorkspaceSymbolRequest::METHOD => self.on_workspace_symbol(request),
             _ => self.respond_unhandled(request),
         }
     }
@@ -214,18 +230,10 @@ impl<'c> Server<'c> {
     /// Answer a `textDocument/completion` request.
     fn on_completion(&mut self, request: Request) -> Result<()> {
         let id = request.id.clone();
-        let result = match serde_json::from_value::<CompletionParams>(request.params) {
-            Ok(params) => self.completion(&params),
-            Err(_) => None,
-        };
-        let response = match result {
-            Some(list) => Response::new_ok(id, list),
-            None => Response::new_ok(id, serde_json::Value::Null),
-        };
-        self.connection
-            .sender
-            .send(Message::Response(response))
-            .context("while sending the completion response")
+        let result = serde_json::from_value::<CompletionParams>(request.params)
+            .ok()
+            .and_then(|params| self.completion(&params));
+        self.respond_with(id, result)
     }
 
     /// Compute completions for a request, or `None` when there is nothing to
@@ -240,6 +248,69 @@ impl<'c> Server<'c> {
         let entries = self.cache.entries(&vault);
         let offset = offset::position_to_offset(&text, position, self.encoding);
         completion::complete(&text, offset, self.encoding, entries, self.snippet_support)
+    }
+
+    /// Answer a `textDocument/definition` request.
+    fn on_definition(&mut self, request: Request) -> Result<()> {
+        let id = request.id.clone();
+        let result = serde_json::from_value::<GotoDefinitionParams>(request.params)
+            .ok()
+            .and_then(|params| {
+                let position = params.text_document_position_params;
+                let uri = &position.text_document.uri;
+                let text = self.documents.get(uri)?.to_owned();
+                let vault::Lookup::Found(vault) = vault::for_document(uri) else {
+                    return None;
+                };
+                let entries = self.cache.entries(&vault);
+                let offset = offset::position_to_offset(&text, position.position, self.encoding);
+                navigation::definition(&text, offset, entries)
+            });
+        self.respond_with(id, result)
+    }
+
+    /// Answer a `textDocument/documentLink` request.
+    fn on_document_link(&mut self, request: Request) -> Result<()> {
+        let id = request.id.clone();
+        let result = serde_json::from_value::<DocumentLinkParams>(request.params)
+            .ok()
+            .and_then(|params| {
+                let uri = &params.text_document.uri;
+                let text = self.documents.get(uri)?.to_owned();
+                let vault::Lookup::Found(vault) = vault::for_document(uri) else {
+                    return None;
+                };
+                let entries = self.cache.entries(&vault);
+                Some(navigation::document_links(&text, self.encoding, entries))
+            });
+        self.respond_with(id, result)
+    }
+
+    /// Answer a `workspace/symbol` request over every touched vault.
+    fn on_workspace_symbol(&mut self, request: Request) -> Result<()> {
+        let id = request.id.clone();
+        let result = serde_json::from_value::<WorkspaceSymbolParams>(request.params)
+            .ok()
+            .map(|params| {
+                let entries = self.cache.all_entries();
+                WorkspaceSymbolResponse::Nested(navigation::workspace_symbols(
+                    &params.query,
+                    &entries,
+                ))
+            });
+        self.respond_with(id, result)
+    }
+
+    /// Send a successful response, using JSON `null` for an absent result.
+    fn respond_with<T: Serialize>(&self, id: RequestId, result: Option<T>) -> Result<()> {
+        let response = match result {
+            Some(value) => Response::new_ok(id, value),
+            None => Response::new_ok(id, serde_json::Value::Null),
+        };
+        self.connection
+            .sender
+            .send(Message::Response(response))
+            .context("while sending a response")
     }
 
     /// Handle a notification, returning an [`Outcome`] only when it ends serving.

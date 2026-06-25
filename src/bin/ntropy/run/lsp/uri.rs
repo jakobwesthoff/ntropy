@@ -10,10 +10,26 @@
 //! paths. Non-`file:` URIs have no filesystem path and yield `None`.
 
 use std::ffi::OsString;
-use std::os::unix::ffi::OsStringExt;
-use std::path::PathBuf;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use lsp_types::Uri;
+
+/// The `file:` URI for a filesystem path, percent-encoding as needed.
+pub fn from_path(path: &Path) -> Option<Uri> {
+    let mut encoded = String::from("file://");
+    for &byte in path.as_os_str().as_bytes() {
+        if is_unreserved(byte) || byte == b'/' {
+            encoded.push(byte as char);
+        } else {
+            encoded.push('%');
+            encoded.push(hex_digit(byte >> 4));
+            encoded.push(hex_digit(byte & 0x0f));
+        }
+    }
+    Uri::from_str(&encoded).ok()
+}
 
 /// The filesystem path of a `file:` URI, or `None` for any other scheme.
 pub fn to_path(uri: &Uri) -> Option<PathBuf> {
@@ -56,6 +72,18 @@ fn hex_value(byte: u8) -> Option<u8> {
         b'A'..=b'F' => Some(byte - b'A' + 10),
         _ => None,
     }
+}
+
+/// The uppercase hex character for a nibble (0–15).
+fn hex_digit(nibble: u8) -> char {
+    char::from_digit(u32::from(nibble), 16)
+        .map(|c| c.to_ascii_uppercase())
+        .expect("nibble is below 16")
+}
+
+/// Whether a byte is unreserved in a URI path (RFC 3986) and needs no encoding.
+fn is_unreserved(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.' | b'_' | b'~')
 }
 
 #[cfg(test)]
@@ -104,5 +132,19 @@ mod tests {
     fn non_file_scheme_is_none() {
         assert_eq!(to_path(&uri("untitled:Untitled-1")), None);
         assert_eq!(to_path(&uri("https://example.com/a.md")), None);
+    }
+
+    #[test]
+    fn from_path_encodes_and_round_trips() {
+        let path = PathBuf::from("/Users/x/my notes/Übung-a.md");
+        let uri = from_path(&path).expect("uri");
+        assert!(uri.as_str().starts_with("file:///Users/x/my%20notes/"));
+        assert_eq!(to_path(&uri), Some(path));
+    }
+
+    #[test]
+    fn from_path_round_trips_plain_ascii() {
+        let path = PathBuf::from("/vault/all-notes/01ARZ-a.md");
+        assert_eq!(to_path(&from_path(&path).expect("uri")), Some(path));
     }
 }

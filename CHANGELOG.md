@@ -34,6 +34,13 @@ and this project adheres to
   `reconcile` refreshes stale link slugs to a note's current filename, keeping
   links resolvable and clickable after a rename. Links inside fenced or inline
   code are left untouched.
+- Language server (`ntropy lsp`): an editor-agnostic LSP server over stdin/stdout
+  that completes inter-note links (type `[`, pick a note by fuzzy-matching its
+  title and tags) and frontmatter tags (flow and block forms, hierarchy-aware),
+  and provides go-to-definition, document links, and workspace-symbol search
+  across notes. It resolves a vault per open document and keeps an in-memory
+  session cache refreshed by editor file-watch events. See
+  [docs/design/language-server.md](docs/design/language-server.md).
 
 ### Changed
 

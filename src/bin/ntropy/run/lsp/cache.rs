@@ -52,6 +52,14 @@ impl Cache {
             .or_insert_with(|| scan_entries(vault))
     }
 
+    /// Every cached entry across all populated vault roots.
+    ///
+    /// Used by workspace symbols, which have no document context, so they range
+    /// over whatever vaults the session has already touched.
+    pub fn all_entries(&self) -> Vec<&CacheEntry> {
+        self.by_root.values().flatten().collect()
+    }
+
     /// Drop a vault's cached entries so the next access rescans it.
     pub fn invalidate(&mut self, root: &Path) {
         self.by_root.remove(root);
@@ -160,5 +168,16 @@ mod tests {
         let mut cache = Cache::new();
         assert_eq!(cache.entries(&vault_a).len(), 1);
         assert_eq!(cache.entries(&vault_b).len(), 2);
+    }
+
+    #[test]
+    fn all_entries_spans_every_populated_root() {
+        let (_a, vault_a) = vault_with(&[(ULID_A, "a", "---\ntitle: Alpha\n---\n")]);
+        let (_b, vault_b) = vault_with(&[(ULID_B, "b", "---\ntitle: Beta\n---\n")]);
+        let mut cache = Cache::new();
+        assert!(cache.all_entries().is_empty());
+        cache.entries(&vault_a);
+        cache.entries(&vault_b);
+        assert_eq!(cache.all_entries().len(), 2);
     }
 }
