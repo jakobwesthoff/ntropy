@@ -8,7 +8,7 @@
 //! (orchestration), so dependencies only ever point downward:
 //!
 //! ```text
-//! ops → {query, view, reconcile, config, scan, template}
+//! ops → {query, view, reconcile, config, scan, template, link}
 //!     → {note, vault} → {fsutil, id, datetime, text}
 //! ```
 //!
@@ -27,6 +27,7 @@ pub mod note;
 pub mod vault;
 
 pub mod config;
+pub mod link;
 pub mod query;
 pub mod reconcile;
 pub mod scan;
