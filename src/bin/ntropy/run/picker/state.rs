@@ -176,16 +176,22 @@ impl<T> PickerState<T> {
         self.recompute();
     }
 
-    /// Move the selection one row toward the top.
-    pub fn move_up(&mut self) {
+    /// Move the selection toward the better-ranked end (index 0).
+    ///
+    /// In the bottom-anchored layout the best match is drawn at the bottom, so
+    /// this is what the Down key / Ctrl-N maps to.
+    pub fn select_better(&mut self) {
         if self.selected > 0 {
             self.selected -= 1;
             self.scroll_to_selection();
         }
     }
 
-    /// Move the selection one row toward the bottom.
-    pub fn move_down(&mut self) {
+    /// Move the selection toward the worse-ranked end (higher index).
+    ///
+    /// Worse matches are drawn higher up the screen, so this is what the Up key
+    /// / Ctrl-P maps to.
+    pub fn select_worse(&mut self) {
         if self.selected + 1 < self.scored.len() {
             self.selected += 1;
             self.scroll_to_selection();
@@ -227,6 +233,24 @@ impl<T> PickerState<T> {
             .collect()
     }
 
+    /// The list region as exactly `height` screen lines, top to bottom.
+    ///
+    /// The picker is bottom-anchored: the prompt sits at the bottom and the list
+    /// grows upward with the best match nearest the prompt. So this returns the
+    /// viewport rows in *screen* order (worst-ranked first/top, best-ranked
+    /// last/bottom) and pads the top with `None` blanks when fewer rows match
+    /// than the viewport can show, keeping the list flush above the prompt.
+    pub fn list_lines(&self) -> Vec<Option<VisibleRow<'_>>> {
+        let visible = self.visible();
+        let blanks = self.height.saturating_sub(visible.len());
+        let mut lines: Vec<Option<VisibleRow<'_>>> = Vec::with_capacity(self.height);
+        lines.extend(std::iter::repeat_with(|| None).take(blanks));
+        // `visible` is best-first; reverse it so the best match lands at the
+        // bottom, nearest the prompt.
+        lines.extend(visible.into_iter().rev().map(Some));
+        lines
+    }
+
     /// Consume the state and return the currently selected item, if any.
     pub fn into_selected(mut self) -> Option<T> {
         let item = self.scored.get(self.selected)?.item;
@@ -235,8 +259,14 @@ impl<T> PickerState<T> {
     }
 
     /// Render the visible state to a plain, deterministic string for snapshot
-    /// tests: the prompt, the `m/n` counter, then each visible row prefixed with
-    /// `> ` (selected) or two spaces, with matched characters wrapped in `[ ]`.
+    /// tests, in screen order (top to bottom): each visible row prefixed with
+    /// `> ` (selected) or two spaces and matched characters wrapped in `[ ]`,
+    /// then the `m/n` counter line, then the prompt at the bottom.
+    ///
+    /// Rows come from [`Self::list_lines`], so they are bottom-anchored (best
+    /// match nearest the prompt). The top blank-fill lines are omitted here to
+    /// keep snapshots tight; blank-fill is covered directly in `list_lines`
+    /// tests.
     #[cfg(test)]
     pub fn debug_render(&self) -> String {
         use std::collections::HashSet;
@@ -245,10 +275,7 @@ impl<T> PickerState<T> {
         // Trailing whitespace (e.g. the empty prompt's `> `) is trimmed per line
         // so inline snapshots stay free of fragile trailing spaces.
         let mut out = String::new();
-        let _ = writeln!(out, "{}", format!("> {}", self.query).trim_end());
-        let (m, n) = self.counter();
-        let _ = writeln!(out, "{m}/{n}");
-        for row in self.visible() {
+        for row in self.list_lines().into_iter().flatten() {
             let pointer = if row.selected { "> " } else { "  " };
             let marked: HashSet<u32> = row.positions.iter().copied().collect();
             let mut line = String::new();
@@ -262,6 +289,9 @@ impl<T> PickerState<T> {
             line.push_str(row.suffix);
             let _ = writeln!(out, "{}", format!("{pointer}{line}").trim_end());
         }
+        let (m, n) = self.counter();
+        let _ = writeln!(out, "{m}/{n}");
+        let _ = writeln!(out, "{}", format!("> {}", self.query).trim_end());
         out
     }
 }
@@ -286,12 +316,13 @@ mod tests {
     #[test]
     fn empty_query_lists_all_in_original_order() {
         let s = state(&["alpha", "beta", "gamma"], 10);
+        // Bottom-anchored: best/selected row is nearest the prompt at the bottom.
         insta::assert_snapshot!(s.debug_render(), @r"
-        >
-        3/3
-        > alpha
-          beta
           gamma
+          beta
+        > alpha
+        3/3
+        >
         ");
     }
 
@@ -310,53 +341,54 @@ mod tests {
             s.push_char(c);
         }
         insta::assert_snapshot!(s.debug_render(), @r"
-        > zzz
         0/2
+        > zzz
         ");
     }
 
     #[test]
     fn selection_moves_and_clamps_at_both_ends() {
         let mut s = state(&["a", "b", "c"], 10);
-        // Cannot move above the top.
-        s.move_up();
+        // Cannot move past the best-ranked end (index 0).
+        s.select_better();
         assert_eq!(s.selected, 0);
-        s.move_down();
-        s.move_down();
+        s.select_worse();
+        s.select_worse();
         assert_eq!(s.selected, 2);
-        // Cannot move past the bottom.
-        s.move_down();
+        // Cannot move past the worst-ranked end.
+        s.select_worse();
         assert_eq!(s.selected, 2);
     }
 
     #[test]
     fn viewport_scrolls_to_follow_the_selection() {
         let mut s = state(&["r0", "r1", "r2", "r3", "r4"], 2);
-        // Only two rows fit; moving down past the window scrolls it.
-        s.move_down();
-        s.move_down();
+        // Only two rows fit; moving toward worse matches past the window scrolls
+        // it. The selected (worse) row sits at the top, the better row below it.
+        s.select_worse();
+        s.select_worse();
         insta::assert_snapshot!(s.debug_render(), @r"
-        >
-        5/5
-          r1
         > r2
-        ");
-        // Scrolling back up brings earlier rows into view again.
-        s.move_up();
-        s.move_up();
-        insta::assert_snapshot!(s.debug_render(), @r"
-        >
-        5/5
-        > r0
           r1
+        5/5
+        >
+        ");
+        // Moving back toward the best match brings earlier rows into view again.
+        s.select_better();
+        s.select_better();
+        insta::assert_snapshot!(s.debug_render(), @r"
+          r1
+        > r0
+        5/5
+        >
         ");
     }
 
     #[test]
     fn typing_resets_selection_to_the_top() {
         let mut s = state(&["alpha", "alps", "also"], 10);
-        s.move_down();
-        s.move_down();
+        s.select_worse();
+        s.select_worse();
         assert_eq!(s.selected, 2);
         s.push_char('a');
         assert_eq!(s.selected, 0);
@@ -396,7 +428,7 @@ mod tests {
     #[test]
     fn into_selected_returns_the_cursor_row() {
         let mut s = state(&["alpha", "beta", "gamma"], 10);
-        s.move_down();
+        s.select_worse();
         assert_eq!(s.into_selected().as_deref(), Some("beta"));
     }
 
@@ -417,9 +449,9 @@ mod tests {
         let mut s = PickerState::new(items, rows, 10);
         // The suffix is part of the displayed row...
         insta::assert_snapshot!(s.debug_render(), @r"
-        >
-        1/1
         > alpha  (ZID)
+        1/1
+        >
         ");
         // ...but a character that occurs only in the suffix finds no match.
         s.push_char('z');
@@ -431,5 +463,65 @@ mod tests {
         let s: PickerState<String> = PickerState::new(Vec::new(), Vec::new(), 10);
         assert_eq!(s.counter(), (0, 0));
         assert_eq!(s.into_selected(), None);
+    }
+
+    /// Collect `(matchable, selected)` for the non-blank lines, top to bottom.
+    fn line_rows(s: &PickerState<String>) -> Vec<(String, bool)> {
+        s.list_lines()
+            .into_iter()
+            .flatten()
+            .map(|r| (r.matchable.to_string(), r.selected))
+            .collect()
+    }
+
+    #[test]
+    fn list_lines_pads_the_top_with_blanks() {
+        let s = state(&["a", "b"], 5);
+        let lines = s.list_lines();
+        // Exactly `height` lines; the top is blank so the list hugs the prompt.
+        assert_eq!(lines.len(), 5);
+        assert!(lines[0].is_none());
+        assert!(lines[1].is_none());
+        assert!(lines[2].is_none());
+        assert!(lines[3].is_some());
+        assert!(lines[4].is_some());
+    }
+
+    #[test]
+    fn list_lines_put_the_best_match_last_and_selected() {
+        // Empty query keeps original order; index 0 ("a") is best and selected.
+        let rows = line_rows(&state(&["a", "b", "c"], 10));
+        assert_eq!(
+            rows,
+            vec![
+                ("c".to_string(), false),
+                ("b".to_string(), false),
+                ("a".to_string(), true),
+            ]
+        );
+    }
+
+    #[test]
+    fn list_lines_have_no_blanks_when_the_viewport_is_full() {
+        let s = state(&["r0", "r1", "r2", "r3", "r4"], 2);
+        let lines = s.list_lines();
+        assert_eq!(lines.len(), 2);
+        assert!(lines.iter().all(Option::is_some));
+    }
+
+    #[test]
+    fn list_lines_track_the_selection_after_moving() {
+        let mut s = state(&["a", "b", "c"], 10);
+        s.select_worse();
+        // The selected (now "b") row moves up one toward the worse end.
+        let rows = line_rows(&s);
+        assert_eq!(
+            rows,
+            vec![
+                ("c".to_string(), false),
+                ("b".to_string(), true),
+                ("a".to_string(), false),
+            ]
+        );
     }
 }
