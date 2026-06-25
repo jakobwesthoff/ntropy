@@ -135,6 +135,51 @@ fn new_no_edit_prints_path() {
 }
 
 #[test]
+fn new_uses_named_template() {
+    let dir = setup_vault();
+    let templates = dir.path().join(".ntropy/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(
+        templates.join("meeting.md"),
+        "---\ntitle: {{title}}\ntags: [meeting]\n---\nAgenda for {{title}}\n",
+    )
+    .expect("write template");
+
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["new", "Standup", "--template", "meeting", "--no-edit"]);
+        assert_cmd_snapshot!(cmd);
+    });
+
+    // The note was created from the meeting template.
+    let created: Vec<_> = fs::read_dir(dir.path().join("all-notes"))
+        .expect("read all-notes")
+        .map(|e| e.expect("entry").path())
+        .collect();
+    assert_eq!(created.len(), 1);
+    let body = fs::read_to_string(&created[0]).expect("read note");
+    assert!(body.contains("Agenda for Standup"));
+    assert!(body.contains("tags: [meeting]"));
+}
+
+#[test]
+fn new_missing_named_template_errors() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["new", "X", "-t", "absent", "--no-edit"]);
+        assert_cmd_snapshot!(cmd);
+    });
+    // No note was created.
+    assert_eq!(
+        fs::read_dir(dir.path().join("all-notes"))
+            .expect("read all-notes")
+            .count(),
+        0
+    );
+}
+
+#[test]
 fn search_lists_all_notes_newest_first() {
     let dir = setup_vault();
     write_note(

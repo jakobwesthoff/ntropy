@@ -56,11 +56,15 @@ pub enum Command {
         set_default: bool,
     },
 
-    /// Create a note from the default template and open it.
+    /// Create a note from a template and open it.
     New {
         /// The note title (joined from all trailing arguments).
         #[arg(required = true, value_name = "TITLE")]
         title: Vec<String>,
+        /// Template to use: `<name>.md` in `.ntropy/templates/` (default:
+        /// `default`).
+        #[arg(short = 't', long, value_name = "NAME")]
+        template: Option<String>,
         /// Create and print the path only; do not open the editor.
         #[arg(long, visible_alias = "print")]
         no_edit: bool,

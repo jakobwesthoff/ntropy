@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - new
+    - Standup
+    - "--template"
+    - meeting
+    - "--no-edit"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[VAULT]/all-notes/[ULID]-standup.md
+
+----- stderr -----

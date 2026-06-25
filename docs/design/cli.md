@@ -48,9 +48,12 @@ config unless `--set-default` is passed, which records this vault as the global
 
 ### `new <title>`
 
-Create a note from the default template (`{{title}}`, `{{id}}`, `{{date}}`,
-`{{slug}}` substituted), then open it in the editor.
+Create a note from a template (`{{title}}`, `{{id}}`, `{{date}}`, `{{slug}}`
+substituted), then open it in the editor.
 
+- `--template <name>` / `-t <name>`: use `.ntropy/templates/<name>.md` instead
+  of `default.md`. A missing named template is an error; the implicit default
+  falls back to the embedded template when `default.md` is absent.
 - `--no-edit` / `--print`: create and print the path only (no editor).
 
 On editor exit, ntropy reconciles the note (slug realignment, view links).

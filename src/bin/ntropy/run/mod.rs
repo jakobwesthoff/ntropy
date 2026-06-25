@@ -51,7 +51,11 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         // Handled above, before vault resolution.
         Command::Init { .. } => unreachable!("init is dispatched before vault resolution"),
         Command::Search { query } => cmd_search(&cli.global, &vault, join(&query), interactive),
-        Command::New { title, no_edit } => cmd_new(&vault, join(&title), no_edit, interactive),
+        Command::New {
+            title,
+            template,
+            no_edit,
+        } => cmd_new(&vault, join(&title), template, no_edit, interactive),
         Command::Edit { selector } => cmd_edit(&vault, join(&selector), interactive),
         Command::Reconcile => cmd_reconcile(&cli.global, &vault),
         Command::Delete { selector, force } => {
@@ -132,8 +136,15 @@ fn cmd_search(
     Ok(exit_for_warnings(global.strict, &matches.warnings))
 }
 
-fn cmd_new(vault: &Vault, title: String, no_edit: bool, interactive: bool) -> Result<ExitCode> {
-    let note = ops::create_note(vault, &title).context("while creating the note")?;
+fn cmd_new(
+    vault: &Vault,
+    title: String,
+    template: Option<String>,
+    no_edit: bool,
+    interactive: bool,
+) -> Result<ExitCode> {
+    let note =
+        ops::create_note(vault, &title, template.as_deref()).context("while creating the note")?;
 
     // Open the editor only when interactive and not explicitly suppressed;
     // otherwise create-and-print for scripting (ADR 0015).

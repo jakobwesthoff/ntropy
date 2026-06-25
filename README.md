@@ -50,7 +50,8 @@ flags are needed. From elsewhere, point at it with `--vault <path>`,
 - `init [path]` — scaffold (or complete) a vault; idempotent. The target is
   `path` or, if omitted, `--vault` (passing both is an error; with neither it
   uses the current directory). `--set-default` records it as the global default.
-- `new <title>` — create a note from the template and open it. `--no-edit`
+- `new <title>` — create a note from a template and open it. `--template`/`-t
+  <name>` picks a template (see [Templates](#templates)); `--no-edit`
   (`--print`) just prints the path.
 - `search [query]` — the one browse/filter/full-text entry point. On a TTY it
   opens an interactive fuzzy picker; piped or with `-n` it prints plain lines.
@@ -103,6 +104,28 @@ subdirectories, and grouping values are normalized (lowercased, slugified). The
 result is a browsable symlink tree any tool (a file manager, `grep`, your
 editor) can navigate, kept fresh after every ntropy mutation and by
 `reconcile`.
+
+## Templates
+
+Templates are Markdown-with-frontmatter files in `<vault>/.ntropy/templates/`.
+`init` seeds `default.md`. To add a note type, drop another file in that
+directory; its name (without `.md`) is how you select it:
+
+    ntropy new Standup --template meeting   # uses .ntropy/templates/meeting.md
+    ntropy new Some note                     # uses default.md
+
+`new` without `--template` uses `default.md` (falling back to a built-in default
+if it is absent). A named template that does not exist is an error rather than a
+silent fallback, so a typo is caught.
+
+When a note is created, these placeholders are substituted in the template:
+
+- `{{title}}` — the title you passed to `new`.
+- `{{id}}` — the note's ULID.
+- `{{date}}` — the creation date (`YYYY-MM-DD`, local timezone).
+- `{{slug}}` — the slugified title.
+
+Unknown placeholders are left untouched.
 
 ## Development
 

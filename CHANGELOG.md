@@ -16,6 +16,9 @@ and this project adheres to
 
 ### Added
 
+- `new --template <name>` / `-t <name>` selects a template from
+  `.ntropy/templates/<name>.md`; a missing named template is an error. Without
+  the flag, `default.md` is used as before. See the README Templates section.
 - `list` is now a visible alias for `search`.
 - `reconcile` now prints a start line and a closing summary (notes scanned,
   files renamed, views rebuilt, warnings). The summary always prints, so a

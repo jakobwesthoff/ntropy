@@ -36,13 +36,22 @@ pub struct TemplateVars {
     pub slug: String,
 }
 
-/// A failure reading a template file from disk.
+/// A failure resolving or reading a template.
 #[derive(Debug, thiserror::Error)]
-#[error("while reading template `{}`", path.display())]
-pub struct TemplateError {
-    path: PathBuf,
-    #[source]
-    source: std::io::Error,
+pub enum TemplateError {
+    /// A template file could not be read (a non-`NotFound` I/O error).
+    #[error("while reading template `{}`", path.display())]
+    Io {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+    /// A named template was requested but no such file exists.
+    #[error("no template `{name}` in {}", dir.display())]
+    NotFound { name: String, dir: PathBuf },
+    /// A template name was empty or contained a path separator.
+    #[error("invalid template name `{name}`: must not be empty or contain path separators")]
+    InvalidName { name: String },
 }
 
 /// Read the template at `path`, falling back to [`DEFAULT_TEMPLATE`] when the
@@ -55,10 +64,34 @@ pub fn load_or_default(path: &Path) -> Result<String, TemplateError> {
     match std::fs::read_to_string(path) {
         Ok(text) => Ok(text),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(DEFAULT_TEMPLATE.to_string()),
-        Err(source) => Err(TemplateError {
+        Err(source) => Err(TemplateError::Io {
             path: path.to_path_buf(),
             source,
         }),
+    }
+}
+
+/// Load the named template `<name>.md` from `templates_dir`.
+///
+/// Unlike [`load_or_default`], an explicitly named template that is missing is
+/// an error rather than a fallback: a user who asks for `meeting` and silently
+/// gets the default would not notice a typo. The name must be a bare file stem;
+/// an empty name or one containing a path separator is rejected so it cannot
+/// escape the templates directory.
+pub fn load_named(templates_dir: &Path, name: &str) -> Result<String, TemplateError> {
+    if name.is_empty() || name.contains(['/', '\\']) {
+        return Err(TemplateError::InvalidName {
+            name: name.to_string(),
+        });
+    }
+    let path = templates_dir.join(format!("{name}.md"));
+    match std::fs::read_to_string(&path) {
+        Ok(text) => Ok(text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(TemplateError::NotFound {
+            name: name.to_string(),
+            dir: templates_dir.to_path_buf(),
+        }),
+        Err(source) => Err(TemplateError::Io { path, source }),
     }
 }
 
@@ -184,5 +217,35 @@ mod tests {
         let path = dir.path().join("default.md");
         std::fs::write(&path, "custom {{title}}").expect("write");
         assert_eq!(load_or_default(&path).expect("load"), "custom {{title}}");
+    }
+
+    #[test]
+    fn load_named_reads_the_matching_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(dir.path().join("meeting.md"), "meeting {{title}}").expect("write");
+        assert_eq!(
+            load_named(dir.path(), "meeting").expect("load"),
+            "meeting {{title}}"
+        );
+    }
+
+    #[test]
+    fn load_named_missing_is_not_found() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let err = load_named(dir.path(), "absent").expect_err("missing");
+        assert!(matches!(err, TemplateError::NotFound { .. }));
+    }
+
+    #[test]
+    fn load_named_rejects_empty_and_path_separators() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        assert!(matches!(
+            load_named(dir.path(), "").expect_err("empty"),
+            TemplateError::InvalidName { .. }
+        ));
+        assert!(matches!(
+            load_named(dir.path(), "../escape").expect_err("traversal"),
+            TemplateError::InvalidName { .. }
+        ));
     }
 }

@@ -4,10 +4,11 @@
 
 //! The new-note use case (ADRs 0015, 0017).
 //!
-//! Generates an identity, derives the slug, renders the vault's default
-//! template, and writes the canonical `all-notes/<ulid>-<slug>.md` file. View
-//! links are refreshed separately by the caller after the (possible) editor
-//! session, so this stays a pure create.
+//! Generates an identity, derives the slug, renders a template, and writes the
+//! canonical `all-notes/<ulid>-<slug>.md` file. The template is the vault's
+//! `default.md` (with an embedded fallback) unless a name is given, in which
+//! case `<name>.md` is required. View links are refreshed separately by the
+//! caller after the (possible) editor session, so this stays a pure create.
 
 use crate::datetime;
 use crate::error::Result;
@@ -18,15 +19,20 @@ use crate::template::{self, TemplateVars};
 use crate::text::slug;
 use crate::vault::Vault;
 
-/// Create a note titled `title` in `vault` from the default template.
+/// Create a note titled `title` in `vault` from a template.
 ///
-/// Returns the parsed [`Note`], whose `path` is the file just written.
-pub fn create_note(vault: &Vault, title: &str) -> Result<Note> {
+/// `template` selects `<name>.md` from the vault's templates directory; `None`
+/// uses `default.md` (falling back to the embedded default when absent). Returns
+/// the parsed [`Note`], whose `path` is the file just written.
+pub fn create_note(vault: &Vault, title: &str, template: Option<&str>) -> Result<Note> {
     let id = Id::generate();
     let slug = slug::slugify(title);
     let date = datetime::render_local_date(id.timestamp_ms())?;
 
-    let template = template::load_or_default(&vault.layout().default_template())?;
+    let template = match template {
+        None => template::load_or_default(&vault.layout().default_template())?,
+        Some(name) => template::load_named(&vault.layout().templates_dir(), name)?,
+    };
     let vars = TemplateVars {
         title: title.to_string(),
         id: id.to_string(),
@@ -62,7 +68,7 @@ mod tests {
     #[test]
     fn creates_file_with_canonical_name() {
         let (_guard, vault) = temp_vault();
-        let note = create_note(&vault, "My First Note").expect("create");
+        let note = create_note(&vault, "My First Note", None).expect("create");
 
         let name = note.path.file_name().unwrap().to_string_lossy();
         assert!(name.ends_with("-my-first-note.md"));
@@ -73,7 +79,7 @@ mod tests {
     #[test]
     fn rendered_content_round_trips_into_note() {
         let (_guard, vault) = temp_vault();
-        let note = create_note(&vault, "My First Note").expect("create");
+        let note = create_note(&vault, "My First Note", None).expect("create");
         assert_eq!(note.title, "My First Note");
         assert_eq!(note.tags, Vec::<String>::new());
 
@@ -93,15 +99,43 @@ mod tests {
         )
         .expect("write template");
 
-        let note = create_note(&vault, "Hello World").expect("create");
+        let note = create_note(&vault, "Hello World", None).expect("create");
         let on_disk = std::fs::read_to_string(&note.path).expect("read");
         assert!(on_disk.contains("Custom body for hello-world"));
     }
 
     #[test]
+    fn uses_named_template_when_selected() {
+        let (_guard, vault) = temp_vault();
+        let templates = vault.layout().templates_dir();
+        std::fs::create_dir_all(&templates).expect("mkdir templates");
+        std::fs::write(
+            templates.join("meeting.md"),
+            "---\ntitle: {{title}}\ntags: [meeting]\n---\nAgenda for {{title}}\n",
+        )
+        .expect("write template");
+
+        let note = create_note(&vault, "Standup", Some("meeting")).expect("create");
+        assert_eq!(note.tags, vec!["meeting"]);
+        let on_disk = std::fs::read_to_string(&note.path).expect("read");
+        assert!(on_disk.contains("Agenda for Standup"));
+    }
+
+    #[test]
+    fn named_template_missing_is_an_error() {
+        let (_guard, vault) = temp_vault();
+        std::fs::create_dir_all(vault.layout().templates_dir()).expect("mkdir templates");
+        let err = create_note(&vault, "X", Some("absent")).expect_err("missing template");
+        assert!(matches!(
+            err,
+            crate::error::Error::Template(template::TemplateError::NotFound { .. })
+        ));
+    }
+
+    #[test]
     fn untitled_fallback_for_empty_title() {
         let (_guard, vault) = temp_vault();
-        let note = create_note(&vault, "???").expect("create");
+        let note = create_note(&vault, "???", None).expect("create");
         assert!(
             note.path
                 .file_name()

@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - new
+    - X
+    - "-t"
+    - absent
+    - "--no-edit"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while creating the note: no template `absent` in [VAULT]/.ntropy/templates
