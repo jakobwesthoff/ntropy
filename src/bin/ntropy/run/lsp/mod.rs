@@ -16,6 +16,17 @@
 #[allow(dead_code)]
 mod offset;
 
+// The note cache, URI conversion and per-document vault resolution. Document
+// sync and file watching wire onto these next, and completion reads the cache
+// after that, so they have no non-test caller yet; the allows are removed as
+// each is wired in.
+#[allow(dead_code)]
+mod cache;
+#[allow(dead_code)]
+mod uri;
+#[allow(dead_code)]
+mod vault;
+
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
