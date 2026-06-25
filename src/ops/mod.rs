@@ -15,7 +15,7 @@ pub mod select;
 pub mod tags;
 pub mod view_admin;
 
-pub use create::create_note;
+pub use create::{TodayOutcome, create_note, today_note};
 pub use delete::delete_note;
 pub use init::init_vault;
 pub use select::{Candidate, Matches, resolve_selection, search, to_candidates};

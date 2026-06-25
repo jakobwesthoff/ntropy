@@ -70,6 +70,13 @@ pub enum Command {
         no_edit: bool,
     },
 
+    /// Open today's note, creating it from the `today` template if absent.
+    Today {
+        /// Create and print the path only; do not open the editor.
+        #[arg(long, visible_alias = "print")]
+        no_edit: bool,
+    },
+
     /// Browse, filter or full-text search notes.
     #[command(visible_alias = "list")]
     Search {

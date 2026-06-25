@@ -24,6 +24,18 @@ tags: []
 # {{title}}
 ";
 
+/// The built-in `today` template, seeded by `init`.
+///
+/// The daily note is titled by its date and carries a `daily` tag; the `today`
+/// command finds an existing note with today's date as title before creating one.
+pub const TODAY_TEMPLATE: &str = "\
+---
+title: {{date}}
+tags: [daily]
+---
+# {{date}}
+";
+
 /// The values substituted into a template's placeholders.
 pub struct TemplateVars {
     /// `{{title}}` — the canonical title as typed.

@@ -16,6 +16,9 @@ and this project adheres to
 
 ### Added
 
+- `today` command: opens today's note (titled by the date), creating it from the
+  seeded `today` template on first use each day and reopening it afterward. `init`
+  now also seeds `.ntropy/templates/today.md`.
 - `new --template <name>` / `-t <name>` selects a template from
   `.ntropy/templates/<name>.md`; a missing named template is an error. Without
   the flag, `default.md` is used as before. See the README Templates section.

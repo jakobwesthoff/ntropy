@@ -21,6 +21,9 @@ than a silent fallback, so a misspelled name is caught. Names may not be empty
 or contain a path separator, so selection cannot escape the templates
 directory.
 
+`init` seeds two templates: `default.md` (used by `new`) and `today.md` (used by
+the `today` command).
+
 Substitution is hand-rolled: ntropy replaces a fixed placeholder set, no
 template-engine dependency. Placeholders: `{{title}}`, `{{id}}` (ULID),
 `{{date}}` (locally rendered creation date), `{{slug}}`.

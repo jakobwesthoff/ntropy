@@ -56,6 +56,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             template,
             no_edit,
         } => cmd_new(&vault, join(&title), template, no_edit, interactive),
+        Command::Today { no_edit } => cmd_today(&vault, no_edit, interactive),
         Command::Edit { selector } => cmd_edit(&vault, join(&selector), interactive),
         Command::Reconcile => cmd_reconcile(&cli.global, &vault),
         Command::Delete { selector, force } => {
@@ -153,6 +154,20 @@ fn cmd_new(
     } else {
         reconcile::refresh_views(vault).context("while refreshing views")?;
         println!("{}", note.path.display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_today(vault: &Vault, no_edit: bool, interactive: bool) -> Result<ExitCode> {
+    let outcome = ops::today_note(vault).context("while preparing today's note")?;
+
+    // Mirror `new`: open interactively unless suppressed, otherwise refresh views
+    // and print the path for scripting (ADR 0015).
+    if !no_edit && interactive {
+        open_and_refresh(vault, &outcome.note.path)?;
+    } else {
+        reconcile::refresh_views(vault).context("while refreshing views")?;
+        println!("{}", outcome.note.path.display());
     }
     Ok(ExitCode::SUCCESS)
 }

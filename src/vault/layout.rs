@@ -20,6 +20,8 @@ pub const CONFIG_FILE: &str = "config.toml";
 pub const TEMPLATES_DIR: &str = "templates";
 /// The default template file, inside [`TEMPLATES_DIR`].
 pub const DEFAULT_TEMPLATE_FILE: &str = "default.md";
+/// The daily-note template file, inside [`TEMPLATES_DIR`].
+pub const TODAY_TEMPLATE_FILE: &str = "today.md";
 /// The project-local vault pointer file looked for during walk-up (ADR 0026).
 pub const POINTER_FILE: &str = ".ntropy-vault";
 
@@ -67,6 +69,11 @@ impl Layout {
     /// `<root>/.ntropy/templates/default.md`.
     pub fn default_template(&self) -> PathBuf {
         self.templates_dir().join(DEFAULT_TEMPLATE_FILE)
+    }
+
+    /// `<root>/.ntropy/templates/today.md`.
+    pub fn today_template(&self) -> PathBuf {
+        self.templates_dir().join(TODAY_TEMPLATE_FILE)
     }
 
     /// The output directory of a named view: `<root>/<name>`.

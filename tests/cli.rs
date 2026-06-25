@@ -180,6 +180,53 @@ fn new_missing_named_template_errors() {
 }
 
 #[test]
+fn today_creates_then_reuses_the_daily_note() {
+    let dir = setup_vault();
+    let templates = dir.path().join(".ntropy/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(
+        templates.join("today.md"),
+        "---\ntitle: {{date}}\ntags: [daily]\n---\n# {{date}}\n",
+    )
+    .expect("write today template");
+
+    redacted(dir.path()).bind(|| {
+        let mut first = ntropy(dir.path());
+        first.args(["today", "--no-edit"]);
+        assert_cmd_snapshot!("today_first", first);
+
+        // A second run reuses the same note (same printed path).
+        let mut again = ntropy(dir.path());
+        again.args(["today", "--no-edit"]);
+        assert_cmd_snapshot!("today_again", again);
+    });
+
+    // Only one daily note exists.
+    assert_eq!(
+        fs::read_dir(dir.path().join("all-notes"))
+            .expect("read all-notes")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn today_without_template_errors() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["today", "--no-edit"]);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert_eq!(
+        fs::read_dir(dir.path().join("all-notes"))
+            .expect("read all-notes")
+            .count(),
+        0
+    );
+}
+
+#[test]
 fn search_lists_all_notes_newest_first() {
     let dir = setup_vault();
     write_note(

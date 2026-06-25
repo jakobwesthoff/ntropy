@@ -15,6 +15,7 @@ use crate::error::Result;
 use crate::fsutil;
 use crate::id::Id;
 use crate::note::{Note, filename};
+use crate::scan;
 use crate::template::{self, TemplateVars};
 use crate::text::slug;
 use crate::vault::Vault;
@@ -51,6 +52,44 @@ pub fn create_note(vault: &Vault, title: &str, template: Option<&str>) -> Result
 
     let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
     Ok(Note::parse(path, &content, modified)?)
+}
+
+/// The outcome of resolving today's note: the note plus whether it was created.
+#[derive(Debug)]
+pub struct TodayOutcome {
+    /// Today's note, freshly created or the pre-existing one.
+    pub note: Note,
+    /// `true` when this call created the note, `false` when it already existed.
+    pub created: bool,
+}
+
+/// Find today's note, or create it from the `today` template.
+///
+/// "Today's note" is the note whose title is today's local date. When several
+/// match (an unlikely manual duplicate), the newest is returned, since the scan
+/// is newest-first. When none exists it is created from `today.md`, which must be
+/// present (`init` seeds it).
+pub fn today_note(vault: &Vault) -> Result<TodayOutcome> {
+    let date = datetime::today_local_date();
+
+    // A vault that has not created any note yet has no `all-notes/`; treat that
+    // as "no match" rather than scanning a missing directory.
+    let all_notes = vault.layout().all_notes();
+    if all_notes.is_dir() {
+        let scan = scan::scan_notes_dir(&all_notes)?;
+        if let Some(existing) = scan.notes.into_iter().find(|n| n.title == date) {
+            return Ok(TodayOutcome {
+                note: existing,
+                created: false,
+            });
+        }
+    }
+
+    let note = create_note(vault, &date, Some("today"))?;
+    Ok(TodayOutcome {
+        note,
+        created: true,
+    })
 }
 
 #[cfg(test)]
@@ -130,6 +169,31 @@ mod tests {
             err,
             crate::error::Error::Template(template::TemplateError::NotFound { .. })
         ));
+    }
+
+    #[test]
+    fn today_note_creates_then_reuses() {
+        let (_guard, vault) = temp_vault();
+        std::fs::create_dir_all(vault.layout().templates_dir()).expect("templates");
+        std::fs::write(vault.layout().today_template(), template::TODAY_TEMPLATE)
+            .expect("seed today");
+
+        let first = today_note(&vault).expect("first");
+        assert!(first.created);
+        assert_eq!(first.note.title, datetime::today_local_date());
+        assert_eq!(first.note.tags, vec!["daily"]);
+
+        // A second call reuses the same note rather than creating another.
+        let second = today_note(&vault).expect("second");
+        assert!(!second.created);
+        assert_eq!(second.note.path, first.note.path);
+    }
+
+    #[test]
+    fn today_note_requires_today_template() {
+        let (_guard, vault) = temp_vault();
+        let err = today_note(&vault).expect_err("missing today template");
+        assert!(matches!(err, crate::error::Error::Template(_)));
     }
 
     #[test]

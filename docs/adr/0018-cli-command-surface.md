@@ -18,7 +18,11 @@ clap-based subcommands. v1 surface:
 - `init [path]` — initialize a vault (`all-notes/`, `.ntropy/`, default
   template and config).
 - `new <title>` — create a note from the template and open it; `--no-edit` /
-  `--print` creates and prints the path only.
+  `--print` creates and prints the path only. `--template`/`-t <name>` picks a
+  named template.
+- `today` — open today's note, creating it from the `today` template when it
+  does not exist yet (identified by its title being today's date). Shares
+  `--no-edit`/`--print` with `new`.
 - `search [query]` — the single browse/filter/full-text entry point. The query
   is a DSL expression (ADR 0012) and is optional (omitted = all notes). On a
   TTY it launches the interactive picker and opens the selection in `$EDITOR`;

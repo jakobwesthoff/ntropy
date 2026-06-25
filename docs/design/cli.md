@@ -30,9 +30,9 @@ The command surface and its behavior. Consolidates
 
 ### `init [path]`
 
-Initialize a vault at `path`: create `all-notes/`, `.ntropy/`, the default
-template (`.ntropy/templates/default.md`), and the per-vault config seeded with
-a `by-tag` view (and its `by-tag/` directory).
+Initialize a vault at `path`: create `all-notes/`, `.ntropy/`, the templates
+(`.ntropy/templates/default.md` and `today.md`), and the per-vault config seeded
+with a `by-tag` view (and its `by-tag/` directory).
 
 The target is the positional `path` or, when it is omitted, the global
 `--vault`. Passing both is an error (they name the same thing two ways); with
@@ -57,6 +57,15 @@ substituted), then open it in the editor.
 - `--no-edit` / `--print`: create and print the path only (no editor).
 
 On editor exit, ntropy reconciles the note (slug realignment, view links).
+
+### `today`
+
+Open today's note, the daily-note convenience. The note is identified by its
+title being today's local date; if one exists it is opened, otherwise it is
+created from `.ntropy/templates/today.md` (which `init` seeds and titles by
+`{{date}}` with a `daily` tag). When several notes share today's date as their
+title, the newest is opened. Shares `--no-edit`/`--print` with `new`. The
+template must exist; a vault predating it must re-run `init`.
 
 ### `search [query]`
 

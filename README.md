@@ -53,6 +53,9 @@ flags are needed. From elsewhere, point at it with `--vault <path>`,
 - `new <title>` — create a note from a template and open it. `--template`/`-t
   <name>` picks a template (see [Templates](#templates)); `--no-edit`
   (`--print`) just prints the path.
+- `today` — open today's note, creating it from the `today` template on first
+  use that day (see [Templates](#templates)). `--no-edit` (`--print`) just prints
+  the path.
 - `search [query]` — the one browse/filter/full-text entry point. On a TTY it
   opens an interactive fuzzy picker; piped or with `-n` it prints plain lines.
   In the picker, type to filter; Ctrl-W deletes a word and Ctrl-U clears the
@@ -126,6 +129,22 @@ When a note is created, these placeholders are substituted in the template:
 - `{{slug}}` — the slugified title.
 
 Unknown placeholders are left untouched.
+
+### The `today` template
+
+`init` also seeds `today.md`, which powers the `today` command:
+
+    ---
+    title: {{date}}
+    tags: [daily]
+    ---
+    # {{date}}
+
+`ntropy today` opens today's note, identified by its title being today's date.
+The first run on a given day creates it from this template; later runs the same
+day reopen the same note rather than making a new one. Customize `today.md` to
+change what your daily note looks like (it must exist; a vault created before
+this feature can re-run `ntropy init` to seed it).
 
 ## Development
 

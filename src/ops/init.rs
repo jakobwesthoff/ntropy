@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use crate::config::{PerVaultConfig, ViewConfig};
 use crate::error::Result;
 use crate::fsutil;
-use crate::template::DEFAULT_TEMPLATE;
+use crate::template::{DEFAULT_TEMPLATE, TODAY_TEMPLATE};
 use crate::vault::Vault;
 use crate::vault::layout;
 
@@ -47,8 +47,10 @@ pub fn init_vault(path: &Path) -> Result<InitReport> {
     ensure_dir(&layout.ntropy_dir(), &mut created)?;
     ensure_dir(&layout.templates_dir(), &mut created)?;
 
-    // The default template, written only if absent so a customized one is kept.
+    // The default and today templates, written only if absent so customized
+    // ones are kept.
     ensure_file(&layout.default_template(), DEFAULT_TEMPLATE, &mut created)?;
+    ensure_file(&layout.today_template(), TODAY_TEMPLATE, &mut created)?;
 
     // The per-vault config, seeded with the `by-tag` view on first creation.
     let config_path = layout.config_file();
@@ -108,6 +110,7 @@ mod tests {
         assert!(vault.layout().ntropy_dir().is_dir());
         assert!(vault.layout().templates_dir().is_dir());
         assert!(vault.layout().default_template().is_file());
+        assert!(vault.layout().today_template().is_file());
         assert!(vault.layout().config_file().is_file());
         assert!(vault.layout().view_dir("by-tag").is_dir());
         assert!(!report.created.is_empty());
@@ -131,6 +134,15 @@ mod tests {
         let template = std::fs::read_to_string(Vault::new(dir.path()).layout().default_template())
             .expect("read template");
         assert_eq!(template, DEFAULT_TEMPLATE);
+    }
+
+    #[test]
+    fn today_template_is_written() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        init_vault(dir.path()).expect("init");
+        let template = std::fs::read_to_string(Vault::new(dir.path()).layout().today_template())
+            .expect("read template");
+        assert_eq!(template, TODAY_TEMPLATE);
     }
 
     #[test]
