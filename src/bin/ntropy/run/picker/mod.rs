@@ -130,6 +130,14 @@ fn run_loop<T>(
 /// The color of the divider lines that frame the prompt.
 const DIVIDER_COLOR: style::Color = style::Color::Blue;
 
+/// The prompt prefix; its width is also the indent the query text and the stats
+/// line share, so the stats sit directly under the query.
+const PROMPT_PREFIX: &str = "❯ ";
+
+/// The selected-row marker. A left bar reads as a selection gutter and stays
+/// distinct from the prompt's `❯`. Two columns wide, like the unselected `  `.
+const SELECTION_POINTER: &str = "▌ ";
+
 /// The number of list rows that fit above the divider/prompt/divider/stats chrome.
 fn list_height(terminal_rows: u16) -> usize {
     (terminal_rows as usize).saturating_sub(4).max(1)
@@ -164,23 +172,24 @@ fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result
     queue!(
         stdout,
         cursor::MoveTo(0, prompt_row),
-        style::Print(format!("❯ {}", state.query())),
+        style::Print(format!("{PROMPT_PREFIX}{}", state.query())),
         cursor::MoveTo(0, prompt_row + 1),
     )?;
     draw_divider(stdout, cols)?;
 
-    // Dimmed `m/n` stats under the second divider, right-aligned.
+    // Dimmed stats under the second divider, aligned under the query text.
     let (matching, total) = state.counter();
+    let rank = state.selected_rank();
     queue!(
         stdout,
         cursor::MoveTo(0, prompt_row + 2),
         style::SetAttribute(Attribute::Dim),
-        style::Print(stats_line(cols as usize, matching, total)),
+        style::Print(stats_line(cols as usize, rank, matching, total)),
         style::SetAttribute(Attribute::Reset),
     )?;
 
     // Park the cursor at the end of the query so typing reads naturally.
-    let prompt_col = 2 + state.query().width() as u16;
+    let prompt_col = (PROMPT_PREFIX.width() + state.query().width()) as u16;
     queue!(stdout, cursor::MoveTo(prompt_col, prompt_row))?;
 
     stdout.flush().context("while flushing the picker frame")?;
@@ -203,24 +212,32 @@ fn divider_line(width: usize, fill: char) -> String {
     std::iter::repeat_n(fill, width).collect()
 }
 
-/// The `m/n` stats string, right-aligned within `width` with one trailing space
-/// so it sits just off the right edge. Too narrow, it degrades to a truncation.
-fn stats_line(width: usize, matching: usize, total: usize) -> String {
-    let label = format!("{matching}/{total} ");
-    if label.chars().count() >= width {
-        return label.chars().take(width).collect();
+/// The dimmed stats string, indented to sit directly under the query text (past
+/// the prompt prefix). Shows the cursor's rank within the matches plus the total
+/// candidate count, or an empty-state hint. Clipped to `width` on a narrow
+/// terminal. `rank` is the 1-based position of the selection among the matches,
+/// or `None` when nothing matches.
+fn stats_line(width: usize, rank: Option<usize>, matching: usize, total: usize) -> String {
+    let body = match rank {
+        None => format!("no matches · {total} total"),
+        Some(rank) => format!("{rank}/{matching} · {total} total"),
+    };
+    let mut line = " ".repeat(PROMPT_PREFIX.width());
+    line.push_str(&body);
+    if line.chars().count() > width {
+        return line.chars().take(width).collect();
     }
-    format!("{label:>width$}")
+    line
 }
 
-/// Draw a single list row. The selected row is drawn in cyan with a `❯ `
-/// pointer; matched characters are yellow on either row; the display-only ULID
-/// suffix is dimmed (or rides the cyan body on the selected row). All colors are
-/// the terminal's own ANSI palette, so the picker adapts to its theme.
+/// Draw a single list row. The selected row is drawn in cyan with a `▌ ` bar;
+/// matched characters are yellow on either row; the display-only ULID suffix is
+/// dimmed (or rides the cyan body on the selected row). All colors are the
+/// terminal's own ANSI palette, so the picker adapts to its theme.
 fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<()> {
     let width = cols as usize;
     let selected = row.selected;
-    let pointer = if selected { "❯ " } else { "  " };
+    let pointer = if selected { SELECTION_POINTER } else { "  " };
 
     // The selected row's body is cyan; the pointer shares that accent.
     if selected {
@@ -230,8 +247,9 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
 
     // Truncate to the terminal width (in display columns) so a long row never
     // wraps and breaks the layout. The matchable part is drawn first (matches in
-    // yellow), then the suffix fills whatever budget remains. A wide character is
-    // dropped whole rather than allowed to straddle the right edge.
+    // yellow), then the suffix fills whatever budget remains. The `▌ ` bar is two
+    // display columns; a wide character is dropped whole rather than allowed to
+    // straddle the right edge.
     let mut drawn = UnicodeWidthStr::width(pointer);
     let positions = row.positions;
     for (i, c) in row.matchable.chars().enumerate() {
@@ -300,17 +318,21 @@ mod tests {
     }
 
     #[test]
-    fn stats_right_align_the_counter_with_one_trailing_space() {
-        let line = stats_line(20, 12, 40);
-        assert_eq!(line.chars().count(), 20);
-        // The counter hugs the right edge with a single trailing space.
-        assert!(line.ends_with("12/40 "));
-        assert!(line.starts_with("        "));
+    fn stats_align_under_the_query_text() {
+        let line = stats_line(40, Some(3), 12, 40);
+        // Indented past the prompt prefix so it sits under the query text.
+        assert_eq!(line, "  3/12 · 40 total");
+        assert_eq!(line.trim_start(), "3/12 · 40 total");
     }
 
     #[test]
-    fn stats_degrade_to_a_truncated_counter_when_too_narrow() {
-        let line = stats_line(4, 100, 200);
+    fn stats_show_an_empty_state_when_nothing_matches() {
+        assert_eq!(stats_line(40, None, 0, 40), "  no matches · 40 total");
+    }
+
+    #[test]
+    fn stats_degrade_to_a_truncation_when_too_narrow() {
+        let line = stats_line(4, Some(1), 100, 200);
         assert_eq!(line.chars().count(), 4);
     }
 }

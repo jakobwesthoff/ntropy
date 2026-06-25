@@ -78,14 +78,15 @@ The single browse / filter / full-text entry point (visible alias: `list`).
 - Piped or `-n`: prints matching notes as plain lines.
 
 The picker (ADR 0027) draws on the alternate screen, bottom-anchored: the prompt
-is framed by a blue divider line above and below it, with the `m/n` counter
-dimmed and right-aligned beneath the lower divider, and the result list grows
-upward above the top divider with the best match nearest the prompt. Rows are an aligned
+is framed by a blue divider line above and below it, with a dimmed stats line
+beneath the lower divider (indented under the query text, showing the cursor's
+rank within the matches, the match count and the total), and the result list
+grows upward above the top divider with the best match nearest the prompt. Rows are an aligned
 title/date/tags grid (widths in Unicode display columns) with the note's ULID
 trailing dimmed and never matched. Type to filter; Backspace, Ctrl-W (delete
 word) and Ctrl-U (clear) edit the query; Up / Ctrl-P move toward worse matches
 and Down / Ctrl-N toward the best; Enter selects; Esc / Ctrl-C aborts. Matched
-characters are yellow and the selected row cyan with a `❯` pointer, all from the
+characters are yellow and the selected row cyan with a `▌` bar, all from the
 terminal's own ANSI palette so the picker adapts to its theme.
 
 Examples:

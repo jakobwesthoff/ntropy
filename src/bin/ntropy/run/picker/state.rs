@@ -217,6 +217,16 @@ impl<T> PickerState<T> {
         (self.scored.len(), self.items.len())
     }
 
+    /// The 1-based rank of the selection within the matches, or `None` when
+    /// nothing matches. Drives the cursor-position part of the stats line.
+    pub fn selected_rank(&self) -> Option<usize> {
+        if self.scored.is_empty() {
+            None
+        } else {
+            Some(self.selected + 1)
+        }
+    }
+
     /// The rows currently inside the viewport, top to bottom.
     pub fn visible(&self) -> Vec<VisibleRow<'_>> {
         let end = (self.offset + self.height).min(self.scored.len());
@@ -507,6 +517,21 @@ mod tests {
         let lines = s.list_lines();
         assert_eq!(lines.len(), 2);
         assert!(lines.iter().all(Option::is_some));
+    }
+
+    #[test]
+    fn selected_rank_is_one_based_and_tracks_movement() {
+        let mut s = state(&["a", "b", "c"], 10);
+        assert_eq!(s.selected_rank(), Some(1));
+        s.select_worse();
+        assert_eq!(s.selected_rank(), Some(2));
+    }
+
+    #[test]
+    fn selected_rank_is_none_when_nothing_matches() {
+        let mut s = state(&["alpha", "beta"], 10);
+        s.push_char('z');
+        assert_eq!(s.selected_rank(), None);
     }
 
     #[test]

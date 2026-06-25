@@ -27,12 +27,14 @@ Render the picker in-house over the `nucleo` matcher (already a dependency) and
   into its rows in one pass so columns can be aligned across every candidate;
   each row's matchable text is also its fuzzy-match haystack.
 - The layout is bottom-anchored: the prompt is framed by a (blue) divider line
-  above and below it, with the `m/n` counter shown dimmed and right-aligned
-  beneath the lower divider; the result list grows upward above the top divider
-  with the best match nearest the prompt. Rows are an aligned grid of title,
-  date and tags; the ULID trails as a dimmed, display-only suffix.
+  above and below it, with a dimmed stats line beneath the lower divider,
+  indented to sit under the query text and showing the cursor's rank within the
+  matches, the match count and the total (or an empty-state hint); the result
+  list grows upward above the top divider with the best match nearest the
+  prompt. Rows are an aligned grid of title, date and tags; the ULID trails as a
+  dimmed, display-only suffix.
 - Matched characters are drawn in yellow and the selected row in cyan with a
-  `❯` pointer. The colors come from the terminal's own ANSI palette, so the
+  `▌` bar. The colors come from the terminal's own ANSI palette, so the
   picker adapts to any light or dark theme. Match positions come from `nucleo`.
 - Keybindings: typing, Backspace, Ctrl-W (delete word) and Ctrl-U (clear) edit
   the query; Up / Ctrl-P move toward worse matches (up the screen), Down /

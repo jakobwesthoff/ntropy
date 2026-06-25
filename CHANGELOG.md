@@ -36,15 +36,16 @@ and this project adheres to
   uppercase column header (docker-style). Strip it with `tail -n +2` if needed.
 - The interactive fuzzy picker is now rendered in-house over `nucleo` and
   `crossterm` instead of `nucleo-picker`. It is bottom-anchored: the query
-  prompt is framed by a blue divider line above and below it, with the `m/n`
-  counter dimmed beneath the lower divider, and the result list grows upward
-  with the best match nearest the prompt. Rows are
-  an aligned title/date/tags grid (widths measured in Unicode display columns)
-  with the note's ULID shown dimmed and never matched. Matched characters are
-  highlighted in yellow and the selected row in cyan with a `❯` pointer, all
-  from the terminal's own ANSI palette so the picker adapts to its light/dark
-  theme. Type to filter; Ctrl-W (delete word), Ctrl-U (clear), and Up/Ctrl-P
-  (toward worse matches) / Down/Ctrl-N (toward the best) navigation (ADR 0027).
+  prompt is framed by a blue divider line above and below it, with a dimmed
+  stats line beneath (under the query text) showing the cursor's rank within the
+  matches and the match/total counts, and the result list grows upward with the
+  best match nearest the prompt. Rows are an aligned title/date/tags grid
+  (widths measured in Unicode display columns) with the note's ULID shown dimmed
+  and never matched. Matched characters are highlighted in yellow and the
+  selected row in cyan with a `▌` bar, all from the terminal's own ANSI palette
+  so the picker adapts to its light/dark theme. Type to filter; Ctrl-W (delete
+  word), Ctrl-U (clear), and Up/Ctrl-P (toward worse matches) / Down/Ctrl-N
+  (toward the best) navigation (ADR 0027).
 - A single note reference (`date  title  [tags]  (id)`) is now used everywhere a
   note is named to a person: delete prompts and confirmations and the
   ambiguous-match list. The plain `search -n` table gained `date` and `tags`
