@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args: []
+---
+success: true
+exit_code: 0
+----- stdout -----
+An opinionated Markdown note-taking and management CLI.
+
+Usage: ntropy
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
+
+
+----- stderr -----

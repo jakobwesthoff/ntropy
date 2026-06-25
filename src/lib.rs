@@ -1,3 +1,25 @@
-pub fn hello_world() {
-    println!("Hello World!");
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+//! ntropy: an opinionated Markdown note-taking and management library.
+//!
+//! The crate is organized into layers, lowest (pure, no I/O) to highest
+//! (orchestration), so dependencies only ever point downward:
+//!
+//! ```text
+//! ops → {query, view, reconcile, config, scan, template}
+//!     → {note, vault} → {fsutil, id, datetime, text}
+//! ```
+//!
+//! [`error`] sits to the side, used by every layer. The library is headless:
+//! it performs no terminal I/O, spawns no editor, and runs no picker. Those
+//! concerns live in the binary (`src/bin/ntropy/`).
+
+pub mod error;
+pub mod fsutil;
+
+/// Common re-exports for callers of the library.
+pub mod prelude {
+    pub use crate::error::{Error, Result};
 }
