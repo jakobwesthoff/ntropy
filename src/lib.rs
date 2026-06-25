@@ -23,8 +23,12 @@ pub mod datetime;
 pub mod id;
 pub mod text;
 
+pub mod note;
+pub mod scan;
+
 /// Common re-exports for callers of the library.
 pub mod prelude {
     pub use crate::error::{Error, Result};
     pub use crate::id::Id;
+    pub use crate::note::Note;
 }

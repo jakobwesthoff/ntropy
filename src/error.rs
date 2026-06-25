@@ -15,6 +15,8 @@
 use crate::datetime::DateError;
 use crate::fsutil::FsError;
 use crate::id::IdError;
+use crate::note::NoteError;
+use crate::scan::ScanError;
 
 /// The unified error type returned across the library surface.
 #[derive(Debug, thiserror::Error)]
@@ -30,6 +32,14 @@ pub enum Error {
     /// A derived date could not be rendered.
     #[error(transparent)]
     Date(#[from] DateError),
+
+    /// A note file was not well-formed.
+    #[error(transparent)]
+    Note(#[from] NoteError),
+
+    /// A vault scan could not run.
+    #[error(transparent)]
+    Scan(#[from] ScanError),
 }
 
 /// Convenience alias for results carrying the crate [`Error`].
