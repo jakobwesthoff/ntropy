@@ -97,11 +97,33 @@ hand.
   at its file. With `nucleo` ranking the query, this is a command-palette jump to
   any note by title across the vault.
 
+## Trying it in Neovim
+
+A minimal smoke test on a recent Neovim attaches the server to Markdown buffers
+inside a vault. The README has a fuller setup.
+
+```lua
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "markdown",
+  callback = function(args)
+    vim.lsp.start({
+      name = "ntropy",
+      cmd = { "ntropy", "lsp" },
+      root_dir = vim.fs.root(args.buf, { ".ntropy", ".ntropy-vault" }),
+    })
+  end,
+})
+```
+
+Open a note under `all-notes/`, type `[`, and pick a note to insert a link;
+`gd` jumps to a link's target and the symbol picker lists notes by title.
+
 ## Open points
 
-- Whether the synchronous `lsp-server` stack suffices is settled by building the
-  v1 server; `tower-lsp-server` is the identified fallback (ADR 0029).
+- The synchronous `lsp-server` stack is validated: the v1 server is built and
+  covered by tests over an in-memory connection. `tower-lsp-server` remains the
+  identified fallback should it ever prove limiting (ADR 0029).
 - Tier-2 features (backlinks/references, hover preview, dangling-link
   diagnostics, document-symbol outline) are deferred; see the todos referenced
   from `todos/01kvxwqq5vbjekr578jffved5m-linking-and-language-server.md`.
-</content>
+

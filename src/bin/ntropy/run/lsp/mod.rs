@@ -673,4 +673,176 @@ mod tests {
             .unwrap();
         shutdown(&client, handle);
     }
+
+    // ===== End-to-end flows over the in-memory connection and a real vault =====
+
+    const ULID_TARGET: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    const ULID_NEW: &str = "01BRZ3NDEKTSV4RRFFQ69G5FAV";
+
+    /// Create a temporary vault with the given `<ulid>-<slug>.md` notes, returning
+    /// the guard and the canonicalized root.
+    fn temp_vault(notes: &[(&str, &str, &str)]) -> (tempfile::TempDir, std::path::PathBuf) {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = std::fs::canonicalize(dir.path()).expect("canonicalize");
+        std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
+        std::fs::create_dir_all(root.join(".ntropy")).expect(".ntropy");
+        for (ulid, slug, content) in notes {
+            std::fs::write(
+                root.join("all-notes").join(format!("{ulid}-{slug}.md")),
+                content,
+            )
+            .expect("write note");
+        }
+        (dir, root)
+    }
+
+    /// The `file:` URI of a path inside the vault's `all-notes/`.
+    fn note_uri(root: &std::path::Path, name: &str) -> String {
+        format!("file://{}", root.join("all-notes").join(name).display())
+    }
+
+    fn did_open(client: &Connection, uri: &str, text: &str) {
+        client
+            .sender
+            .send(notification(
+                "textDocument/didOpen",
+                json!({
+                    "textDocument": {
+                        "uri": uri, "languageId": "markdown", "version": 1, "text": text,
+                    }
+                }),
+            ))
+            .unwrap();
+    }
+
+    /// Send a request and return its result value.
+    fn call(client: &Connection, method: &str, params: serde_json::Value) -> serde_json::Value {
+        client.sender.send(request(10, method, params)).unwrap();
+        let Message::Response(response) = recv(client) else {
+            panic!("expected a response to {method}");
+        };
+        response.result.expect("a result")
+    }
+
+    fn completion_labels(result: &serde_json::Value) -> Vec<String> {
+        result["items"]
+            .as_array()
+            .expect("items array")
+            .iter()
+            .map(|item| item["label"].as_str().unwrap_or_default().to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn completion_offers_vault_notes_end_to_end() {
+        let (_dir, root) =
+            temp_vault(&[(ULID_TARGET, "target", "---\ntitle: Target\n---\nbody\n")]);
+        let (client, handle) = start();
+        initialize(
+            &client,
+            json!({ "general": { "positionEncodings": ["utf-8"] } }),
+        );
+
+        let uri = note_uri(&root, "source.md");
+        did_open(&client, &uri, "see [Tar");
+        let result = call(
+            &client,
+            "textDocument/completion",
+            json!({ "textDocument": { "uri": uri }, "position": { "line": 0, "character": 8 } }),
+        );
+        assert!(completion_labels(&result).contains(&"Target".to_owned()));
+        shutdown(&client, handle);
+    }
+
+    #[test]
+    fn definition_jumps_to_target_end_to_end() {
+        let (_dir, root) =
+            temp_vault(&[(ULID_TARGET, "target", "---\ntitle: Target\n---\nbody\n")]);
+        let (client, handle) = start();
+        initialize(
+            &client,
+            json!({ "general": { "positionEncodings": ["utf-8"] } }),
+        );
+
+        let uri = note_uri(&root, "source.md");
+        did_open(&client, &uri, &format!("[x]({ULID_TARGET}-target.md)"));
+        let result = call(
+            &client,
+            "textDocument/definition",
+            json!({ "textDocument": { "uri": uri }, "position": { "line": 0, "character": 1 } }),
+        );
+        assert!(
+            result["uri"]
+                .as_str()
+                .expect("a target uri")
+                .ends_with(&format!("{ULID_TARGET}-target.md"))
+        );
+        shutdown(&client, handle);
+    }
+
+    #[test]
+    fn workspace_symbol_finds_notes_end_to_end() {
+        let (_dir, root) =
+            temp_vault(&[(ULID_TARGET, "target", "---\ntitle: Target\n---\nbody\n")]);
+        let (client, handle) = start();
+        initialize(
+            &client,
+            json!({ "general": { "positionEncodings": ["utf-8"] } }),
+        );
+
+        // Open a document so the vault's cache is populated.
+        let uri = note_uri(&root, "source.md");
+        did_open(&client, &uri, "[Tar");
+        call(
+            &client,
+            "textDocument/completion",
+            json!({ "textDocument": { "uri": uri }, "position": { "line": 0, "character": 4 } }),
+        );
+
+        let symbols = call(&client, "workspace/symbol", json!({ "query": "Target" }));
+        let names: Vec<&str> = symbols
+            .as_array()
+            .expect("symbol array")
+            .iter()
+            .map(|symbol| symbol["name"].as_str().unwrap_or_default())
+            .collect();
+        assert!(names.contains(&"Target"));
+        shutdown(&client, handle);
+    }
+
+    #[test]
+    fn watched_file_change_refreshes_completion_end_to_end() {
+        let (_dir, root) =
+            temp_vault(&[(ULID_TARGET, "target", "---\ntitle: Target\n---\nbody\n")]);
+        let (client, handle) = start();
+        initialize(
+            &client,
+            json!({ "general": { "positionEncodings": ["utf-8"] } }),
+        );
+
+        let uri = note_uri(&root, "source.md");
+        did_open(&client, &uri, "[");
+        let params =
+            json!({ "textDocument": { "uri": uri }, "position": { "line": 0, "character": 1 } });
+        let before = call(&client, "textDocument/completion", params.clone());
+        assert_eq!(completion_labels(&before).len(), 1);
+
+        // Create a new note on disk and report it via the watcher.
+        std::fs::write(
+            root.join("all-notes").join(format!("{ULID_NEW}-new.md")),
+            "---\ntitle: New Note\n---\nbody\n",
+        )
+        .unwrap();
+        client
+            .sender
+            .send(notification(
+                "workspace/didChangeWatchedFiles",
+                json!({ "changes": [{ "uri": note_uri(&root, &format!("{ULID_NEW}-new.md")), "type": 1 }] }),
+            ))
+            .unwrap();
+
+        let after = call(&client, "textDocument/completion", params);
+        assert_eq!(completion_labels(&after).len(), 2);
+        shutdown(&client, handle);
+    }
 }
