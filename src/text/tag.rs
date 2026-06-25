@@ -54,9 +54,92 @@ pub fn matches(query: &str, candidate: &str) -> bool {
         .any(|window| window == needle)
 }
 
+/// Existing tags that could complete the partial tag being typed.
+///
+/// Matching is hierarchy-aware. The partial's leading segments must equal the
+/// candidate's, and the candidate's segment at the partial's depth must start
+/// with the partial's last segment, so `prog` offers `programming/rust` and
+/// `programming/ru` narrows to `programming/rust`. A partial ending in `/`
+/// offers the strictly deeper children below it. An empty partial offers every
+/// candidate. The partial is normalized, so matching is case-insensitive.
+/// Order is preserved and duplicates are dropped.
+pub fn suggest(partial: &str, candidates: &[String]) -> Vec<String> {
+    let needle = segments(partial);
+    let trailing_slash = partial.ends_with('/');
+
+    let mut seen = std::collections::HashSet::new();
+    candidates
+        .iter()
+        .filter(|candidate| {
+            if needle.is_empty() {
+                return true;
+            }
+            let haystack = segments(candidate);
+            if trailing_slash {
+                // Offer children strictly below the completed partial.
+                haystack.len() > needle.len() && haystack[..needle.len()] == needle[..]
+            } else {
+                let (last, parents) = needle.split_last().expect("needle is non-empty");
+                haystack.len() >= needle.len()
+                    && haystack[..parents.len()] == parents[..]
+                    && haystack[parents.len()].starts_with(last)
+            }
+        })
+        .filter(|candidate| seen.insert((*candidate).clone()))
+        .cloned()
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn tags(values: &[&str]) -> Vec<String> {
+        values.iter().map(|v| (*v).to_owned()).collect()
+    }
+
+    #[test]
+    fn suggest_empty_partial_offers_all() {
+        let all = tags(&["programming/rust", "area/work"]);
+        assert_eq!(suggest("", &all), all);
+    }
+
+    #[test]
+    fn suggest_prefixes_the_first_segment() {
+        let all = tags(&["programming/rust", "programming/cli", "area/work"]);
+        assert_eq!(
+            suggest("prog", &all),
+            tags(&["programming/rust", "programming/cli"])
+        );
+    }
+
+    #[test]
+    fn suggest_trailing_slash_offers_children() {
+        let all = tags(&["programming", "programming/rust", "programming/cli"]);
+        assert_eq!(
+            suggest("programming/", &all),
+            tags(&["programming/rust", "programming/cli"])
+        );
+    }
+
+    #[test]
+    fn suggest_narrows_within_a_level() {
+        let all = tags(&["programming/rust", "programming/cli"]);
+        assert_eq!(suggest("programming/ru", &all), tags(&["programming/rust"]));
+    }
+
+    #[test]
+    fn suggest_is_case_insensitive_and_normalizing() {
+        let all = tags(&["ueber/groesse"]);
+        assert_eq!(suggest("Über", &all), tags(&["ueber/groesse"]));
+    }
+
+    #[test]
+    fn suggest_drops_duplicates_and_non_matches() {
+        let all = tags(&["area/work", "area/work", "programming/rust"]);
+        assert_eq!(suggest("area", &all), tags(&["area/work"]));
+        assert!(suggest("xyz", &all).is_empty());
+    }
 
     #[test]
     fn segments_normalize_each_piece() {
