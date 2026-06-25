@@ -30,27 +30,37 @@ use ntropy::ops::Candidate;
 
 use state::{PickerState, VisibleRow};
 
-/// Render a note [`Candidate`] as one picker row: title, local date, then any
-/// tags. The fuzzy matcher runs over this whole row (ADR 0014).
-pub fn render_candidate(candidate: &Candidate) -> String {
-    if candidate.tags.is_empty() {
-        format!("{}  ({})", candidate.title, candidate.date)
-    } else {
-        format!(
-            "{}  ({})  [{}]",
-            candidate.title,
-            candidate.date,
-            candidate.tags.join(", ")
-        )
+/// One picker row split into its matchable and display-only parts.
+///
+/// The fuzzy matcher and the match-highlighting run over `matchable` only;
+/// `suffix` is shown (dimmed) but never matched, so a long identifier can be
+/// visible without polluting the query or the highlight.
+pub struct Row {
+    /// The matchable, highlightable text (shown first).
+    pub matchable: String,
+    /// Trailing display-only text, e.g. a note's ULID.
+    pub suffix: String,
+}
+
+/// Render a note [`Candidate`] as one picker row: title, local date and tags
+/// are matchable; the ULID trails as a display-only suffix (ADR 0014, ADR 0027).
+pub fn render_candidate(candidate: &Candidate) -> Row {
+    let mut matchable = format!("{}  ({})", candidate.title, candidate.date);
+    if !candidate.tags.is_empty() {
+        matchable.push_str(&format!("  [{}]", candidate.tags.join(", ")));
+    }
+    Row {
+        matchable,
+        suffix: format!("  ({})", candidate.id),
     }
 }
 
 /// Present `items` in the interactive picker and return the chosen one.
 ///
-/// `render` turns each item into its display row, which is also what the fuzzy
-/// query matches against. Returns `Ok(None)` when there are no items or the
-/// user aborts (Esc / Ctrl-C) without selecting.
-pub fn pick<T>(items: Vec<T>, render: impl Fn(&T) -> String) -> Result<Option<T>> {
+/// `render` turns each item into its [`Row`] (matchable text plus a display-only
+/// suffix). Returns `Ok(None)` when there are no items or the user aborts
+/// (Esc / Ctrl-C) without selecting.
+pub fn pick<T>(items: Vec<T>, render: impl Fn(&T) -> Row) -> Result<Option<T>> {
     // Nothing to pick: never touch the terminal so non-interactive callers and
     // empty result sets stay side-effect free.
     if items.is_empty() {
@@ -83,7 +93,7 @@ impl Drop for TerminalGuard {
 fn run_loop<T>(
     stdout: &mut io::Stdout,
     items: Vec<T>,
-    render: impl Fn(&T) -> String,
+    render: impl Fn(&T) -> Row,
 ) -> Result<Option<T>> {
     let (mut cols, rows) = terminal::size().context("while querying the terminal size")?;
     let mut state = PickerState::new(items, render, list_height(rows));
@@ -158,8 +168,9 @@ fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result
 }
 
 /// Draw a single list row: a `> ` pointer for the selection, matched characters
-/// in bold, and (for the selection) a reverse-video bar padded to the full
-/// width so it reads as a highlighted line on any terminal theme.
+/// in the matchable part bold, the display-only suffix dimmed, and (for the
+/// selection) a reverse-video bar padded to the full width so it reads as a
+/// highlighted line on any terminal theme.
 fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<()> {
     let width = cols as usize;
     if row.selected {
@@ -169,12 +180,15 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
     let pointer = if row.selected { "> " } else { "  " };
     queue!(stdout, style::Print(pointer))?;
 
-    // Truncate to the remaining width so a long row never wraps and breaks the
-    // layout. Highlight positions past the cut are simply not drawn.
-    let budget = width.saturating_sub(pointer.len());
+    // Truncate to the terminal width so a long row never wraps and breaks the
+    // layout. The matchable part is drawn first (highlighted), then the dimmed
+    // suffix fills whatever budget remains.
     let mut drawn = pointer.len();
     let positions = row.positions;
-    for (i, c) in row.text.chars().take(budget).enumerate() {
+    for (i, c) in row.matchable.chars().enumerate() {
+        if drawn >= width {
+            break;
+        }
         let matched = positions.binary_search(&(i as u32)).is_ok();
         if matched {
             queue!(stdout, style::SetAttribute(Attribute::Bold))?;
@@ -184,6 +198,18 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
             queue!(stdout, style::SetAttribute(Attribute::NormalIntensity))?;
         }
         drawn += 1;
+    }
+
+    if !row.suffix.is_empty() && drawn < width {
+        queue!(stdout, style::SetAttribute(Attribute::Dim))?;
+        for c in row.suffix.chars() {
+            if drawn >= width {
+                break;
+            }
+            queue!(stdout, style::Print(c))?;
+            drawn += 1;
+        }
+        queue!(stdout, style::SetAttribute(Attribute::NormalIntensity))?;
     }
 
     if row.selected {

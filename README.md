@@ -71,8 +71,10 @@ flags are needed. From elsewhere, point at it with `--vault <path>`,
 Global flags (any command): `--vault <path>`, `-n`/`--non-interactive`,
 `--strict` (treat malformed/badly-named notes as errors instead of warnings).
 
-Non-interactive output is a tab-separated `id<TAB>title<TAB>path` table, newest
-first, so `awk`/`cut` and pipelines work directly.
+Non-interactive output is a tab-separated `id<TAB>date<TAB>title<TAB>tags<TAB>path`
+table, newest first (tags comma-joined), so `awk`/`cut` and pipelines work
+directly. Where a note is named to you (delete prompts, ambiguous matches) it is
+shown as `date  title  [tags]  (id)`.
 
 ## Query language
 

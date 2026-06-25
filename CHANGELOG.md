@@ -26,7 +26,13 @@ and this project adheres to
   `crossterm` instead of `nucleo-picker`. The selection bar uses reverse video
   so it adapts to the terminal's light/dark theme, matched characters are
   highlighted, and the picker supports Ctrl-W (delete word), Ctrl-U (clear),
-  and Ctrl-P/Ctrl-N navigation (ADR 0027).
+  and Ctrl-P/Ctrl-N navigation (ADR 0027). Rows now also show the note's ULID
+  dimmed, without matching against it.
+- A single note reference (`date  title  [tags]  (id)`) is now used everywhere a
+  note is named to a person: delete prompts and confirmations and the
+  ambiguous-match list. The plain `search -n` table gained `date` and `tags`
+  columns: `id<TAB>date<TAB>title<TAB>tags<TAB>path` (tags comma-joined). This
+  changes the previous `id<TAB>title<TAB>path` format.
 
 ## [0.9.0] - 2026-06-25
 

@@ -3,8 +3,6 @@ source: tests/cli.rs
 info:
   program: ntropy
   args:
-    - "--vault"
-    - /var/folders/sy/j_tvsf5n5g3055p026gwzw1c0000gn/T/.tmpwSPM0p
     - search
     - "text:deadline"
     - "-n"
@@ -14,6 +12,6 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-[ULID]	A	[VAULT]/all-notes/[ULID]-a.md
+[ULID]	[DATE]	A		[VAULT]/all-notes/[ULID]-a.md
 
 ----- stderr -----

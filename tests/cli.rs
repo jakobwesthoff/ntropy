@@ -61,6 +61,9 @@ fn redacted(vault: &Path) -> insta::Settings {
     }
     settings.add_filter(&regex::escape(&vault.to_string_lossy()), "[VAULT]");
     settings.add_filter(r"[0-9A-HJKMNP-TV-Z]{26}", "[ULID]");
+    // Derived dates render in the local timezone (ADR 0010), so redact them to
+    // keep snapshots stable across machines.
+    settings.add_filter(r"\d{4}-\d{2}-\d{2}", "[DATE]");
     settings
 }
 

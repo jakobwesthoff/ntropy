@@ -168,7 +168,7 @@ fn cmd_edit(vault: &Vault, selector: String, interactive: bool) -> Result<ExitCo
                 }
                 Ok(ExitCode::SUCCESS)
             } else {
-                report_ambiguous(&selector, notes);
+                report_ambiguous(&selector, notes)?;
                 Ok(ExitCode::FAILURE)
             }
         }
@@ -202,34 +202,42 @@ fn cmd_delete(vault: &Vault, selector: String, force: bool, interactive: bool) -
         ops::resolve_selection(vault, &selector).context("while resolving the selector")?;
     output::print_warnings(&matches.warnings);
 
-    // Determine the single target note (path + title), honoring the ambiguity
-    // rule shared with `edit` (ADR 0025).
+    // Determine the single target note (path + human reference), honoring the
+    // ambiguity rule shared with `edit` (ADR 0025).
     let target = match matches.notes.as_slice() {
         [] => {
             eprintln!("error: no note matches `{selector}`");
             return Ok(ExitCode::FAILURE);
         }
-        [note] => (note.path.clone(), note.title.clone()),
+        [note] => (note.path.clone(), output::note_reference(note)?),
         notes => {
             if interactive {
                 let candidates = ops::to_candidates(notes)?;
                 match picker::pick(candidates, picker::render_candidate)? {
-                    Some(selected) => (selected.path, selected.title),
+                    Some(selected) => {
+                        let reference = output::reference(
+                            selected.id,
+                            &selected.date,
+                            &selected.title,
+                            &selected.tags,
+                        );
+                        (selected.path, reference)
+                    }
                     None => return Ok(ExitCode::SUCCESS),
                 }
             } else {
-                report_ambiguous(&selector, notes);
+                report_ambiguous(&selector, notes)?;
                 return Ok(ExitCode::FAILURE);
             }
         }
     };
-    let (path, title) = target;
+    let (path, reference) = target;
 
     if !force {
         if !interactive {
-            bail!("refusing to delete `{title}` without --force in non-interactive mode");
+            bail!("refusing to delete {reference} without --force in non-interactive mode");
         }
-        if !confirm(&format!("Delete \"{title}\"? [y/N] "))? {
+        if !confirm(&format!("Delete {reference}? [y/N] "))? {
             println!("Aborted.");
             return Ok(ExitCode::SUCCESS);
         }
@@ -239,7 +247,7 @@ fn cmd_delete(vault: &Vault, selector: String, force: bool, interactive: bool) -
     // scans the same vault, so its warnings are discarded to avoid printing
     // each one twice.
     ops::delete_note(vault, &path).context("while deleting the note")?;
-    println!("Deleted {}", file_name(&path));
+    println!("Deleted {reference}");
     Ok(ExitCode::SUCCESS)
 }
 
@@ -298,16 +306,18 @@ fn set_global_default(root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Print an "ambiguous selector" error and the candidate notes to stderr.
-fn report_ambiguous(selector: &str, notes: &[ntropy::note::Note]) {
+/// Print an "ambiguous selector" error and the candidate notes to stderr,
+/// each as the shared human reference (ADR 0025).
+fn report_ambiguous(selector: &str, notes: &[ntropy::note::Note]) -> Result<()> {
     eprintln!(
         "error: `{selector}` is ambiguous ({} matches):",
         notes.len()
     );
     for note in notes {
-        eprintln!("  {}\t{}", note.id, note.title);
+        eprintln!("  {}", output::note_reference(note)?);
     }
     eprintln!("refine the query or pass a full ULID");
+    Ok(())
 }
 
 /// Prompt on stdin for a yes/no confirmation.

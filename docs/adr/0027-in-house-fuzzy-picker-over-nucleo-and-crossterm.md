@@ -43,7 +43,8 @@ Render the picker in-house over the `nucleo` matcher (already a dependency) and
 - `crossterm` is added; `nucleo-picker` is removed. `nucleo` stays as the
   matcher.
 - The terminal loop is not covered by tests, by design; the logic it drives is.
-- Matching runs over the full rendered row (title, date, tags), unchanged from
-  the previous behaviour.
+- Matching and highlighting run over the matchable part of a row (title, date,
+  tags). A trailing display-only suffix (the note's ULID) is shown dimmed but
+  never matched.
 - The query has no intra-line cursor movement (Left/Right) in v1; edits act at
   the end of the input.

@@ -14,6 +14,8 @@
 use nucleo::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo::{Config, Matcher, Utf32String};
 
+use super::Row;
+
 /// One ranked result: the item it points at and the matched character
 /// positions within that item's rendered row.
 struct Scored {
@@ -25,9 +27,11 @@ struct Scored {
 
 /// A row currently inside the viewport, handed to the renderer (or a test).
 pub struct VisibleRow<'a> {
-    /// The full rendered display text of the row.
-    pub text: &'a str,
-    /// Char positions in `text` that matched the query, ascending.
+    /// The matchable, highlightable part of the row (shown first).
+    pub matchable: &'a str,
+    /// Trailing text shown but never matched or highlighted (e.g. an id).
+    pub suffix: &'a str,
+    /// Char positions in `matchable` that matched the query, ascending.
     pub positions: &'a [u32],
     /// Whether this row is the current selection.
     pub selected: bool,
@@ -35,11 +39,13 @@ pub struct VisibleRow<'a> {
 
 /// The picker's interaction state over an owned set of items of type `T`.
 pub struct PickerState<T> {
-    /// The candidate items, index-aligned with `rows` and `haystacks`.
+    /// The candidate items, index-aligned with `matchable`/`suffix`/`haystacks`.
     items: Vec<T>,
-    /// Pre-rendered display string per item.
-    rows: Vec<String>,
-    /// Pre-converted match haystacks per item (the same text as `rows`).
+    /// The matchable, highlightable text per item.
+    matchable: Vec<String>,
+    /// The trailing display-only text per item (shown, never matched).
+    suffix: Vec<String>,
+    /// Pre-converted match haystacks per item (the same text as `matchable`).
     haystacks: Vec<Utf32String>,
     /// Reused fuzzy matcher; allocates a large scratch buffer, so it is kept.
     matcher: Matcher,
@@ -60,13 +66,18 @@ impl<T> PickerState<T> {
     ///
     /// `height` is the number of list rows the viewport can show; it is clamped
     /// to at least one so movement and scrolling always have room.
-    pub fn new(items: Vec<T>, render: impl Fn(&T) -> String, height: usize) -> Self {
-        let rows: Vec<String> = items.iter().map(&render).collect();
-        let haystacks: Vec<Utf32String> =
-            rows.iter().map(|r| Utf32String::from(r.as_str())).collect();
+    pub fn new(items: Vec<T>, render: impl Fn(&T) -> Row, height: usize) -> Self {
+        let rendered: Vec<Row> = items.iter().map(&render).collect();
+        let haystacks: Vec<Utf32String> = rendered
+            .iter()
+            .map(|r| Utf32String::from(r.matchable.as_str()))
+            .collect();
+        let matchable: Vec<String> = rendered.iter().map(|r| r.matchable.clone()).collect();
+        let suffix: Vec<String> = rendered.into_iter().map(|r| r.suffix).collect();
         let mut state = Self {
             items,
-            rows,
+            matchable,
+            suffix,
             haystacks,
             matcher: Matcher::new(Config::DEFAULT),
             query: String::new(),
@@ -201,7 +212,8 @@ impl<T> PickerState<T> {
             .map(|i| {
                 let s = &self.scored[i];
                 VisibleRow {
-                    text: &self.rows[s.item],
+                    matchable: &self.matchable[s.item],
+                    suffix: &self.suffix[s.item],
                     positions: &s.positions,
                     selected: i == self.selected,
                 }
@@ -234,13 +246,14 @@ impl<T> PickerState<T> {
             let pointer = if row.selected { "> " } else { "  " };
             let marked: HashSet<u32> = row.positions.iter().copied().collect();
             let mut line = String::new();
-            for (i, c) in row.text.chars().enumerate() {
+            for (i, c) in row.matchable.chars().enumerate() {
                 if marked.contains(&(i as u32)) {
                     let _ = write!(line, "[{c}]");
                 } else {
                     line.push(c);
                 }
             }
+            line.push_str(row.suffix);
             let _ = writeln!(out, "{}", format!("{pointer}{line}").trim_end());
         }
         out
@@ -251,10 +264,17 @@ impl<T> PickerState<T> {
 mod tests {
     use super::*;
 
-    /// A fixed candidate set rendered by its own string identity.
+    /// A fixed candidate set rendered by its own string identity (no suffix).
     fn state(rows: &[&str], height: usize) -> PickerState<String> {
         let items: Vec<String> = rows.iter().map(|s| s.to_string()).collect();
-        PickerState::new(items, |s: &String| s.clone(), height)
+        PickerState::new(
+            items,
+            |s: &String| Row {
+                matchable: s.clone(),
+                suffix: String::new(),
+            },
+            height,
+        )
     }
 
     #[test]
@@ -382,8 +402,37 @@ mod tests {
     }
 
     #[test]
+    fn suffix_is_shown_but_not_matched() {
+        let items = vec!["alpha".to_string()];
+        let mut s = PickerState::new(
+            items,
+            |t: &String| Row {
+                matchable: t.clone(),
+                suffix: "  (ZID)".into(),
+            },
+            10,
+        );
+        // The suffix is part of the displayed row...
+        insta::assert_snapshot!(s.debug_render(), @r"
+        >
+        1/1
+        > alpha  (ZID)
+        ");
+        // ...but a character that occurs only in the suffix finds no match.
+        s.push_char('z');
+        assert_eq!(s.counter().0, 0);
+    }
+
+    #[test]
     fn empty_item_set_selects_nothing() {
-        let s: PickerState<String> = PickerState::new(Vec::new(), |s: &String| s.clone(), 10);
+        let s: PickerState<String> = PickerState::new(
+            Vec::new(),
+            |s: &String| Row {
+                matchable: s.clone(),
+                suffix: String::new(),
+            },
+            10,
+        );
         assert_eq!(s.counter(), (0, 0));
         assert_eq!(s.into_selected(), None);
     }

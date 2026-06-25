@@ -3,8 +3,6 @@ source: tests/cli.rs
 info:
   program: ntropy
   args:
-    - "--vault"
-    - /var/folders/sy/j_tvsf5n5g3055p026gwzw1c0000gn/T/.tmpTxZLEM
     - delete
     - 01ARZ3NDEKTSV4RRFFQ69G5FAV
     - "-n"
@@ -16,4 +14,4 @@ exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-error: refusing to delete `Keep` without --force in non-interactive mode
+error: refusing to delete [DATE]  Keep  ([ULID]) without --force in non-interactive mode
