@@ -1,24 +1,31 @@
-# Inter-note linking and a language server (post-v1)
+# Inter-note linking and a language server
 
-Deferred from v1. ntropy does not control the editor buffer, so link insertion
-and navigation are out-of-band; nothing in v1 processes links, which is why v1
-ships without a Markdown parser.
+The link format and the core language server are now being designed for
+implementation. This todo tracks the parts that remain deferred.
 
-## Scope to design later
+## Decided
 
-- **Link format:** standard Markdown link with the target note's ULID as the
-  target: `[display](<ulid>)`. Resolution via the ULID glob (ADR 0004).
-- **Link commands:** an out-of-band `link` helper (picker → emit/copy link
-  markup), `backlinks <id>` (scan bodies for references), and follow/resolve a
-  `[[...]]`/`(ulid)` target to a note path.
-- **Language server:** an LSP that understands ntropy notes and provides
-  completion for links and tags (and likely frontmatter fields) inside the
-  editor. This is the primary intended way to author links ergonomically,
-  given ntropy cannot inject into an external editor buffer.
+- **Link format:** standard Markdown link to the target's current filename,
+  `[display](<ulid>-<slug>.md)`, resolved by ULID glob. See ADR 0028.
+- **LSP stack:** `lsp-server` + `lsp-types` (synchronous), validated by building.
+- **First LSP iteration scope:** completion (links + frontmatter tags),
+  `textDocument/definition`, `textDocument/documentLink`, `workspace/symbol`.
+- **Backlinks:** computed on demand by scanning for the ULID; never stored
+  (ADR 0028).
 
-## Open questions for that work
+## Still deferred
 
-- Whether link scanning needs a real Markdown parser (e.g. `pulldown-cmark`) or
-  an LSP-oriented incremental parser (e.g. tree-sitter) instead of regex, to
-  ignore links in code blocks and parse robustly.
-- Backlink performance over large vaults under the stateless model (ADR 0002).
+- **CLI link helpers** (for users not running the LSP): an out-of-band `link`
+  command (picker → emit/copy link markup) and a `backlinks <id>` command (scan
+  bodies for references).
+- **Tier-2 LSP features**, one todo each:
+  - `01kvzkk1bvqnhfx3v6w7w80ytd-lsp-backlinks-references.md`
+  - `01kvzkk1bvqnhfx3v6w7w80yte-lsp-hover-preview.md`
+  - `01kvzkk1bvqnhfx3v6w7w80ytf-lsp-dangling-link-diagnostics.md`
+  - `01kvzkk1bvqnhfx3v6w7w80ytg-lsp-document-symbol-outline.md`
+
+## Considerations
+
+- Backlink performance over large vaults under the stateless model (ADR 0002),
+  mitigated in the LSP by an in-memory session scan cache.
+</content>
