@@ -68,6 +68,9 @@ impl Outcome {
 pub fn run() -> Result<ExitCode> {
     let (connection, io_threads) = Connection::stdio();
     let outcome = serve(&connection).context("while serving the language server")?;
+    // Drop the connection so its channel senders close, letting the writer
+    // thread finish; otherwise `join` would block forever.
+    drop(connection);
     io_threads.join().context("while joining the I/O threads")?;
     Ok(outcome.exit_code())
 }
