@@ -19,6 +19,7 @@ use crate::id::IdError;
 use crate::note::NoteError;
 use crate::query::QueryError;
 use crate::scan::ScanError;
+use crate::template::TemplateError;
 use crate::vault::ResolveError;
 
 /// The unified error type returned across the library surface.
@@ -55,6 +56,10 @@ pub enum Error {
     /// A vault could not be resolved.
     #[error(transparent)]
     Resolve(#[from] ResolveError),
+
+    /// A template file could not be read.
+    #[error(transparent)]
+    Template(#[from] TemplateError),
 }
 
 /// Convenience alias for results carrying the crate [`Error`].

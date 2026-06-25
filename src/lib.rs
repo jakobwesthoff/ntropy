@@ -29,6 +29,9 @@ pub mod vault;
 pub mod config;
 pub mod query;
 pub mod scan;
+pub mod template;
+
+pub mod ops;
 
 /// Common re-exports for callers of the library.
 pub mod prelude {
