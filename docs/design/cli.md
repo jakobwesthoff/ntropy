@@ -77,11 +77,15 @@ The single browse / filter / full-text entry point (visible alias: `list`).
   the editor.
 - Piped or `-n`: prints matching notes as plain lines.
 
-The picker (ADR 0027) draws on the alternate screen with a prompt and an `m/n`
-match counter. Type to filter; Backspace, Ctrl-W (delete word) and Ctrl-U
-(clear) edit the query; Up / Ctrl-P and Down / Ctrl-N move the selection; Enter
-selects; Esc / Ctrl-C aborts. The selection bar uses reverse video, so it
-adapts to the terminal's theme.
+The picker (ADR 0027) draws on the alternate screen, bottom-anchored: the prompt
+sits on the last line above a divider carrying the `m/n` counter, and the result
+list grows upward with the best match nearest the prompt. Rows are an aligned
+title/date/tags grid (widths in Unicode display columns) with the note's ULID
+trailing dimmed and never matched. Type to filter; Backspace, Ctrl-W (delete
+word) and Ctrl-U (clear) edit the query; Up / Ctrl-P move toward worse matches
+and Down / Ctrl-N toward the best; Enter selects; Esc / Ctrl-C aborts. Matched
+characters are yellow and the selected row cyan with a `❯` pointer, all from the
+terminal's own ANSI palette so the picker adapts to its theme.
 
 Examples:
 
