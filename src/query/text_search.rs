@@ -117,9 +117,7 @@ impl LiteralCase {
                 self.record(range.end.c);
             }
             ClassSetItem::Bracketed(class) => self.visit_class_set(&class.kind),
-            ClassSetItem::Union(union) => {
-                union.items.iter().for_each(|i| self.visit_class_item(i))
-            }
+            ClassSetItem::Union(union) => union.items.iter().for_each(|i| self.visit_class_item(i)),
             // Empty, ASCII/Unicode/Perl class shorthands carry no literal.
             _ => {}
         }
