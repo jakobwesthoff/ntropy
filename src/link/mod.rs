@@ -16,6 +16,7 @@
 
 mod code;
 
+use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::LazyLock;
 
@@ -87,6 +88,20 @@ pub fn resolve(id: Id, notes: &[Note]) -> Option<&Note> {
     notes.iter().find(|note| note.id == id)
 }
 
+/// A note identity to note lookup, built once to resolve many links in O(1)
+/// each instead of rescanning the note slice per link.
+pub type NoteIndex<'n> = HashMap<Id, &'n Note>;
+
+/// Build a [`NoteIndex`] over `notes`. On a duplicate id the first note wins,
+/// matching the first-match behavior of [`resolve`].
+pub fn index(notes: &[Note]) -> NoteIndex<'_> {
+    let mut map = NoteIndex::with_capacity(notes.len());
+    for note in notes {
+        map.entry(note.id).or_insert(note);
+    }
+    map
+}
+
 /// The link covering `offset`, if any. Used to act on the link under a cursor.
 pub fn at_offset<'l, 'b>(links: &'l [Link<'b>], offset: usize) -> Option<&'l Link<'b>> {
     links.iter().find(|link| link.range.contains(&offset))
@@ -121,12 +136,12 @@ pub struct TargetRewrite {
 /// rewriting. Dangling links, external links and links inside code are left
 /// untouched (the latter two are never extracted in the first place), so an
 /// already-aligned body produces no write.
-pub fn rewrite_body(body: &str, notes: &[Note]) -> Option<BodyRewrite> {
+pub fn rewrite_body(body: &str, notes: &NoteIndex<'_>) -> Option<BodyRewrite> {
     let mut out = String::new();
     let mut rewrites = Vec::new();
     let mut cursor = 0;
     for link in extract(body) {
-        let Some(note) = resolve(link.id, notes) else {
+        let Some(note) = notes.get(&link.id).copied() else {
             continue;
         };
         let desired = note.canonical_filename();
@@ -294,6 +309,34 @@ mod tests {
     }
 
     #[test]
+    fn index_resolves_hits_and_misses() {
+        let notes = vec![note(ULID)];
+        let id: Id = ULID.parse().unwrap();
+        let idx = index(&notes);
+        assert_eq!(idx.get(&id).map(|n| n.id), Some(id));
+
+        let other: Id = "01BX5ZZKBKACTAV9WEVGEMMVRZ".parse().unwrap();
+        assert!(!idx.contains_key(&other));
+        assert!(!index(&[]).contains_key(&id));
+    }
+
+    #[test]
+    fn index_keeps_the_first_note_on_a_duplicate_id() {
+        // Two notes sharing one id: the first wins, matching `resolve`'s `find`.
+        let parse = |slug: &str, title: &str| {
+            Note::parse(
+                PathBuf::from(format!("/v/all-notes/{ULID}-{slug}.md")),
+                &format!("---\ntitle: {title}\n---\nbody\n"),
+                None,
+            )
+            .expect("note parses")
+        };
+        let notes = vec![parse("first", "First"), parse("second", "Second")];
+        let id: Id = ULID.parse().unwrap();
+        assert_eq!(index(&notes).get(&id).expect("present").title, "First");
+    }
+
+    #[test]
     fn at_offset_finds_the_covering_link() {
         let body = format!("xx [a]({ULID}-a.md) yy");
         let links = extract(&body);
@@ -307,7 +350,7 @@ mod tests {
         // The note's title is `T`, so its canonical filename is `<ULID>-t.md`.
         let notes = vec![note(ULID)];
         let body = format!("see [Display]({ULID}-stale.md) end");
-        let rewrite = rewrite_body(&body, &notes).expect("a rewrite happens");
+        let rewrite = rewrite_body(&body, &index(&notes)).expect("a rewrite happens");
         assert_eq!(rewrite.body, format!("see [Display]({ULID}-t.md) end"));
         assert_eq!(rewrite.rewrites.len(), 1);
         assert_eq!(rewrite.rewrites[0].from, format!("{ULID}-stale.md"));
@@ -318,7 +361,7 @@ mod tests {
     fn rewrite_upgrades_a_bare_ulid_target() {
         let notes = vec![note(ULID)];
         let body = format!("[x]({ULID}.md)");
-        let rewrite = rewrite_body(&body, &notes).expect("a rewrite happens");
+        let rewrite = rewrite_body(&body, &index(&notes)).expect("a rewrite happens");
         assert_eq!(rewrite.body, format!("[x]({ULID}-t.md)"));
     }
 
@@ -326,7 +369,7 @@ mod tests {
     fn aligned_links_produce_no_rewrite() {
         let notes = vec![note(ULID)];
         let body = format!("[x]({ULID}-t.md)");
-        assert!(rewrite_body(&body, &notes).is_none());
+        assert!(rewrite_body(&body, &index(&notes)).is_none());
     }
 
     #[test]
@@ -334,7 +377,7 @@ mod tests {
         let notes = vec![note(ULID)];
         let other = "01BX5ZZKBKACTAV9WEVGEMMVRZ";
         let body = format!("[x]({other}-stale.md) and `[y]({ULID}-stale.md)`");
-        assert!(rewrite_body(&body, &notes).is_none());
+        assert!(rewrite_body(&body, &index(&notes)).is_none());
     }
 
     #[test]
@@ -342,7 +385,7 @@ mod tests {
         let notes = vec![note(ULID)];
         let dangling = "01BX5ZZKBKACTAV9WEVGEMMVRZ";
         let body = format!("[a]({ULID}-stale.md) [b]({dangling}-x.md) [c](https://e.com)");
-        let rewrite = rewrite_body(&body, &notes).expect("one rewrite");
+        let rewrite = rewrite_body(&body, &index(&notes)).expect("one rewrite");
         assert_eq!(rewrite.rewrites.len(), 1);
         assert_eq!(
             rewrite.body,
@@ -354,7 +397,7 @@ mod tests {
     fn rewrite_preserves_crlf_body() {
         let notes = vec![note(ULID)];
         let body = format!("line one\r\n[a]({ULID}-stale.md)\r\nlast");
-        let rewrite = rewrite_body(&body, &notes).expect("a rewrite happens");
+        let rewrite = rewrite_body(&body, &index(&notes)).expect("a rewrite happens");
         assert_eq!(
             rewrite.body,
             format!("line one\r\n[a]({ULID}-t.md)\r\nlast")

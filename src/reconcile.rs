@@ -108,6 +108,9 @@ pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
 /// body's link targets are touched, and only when at least one drifted, so an
 /// up-to-date note is never rewritten.
 fn rewrite_links(notes: &[Note]) -> Result<Vec<LinkRewrite>> {
+    // Build the id index once: every note's body resolves its link targets
+    // against it in O(1), instead of rescanning the whole slice per link.
+    let index = link::index(notes);
     let mut rewritten = Vec::new();
     for note in notes {
         let Ok(content) = std::fs::read_to_string(&note.path) else {
@@ -115,7 +118,7 @@ fn rewrite_links(notes: &[Note]) -> Result<Vec<LinkRewrite>> {
         };
         let body = frontmatter::split(&content).body;
         let body_start = content.len() - body.len();
-        let Some(rewrite) = link::rewrite_body(body, notes) else {
+        let Some(rewrite) = link::rewrite_body(body, &index) else {
             continue;
         };
         let mut updated = String::with_capacity(content.len());
