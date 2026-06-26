@@ -60,23 +60,44 @@ pub fn pick<T>(items: Vec<T>, render_all: impl FnOnce(&[T]) -> Vec<Row>) -> Resu
 
     let mut stdout = io::stdout();
     terminal::enable_raw_mode().context("while enabling raw mode")?;
+    // Arm raw-mode teardown the instant raw mode is on, before any further
+    // fallible setup. If entering the alternate screen below fails, this guard
+    // still restores the terminal, so the user's shell never stays in raw mode.
+    let _raw_guard = TerminalGuard::new(|| {
+        let _ = terminal::disable_raw_mode();
+    });
     execute!(stdout, terminal::EnterAlternateScreen)
         .context("while entering the alternate screen")?;
-    // The guard restores the terminal on every exit path, including `?` and
-    // panics, so a failure mid-loop never leaves the user in raw mode.
-    let _guard = TerminalGuard;
+    // Armed only after the alternate screen is actually entered, so it leaves
+    // exactly what was entered. It drops before the raw guard (reverse arming
+    // order), leaving the alternate screen before raw mode is disabled.
+    let _alt_guard = TerminalGuard::new(|| {
+        let mut stdout = io::stdout();
+        let _ = execute!(stdout, terminal::LeaveAlternateScreen, cursor::Show);
+    });
 
     run_loop(&mut stdout, items, render_all)
 }
 
-/// Restores the terminal to its normal mode when the picker exits.
-struct TerminalGuard;
+/// Restores one piece of terminal state when dropped, on every exit path
+/// (`?`, normal return, panic). One guard is armed per setup step so a failure
+/// between steps still tears down everything already set up.
+///
+/// The teardown action is injected rather than hardcoded so the arming-order
+/// guarantee is unit-testable without a real terminal.
+struct TerminalGuard<F: FnMut()> {
+    teardown: F,
+}
 
-impl Drop for TerminalGuard {
+impl<F: FnMut()> TerminalGuard<F> {
+    fn new(teardown: F) -> Self {
+        Self { teardown }
+    }
+}
+
+impl<F: FnMut()> Drop for TerminalGuard<F> {
     fn drop(&mut self) {
-        let mut stdout = io::stdout();
-        let _ = execute!(stdout, terminal::LeaveAlternateScreen, cursor::Show);
-        let _ = terminal::disable_raw_mode();
+        (self.teardown)();
     }
 }
 
@@ -304,6 +325,33 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::cell::RefCell;
+    use std::rc::Rc;
+
+    #[test]
+    fn guards_tear_down_in_reverse_arming_order() {
+        let log = Rc::new(RefCell::new(Vec::new()));
+        {
+            let raw_log = Rc::clone(&log);
+            let _raw = TerminalGuard::new(move || raw_log.borrow_mut().push("raw"));
+            let alt_log = Rc::clone(&log);
+            let _alt = TerminalGuard::new(move || alt_log.borrow_mut().push("alt"));
+        }
+        // The alternate screen is left before raw mode is disabled.
+        assert_eq!(*log.borrow(), vec!["alt", "raw"]);
+    }
+
+    #[test]
+    fn raw_guard_restores_when_the_alt_screen_step_is_skipped() {
+        // Models `EnterAlternateScreen` failing: the alt guard is never armed,
+        // yet raw mode must still be restored.
+        let log = Rc::new(RefCell::new(Vec::new()));
+        {
+            let raw_log = Rc::clone(&log);
+            let _raw = TerminalGuard::new(move || raw_log.borrow_mut().push("raw"));
+        }
+        assert_eq!(*log.borrow(), vec!["raw"]);
+    }
 
     #[test]
     fn divider_fills_the_full_width_with_the_glyph() {
