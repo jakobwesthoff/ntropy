@@ -66,6 +66,13 @@ language-server support is added.
   ambiguous-match list. The plain `search -n` table gained `date` and `tags`
   columns: `id<TAB>date<TAB>title<TAB>tags<TAB>path` (tags comma-joined). This
   changes the previous `id<TAB>title<TAB>path` format.
+- `edit` no longer requires a selector. A bare `edit` now mirrors `search`/`list`
+  with no query: the picker lists every note and opens the selection, and
+  piped/`-n` prints the plain table.
+- Full-text search (`text:` and bare terms) now uses the `regex` crate in place
+  of the embedded ripgrep libraries (`grep-searcher`/`grep-regex`). Smart-case
+  and matching are unchanged, except a pattern that explicitly spans a newline
+  now matches across lines instead of being confined to one (ADR 0030).
 
 ## [0.9.0] - 2026-06-25
 

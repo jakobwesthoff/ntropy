@@ -4,7 +4,7 @@ How ntropy filters and searches notes. Consolidates
 [ADR 0002](../adr/0002-stateless-filesystem-scanning-over-a-derived-index.md),
 [ADR 0005](../adr/0005-permissive-frontmatter-schema-with-recognized-fields.md),
 [ADR 0006](../adr/0006-hierarchical-tags-by-slash-convention.md),
-[ADR 0011](../adr/0011-embed-ripgrep-libraries-for-full-text-search.md), and
+[ADR 0030](../adr/0030-replace-ripgrep-stack-with-regex-crate-for-full-text-search.md), and
 [ADR 0012](../adr/0012-query-dsl-with-hand-rolled-parser.md).
 
 ## One mechanism
@@ -49,10 +49,10 @@ shorthand for a `text:` predicate, so `ntropy search foobar` searches bodies and
   case-insensitive (ADR 0006).
 - `field:value` matches when the frontmatter scalar equals `value`, or when a
   list-valued field contains it (exact, case-sensitive).
-- `text:` (and the bare-term shorthand) is a **regex** evaluated by the embedded
-  grep engine over the note body (ADR 0011), compiled with **smart-case**:
-  case-insensitive unless the pattern contains an uppercase letter. An invalid
-  regex is a query error.
+- `text:` (and the bare-term shorthand) is a **regex** evaluated by the `regex`
+  crate over the note body (ADR 0030), compiled with **smart-case**:
+  case-insensitive unless the pattern contains a literal uppercase character. An
+  invalid regex is a query error.
 
 Comparison operators (`>`, `<`, `>=`, `<=`, for date/value ranges) are out of
 v1 scope; the grammar is designed to add them as new tokens plus one predicate
@@ -67,8 +67,8 @@ Stateless, single pass (ADR 0002):
 2. Walk `all-notes/` once. For each note, parse frontmatter and keep the body
    in memory.
 3. Evaluate the AST against the note: frontmatter predicates against the parsed
-   YAML, `text:` predicates against the in-memory body via grep. Collect
-   matches.
+   YAML, `text:` predicates against the in-memory body via the `regex` crate.
+   Collect matches.
 
 Frontmatter filtering and full-text run together in this one pass, so a query
 mixing both (`tag:work and text:"deadline"`) costs a single scan.

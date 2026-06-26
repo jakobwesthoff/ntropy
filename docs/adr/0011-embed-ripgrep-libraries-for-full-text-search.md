@@ -4,7 +4,7 @@ Date: 2026-06-24
 
 ## Status
 
-Accepted
+Superseded by [ADR 0030](0030-replace-ripgrep-stack-with-regex-crate-for-full-text-search.md).
 
 ## Context
 

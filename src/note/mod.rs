@@ -7,7 +7,7 @@
 //! A [`Note`] is the parsed, query-ready representation of one canonical
 //! `all-notes/*.md` file: its identity and slug from the filename (ADR 0004),
 //! its recognized and arbitrary frontmatter fields (ADR 0005), and its body
-//! text held in memory for `text:` search (ADR 0011). Timestamps are derived,
+//! text held in memory for `text:` search (ADR 0030). Timestamps are derived,
 //! never stored: `created` from the ULID, `modified` from filesystem mtime.
 
 pub mod filename;

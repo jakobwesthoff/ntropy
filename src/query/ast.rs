@@ -22,6 +22,6 @@ pub enum Query {
     Tag(String),
     /// `field:value` — frontmatter equality or list membership.
     Field { name: String, value: String },
-    /// `text:"…"`, or a bare term/phrase — a regex over the body (ADR 0011).
+    /// `text:"…"`, or a bare term/phrase — a regex over the body (ADR 0030).
     Text(String),
 }
