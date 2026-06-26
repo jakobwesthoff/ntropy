@@ -71,6 +71,9 @@ fn detect(text: &str, offset: usize) -> Option<Context> {
         if let Some(open) = after_key.find('[')
             && !after_key[open + 1..].contains(']')
         {
+            // The last `[` or `,` before the cursor opens the current element.
+            // A comma inside a value cannot mislead this: commas do not survive
+            // tag normalization, so no candidate is ever offered against one.
             let separator = prefix
                 .rfind(['[', ','])
                 .expect("the flow array has an opening bracket");
@@ -81,7 +84,10 @@ fn detect(text: &str, offset: usize) -> Option<Context> {
 
     // Block form: a `- item` line beneath a `tags:` key.
     if stripped.starts_with('-') && under_tags_key(text, line_start) {
-        let separator = prefix.rfind('-').expect("the list item has a dash");
+        // The list dash is the first non-whitespace byte of the line, not the
+        // last `-` on it: a hyphen inside the value (`work-home`) is routine and
+        // `rfind('-')` would split the token mid-value.
+        let separator = prefix.len() - stripped.len();
         return Some(token_after(prefix, line_start, separator));
     }
 
@@ -238,6 +244,40 @@ mod tests {
             labels_at("---\ntags:\n  - area/work\n  - prog|\n---\n").unwrap(),
             vec!["programming/cli", "programming/rust"]
         );
+    }
+
+    #[test]
+    fn block_hyphenated_value_replaces_the_whole_token() {
+        // Regression: a hyphen inside the value must not be mistaken for the
+        // list dash. The replacement must start at the value, not mid-token.
+        let custom = vec!["area/work-home".to_owned()];
+        let text = "---\ntags:\n  - area/work-ho|\n---\n";
+        let offset = text.find('|').unwrap();
+        let text = text.replace('|', "");
+        let list = complete(&text, offset, Encoding::Utf8, &custom).expect("context");
+        assert_eq!(list.items[0].label, "area/work-home");
+        let CompletionTextEdit::Edit(edit) = list.items[0].text_edit.as_ref().unwrap() else {
+            panic!("edit");
+        };
+        // Line 2: "  - area/work-ho" — value starts at column 4, cursor at 16.
+        assert_eq!(edit.range.start.line, 2);
+        assert_eq!(edit.range.start.character, 4);
+        assert_eq!(edit.range.end.character, 16);
+    }
+
+    #[test]
+    fn block_hyphen_in_first_segment_resolves() {
+        let custom = vec!["front-end/css".to_owned()];
+        let text = "---\ntags:\n  - front-end/cs|\n---\n";
+        let offset = text.find('|').unwrap();
+        let text = text.replace('|', "");
+        let list = complete(&text, offset, Encoding::Utf8, &custom).expect("context");
+        assert_eq!(list.items[0].label, "front-end/css");
+        let CompletionTextEdit::Edit(edit) = list.items[0].text_edit.as_ref().unwrap() else {
+            panic!("edit");
+        };
+        // Value starts at column 4, after the "  - " list prefix.
+        assert_eq!(edit.range.start.character, 4);
     }
 
     #[test]
