@@ -18,7 +18,7 @@ use crate::config::PerVaultConfig;
 use crate::error::Result;
 use crate::fsutil;
 use crate::link;
-use crate::note::{Note, frontmatter};
+use crate::note::Note;
 use crate::scan::{self, ScanWarning};
 use crate::vault::Vault;
 use crate::view::{self, ViewDef};
@@ -104,25 +104,21 @@ pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
 
 /// Rewrite stale link targets in every note body to the current filenames.
 ///
-/// Each note is re-read so its frontmatter is preserved byte-for-byte; only the
-/// body's link targets are touched, and only when at least one drifted, so an
-/// up-to-date note is never rewritten.
+/// Only the body's link targets are touched, and only when at least one
+/// drifted, so an up-to-date note is never rewritten. The file is rebuilt from
+/// the note's retained `raw_header` and rewritten body, preserving the
+/// frontmatter byte-for-byte without re-reading from disk.
 fn rewrite_links(notes: &[Note]) -> Result<Vec<LinkRewrite>> {
     // Build the id index once: every note's body resolves its link targets
     // against it in O(1), instead of rescanning the whole slice per link.
     let index = link::index(notes);
     let mut rewritten = Vec::new();
     for note in notes {
-        let Ok(content) = std::fs::read_to_string(&note.path) else {
+        let Some(rewrite) = link::rewrite_body(&note.body, &index) else {
             continue;
         };
-        let body = frontmatter::split(&content).body;
-        let body_start = content.len() - body.len();
-        let Some(rewrite) = link::rewrite_body(body, &index) else {
-            continue;
-        };
-        let mut updated = String::with_capacity(content.len());
-        updated.push_str(&content[..body_start]);
+        let mut updated = String::with_capacity(note.raw_header.len() + rewrite.body.len());
+        updated.push_str(&note.raw_header);
         updated.push_str(&rewrite.body);
         fsutil::atomic_write(&note.path, updated.as_bytes())?;
         for change in rewrite.rewrites {
@@ -332,6 +328,31 @@ mod tests {
         assert_eq!(report.links_rewritten.len(), 1);
         let content = std::fs::read_to_string(&source).expect("read source");
         assert!(content.contains(&format!("[Target]({ULID}-target.md)")));
+    }
+
+    #[test]
+    fn reconcile_preserves_frontmatter_bytes_when_rewriting() {
+        let (_guard, vault) = vault_with_view();
+        write_note(
+            &vault,
+            &format!("{ULID}-target.md"),
+            "---\ntitle: Target\n---\nbody\n",
+        );
+        // Rich, deliberately-formatted frontmatter: every byte before the body
+        // must survive the rewrite untouched.
+        let header = "---\ntitle: Source\ntags: [area/work]\nstatus: in progress\npriority: 3\n---\n";
+        let source = write_note(
+            &vault,
+            &format!("{ULID_B}-source.md"),
+            &format!("{header}see [Target]({ULID}-old.md)\n"),
+        );
+
+        let report = reconcile(&vault).expect("reconcile");
+        assert_eq!(report.links_rewritten.len(), 1);
+        assert_eq!(
+            std::fs::read_to_string(&source).expect("read source"),
+            format!("{header}see [Target]({ULID}-target.md)\n")
+        );
     }
 
     #[test]

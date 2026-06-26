@@ -38,6 +38,11 @@ pub struct Note {
     pub frontmatter: Mapping,
     /// The Markdown body after the frontmatter block.
     pub body: String,
+    /// The verbatim bytes preceding the body: the opening fence, the
+    /// frontmatter block and the closing fence. Retained so the full file can
+    /// be reconstructed (e.g. a link rewrite) without re-reading from disk and
+    /// without re-serializing the frontmatter.
+    pub raw_header: String,
     /// The canonical file path within `all-notes/`.
     pub path: PathBuf,
     /// Filesystem mtime, when available. Soft information (ADR 0005).
@@ -79,6 +84,11 @@ impl Note {
             mapping,
         } = frontmatter::parse_block(block)?;
 
+        // The header is everything up to the body: reconstructing the file is
+        // then `raw_header + body`, with the frontmatter bytes preserved exactly.
+        let body_start = content.len() - split.body.len();
+        let raw_header = content[..body_start].to_string();
+
         Ok(Note {
             id: parsed_name.id,
             slug: parsed_name.slug,
@@ -86,6 +96,7 @@ impl Note {
             tags,
             frontmatter: mapping,
             body: split.body.to_string(),
+            raw_header,
             path,
             modified,
         })
@@ -142,6 +153,26 @@ mod tests {
         assert_eq!(note.tags, vec!["area/work"]);
         assert_eq!(note.body, "The body.\n");
         assert_eq!(note.slug, "quarterly-review");
+    }
+
+    #[test]
+    fn parse_retains_the_raw_header_bytes() {
+        let content = "---\ntitle: Quarterly Review\ntags: [area/work]\n---\nThe body.\n";
+        let note = Note::parse(note_path("quarterly-review"), content, None).expect("parse");
+        assert_eq!(
+            note.raw_header,
+            "---\ntitle: Quarterly Review\ntags: [area/work]\n---\n"
+        );
+        // Header and body together reconstruct the file verbatim.
+        assert_eq!(format!("{}{}", note.raw_header, note.body), content);
+    }
+
+    #[test]
+    fn parse_retains_a_crlf_header_verbatim() {
+        let content = "---\r\ntitle: X\r\n---\r\nBody\r\n";
+        let note = Note::parse(note_path("x"), content, None).expect("parse");
+        assert_eq!(note.raw_header, "---\r\ntitle: X\r\n---\r\n");
+        assert_eq!(format!("{}{}", note.raw_header, note.body), content);
     }
 
     #[test]
