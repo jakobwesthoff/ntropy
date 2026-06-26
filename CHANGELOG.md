@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- The interactive picker no longer panics on Ctrl-W when the query contains
+  multi-byte whitespace (e.g. a non-breaking space): word deletion now advances
+  by whole characters instead of bytes.
+- Block-form tag completion no longer corrupts a tag containing a hyphen
+  (`area/work-home`): the list-item dash is located by structure rather than by
+  the last hyphen on the line, so accepting a suggestion replaces the whole tag.
+- The picker now restores raw mode even when entering the alternate screen
+  fails on startup, instead of leaving the shell without echo for the rest of
+  the session.
+- Link completion no longer drops a space from a display title that literally
+  contains `) $0`; the snippet placeholder cleanup is confined to the snippet
+  branch.
+- Vault walk-up now reports a directory that looks like a vault but cannot be
+  canonicalized as an error, instead of silently treating it as "no vault found"
+  and falling through to the global default.
+- The language server no longer points one character too far when a client
+  sends an out-of-spec position inside a surrogate pair; it clamps to the start
+  of the affected character.
+
+### Changed
+
+- Link completion now cooperates with editors that auto-close brackets: when the
+  closing `]` was already inserted, accepting a completion overwrites it instead
+  of leaving a duplicate.
+- `reconcile` resolves link targets through an index rather than a linear scan
+  per link, so refreshing links in large, well-linked vaults is markedly faster.
+
 ## 1.0.0 - 2026-06-26
 
 First stable release: the user-facing interface is polished and initial
