@@ -162,9 +162,18 @@ impl<T> PickerState<T> {
     /// trailing whitespace, then the run of non-whitespace before it.
     pub fn delete_word(&mut self) {
         let trimmed = self.query.trim_end_matches(char::is_whitespace);
+        // `rfind` yields the whitespace char's *byte* offset; cut after the whole
+        // char, not after one byte, or a multi-byte separator (NBSP, the
+        // `U+2000`–`U+200A` spaces) would split mid-char and panic `truncate`.
         let cut = trimmed
             .rfind(char::is_whitespace)
-            .map(|i| i + 1)
+            .map(|i| {
+                i + trimmed[i..]
+                    .chars()
+                    .next()
+                    .expect("rfind landed on a char boundary")
+                    .len_utf8()
+            })
             .unwrap_or(0);
         self.query.truncate(cut);
         self.recompute();
@@ -421,6 +430,51 @@ mod tests {
         }
         s.delete_word();
         assert_eq!(s.query(), "foo ");
+        s.delete_word();
+        assert_eq!(s.query(), "");
+    }
+
+    #[test]
+    fn delete_word_handles_a_multibyte_whitespace_separator() {
+        // NBSP (`U+00A0`, 2 bytes) between the words: `rfind` + 1 would land
+        // inside it and `truncate` would panic on a non-char-boundary.
+        let mut s = state(&["x"], 10);
+        for c in "alpha\u{00A0}beta".chars() {
+            s.push_char(c);
+        }
+        s.delete_word();
+        assert_eq!(s.query(), "alpha\u{00A0}");
+        s.delete_word();
+        assert_eq!(s.query(), "");
+    }
+
+    #[test]
+    fn delete_word_handles_a_three_byte_whitespace_separator() {
+        // `U+2003` EM SPACE encodes to 3 bytes.
+        let mut s = state(&["x"], 10);
+        for c in "one\u{2003}two".chars() {
+            s.push_char(c);
+        }
+        s.delete_word();
+        assert_eq!(s.query(), "one\u{2003}");
+    }
+
+    #[test]
+    fn delete_word_on_all_whitespace_empties_the_query() {
+        let mut s = state(&["x"], 10);
+        for c in "  \u{00A0} ".chars() {
+            s.push_char(c);
+        }
+        s.delete_word();
+        assert_eq!(s.query(), "");
+    }
+
+    #[test]
+    fn delete_word_without_whitespace_empties_the_query() {
+        let mut s = state(&["x"], 10);
+        for c in "single".chars() {
+            s.push_char(c);
+        }
         s.delete_word();
         assert_eq!(s.query(), "");
     }
