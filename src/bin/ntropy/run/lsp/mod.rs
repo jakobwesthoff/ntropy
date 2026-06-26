@@ -13,6 +13,7 @@
 mod cache;
 mod completion;
 mod documents;
+mod fuzzy;
 mod navigation;
 mod offset;
 mod uri;

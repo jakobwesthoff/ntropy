@@ -14,13 +14,12 @@ use lsp_types::{
     DocumentLink, GotoDefinitionResponse, Location, OneOf, Position, Range, SymbolKind,
     WorkspaceSymbol,
 };
-use nucleo::pattern::{CaseMatching, Normalization, Pattern};
-use nucleo::{Config, Matcher, Utf32String};
 
 use ntropy::link;
 use ntropy::note::frontmatter;
 
 use super::cache::CacheEntry;
+use super::fuzzy;
 use super::offset::{self, Encoding};
 use super::uri;
 
@@ -76,9 +75,9 @@ pub fn document_links(text: &str, encoding: Encoding, entries: &[CacheEntry]) ->
 /// Every note as a workspace symbol, fuzzy-ranked by title for a non-empty
 /// query and newest-first (cache order) for an empty one.
 pub fn workspace_symbols(query: &str, entries: &[&CacheEntry]) -> Vec<WorkspaceSymbol> {
-    ranked(query, entries)
+    fuzzy::rank(query, entries, |entry| entry.title.clone())
         .into_iter()
-        .filter_map(symbol)
+        .filter_map(|entry| symbol(entry))
         .collect()
 }
 
@@ -93,31 +92,6 @@ fn symbol(entry: &CacheEntry) -> Option<WorkspaceSymbol> {
         location: OneOf::Left(location),
         data: None,
     })
-}
-
-/// Rank entries by title against the query, keeping cache order for an empty one.
-fn ranked<'e>(query: &str, entries: &[&'e CacheEntry]) -> Vec<&'e CacheEntry> {
-    if query.is_empty() {
-        return entries.to_vec();
-    }
-    let mut matcher = Matcher::new(Config::DEFAULT);
-    let pattern = Pattern::parse(query, CaseMatching::Smart, Normalization::Smart);
-    let mut scratch = Vec::new();
-    let mut scored: Vec<(u32, usize, &CacheEntry)> = entries
-        .iter()
-        .enumerate()
-        .filter_map(|(index, entry)| {
-            let haystack = Utf32String::from(entry.title.as_str());
-            pattern
-                .indices(haystack.slice(..), &mut matcher, &mut scratch)
-                .map(|score| {
-                    scratch.clear();
-                    (score, index, *entry)
-                })
-        })
-        .collect();
-    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-    scored.into_iter().map(|(_, _, entry)| entry).collect()
 }
 
 #[cfg(test)]

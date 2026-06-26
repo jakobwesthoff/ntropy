@@ -18,13 +18,12 @@ use lsp_types::{
     CompletionItem, CompletionItemKind, CompletionList, CompletionTextEdit, InsertTextFormat,
     Range, TextEdit,
 };
-use nucleo::pattern::{CaseMatching, Normalization, Pattern};
-use nucleo::{Config, Matcher, Utf32String};
 
 use ntropy::link;
 use ntropy::note::frontmatter;
 
 use super::super::cache::CacheEntry;
+use super::super::fuzzy;
 use super::super::offset::{self, Encoding};
 
 /// Build a link-completion list for the cursor at `offset`, or `None` when the
@@ -50,7 +49,7 @@ pub fn complete(
         start: offset::offset_to_position(text, context.replace_start, encoding),
         end: offset::offset_to_position(text, replace_end, encoding),
     };
-    let items = ranked(&context.query, entries)
+    let items = fuzzy::rank(&context.query, entries, haystack)
         .iter()
         .enumerate()
         .map(|(rank, entry)| item(&context, entry, range, rank, snippet_support))
@@ -122,33 +121,6 @@ fn detect(text: &str, offset: usize) -> Option<Context> {
     }
 
     None
-}
-
-/// Rank entries against the query: fuzzy by title/tags/filename, or newest-first
-/// (cache order) for an empty query.
-fn ranked<'e>(query: &str, entries: &'e [CacheEntry]) -> Vec<&'e CacheEntry> {
-    if query.is_empty() {
-        return entries.iter().collect();
-    }
-    let mut matcher = Matcher::new(Config::DEFAULT);
-    let pattern = Pattern::parse(query, CaseMatching::Smart, Normalization::Smart);
-    let mut scratch = Vec::new();
-    let mut scored: Vec<(u32, usize, &CacheEntry)> = entries
-        .iter()
-        .enumerate()
-        .filter_map(|(index, entry)| {
-            let haystack = Utf32String::from(haystack(entry));
-            pattern
-                .indices(haystack.slice(..), &mut matcher, &mut scratch)
-                .map(|score| {
-                    scratch.clear();
-                    (score, index, entry)
-                })
-        })
-        .collect();
-    // Best score first; ties keep the newest-first cache order.
-    scored.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-    scored.into_iter().map(|(_, _, entry)| entry).collect()
 }
 
 /// The fuzzy haystack for an entry: its title, tags and filename.
