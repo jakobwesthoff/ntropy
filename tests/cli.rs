@@ -249,6 +249,28 @@ fn search_lists_all_notes_newest_first() {
 }
 
 #[test]
+fn edit_without_selector_lists_like_search() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "older",
+        "---\ntitle: Older\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "newer",
+        "---\ntitle: Newer\n---\nbody\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["edit", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
 fn list_is_an_alias_for_search() {
     let dir = setup_vault();
     write_note(dir.path(), ULID_A, "a", "---\ntitle: A\n---\nbody\n");

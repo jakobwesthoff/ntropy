@@ -97,12 +97,16 @@ Examples:
     ntropy search 'text:"deadline"'     # quote phrases for the shell
     ntropy search tag:work -n           # print, don't pick
 
-### `edit <id|query>`
+### `edit [id|query]`
 
 Open a specific note directly, bypassing the picker when the selector resolves
 to a single note. Reconciles on exit like `new`. On an ambiguous match: a TTY
 opens the picker pre-filtered to the matches; piped/`-n` errors and prints the
 matches to stderr (non-zero exit).
+
+Omit the selector to browse the whole vault exactly like `search` with no
+query: a TTY lists every note in the picker and opens the selection; piped/`-n`
+prints the plain table.
 
 The selector rule (shared with `delete`): an argument that is a full 26-char
 ULID resolves directly to that note's id; anything else is parsed as a DSL

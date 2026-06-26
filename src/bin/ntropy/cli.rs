@@ -86,11 +86,11 @@ pub enum Command {
         query: Vec<String>,
     },
 
-    /// Open a specific note by id or query.
+    /// Open a note by id or query, or pick from all notes.
     Edit {
         /// A full ULID or a query DSL expression (joined from trailing
-        /// arguments).
-        #[arg(required = true, value_name = "ID|QUERY")]
+        /// arguments; omitted = pick from all notes).
+        #[arg(value_name = "ID|QUERY")]
         selector: Vec<String>,
     },
 

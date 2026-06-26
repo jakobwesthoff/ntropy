@@ -148,14 +148,19 @@ fn cmd_search(
     let matches = ops::search(vault, query).context("while searching")?;
     output::print_warnings(&matches.warnings);
 
-    if interactive {
-        let candidates = ops::to_candidates(&matches.notes)?;
-        if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
-            open_and_refresh(vault, &selected.path)?;
-        }
+    if matches.notes.is_empty() {
+        println!("No notes matched your search criteria.");
     } else {
-        output::print_notes(&matches.notes)?;
+        if interactive {
+            let candidates = ops::to_candidates(&matches.notes)?;
+            if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
+                open_and_refresh(vault, &selected.path)?;
+            }
+        } else {
+            output::print_notes(&matches.notes)?;
+        }
     }
+
     Ok(exit_for_warnings(global.strict, &matches.warnings))
 }
 
@@ -195,8 +200,15 @@ fn cmd_today(vault: &Vault, no_edit: bool, interactive: bool) -> Result<ExitCode
 }
 
 fn cmd_edit(vault: &Vault, selector: String, interactive: bool) -> Result<ExitCode> {
+    // A bare `edit` browses the whole vault exactly like `search` with no query:
+    // list every note, pick one interactively, and open it. With a selector it
+    // narrows to a ULID or query and keeps the ambiguity rules (ADR 0025).
+    let Some(selector) = optional(&selector) else {
+        return cmd_edit_all(vault, interactive);
+    };
+
     let matches =
-        ops::resolve_selection(vault, &selector).context("while resolving the selector")?;
+        ops::resolve_selection(vault, selector).context("while resolving the selector")?;
     output::print_warnings(&matches.warnings);
 
     match matches.notes.as_slice() {
@@ -216,11 +228,32 @@ fn cmd_edit(vault: &Vault, selector: String, interactive: bool) -> Result<ExitCo
                 }
                 Ok(ExitCode::SUCCESS)
             } else {
-                report_ambiguous(&selector, notes)?;
+                report_ambiguous(selector, notes)?;
                 Ok(ExitCode::FAILURE)
             }
         }
     }
+}
+
+/// Browse the whole vault and open the chosen note, mirroring `search` with no
+/// query: list everything, pick interactively, and edit the selection. Without
+/// a TTY there is nothing to pick, so the plain table is printed instead.
+fn cmd_edit_all(vault: &Vault, interactive: bool) -> Result<ExitCode> {
+    let matches = ops::search(vault, None).context("while listing notes")?;
+    output::print_warnings(&matches.warnings);
+
+    if matches.notes.is_empty() {
+        println!("No notes matched your search criteria.");
+    } else if interactive {
+        let candidates = ops::to_candidates(&matches.notes)?;
+        if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
+            open_and_refresh(vault, &selected.path)?;
+        }
+    } else {
+        output::print_notes(&matches.notes)?;
+    }
+
+    Ok(ExitCode::SUCCESS)
 }
 
 fn cmd_reconcile(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
