@@ -66,9 +66,12 @@ language-server support is added.
   ambiguous-match list. The plain `search -n` table gained `date` and `tags`
   columns: `id<TAB>date<TAB>title<TAB>tags<TAB>path` (tags comma-joined). This
   changes the previous `id<TAB>title<TAB>path` format.
-- `edit` no longer requires a selector. A bare `edit` now mirrors `search`/`list`
-  with no query: the picker lists every note and opens the selection, and
-  piped/`-n` prints the plain table.
+- `edit` is now a hidden alias of `search` rather than a separate command
+  (ADR 0031). `search`/`list` accepts a full ULID or a query and is the single
+  open entry point: on a TTY a single match opens directly in the editor and
+  several open the picker, while piped/`-n` prints the plain table without ever
+  opening an editor. A selector or listing that matches nothing now exits
+  non-zero with the message on stderr.
 - Full-text search (`text:` and bare terms) now uses the `regex` crate in place
   of the embedded ripgrep libraries (`grep-searcher`/`grep-regex`). Smart-case
   and matching are unchanged, except a pattern that explicitly spans a newline

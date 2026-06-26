@@ -6,6 +6,10 @@ Date: 2026-06-24
 
 Accepted
 
+The `edit` command is superseded by
+[ADR 0031](0031-merge-edit-into-search.md), which folds it into `search` as a
+hidden alias.
+
 ## Context
 
 The decisions so far imply a set of commands. They need concrete verbs and a

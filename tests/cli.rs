@@ -326,6 +326,42 @@ fn search_full_text() {
 }
 
 #[test]
+fn search_by_ulid_resolves_single_note() {
+    // A full ULID selector resolves to exactly that note; non-interactively the
+    // lone match prints as a one-row table (ADR 0031).
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "other",
+        "---\ntitle: Other\n---\nbody\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", ULID_A, "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn search_empty_vault_exits_nonzero() {
+    // An empty result, even a bare listing of an empty vault, exits non-zero
+    // with the message on stderr (ADR 0031).
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
 fn info_reports_vault_and_stats() {
     let dir = setup_vault();
     write_note(
@@ -437,7 +473,9 @@ fn strict_makes_malformed_fatal() {
 }
 
 #[test]
-fn ambiguous_edit_piped_errors() {
+fn edit_alias_lists_multiple_matches() {
+    // `edit` is a hidden alias of `search`; a multi-match selector lists the
+    // notes non-interactively rather than erroring (ADR 0031).
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -531,7 +569,9 @@ fn reconcile_noop_prints_summary() {
 }
 
 #[test]
-fn edit_no_match_errors() {
+fn edit_no_match_exits_nonzero() {
+    // A selector matching nothing prints the no-match message and exits
+    // non-zero, identical to `search` (ADR 0031).
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());

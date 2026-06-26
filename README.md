@@ -56,18 +56,20 @@ flags are needed. From elsewhere, point at it with `--vault <path>`,
 - `today` — open today's note, creating it from the `today` template on first
   use that day (see [Templates](#templates)). `--no-edit` (`--print`) just prints
   the path.
-- `search [query]` — the one browse/filter/full-text entry point. On a TTY it
-  opens an interactive fuzzy picker; piped or with `-n` it prints plain lines.
-  The picker is bottom-anchored: the prompt sits at the bottom and the list
-  grows upward with the best match nearest it. Type to filter; Ctrl-W deletes a
-  word and Ctrl-U clears the query; Up/Ctrl-P move toward worse matches and
-  Down/Ctrl-N toward the best; Enter opens the selection; Esc/Ctrl-C aborts.
-  Matches are highlighted in yellow and the selected row is cyan, using your
-  terminal's own colors so it adapts to your theme.
-- `edit <id|query>` — open a note directly. A full ULID resolves to that note;
-  anything else is a query. Ambiguous matches open a pre-filtered picker (or
-  error when non-interactive).
+- `search [id|query]` — the one browse/filter/full-text/open entry point
+  (alias `list`, and the hidden alias `edit`). Omitted lists every note; a full
+  ULID resolves to that note; anything else is a query. On a TTY a single match
+  opens directly in the editor and several open an interactive fuzzy picker;
+  piped or with `-n` it prints plain lines and never opens an editor. A no-match
+  exits non-zero. The picker is bottom-anchored: the prompt sits at the bottom
+  and the list grows upward with the best match nearest it. Type to filter;
+  Ctrl-W deletes a word and Ctrl-U clears the query; Up/Ctrl-P move toward worse
+  matches and Down/Ctrl-N toward the best; Enter opens the selection;
+  Esc/Ctrl-C aborts. Matches are highlighted in yellow and the selected row is
+  cyan, using your terminal's own colors so it adapts to your theme.
 - `delete <id|query>` — remove a note and refresh views (`-f` skips the prompt).
+  Unlike `search` it must resolve to exactly one note, erroring on an ambiguous
+  selector when non-interactive.
 - `reconcile` — realign filenames whose slug drifted from the title, and rebuild
   every view (catches up after edits made outside ntropy). Prints each rename
   and a summary of notes scanned, files renamed, views rebuilt and warnings.
@@ -91,7 +93,7 @@ named to you (delete prompts, ambiguous matches) it is shown as
 
 ## Query language
 
-`search`, `edit` and `delete` share one DSL (precedence `not` > `and` > `or`,
+`search` and `delete` share one DSL (precedence `not` > `and` > `or`,
 parentheses override):
 
     ntropy search tag:work and not status:done

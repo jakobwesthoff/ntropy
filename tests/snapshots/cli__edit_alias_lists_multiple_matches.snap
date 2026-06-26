@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - edit
+    - "tag:work"
+    - "-n"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+ID	DATE	TITLE	TAGS	PATH
+[ULID]	[DATE]	Beta	work	[VAULT]/all-notes/[ULID]-beta.md
+[ULID]	[DATE]	Alpha	work	[VAULT]/all-notes/[ULID]-alpha.md
+
+----- stderr -----

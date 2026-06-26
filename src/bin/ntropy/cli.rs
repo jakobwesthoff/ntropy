@@ -5,9 +5,10 @@
 //! The clap command surface (ADR 0018, `docs/design/cli.md`).
 //!
 //! Global flags (`--vault`, `-n/--non-interactive`, `--strict`) are available
-//! on every subcommand. `new`, `search`, `edit` and `delete` take their free
-//! text as repeated positional arguments which the `run` layer joins into one
-//! string (the title / query / selector). A bare `ntropy` prints help.
+//! on every subcommand. `new`, `search` and `delete` take their free text as
+//! repeated positional arguments which the `run` layer joins into one string
+//! (the title / query / selector). `edit` is a hidden alias of `search`
+//! (ADR 0031). A bare `ntropy` prints help.
 
 use std::path::PathBuf;
 
@@ -77,21 +78,16 @@ pub enum Command {
         no_edit: bool,
     },
 
-    /// Browse, filter or full-text search notes.
-    #[command(visible_alias = "list")]
+    /// Browse, filter, full-text search, or open a note by id or query.
+    ///
+    /// A single match opens directly; several open the picker. `edit` is a
+    /// hidden alias for this command (ADR 0031).
+    #[command(visible_alias = "list", alias = "edit")]
     Search {
-        /// A query DSL expression (joined from trailing arguments; omitted =
-        /// all notes).
-        #[arg(value_name = "QUERY")]
-        query: Vec<String>,
-    },
-
-    /// Open a note by id or query, or pick from all notes.
-    Edit {
         /// A full ULID or a query DSL expression (joined from trailing
-        /// arguments; omitted = pick from all notes).
+        /// arguments; omitted = all notes).
         #[arg(value_name = "ID|QUERY")]
-        selector: Vec<String>,
+        query: Vec<String>,
     },
 
     /// Realign drifted filenames and rebuild views.

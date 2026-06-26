@@ -4,7 +4,6 @@ info:
   program: ntropy
   args:
     - search
-    - "tag:"
     - "-n"
   env:
     EDITOR: "true"
@@ -14,4 +13,4 @@ exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-error: while resolving the selector: query syntax error at position 4: expected a value after `:`
+No notes matched your search criteria.

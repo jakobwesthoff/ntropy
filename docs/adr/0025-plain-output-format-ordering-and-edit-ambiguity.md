@@ -6,6 +6,12 @@ Date: 2026-06-24
 
 Accepted
 
+The `edit`-ambiguity decision is superseded by
+[ADR 0031](0031-merge-edit-into-search.md): `edit` is now a hidden alias of
+`search`, which lists ambiguous matches instead of erroring. The strict
+ambiguity rule survives only for `delete`. The selector id-or-query rule, the
+plain table format, and the ordering decision still stand.
+
 ## Context
 
 The non-interactive output format, default result ordering, and the behavior of

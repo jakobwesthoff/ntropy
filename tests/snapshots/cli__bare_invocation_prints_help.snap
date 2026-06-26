@@ -15,8 +15,7 @@ Commands:
   init       Initialize a vault (idempotent)
   new        Create a note from a template and open it
   today      Open today's note, creating it from the `today` template if absent
-  search     Browse, filter or full-text search notes [aliases: list]
-  edit       Open a note by id or query, or pick from all notes
+  search     Browse, filter, full-text search, or open a note by id or query [aliases: list]
   reconcile  Realign drifted filenames and rebuild views
   delete     Delete a note by id or query
   view       Manage materialized view definitions

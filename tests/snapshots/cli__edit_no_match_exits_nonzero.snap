@@ -4,7 +4,7 @@ info:
   program: ntropy
   args:
     - edit
-    - "tag:work"
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
     - "-n"
   env:
     EDITOR: "true"
@@ -14,7 +14,4 @@ exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-error: `tag:work` is ambiguous (2 matches):
-  [DATE]  Beta  [work]  ([ULID])
-  [DATE]  Alpha  [work]  ([ULID])
-refine the query or pass a full ULID
+No notes matched your search criteria.

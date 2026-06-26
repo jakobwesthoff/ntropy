@@ -69,7 +69,6 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             no_edit,
         } => cmd_new(&vault, join(&title), template, no_edit, interactive),
         Command::Today { no_edit } => cmd_today(&vault, no_edit, interactive),
-        Command::Edit { selector } => cmd_edit(&vault, join(&selector), interactive),
         Command::Reconcile => cmd_reconcile(&cli.global, &vault),
         Command::Delete { selector, force } => {
             cmd_delete(&vault, join(&selector), force, interactive)
@@ -141,27 +140,49 @@ fn cmd_init(path: Option<PathBuf>, vault: Option<PathBuf>, set_default: bool) ->
 fn cmd_search(
     global: &GlobalArgs,
     vault: &Vault,
-    query: String,
+    selector: String,
     interactive: bool,
 ) -> Result<ExitCode> {
-    let query = optional(&query);
-    let matches = ops::search(vault, query).context("while searching")?;
+    // A bare invocation browses the whole vault; a selector resolves a full ULID
+    // directly or otherwise runs as a DSL query (the id-or-query rule of ADR
+    // 0025). Both feed one presentation path, which `edit` shares verbatim as a
+    // hidden alias (ADR 0031).
+    let matches = match optional(&selector) {
+        Some(selector) => {
+            ops::resolve_selection(vault, selector).context("while resolving the selector")?
+        }
+        None => ops::search(vault, None).context("while listing notes")?,
+    };
     output::print_warnings(&matches.warnings);
 
-    if matches.notes.is_empty() {
-        println!("No notes matched your search criteria.");
-    } else {
-        if interactive {
-            let candidates = ops::to_candidates(&matches.notes)?;
-            if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
-                open_and_refresh(vault, &selected.path)?;
+    match matches.notes.as_slice() {
+        // A no-match, including an empty-vault listing, is a non-zero exit so
+        // `search <x> && ...` branches correctly. The message goes to stderr to
+        // keep stdout clean for pipelines.
+        [] => {
+            eprintln!("No notes matched your search criteria.");
+            Ok(ExitCode::FAILURE)
+        }
+        notes => {
+            if interactive {
+                // On a TTY a lone match opens straight away; several open the
+                // picker pre-filtered to them.
+                if let [note] = notes {
+                    open_and_refresh(vault, &note.path)?;
+                } else {
+                    let candidates = ops::to_candidates(notes)?;
+                    if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
+                        open_and_refresh(vault, &selected.path)?;
+                    }
+                }
+            } else {
+                // Without a TTY the editor never opens, mirroring `new`/`today`
+                // (ADR 0015); the plain table is printed instead.
+                output::print_notes(notes)?;
             }
-        } else {
-            output::print_notes(&matches.notes)?;
+            Ok(exit_for_warnings(global.strict, &matches.warnings))
         }
     }
-
-    Ok(exit_for_warnings(global.strict, &matches.warnings))
 }
 
 fn cmd_new(
@@ -196,63 +217,6 @@ fn cmd_today(vault: &Vault, no_edit: bool, interactive: bool) -> Result<ExitCode
         reconcile::refresh_views(vault).context("while refreshing views")?;
         println!("{}", outcome.note.path.display());
     }
-    Ok(ExitCode::SUCCESS)
-}
-
-fn cmd_edit(vault: &Vault, selector: String, interactive: bool) -> Result<ExitCode> {
-    // A bare `edit` browses the whole vault exactly like `search` with no query:
-    // list every note, pick one interactively, and open it. With a selector it
-    // narrows to a ULID or query and keeps the ambiguity rules (ADR 0025).
-    let Some(selector) = optional(&selector) else {
-        return cmd_edit_all(vault, interactive);
-    };
-
-    let matches =
-        ops::resolve_selection(vault, selector).context("while resolving the selector")?;
-    output::print_warnings(&matches.warnings);
-
-    match matches.notes.as_slice() {
-        [] => {
-            eprintln!("error: no note matches `{selector}`");
-            Ok(ExitCode::FAILURE)
-        }
-        [note] => {
-            open_and_refresh(vault, &note.path)?;
-            Ok(ExitCode::SUCCESS)
-        }
-        notes => {
-            if interactive {
-                let candidates = ops::to_candidates(notes)?;
-                if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
-                    open_and_refresh(vault, &selected.path)?;
-                }
-                Ok(ExitCode::SUCCESS)
-            } else {
-                report_ambiguous(selector, notes)?;
-                Ok(ExitCode::FAILURE)
-            }
-        }
-    }
-}
-
-/// Browse the whole vault and open the chosen note, mirroring `search` with no
-/// query: list everything, pick interactively, and edit the selection. Without
-/// a TTY there is nothing to pick, so the plain table is printed instead.
-fn cmd_edit_all(vault: &Vault, interactive: bool) -> Result<ExitCode> {
-    let matches = ops::search(vault, None).context("while listing notes")?;
-    output::print_warnings(&matches.warnings);
-
-    if matches.notes.is_empty() {
-        println!("No notes matched your search criteria.");
-    } else if interactive {
-        let candidates = ops::to_candidates(&matches.notes)?;
-        if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
-            open_and_refresh(vault, &selected.path)?;
-        }
-    } else {
-        output::print_notes(&matches.notes)?;
-    }
-
     Ok(ExitCode::SUCCESS)
 }
 

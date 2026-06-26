@@ -4,7 +4,8 @@ The command surface and its behavior. Consolidates
 [ADR 0014](../adr/0014-interactive-by-default-cli-with-auto-output-mode.md),
 [ADR 0015](../adr/0015-editor-integration-and-new-note-flow.md),
 [ADR 0016](../adr/0016-configuration-format-location-and-vault-resolution.md),
-[ADR 0018](../adr/0018-cli-command-surface.md), and the query DSL in
+[ADR 0018](../adr/0018-cli-command-surface.md),
+[ADR 0031](../adr/0031-merge-edit-into-search.md), and the query DSL in
 [query-and-search.md](query-and-search.md).
 
 ## Global behavior
@@ -68,14 +69,22 @@ created from `.ntropy/templates/today.md` (which `init` seeds and titles by
 title, the newest is opened. Shares `--no-edit`/`--print` with `new`. The
 template must exist; a vault predating it must re-run `init`.
 
-### `search [query]`
+### `search [id|query]`
 
-The single browse / filter / full-text entry point (visible alias: `list`).
-`query` is an optional DSL expression; omitted means all notes.
+The single browse / filter / full-text / open entry point (visible alias:
+`list`; hidden alias: `edit`). The selector is optional: omitted means all
+notes; a full 26-char ULID resolves directly to that note; anything else is a
+DSL expression (the id-or-query rule shared with `delete`).
 
-- On a TTY: launches the interactive picker; Enter opens the selected note in
-  the editor.
-- Piped or `-n`: prints matching notes as plain lines.
+- On a TTY: a single match opens directly in the editor; several launch the
+  interactive picker pre-filtered to them, and Enter opens the selection. The
+  note reconciles on editor exit, like `new`.
+- Piped or `-n`: prints the matching notes as plain lines (one row for a single
+  match, the full table for several). The editor never opens without a TTY,
+  mirroring `new`/`today` (ADR 0015).
+- No match, in any mode: prints `No notes matched your search criteria.` to
+  stderr and exits non-zero. An empty-vault listing exits non-zero too
+  (ADR 0031).
 
 The picker (ADR 0027) draws on the alternate screen, bottom-anchored: the prompt
 is framed by a blue divider line above and below it, with a dimmed stats line
@@ -93,32 +102,20 @@ Examples:
 
     ntropy search                       # all notes
     ntropy search tag:work
+    ntropy search 01ARZ3NDEKTSV4RRFFQ69G5FAV    # open a note by id
     ntropy search tag:work and not status:done   # trailing args joined
     ntropy search 'text:"deadline"'     # quote phrases for the shell
     ntropy search tag:work -n           # print, don't pick
-
-### `edit [id|query]`
-
-Open a specific note directly, bypassing the picker when the selector resolves
-to a single note. Reconciles on exit like `new`. On an ambiguous match: a TTY
-opens the picker pre-filtered to the matches; piped/`-n` errors and prints the
-matches to stderr (non-zero exit).
-
-Omit the selector to browse the whole vault exactly like `search` with no
-query: a TTY lists every note in the picker and opens the selection; piped/`-n`
-prints the plain table.
-
-The selector rule (shared with `delete`): an argument that is a full 26-char
-ULID resolves directly to that note's id; anything else is parsed as a DSL
-query.
+    ntropy edit 01ARZ3NDEKTSV4RRFFQ69G5FAV      # `edit` is a hidden alias
 
 ### `delete <id|query>`
 
 Remove a note (its canonical file) and refresh the views. The selector follows
-the same id-or-query rule as `edit`. Deletion prompts for confirmation unless
-`--force`/`-f` is given. An ambiguous selector behaves like `edit` (a TTY opens
-the picker pre-filtered; piped/`-n` errors with a non-zero exit). In
-non-interactive mode `--force` is required, since there is no prompt.
+the same id-or-query rule as `search`. Deletion prompts for confirmation unless
+`--force`/`-f` is given. Unlike `search`, `delete` must resolve to exactly one
+note: an ambiguous selector opens the picker pre-filtered on a TTY, and errors
+with a non-zero exit piped/`-n` (ADR 0025). In non-interactive mode `--force`
+is required, since there is no prompt.
 
 ### `reconcile`
 
