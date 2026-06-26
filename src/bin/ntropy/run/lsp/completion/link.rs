@@ -37,9 +37,18 @@ pub fn complete(
     snippet_support: bool,
 ) -> Option<CompletionList> {
     let context = detect(text, offset)?;
+    // A `Kind::Display` insertion supplies its own closing `]`. When the editor
+    // auto-closed the opening `[` into `[]`, that `]` sits right at the cursor;
+    // extend the replacement over it so it is overwritten rather than doubled.
+    // Without auto-closing there is no `]` here and nothing extra is consumed.
+    let replace_end = if context.kind == Kind::Display && text[offset..].starts_with(']') {
+        offset + 1
+    } else {
+        offset
+    };
     let range = Range {
         start: offset::offset_to_position(text, context.replace_start, encoding),
-        end: offset::offset_to_position(text, offset, encoding),
+        end: offset::offset_to_position(text, replace_end, encoding),
     };
     let items = ranked(&context.query, entries)
         .iter()
@@ -173,7 +182,9 @@ fn item(
     let (new_text, format) = match context.kind {
         Kind::Target => (target.clone(), InsertTextFormat::PLAIN_TEXT),
         Kind::Display if snippet_support => (
-            format!("{}]({}) $0", escape_snippet(&entry.title), target),
+            // `$0` sits the cursor right after the link, directly on the closing
+            // paren with no intervening space.
+            format!("{}]({})$0", escape_snippet(&entry.title), target),
             InsertTextFormat::SNIPPET,
         ),
         Kind::Display => (
@@ -181,9 +192,6 @@ fn item(
             InsertTextFormat::PLAIN_TEXT,
         ),
     };
-    // Snippet trailing `$0` adds a space we did not intend; trim it to sit the
-    // cursor right after the link.
-    let new_text = new_text.replace(") $0", ")$0");
 
     CompletionItem {
         label: entry.title.clone(),
@@ -347,6 +355,93 @@ mod tests {
         let list = complete("body [", offset, Encoding::Utf8, &[], false).expect("completion");
         assert!(list.is_incomplete);
         assert!(list.items.is_empty());
+    }
+
+    /// The replacement range for `label`'s completion item.
+    fn range_of<'a>(list: &'a CompletionList, label: &str) -> &'a Range {
+        let item = list
+            .items
+            .iter()
+            .find(|i| i.label == label)
+            .expect("item present");
+        match item.text_edit.as_ref().expect("text edit") {
+            CompletionTextEdit::Edit(edit) => &edit.range,
+            other => panic!("unexpected edit: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn plain_display_title_with_dollar_zero_keeps_its_space() {
+        // A title literally containing `) $0` must not be rewritten: only the
+        // snippet placeholder is special, and this is the plain-text branch.
+        let ulid = ULID_A;
+        let entries = vec![entry(ulid, "revenue", "Revenue (Q3) $0 to $100K", &[])];
+        let text = "body [Rev";
+        let offset = text.len();
+        let list = complete(text, offset, Encoding::Utf8, &entries, false).expect("completion");
+        assert_eq!(
+            new_text(&list, "Revenue (Q3) $0 to $100K"),
+            format!("Revenue (Q3) $0 to $100K]({ulid}-revenue.md)")
+        );
+    }
+
+    #[test]
+    fn snippet_title_dollar_is_escaped_without_a_stray_space() {
+        let ulid = ULID_A;
+        let entries = vec![entry(ulid, "revenue", "Cost $5", &[])];
+        let text = "body [Cost";
+        let offset = text.len();
+        let list = complete(text, offset, Encoding::Utf8, &entries, true).expect("completion");
+        assert_eq!(
+            new_text(&list, "Cost $5"),
+            format!("Cost \\$5]({ulid}-revenue.md)$0")
+        );
+    }
+
+    #[test]
+    fn display_overwrites_an_autoclosed_bracket() {
+        // Editor auto-closed `[` into `[]`; the cursor sits before the `]`.
+        let list = at_marker("body [Quar|]", false).expect("completion");
+        // The inserted text supplies its own `]`, and the range extends over the
+        // autoclosed one so it is overwritten, not doubled.
+        assert_eq!(
+            new_text(&list, "Quarterly Review"),
+            format!("Quarterly Review]({ULID_A}-quarterly-review.md)")
+        );
+        let range = range_of(&list, "Quarterly Review");
+        assert_eq!(range.start, Position::new(0, 6));
+        assert_eq!(range.end, Position::new(0, 11));
+    }
+
+    #[test]
+    fn display_without_a_following_bracket_does_not_extend() {
+        let list = at_marker("body [Quar|", false).expect("completion");
+        let range = range_of(&list, "Quarterly Review");
+        // End stays at the cursor; nothing past it is consumed.
+        assert_eq!(range.end, Position::new(0, 10));
+    }
+
+    #[test]
+    fn empty_query_autoclose_overwrites_the_bracket() {
+        let list = at_marker("body [|]", false).expect("completion");
+        let range = range_of(&list, "Quarterly Review");
+        assert_eq!(range.start, Position::new(0, 6));
+        assert_eq!(range.end, Position::new(0, 7));
+    }
+
+    #[test]
+    fn target_preserves_a_following_paren() {
+        // `Kind::Target` inserts only the path; the closing `)` (auto-closed or
+        // hand-typed) must stay and must not be consumed by the range.
+        let list = at_marker("body [d](Quar|)", false).expect("completion");
+        assert_eq!(
+            new_text(&list, "Quarterly Review"),
+            format!("{ULID_A}-quarterly-review.md")
+        );
+        let range = range_of(&list, "Quarterly Review");
+        // "body [d](" is 9 columns; the query "Quar" ends at column 13.
+        assert_eq!(range.start, Position::new(0, 9));
+        assert_eq!(range.end, Position::new(0, 13));
     }
 
     #[test]
