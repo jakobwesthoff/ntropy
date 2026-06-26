@@ -102,7 +102,10 @@ fn clamp_utf8(line: &str, character: usize) -> usize {
 fn offset_for_utf16_units(line: &str, units: usize) -> usize {
     let mut seen = 0;
     for (byte_index, ch) in line.char_indices() {
-        if seen >= units {
+        // Stop at the char boundary that reaches `units`. The `>` also catches a
+        // `units` that falls *inside* this char's surrogate pair (an out-of-spec
+        // position): clamp it to the char's start rather than overshooting.
+        if seen + ch.len_utf16() > units {
             return byte_index;
         }
         seen += ch.len_utf16();
@@ -145,6 +148,16 @@ mod tests {
         assert_eq!(position_to_offset(text, pos(0, 2), Encoding::Utf16), 4);
         assert_eq!(offset_to_position(text, 4, Encoding::Utf8), pos(0, 4));
         assert_eq!(offset_to_position(text, 4, Encoding::Utf16), pos(0, 2));
+    }
+
+    #[test]
+    fn utf16_position_inside_a_surrogate_pair_clamps_to_the_char_start() {
+        // `character = 1` points into the high surrogate of "😀", an out-of-spec
+        // position. It must clamp to the char's start (byte 0), not overshoot.
+        assert_eq!(position_to_offset("😀", pos(0, 1), Encoding::Utf16), 0);
+        assert_eq!(position_to_offset("😀!", pos(0, 1), Encoding::Utf16), 0);
+        // The valid boundary just after the emoji still resolves to the "!".
+        assert_eq!(position_to_offset("😀!", pos(0, 2), Encoding::Utf16), 4);
     }
 
     #[test]
