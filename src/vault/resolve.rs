@@ -122,8 +122,8 @@ fn walk_up_with(
             // A found vault that fails to canonicalize is a hard error, not a
             // silent "no vault": surface it as `require_vault` does rather than
             // dropping it and falling through to the global default.
-            let root = canonicalize(dir)
-                .ok_or_else(|| ResolveError::NotAVault(dir.to_path_buf()))?;
+            let root =
+                canonicalize(dir).ok_or_else(|| ResolveError::NotAVault(dir.to_path_buf()))?;
             return Ok(Some((root, ResolveSource::WalkUp)));
         }
     }

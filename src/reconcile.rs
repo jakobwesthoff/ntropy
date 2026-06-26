@@ -340,7 +340,8 @@ mod tests {
         );
         // Rich, deliberately-formatted frontmatter: every byte before the body
         // must survive the rewrite untouched.
-        let header = "---\ntitle: Source\ntags: [area/work]\nstatus: in progress\npriority: 3\n---\n";
+        let header =
+            "---\ntitle: Source\ntags: [area/work]\nstatus: in progress\npriority: 3\n---\n";
         let source = write_note(
             &vault,
             &format!("{ULID_B}-source.md"),
