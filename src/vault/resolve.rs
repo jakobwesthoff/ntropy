@@ -102,6 +102,16 @@ fn require_vault(path: &Path) -> Result<PathBuf, ResolveError> {
 /// Walk from `start` up to the filesystem root, returning the first vault found
 /// via either signal. The pointer is checked first so it wins in a tie.
 fn walk_up(start: &Path) -> Result<Option<(PathBuf, ResolveSource)>, ResolveError> {
+    walk_up_with(start, canonicalize)
+}
+
+/// The walk-up with `canonicalize` injected, so the failure path (a found vault
+/// that cannot be canonicalized) is testable without provoking a filesystem
+/// race between the `is_vault` check and the canonicalize call.
+fn walk_up_with(
+    start: &Path,
+    canonicalize: impl Fn(&Path) -> Option<PathBuf>,
+) -> Result<Option<(PathBuf, ResolveSource)>, ResolveError> {
     for dir in start.ancestors() {
         let pointer = dir.join(POINTER_FILE);
         if pointer.is_file() {
@@ -109,7 +119,12 @@ fn walk_up(start: &Path) -> Result<Option<(PathBuf, ResolveSource)>, ResolveErro
             return Ok(Some((target, ResolveSource::Pointer(pointer))));
         }
         if layout::is_vault(dir) {
-            return Ok(canonicalize(dir).map(|root| (root, ResolveSource::WalkUp)));
+            // A found vault that fails to canonicalize is a hard error, not a
+            // silent "no vault": surface it as `require_vault` does rather than
+            // dropping it and falling through to the global default.
+            let root = canonicalize(dir)
+                .ok_or_else(|| ResolveError::NotAVault(dir.to_path_buf()))?;
+            return Ok(Some((root, ResolveSource::WalkUp)));
         }
     }
     Ok(None)
@@ -251,6 +266,35 @@ mod tests {
         })
         .expect("resolve");
         assert_eq!(resolved, canonical(&vault));
+    }
+
+    #[test]
+    fn walk_up_with_resolves_a_found_vault() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let vault = dir.path().join("vault");
+        make_vault(&vault);
+        let nested = vault.join("sub");
+        fs::create_dir_all(&nested).expect("nested");
+
+        let (root, source) = walk_up_with(&nested, canonicalize)
+            .expect("walk up")
+            .expect("a vault is found");
+        assert_eq!(root, canonical(&vault));
+        assert_eq!(source, ResolveSource::WalkUp);
+    }
+
+    #[test]
+    fn walk_up_with_surfaces_a_canonicalize_failure() {
+        // A real vault is found, but canonicalize fails (modelled by the
+        // closure). The walk-up must report the failure, not a silent Ok(None).
+        let dir = tempfile::tempdir().expect("temp dir");
+        let vault = dir.path().join("vault");
+        make_vault(&vault);
+        let nested = vault.join("sub");
+        fs::create_dir_all(&nested).expect("nested");
+
+        let err = walk_up_with(&nested, |_| None).expect_err("the failure surfaces");
+        assert!(matches!(err, ResolveError::NotAVault(_)));
     }
 
     #[test]
