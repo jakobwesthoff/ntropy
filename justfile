@@ -23,3 +23,7 @@ check: clippy test
 # Measure test coverage
 coverage:
     cargo llvm-cov
+
+# Benchmark access and query patterns against a generated vault (needs hyperfine)
+bench *ARGS:
+    ./scripts/benchmark.sh {{ARGS}}
