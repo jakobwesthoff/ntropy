@@ -14,6 +14,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+use rayon::prelude::*;
 use serde_yaml_ng::Value;
 
 use crate::error::Result;
@@ -92,8 +93,11 @@ fn desired_links(
     view: &ViewDef,
     notes: &[Note],
 ) -> Result<BTreeMap<PathBuf, PathBuf>> {
-    // Group notes by normalized field value. A `BTreeMap` keeps the projection
-    // deterministic, which matters for reproducible disambiguation and tests.
+    // Group notes by normalized field value. The group-by itself stays serial:
+    // it is a cheap `normalize` (or a tag-list clone) per note, a small Amdahl
+    // floor not worth a parallel pre-pass. Sorting here is only to keep the
+    // parallel map's input order stable; the path-keyed `BTreeMap` below makes
+    // the final projection deterministic regardless of completion order.
     let mut groups: BTreeMap<String, Vec<&Note>> = BTreeMap::new();
     for note in notes {
         for value in group_values(note, &view.field) {
@@ -101,30 +105,58 @@ fn desired_links(
         }
     }
 
+    // Each group writes a disjoint subdirectory and disambiguates only within
+    // itself, so the per-group leaf construction is embarrassingly parallel.
+    // Build each group's leaves in parallel, then flatten into the path-keyed
+    // map: disjoint subtrees mean keys never collide, so the merge is
+    // conflict-free and the output is identical to a serial build.
+    let groups: Vec<(String, Vec<&Note>)> = groups.into_iter().collect();
+    let per_group: Vec<Vec<(PathBuf, PathBuf)>> = groups
+        .into_par_iter()
+        .map(|(value, group_notes)| group_leaves(view_dir, &value, &group_notes))
+        .collect::<Result<_>>()?;
+
     let mut desired = BTreeMap::new();
-    for (value, group_notes) in groups {
-        // A value's `/` segments nest into subdirectories.
-        let leaf_dir = view_dir.join(&value);
+    for leaf in per_group.into_iter().flatten() {
+        desired.insert(leaf.0, leaf.1);
+    }
+    Ok(desired)
+}
 
-        let mut inputs = Vec::with_capacity(group_notes.len());
-        for note in &group_notes {
-            inputs.push(LeafInput {
-                id: note.id,
-                date: note.created_date()?,
-                slug: slug::slugify(&note.title),
-            });
-        }
-        let names = leaf::leaf_names(&inputs);
+/// The leaves a single group contributes: `(leaf path, stored target)` pairs.
+///
+/// Disambiguation ([`leaf::leaf_names`]) is scoped to the group, so this is the
+/// largest unit that can be built independently of the rest of the view.
+fn group_leaves(
+    view_dir: &Path,
+    value: &str,
+    group_notes: &[&Note],
+) -> Result<Vec<(PathBuf, PathBuf)>> {
+    // A value's `/` segments nest into subdirectories.
+    let leaf_dir = view_dir.join(value);
 
-        for (note, name) in group_notes.iter().zip(names) {
+    let mut inputs = Vec::with_capacity(group_notes.len());
+    for note in group_notes {
+        inputs.push(LeafInput {
+            id: note.id,
+            date: note.created_date()?,
+            slug: slug::slugify(&note.title),
+        });
+    }
+    let names = leaf::leaf_names(&inputs);
+
+    let leaves = group_notes
+        .iter()
+        .zip(names)
+        .map(|(note, name)| {
             let link = leaf_dir.join(&name);
             // The stored target is relative to the link's own directory, so the
             // vault stays relocatable (ADR 0008).
             let target = fsutil::relative_path(&leaf_dir, &note.path);
-            desired.insert(link, target);
-        }
-    }
-    Ok(desired)
+            (link, target)
+        })
+        .collect();
+    Ok(leaves)
 }
 
 /// The view tree's current contents: every file keyed by path, plus every
@@ -581,6 +613,108 @@ mod sync_tests {
         let leaf = only_entry(&group);
         let name = leaf.file_name().expect("name").to_string_lossy().into_owned();
         assert!(name.ends_with("review.md"), "expected reshuffle, got {name}");
+    }
+
+    /// Recursively collect every symlink under `root` as `(path relative to
+    /// `strip`, stored target)`, sorted. Stripping the per-tempdir prefix makes
+    /// trees from two independent vaults directly comparable; targets are already
+    /// stored relative to their link, so they need no stripping.
+    fn collect_tree(root: &Path, strip: &Path) -> Vec<(String, String)> {
+        let mut out = Vec::new();
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            for entry in std::fs::read_dir(&dir).expect("read dir") {
+                let path = entry.expect("entry").path();
+                let file_type = std::fs::symlink_metadata(&path).expect("lstat").file_type();
+                if file_type.is_symlink() {
+                    let rel = path.strip_prefix(strip).expect("strip prefix");
+                    let target = std::fs::read_link(&path).expect("readlink");
+                    out.push((
+                        rel.to_string_lossy().into_owned(),
+                        target.to_string_lossy().into_owned(),
+                    ));
+                } else if file_type.is_dir() {
+                    stack.push(path);
+                }
+            }
+        }
+        out.sort();
+        out
+    }
+
+    /// A larger corpus across many tag groups, nested paths, and several
+    /// intra-group title collisions, materialized into two fresh vaults. The two
+    /// trees must be byte-identical (parallel grouping/merge stays deterministic)
+    /// and must equal the expected sorted leaf set.
+    #[test]
+    fn parallel_desired_links_is_deterministic_across_two_vaults() {
+        // Distinct ULIDs; the first three share a timestamp prefix so equal
+        // titles in the same group collide and gain a ULID tail.
+        const IDS: &[&str] = &[
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "01ARZ3NDEKTSV4RRFFQ69G5FBW",
+            "01ARZ3NDEKTSV4RRFFQ69G5FCX",
+            "01BX5ZZKBKACTAV9WEVGEMMVRZ",
+            "01C0AAAAAAAAAAAAAAAAAAAAAA",
+            "01D0BBBBBBBBBBBBBBBBBBBBBB",
+            "01E0CCCCCCCCCCCCCCCCCCCCCC",
+            "01F0DDDDDDDDDDDDDDDDDDDDDD",
+        ];
+
+        // (filename suffix, title, tags) — many groups, nested paths, and the
+        // first three colliding on "Review" within `dup`.
+        let corpus: &[(&str, &str, &str)] = &[
+            ("a.md", "Review", "[dup, area/work]"),
+            ("b.md", "Review", "[dup, area/work/deep]"),
+            ("c.md", "Review", "[dup]"),
+            ("d.md", "Planning", "[area/home, status/active]"),
+            ("e.md", "Notes", "[status/active]"),
+            ("f.md", "Ideas", "[area/home, area/work]"),
+            ("g.md", "Log", "[journal/2026, journal/2026/06]"),
+            ("h.md", "Recipe", "[cooking]"),
+        ];
+
+        let build = || {
+            let (guard, vault) = vault_with_views(&[("by-tag", "tags")]);
+            for (id, (suffix, title, tags)) in IDS.iter().zip(corpus) {
+                write_note(
+                    &vault,
+                    &format!("{id}-{suffix}"),
+                    &format!("---\ntitle: {title}\ntags: {tags}\n---\nx\n"),
+                );
+            }
+            sync(&vault);
+            let tree = collect_tree(&vault.root().join("by-tag"), vault.root());
+            (guard, tree)
+        };
+
+        let (_g1, tree1) = build();
+        let (_g2, tree2) = build();
+
+        assert_eq!(tree1, tree2, "two independent vaults must materialize identically");
+
+        // The leaf paths the corpus must produce, independent of disambiguation
+        // tails which are asserted structurally below.
+        let leaf_paths: Vec<&str> = tree1.iter().map(|(p, _)| p.as_str()).collect();
+        // Leaf placements summed over the corpus's per-note tag fan-out
+        // (2+2+1+2+1+2+2+1).
+        assert_eq!(leaf_paths.len(), 13, "expected 13 leaf placements, got {leaf_paths:?}");
+        // The three colliding "Review" notes each land in `dup` with a ULID tail.
+        let dup_leaves: Vec<&&str> = leaf_paths
+            .iter()
+            .filter(|p| p.starts_with("by-tag/dup/"))
+            .collect();
+        assert_eq!(dup_leaves.len(), 3, "all three colliders placed in dup");
+        for tail in ["FAV", "FBW", "FCX"] {
+            assert!(
+                dup_leaves.iter().any(|p| p.contains(tail)),
+                "collider {tail} disambiguated in dup, got {dup_leaves:?}"
+            );
+        }
+        // Every stored target resolves (relative target back into all-notes).
+        for (_, target) in &tree1 {
+            assert!(target.contains("all-notes/"), "target points into all-notes: {target}");
+        }
     }
 
     #[test]

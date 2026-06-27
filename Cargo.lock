@@ -677,6 +677,7 @@ dependencies = [
  "lsp-server",
  "lsp-types",
  "nucleo",
+ "rayon",
  "regex",
  "regex-syntax",
  "serde",
