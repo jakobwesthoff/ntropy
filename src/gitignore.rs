@@ -17,6 +17,15 @@
 //! considered *present* (and so not re-added) whenever any line — the user's or
 //! ours — names the same directory, so we never duplicate an ignore the user
 //! added by hand.
+//!
+//! The module is decoupled from the config layer: callers pass the configured
+//! view names, exactly as the `view` layer takes `ViewDef`s. The on-disk entry
+//! is derived from [`Layout::view_dir`] so this module owns only git syntax,
+//! never *where* a view lives.
+
+use crate::error::Result;
+use crate::fsutil;
+use crate::vault::Vault;
 
 /// The comment written directly above every ntropy-managed entry.
 ///
@@ -111,6 +120,50 @@ pub fn sync_entries(existing: &str, configured: &[&str]) -> SyncOutcome {
         added,
         removed,
     }
+}
+
+/// What [`sync`] changed, for human-facing reporting.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct SyncReport {
+    /// Entries newly added (in anchored `/<rel>/` form).
+    pub added: Vec<String>,
+    /// Managed entries pruned because their view is no longer configured.
+    pub removed: Vec<String>,
+}
+
+/// Reconcile `<vault>/.gitignore` so its managed entries match the configured
+/// views, writing the file only when something changed.
+///
+/// Each view's ignore entry is derived from [`Layout::view_dir`] relative to the
+/// vault root, then wrapped in anchored git syntax (`/<rel>/`). A missing file
+/// is treated as empty; the write goes through [`fsutil::atomic_write`].
+///
+/// [`Layout::view_dir`]: crate::vault::layout::Layout::view_dir
+pub fn sync(vault: &Vault, configured_view_names: &[&str]) -> Result<SyncReport> {
+    let layout = vault.layout();
+    let root = layout.root();
+    let entries: Vec<String> = configured_view_names
+        .iter()
+        .map(|name| {
+            let dir = layout.view_dir(name);
+            let rel = dir
+                .strip_prefix(root)
+                .expect("view dir is built by joining the name onto the root");
+            format!("/{}/", rel.display())
+        })
+        .collect();
+    let entry_refs: Vec<&str> = entries.iter().map(String::as_str).collect();
+
+    let path = layout.gitignore_file();
+    let existing = fsutil::read_to_string_if_exists(&path)?.unwrap_or_default();
+    let outcome = sync_entries(&existing, &entry_refs);
+    if let Some(content) = outcome.content {
+        fsutil::atomic_write(&path, content.as_bytes())?;
+    }
+    Ok(SyncReport {
+        added: outcome.added,
+        removed: outcome.removed,
+    })
 }
 
 /// The file's lines, with the trailing empty element produced by a final
@@ -291,5 +344,53 @@ secrets/
         let pruned = sync_entries(existing, &[]);
         assert_eq!(pruned.removed, ["/area/work/"]);
         assert_eq!(pruned.content.as_deref(), Some(""));
+    }
+
+    // -- IO shell ------------------------------------------------------------
+
+    #[test]
+    fn sync_creates_file_with_anchored_entry() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let v = Vault::new(dir.path());
+        let report = sync(&v, &["by-tag"]).expect("sync");
+        assert_eq!(report.added, ["/by-tag/"]);
+        let content = std::fs::read_to_string(v.layout().gitignore_file()).expect("read");
+        assert!(content.contains("/by-tag/"), "content: {content}");
+        assert!(content.contains(MARKER), "content: {content}");
+    }
+
+    #[test]
+    fn sync_is_idempotent_on_disk() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let v = Vault::new(dir.path());
+        sync(&v, &["by-tag"]).expect("first");
+        let before = std::fs::read_to_string(v.layout().gitignore_file()).expect("read");
+        let report = sync(&v, &["by-tag"]).expect("second");
+        assert!(report.added.is_empty() && report.removed.is_empty());
+        let after = std::fs::read_to_string(v.layout().gitignore_file()).expect("read");
+        assert_eq!(before, after);
+    }
+
+    #[test]
+    fn sync_prunes_orphan_entry_but_leaves_directory() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let v = Vault::new(dir.path());
+        sync(&v, &["by-tag"]).expect("add");
+        std::fs::create_dir_all(v.layout().view_dir("by-tag")).expect("view dir");
+
+        let report = sync(&v, &[]).expect("prune");
+        assert_eq!(report.removed, ["/by-tag/"]);
+        assert!(
+            v.layout().view_dir("by-tag").exists(),
+            "the directory must be left in place"
+        );
+    }
+
+    #[test]
+    fn sync_derives_multi_segment_entry() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let v = Vault::new(dir.path());
+        let report = sync(&v, &["area/work"]).expect("sync");
+        assert_eq!(report.added, ["/area/work/"]);
     }
 }

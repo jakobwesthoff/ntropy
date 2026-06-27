@@ -10,5 +10,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 Initialized vault at vault
+ignored /by-tag/
 
 ----- stderr -----

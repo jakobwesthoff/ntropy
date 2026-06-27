@@ -123,11 +123,14 @@ fn cmd_init(path: Option<PathBuf>, vault: Option<PathBuf>, set_default: bool) ->
     };
     let report = ops::init_vault(&target).context("while initializing the vault")?;
 
-    if report.created.is_empty() {
+    let touched_gitignore =
+        !report.gitignore_added.is_empty() || !report.gitignore_removed.is_empty();
+    if report.created.is_empty() && !touched_gitignore {
         println!("Vault already initialized at {}", report.root.display());
     } else {
         println!("Initialized vault at {}", report.root.display());
     }
+    report_gitignore_changes(&report.gitignore_added, &report.gitignore_removed);
 
     if set_default {
         let canonical = std::fs::canonicalize(&report.root).unwrap_or_else(|_| report.root.clone());
@@ -420,6 +423,22 @@ fn exit_for_warnings(strict: bool, warnings: &[ScanWarning]) -> ExitCode {
 fn plural(count: usize, singular: &str, plural: &str) -> String {
     let unit = if count == 1 { singular } else { plural };
     format!("{count} {unit}")
+}
+
+/// Report `.gitignore` changes, one line per entry.
+///
+/// A pruned entry also warns that the view's directory was *not* removed —
+/// ntropy never deletes directories — so the user can clean it up themselves.
+fn report_gitignore_changes(added: &[String], removed: &[String]) {
+    for entry in added {
+        println!("ignored {entry}");
+    }
+    for entry in removed {
+        let dir = entry.trim_matches('/');
+        println!(
+            "stopped ignoring {entry}; left directory `{dir}/` in place, delete it manually if you no longer need it"
+        );
+    }
 }
 
 /// The file-name component of a path as a lossy string.

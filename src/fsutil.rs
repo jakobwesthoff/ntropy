@@ -42,6 +42,23 @@ impl FsError {
 type Result<T> = std::result::Result<T, FsError>;
 
 // =============================================================================
+// File reads
+// =============================================================================
+
+/// Read `path` to a string, returning `None` when it does not exist.
+///
+/// A missing file is a routine "nothing there yet" rather than an error, mirroring
+/// how an absent config or `.gitignore` is treated as empty. Any other read
+/// failure (permissions, I/O) surfaces as an [`FsError`].
+pub fn read_to_string_if_exists(path: &Path) -> Result<Option<String>> {
+    match std::fs::read_to_string(path) {
+        Ok(contents) => Ok(Some(contents)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(FsError::new("reading", path, e)),
+    }
+}
+
+// =============================================================================
 // File writes
 // =============================================================================
 
@@ -269,6 +286,24 @@ mod tests {
         assert_eq!(std::fs::read_link(&link).expect("readlink"), target);
         // The relative link resolves back to the canonical body.
         assert_eq!(std::fs::read(&link).expect("read via link"), b"body");
+    }
+
+    #[test]
+    fn read_to_string_if_exists_returns_contents() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("f.txt");
+        std::fs::write(&path, b"hello").expect("seed");
+        assert_eq!(
+            read_to_string_if_exists(&path).expect("read"),
+            Some("hello".to_string())
+        );
+    }
+
+    #[test]
+    fn read_to_string_if_exists_returns_none_when_missing() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("absent.txt");
+        assert_eq!(read_to_string_if_exists(&path).expect("read"), None);
     }
 
     #[test]

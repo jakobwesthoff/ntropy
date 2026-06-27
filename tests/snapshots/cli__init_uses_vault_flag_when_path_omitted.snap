@@ -11,5 +11,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 Initialized vault at via-flag
+ignored /by-tag/
 
 ----- stderr -----
