@@ -112,8 +112,9 @@ trap cleanup EXIT
 echo "==> Initializing vault at $VAULT"
 "$BIN" init --vault "$VAULT" >/dev/null
 
-# A second view makes the reconcile/view-rebuild benchmark representative of a
-# real multi-view vault rather than the single default by-tag tree.
+# A second view makes the reconcile benchmark representative of a real
+# multi-view vault rather than the single default by-tag tree. A view per
+# remaining field is added later for the view-count scaling benchmark.
 "$BIN" view add by-status --field status --vault "$VAULT" >/dev/null
 
 MANIFEST="$WORK_DIR/manifest.json"
@@ -175,10 +176,10 @@ echo
 # =========================================================
 
 # Every benchmarked command runs non-interactively (`-n`) against the generated
-# vault. The editor is stubbed with `true` so the `edit` benchmark measures the
-# resolve-open-and-rebuild path without launching a real editor.
-export VISUAL=true
-export EDITOR=true
+# vault. There is no `edit` benchmark: `edit` only opens the editor and syncs
+# views on a TTY, and `-n` (and the piped stdout) forces the plain path, which is
+# just a resolve-and-print already covered by the query rows. The view-sync cost
+# `edit` would pay interactively is the same one `reconcile` and `delete` measure.
 
 # Quote the binary and vault paths for the shell hyperfine spawns per command.
 printf -v NT '%q -n --vault %q' "$BIN" "$VAULT"
@@ -196,8 +197,7 @@ COMMANDS=(
     "combined-tag-and-text|$NT search 'tag:$TAG_SHALLOW and text:$TEXT_COMMON'"
     "tags-aggregate|$NT tags"
     "info-stats|$NT info"
-    "edit-open|$NT edit $SAMPLE_ID"
-    "reconcile-rebuild|$NT reconcile"
+    "reconcile|$NT reconcile"
 )
 
 # Assemble the hyperfine argument vector: shared options first, then a
@@ -247,6 +247,36 @@ if [[ -f "$SAMPLE_FILE" ]]; then
     echo "==> Benchmarking delete (destructive, restored between runs)"
     hyperfine "${DELETE_ARGS[@]}"
 fi
+
+# =========================================================
+# View-count scaling: reconcile with a view per field
+# =========================================================
+
+# The corpus carries `priority` and `codename` beyond the already-configured
+# `tags` and `status`, so a view on each exercises reconcile against every
+# grouping field the notes hold (`title` is the per-note identity, not a
+# category, so it is skipped). Reconcile's cost scales with the view tree it must
+# read, so this shows how it grows as views are added — the case the incremental
+# sync is meant to keep cheap. Comparable to the 2-view `reconcile` row above.
+echo
+echo "==> Configuring a view for every remaining field (priority, codename)"
+"$BIN" view add by-priority --field priority --vault "$VAULT" >/dev/null
+"$BIN" view add by-codename --field codename --vault "$VAULT" >/dev/null
+# Build the new trees once so the timed run measures a steady-state (no-op) sync,
+# matching the `reconcile` row above.
+"$BIN" reconcile --vault "$VAULT" >/dev/null
+
+ALL_VIEWS_ARGS=(--warmup "$WARMUP" --shell sh)
+if [[ -n "$RUNS" ]]; then
+    ALL_VIEWS_ARGS+=(--runs "$RUNS")
+else
+    ALL_VIEWS_ARGS+=(--min-runs 10)
+fi
+ALL_VIEWS_ARGS+=(--command-name "reconcile-4-views" "$NT reconcile")
+
+echo
+echo "==> Benchmarking reconcile with 4 views (tags, status, priority, codename)"
+hyperfine "${ALL_VIEWS_ARGS[@]}"
 
 # =========================================================
 # Persist exports if requested
