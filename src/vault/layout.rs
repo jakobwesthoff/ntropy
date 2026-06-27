@@ -24,9 +24,14 @@ pub const DEFAULT_TEMPLATE_FILE: &str = "default.md";
 pub const TODAY_TEMPLATE_FILE: &str = "today.md";
 /// The project-local vault pointer file looked for during walk-up (ADR 0026).
 pub const POINTER_FILE: &str = ".ntropy-vault";
+/// The auto-managed root ignore file listing the derived view directories.
+pub const GITIGNORE_FILE: &str = ".gitignore";
 
 /// Top-level names reserved by ntropy; a view directory may use none of them.
-pub const RESERVED_NAMES: [&str; 2] = [ALL_NOTES_DIR, NTROPY_DIR];
+///
+/// `.gitignore` is reserved alongside the canonical directories so a view can
+/// never be named after, and thereby clobber, the file ntropy manages.
+pub const RESERVED_NAMES: [&str; 3] = [ALL_NOTES_DIR, NTROPY_DIR, GITIGNORE_FILE];
 
 /// Computes the well-known paths of a vault rooted at a directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -80,6 +85,11 @@ impl Layout {
     pub fn view_dir(&self, name: &str) -> PathBuf {
         self.root.join(name)
     }
+
+    /// `<root>/.gitignore`, the auto-managed ignore file for view directories.
+    pub fn gitignore_file(&self) -> PathBuf {
+        self.root.join(GITIGNORE_FILE)
+    }
 }
 
 /// Whether `path` looks like a vault: it contains a `.ntropy/` directory.
@@ -110,6 +120,7 @@ mod tests {
             PathBuf::from("/vault/.ntropy/templates/default.md")
         );
         assert_eq!(layout.view_dir("by-tag"), PathBuf::from("/vault/by-tag"));
+        assert_eq!(layout.gitignore_file(), PathBuf::from("/vault/.gitignore"));
     }
 
     #[test]
@@ -124,6 +135,7 @@ mod tests {
     fn reserved_names_cover_canonical_dirs() {
         assert!(is_reserved_name("all-notes"));
         assert!(is_reserved_name(".ntropy"));
+        assert!(is_reserved_name(".gitignore"));
         assert!(!is_reserved_name("by-tag"));
     }
 }
