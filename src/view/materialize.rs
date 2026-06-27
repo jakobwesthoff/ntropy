@@ -56,7 +56,8 @@ pub fn sync_view(vault: &Vault, view: &ViewDef, notes: &[Note]) -> Result<()> {
     // any non-symlink file (`target` is `None`), which is never a correct leaf and
     // so is always removed — whether it sits at a desired path or a stray one.
     for (path, target) in &actual {
-        let is_correct_leaf = matches!(target, Some(existing) if desired.get(path) == Some(existing));
+        let is_correct_leaf =
+            matches!(target, Some(existing) if desired.get(path) == Some(existing));
         if !is_correct_leaf {
             fsutil::remove_file(path)?;
         }
@@ -65,7 +66,8 @@ pub fn sync_view(vault: &Vault, view: &ViewDef, notes: &[Note]) -> Result<()> {
     // Create the links that are missing, or were just removed for a retarget.
     // `symlink` creates any missing parent directories.
     for (path, target) in &desired {
-        let already_correct = matches!(actual.get(path), Some(Some(existing)) if existing == target);
+        let already_correct =
+            matches!(actual.get(path), Some(Some(existing)) if existing == target);
         if !already_correct {
             fsutil::symlink(target, path)?;
         }
@@ -416,7 +418,9 @@ mod sync_tests {
 
         let target = std::fs::read_link(&leaf).expect("readlink");
         assert!(
-            target.to_string_lossy().ends_with(&format!("{ULID_A}-n.md")),
+            target
+                .to_string_lossy()
+                .ends_with(&format!("{ULID_A}-n.md")),
             "target corrected, got {target:?}"
         );
         assert!(leaf.exists(), "resolves again");
@@ -532,7 +536,9 @@ mod sync_tests {
 
         assert!(!stray.exists(), "stray non-leaf file removed");
         assert_eq!(
-            std::fs::read_dir(group_dir(&vault, "t")).expect("read").count(),
+            std::fs::read_dir(group_dir(&vault, "t"))
+                .expect("read")
+                .count(),
             1,
             "the real leaf survives"
         );
@@ -579,8 +585,15 @@ mod sync_tests {
         std::fs::remove_file(&second).expect("rm");
         sync(&vault);
         let leaf = only_entry(&group);
-        let name = leaf.file_name().expect("name").to_string_lossy().into_owned();
-        assert!(name.ends_with("review.md"), "expected reshuffle, got {name}");
+        let name = leaf
+            .file_name()
+            .expect("name")
+            .to_string_lossy()
+            .into_owned();
+        assert!(
+            name.ends_with("review.md"),
+            "expected reshuffle, got {name}"
+        );
     }
 
     #[test]
