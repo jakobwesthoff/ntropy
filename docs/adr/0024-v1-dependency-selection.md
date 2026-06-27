@@ -26,7 +26,11 @@ Adopt:
 - `grep-searcher`, `grep-regex` — embedded full-text search.
 - `ignore` — ripgrep's traversal crate, used as the directory walker with
   standard filters disabled (`standard_filters(false)`, `max_depth=1`) and its
-  parallel walker, so no separate parallelism crate (`rayon`) is needed.
+  parallel walker for the note scan.
+- `rayon` (post-v1 addition) — data parallelism for the per-view sync: the
+  per-group desired-link CPU and the per-leaf readlinks run in parallel, and the
+  two halves overlap via `rayon::join`. `ignore`'s walker parallelizes only the
+  directory read, not this leaf-level CPU and readlink work.
 - `nucleo` — fuzzy matcher for the interactive picker.
 - `crossterm` — terminal control for the in-house picker UI
   ([ADR 0027](0027-in-house-fuzzy-picker-over-nucleo-and-crossterm.md)).
@@ -50,7 +54,8 @@ interactive picker via `crossterm`.
 
 - The full-text, traversal, and date crates come from one author/ecosystem
   (ripgrep/jiff), a coherent bet.
-- Using `ignore`'s parallel walker removes hand-rolled parallelism.
+- Using `ignore`'s parallel walker removes hand-rolled parallelism for the note
+  scan; `rayon` covers the leaf-level parallelism of the view sync.
 - `serde_yaml_ng` carries fork-maintenance risk; acceptable as v1 only reads.
 - Hand-rolled DSL/templates/normalization are owned and must be tested
   (ADR 0021).

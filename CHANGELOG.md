@@ -26,6 +26,10 @@ and this project adheres to
   mutation or `reconcile` from roughly 820 ms to 135–150 ms (about 5–6×), with
   the saved time being almost entirely filesystem syscalls. `reconcile`'s
   summary now reads `synced N views` rather than `rebuilt N views`.
+- The per-view sync now runs in parallel. The desired-link computation is split
+  across grouping values, the on-disk tree is walked concurrently across its
+  subdirectories, and the two halves overlap, so a sync spreads its CPU and
+  filesystem work across cores rather than running it all on one thread.
 - `view remove` no longer deletes the view's directory. ntropy never deletes a
   directory: it prunes the view's `.gitignore` entry and leaves the now-stale
   directory in place, reporting it so you can delete it yourself. `reconcile`
