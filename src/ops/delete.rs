@@ -28,34 +28,18 @@ pub fn delete_note(vault: &Vault, path: &Path) -> Result<Vec<ScanWarning>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{PerVaultConfig, ViewConfig};
+    use crate::test_support::{vault_with_view, write_note};
 
     const ULID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
-
-    fn vault_with_view() -> (tempfile::TempDir, Vault) {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let root = dir.path();
-        std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
-        std::fs::create_dir_all(root.join(".ntropy")).expect(".ntropy");
-        let mut config = PerVaultConfig::default();
-        config.add(ViewConfig {
-            name: "by-tag".into(),
-            field: "tags".into(),
-        });
-        std::fs::write(
-            root.join(".ntropy/config.toml"),
-            config.to_toml().expect("toml"),
-        )
-        .expect("write config");
-        let vault = Vault::new(root);
-        (dir, vault)
-    }
 
     #[test]
     fn removes_file_and_prunes_links() {
         let (_g, vault) = vault_with_view();
-        let path = vault.layout().all_notes().join(format!("{ULID}-note.md"));
-        std::fs::write(&path, "---\ntitle: Note\ntags: [work]\n---\n").expect("write");
+        let path = write_note(
+            &vault,
+            &format!("{ULID}-note.md"),
+            "---\ntitle: Note\ntags: [work]\n---\n",
+        );
 
         // Build the view first so there is a link to prune.
         reconcile::refresh_views(&vault).expect("refresh");

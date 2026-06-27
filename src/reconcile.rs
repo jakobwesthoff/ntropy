@@ -199,37 +199,9 @@ fn load_views(vault: &Vault) -> Result<Vec<ViewDef>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ViewConfig;
+    use crate::test_support::{vault_with_view, write_note};
 
     const ULID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
-
-    /// Build a vault with `all-notes/` and a `by-tag` view configured.
-    fn vault_with_view() -> (tempfile::TempDir, Vault) {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let root = dir.path();
-        std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
-        std::fs::create_dir_all(root.join(".ntropy")).expect(".ntropy");
-
-        let mut config = PerVaultConfig::default();
-        config.add(ViewConfig {
-            name: "by-tag".into(),
-            field: "tags".into(),
-        });
-        std::fs::write(
-            root.join(".ntropy").join("config.toml"),
-            config.to_toml().expect("toml"),
-        )
-        .expect("write config");
-
-        let vault = Vault::new(root);
-        (dir, vault)
-    }
-
-    fn write_note(vault: &Vault, name: &str, content: &str) -> PathBuf {
-        let path = vault.layout().all_notes().join(name);
-        std::fs::write(&path, content).expect("write note");
-        path
-    }
 
     #[test]
     fn refresh_builds_view_links() {

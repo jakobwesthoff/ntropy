@@ -37,6 +37,9 @@ pub mod view;
 
 pub mod ops;
 
+#[cfg(test)]
+mod test_support;
+
 /// Common re-exports for callers of the library.
 pub mod prelude {
     pub use crate::error::{Error, Result};
