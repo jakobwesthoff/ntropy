@@ -3,8 +3,6 @@ source: tests/cli.rs
 info:
   program: ntropy
   args:
-    - "--vault"
-    - /var/folders/sy/j_tvsf5n5g3055p026gwzw1c0000gn/T/.tmpefFkmt
     - view
     - remove
     - by-status
@@ -15,5 +13,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 Removed view `by-status`.
+left directory `by-status/` in place, delete it manually if you no longer need it
 
 ----- stderr -----

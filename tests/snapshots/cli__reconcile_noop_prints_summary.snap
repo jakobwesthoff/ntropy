@@ -11,6 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 Reconciling vault at [VAULT]...
-Scanned 1 note, renamed 0 files, relinked 0 links, rebuilt 1 view, 0 warnings.
+ignored /by-tag/
+Scanned 1 note, renamed 0 files, relinked 0 links, rebuilt 1 view, ignored 1 entry, unignored 0 entries, 0 warnings.
 
 ----- stderr -----

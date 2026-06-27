@@ -242,13 +242,16 @@ fn cmd_reconcile(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
             file_name(&rewrite.note)
         );
     }
+    report_gitignore_changes(&report.gitignore_added, &report.gitignore_removed);
     // A summary always prints, so even a no-op run confirms what happened.
     println!(
-        "Scanned {}, renamed {}, relinked {}, rebuilt {}, {}.",
+        "Scanned {}, renamed {}, relinked {}, rebuilt {}, ignored {}, unignored {}, {}.",
         plural(report.notes_scanned, "note", "notes"),
         plural(report.renamed.len(), "file", "files"),
         plural(report.links_rewritten.len(), "link", "links"),
         plural(report.views_rebuilt, "view", "views"),
+        plural(report.gitignore_added.len(), "entry", "entries"),
+        plural(report.gitignore_removed.len(), "entry", "entries"),
         plural(report.warnings.len(), "warning", "warnings"),
     );
     Ok(exit_for_warnings(global.strict, &report.warnings))
@@ -326,6 +329,13 @@ fn cmd_view(vault: &Vault, sub: ViewCommand) -> Result<ExitCode> {
         ViewCommand::Remove { name } => {
             ops::remove_view(vault, &name).context("while removing the view")?;
             println!("Removed view `{name}`.");
+            // ntropy never deletes the directory; tell the user it remains so
+            // they can clean up the now-stale (and no longer ignored) tree.
+            if vault.layout().view_dir(&name).exists() {
+                println!(
+                    "left directory `{name}/` in place, delete it manually if you no longer need it"
+                );
+            }
         }
     }
     Ok(ExitCode::SUCCESS)

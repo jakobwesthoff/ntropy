@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use crate::config::PerVaultConfig;
 use crate::error::Result;
 use crate::fsutil;
+use crate::gitignore;
 use crate::link;
 use crate::note::Note;
 use crate::scan::{self, ScanWarning};
@@ -52,6 +53,10 @@ pub struct ReconcileReport {
     pub renamed: Vec<Rename>,
     /// Link targets refreshed to point at their notes' current filenames.
     pub links_rewritten: Vec<LinkRewrite>,
+    /// `.gitignore` entries added to match the configured views.
+    pub gitignore_added: Vec<String>,
+    /// `.gitignore` entries pruned because their view is no longer configured.
+    pub gitignore_removed: Vec<String>,
     /// Warnings from scanning `all-notes/` (malformed/badly-named files).
     pub warnings: Vec<ScanWarning>,
 }
@@ -62,8 +67,24 @@ pub struct ReconcileReport {
 pub fn refresh_views(vault: &Vault) -> Result<Vec<ScanWarning>> {
     let scan = scan::scan_notes_dir(&vault.layout().all_notes())?;
     let views = load_views(vault)?;
-    view::rebuild_all(vault, &views, &scan.notes)?;
+    rebuild_and_sync(vault, &views, &scan.notes)?;
     Ok(scan.warnings)
+}
+
+/// Rebuild every view and bring `.gitignore` in step with them.
+///
+/// The two derived-state updates that must move together — the symlink trees
+/// and the ignore file — live here so every full-rebuild path shares them and
+/// they cannot drift. The `view` layer stays unaware of `.gitignore`; the
+/// composition is owned here.
+fn rebuild_and_sync(
+    vault: &Vault,
+    views: &[ViewDef],
+    notes: &[Note],
+) -> Result<gitignore::SyncReport> {
+    view::rebuild_all(vault, views, notes)?;
+    let names: Vec<&str> = views.iter().map(|v| v.name.as_str()).collect();
+    gitignore::sync(vault, &names)
 }
 
 /// Realign drifted filenames, then rebuild all views.
@@ -91,13 +112,15 @@ pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
     let links_rewritten = rewrite_links(&notes)?;
 
     let views = load_views(vault)?;
-    view::rebuild_all(vault, &views, &notes)?;
+    let gitignore = rebuild_and_sync(vault, &views, &notes)?;
 
     Ok(ReconcileReport {
         notes_scanned: notes.len(),
         views_rebuilt: views.len(),
         renamed,
         links_rewritten,
+        gitignore_added: gitignore.added,
+        gitignore_removed: gitignore.removed,
         warnings: scan.warnings,
     })
 }
@@ -462,5 +485,49 @@ mod tests {
         std::fs::remove_file(&path).expect("remove");
         refresh_views(&vault).expect("second refresh");
         assert!(!vault.root().join("by-tag/area").exists());
+    }
+
+    #[test]
+    fn reconcile_adds_gitignore_entry_for_configured_view() {
+        let (_guard, vault) = vault_with_view();
+        let report = reconcile(&vault).expect("reconcile");
+        assert_eq!(report.gitignore_added, ["/by-tag/"]);
+
+        let gitignore =
+            std::fs::read_to_string(vault.layout().gitignore_file()).expect("read .gitignore");
+        assert!(gitignore.contains("/by-tag/"), "got: {gitignore}");
+    }
+
+    #[test]
+    fn reconcile_prunes_orphan_entry_but_leaves_directory() {
+        let (_guard, vault) = vault_with_view();
+        reconcile(&vault).expect("first reconcile");
+
+        // Simulate a view removed from config out of band: a managed entry and a
+        // directory remain for `old`, which is no longer configured.
+        let gitignore = vault.layout().gitignore_file();
+        let mut content = std::fs::read_to_string(&gitignore).expect("read");
+        content.push_str(&format!("{}\n/old/\n", crate::gitignore::MARKER));
+        std::fs::write(&gitignore, content).expect("write");
+        std::fs::create_dir_all(vault.layout().view_dir("old")).expect("orphan dir");
+
+        let report = reconcile(&vault).expect("second reconcile");
+        assert_eq!(report.gitignore_removed, ["/old/"]);
+        assert!(
+            vault.layout().view_dir("old").exists(),
+            "the directory must be left in place"
+        );
+        let after = std::fs::read_to_string(&gitignore).expect("read");
+        assert!(!after.contains("/old/"), "entry not pruned: {after}");
+        assert!(after.contains("/by-tag/"), "configured entry lost: {after}");
+    }
+
+    #[test]
+    fn reconcile_gitignore_is_idempotent() {
+        let (_guard, vault) = vault_with_view();
+        reconcile(&vault).expect("first");
+        let report = reconcile(&vault).expect("second");
+        assert!(report.gitignore_added.is_empty());
+        assert!(report.gitignore_removed.is_empty());
     }
 }
