@@ -111,40 +111,17 @@ fn template_names(templates_dir: &Path) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::ViewConfig;
+    use crate::test_support::{vault_with_view, write_note};
 
-    fn vault_with_view() -> (tempfile::TempDir, Vault) {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let root = dir.path();
-        std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
-        std::fs::create_dir_all(root.join(".ntropy/templates")).expect("templates");
-
-        let mut config = PerVaultConfig::default();
-        config.add(ViewConfig {
-            name: "by-tag".into(),
-            field: "tags".into(),
-        });
-        std::fs::write(
-            root.join(".ntropy/config.toml"),
-            config.to_toml().expect("toml"),
-        )
-        .expect("write config");
-
-        let vault = Vault::new(root);
-        (dir, vault)
-    }
-
+    /// Write a note named `<ulid>-n.md` (the slug is irrelevant to these stats).
     fn write(vault: &Vault, ulid: &str, content: &str) {
-        std::fs::write(
-            vault.layout().all_notes().join(format!("{ulid}-n.md")),
-            content,
-        )
-        .expect("write note");
+        write_note(vault, &format!("{ulid}-n.md"), content);
     }
 
     #[test]
     fn counts_and_ranks() {
         let (_g, vault) = vault_with_view();
+        std::fs::create_dir_all(vault.layout().templates_dir()).expect("templates dir");
         std::fs::write(vault.layout().default_template(), "x").expect("default template");
         std::fs::write(vault.layout().today_template(), "x").expect("today template");
         write(
