@@ -167,24 +167,59 @@ fn group_leaves(
 /// not matching its desired symlink. The directory set drives empty-directory
 /// pruning. A missing view directory yields empty collections (the first build).
 fn actual_state(view_dir: &Path) -> Result<(LeafMap, DirSet)> {
+    // Walk the tree in parallel into a flat entry list, then sort the entries
+    // into the two collections serially. The walk's disjoint subtrees never
+    // produce colliding paths, and the `BTreeMap`/`BTreeSet` impose a stable
+    // order, so the result is identical to a serial walk.
     let mut files = LeafMap::new();
     let mut dirs = DirSet::new();
-    collect_state(view_dir, &mut files, &mut dirs)?;
+    for entry in walk(view_dir)? {
+        match entry {
+            Entry::Leaf(path, target) => {
+                files.insert(path, target);
+            }
+            Entry::Dir(path) => {
+                dirs.insert(path);
+            }
+        }
+    }
     Ok((files, dirs))
 }
 
-fn collect_state(dir: &Path, files: &mut LeafMap, dirs: &mut DirSet) -> Result<()> {
-    for (path, file_type) in fsutil::read_dir_entries(dir)? {
-        if file_type.is_dir() {
-            dirs.insert(path.clone());
-            collect_state(&path, files, dirs)?;
-        } else if file_type.is_symlink() {
-            files.insert(path.clone(), Some(fsutil::read_link(&path)?));
-        } else {
-            files.insert(path, None);
-        }
-    }
-    Ok(())
+/// One node seen by the parallel walk: a `Leaf` is any file occupying a path
+/// (`Some(target)` for a symlink read without following, `None` otherwise); a
+/// `Dir` is a descended directory, recorded so the prune pass can see every
+/// directory including the empty ones.
+enum Entry {
+    Leaf(PathBuf, Option<PathBuf>),
+    Dir(PathBuf),
+}
+
+/// Recursively walk `dir`, reading every directory's entries in parallel so
+/// sibling subtrees walk concurrently (parallelizing `readdir` across the tree's
+/// breadth) and each leaf's `read_link` runs in the pool.
+///
+/// A directory is checked before `is_symlink`, so a symlink-to-a-directory is
+/// treated as a leaf (its `is_dir` is false) and read with `read_link` rather
+/// than descended, matching the serial walk. A missing directory yields no
+/// entries (the first build, before the view dir exists).
+fn walk(dir: &Path) -> Result<Vec<Entry>> {
+    let nested: Vec<Vec<Entry>> = fsutil::read_dir_entries(dir)?
+        .into_par_iter()
+        .map(|(path, file_type)| -> Result<Vec<Entry>> {
+            if file_type.is_dir() {
+                let mut entries = walk(&path)?;
+                entries.push(Entry::Dir(path));
+                Ok(entries)
+            } else if file_type.is_symlink() {
+                let target = fsutil::read_link(&path)?;
+                Ok(vec![Entry::Leaf(path, Some(target))])
+            } else {
+                Ok(vec![Entry::Leaf(path, None)])
+            }
+        })
+        .collect::<Result<_>>()?;
+    Ok(nested.into_iter().flatten().collect())
 }
 
 /// The normalized grouping values a note contributes for `field`.
@@ -715,6 +750,74 @@ mod sync_tests {
         for (_, target) in &tree1 {
             assert!(target.contains("all-notes/"), "target points into all-notes: {target}");
         }
+    }
+
+    /// The parallel walk must see every leaf and every descended directory of a
+    /// wide, deeply nested, high-cardinality tree, classify symlinks vs. stray
+    /// files correctly, and treat a symlink-to-a-directory as a leaf.
+    #[test]
+    fn parallel_walk_collects_every_leaf_and_directory() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let root = tmp.path();
+
+        // A wide top with a deep nest on one branch, a one-leaf-per-directory
+        // (high-cardinality) branch, an empty directory, stray non-symlink files
+        // placed at depth, and a symlink pointing at a directory.
+        std::fs::create_dir_all(root.join("a/b/c")).expect("mkdir nest");
+        std::fs::create_dir_all(root.join("empty")).expect("mkdir empty");
+        for i in 0..5 {
+            std::fs::create_dir_all(root.join(format!("card/g{i}"))).expect("mkdir card");
+            std::os::unix::fs::symlink("../../../all-notes/x.md", root.join(format!("card/g{i}/leaf.md")))
+                .expect("card leaf");
+        }
+        std::os::unix::fs::symlink("../all-notes/top.md", root.join("toplink.md")).expect("top link");
+        std::os::unix::fs::symlink("../all-notes/deep.md", root.join("a/b/c/deep.md")).expect("deep link");
+        // Stray non-symlink files at the top and deep in the tree.
+        std::fs::write(root.join("README.txt"), b"junk").expect("stray top");
+        std::fs::write(root.join("a/b/notes.txt"), b"junk").expect("stray deep");
+        // A symlink whose target is a directory: a leaf, never descended.
+        std::fs::create_dir_all(root.join("realdir")).expect("mkdir realdir");
+        std::fs::write(root.join("realdir/inside.md"), b"x").expect("inside");
+        std::os::unix::fs::symlink("realdir", root.join("dirlink")).expect("dir symlink");
+
+        let (files, dirs) = actual_state(root).expect("walk");
+
+        let leaf = |p: &str| root.join(p);
+        // Symlinks map to their stored target; stray files map to None.
+        assert_eq!(files.get(&leaf("toplink.md")), Some(&Some(PathBuf::from("../all-notes/top.md"))));
+        assert_eq!(files.get(&leaf("a/b/c/deep.md")), Some(&Some(PathBuf::from("../all-notes/deep.md"))));
+        assert_eq!(files.get(&leaf("README.txt")), Some(&None));
+        assert_eq!(files.get(&leaf("a/b/notes.txt")), Some(&None));
+        // A symlink-to-a-directory is a leaf, read not followed.
+        assert_eq!(files.get(&leaf("dirlink")), Some(&Some(PathBuf::from("realdir"))));
+        // It is not descended: the directory's real content is reached via the
+        // real `realdir`, never through `dirlink`.
+        assert!(!files.contains_key(&leaf("dirlink/inside.md")));
+        for i in 0..5 {
+            assert_eq!(
+                files.get(&leaf(&format!("card/g{i}/leaf.md"))),
+                Some(&Some(PathBuf::from("../../../all-notes/x.md"))),
+            );
+        }
+        // 2 + 1(dirlink) + 1(inside.md regular) + 2 stray + 5 card = 11 leaves.
+        assert_eq!(files.len(), 11, "every file is recorded: {files:?}");
+
+        // Every descended directory is recorded, including the empty one.
+        let expected_dirs: DirSet = [
+            "a", "a/b", "a/b/c", "empty", "realdir", "card",
+            "card/g0", "card/g1", "card/g2", "card/g3", "card/g4",
+        ]
+        .iter()
+        .map(|p| root.join(p))
+        .collect();
+        assert_eq!(dirs, expected_dirs, "every directory recorded including empties");
+    }
+
+    #[test]
+    fn parallel_walk_on_a_missing_directory_is_empty() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let (files, dirs) = actual_state(&tmp.path().join("does-not-exist")).expect("walk");
+        assert!(files.is_empty() && dirs.is_empty());
     }
 
     #[test]
