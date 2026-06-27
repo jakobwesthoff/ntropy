@@ -46,8 +46,15 @@ type DirSet = BTreeSet<PathBuf>;
 pub fn sync_view(vault: &Vault, view: &ViewDef, notes: &[Note]) -> Result<()> {
     let view_dir = vault.layout().view_dir(&view.name);
 
-    let desired = desired_links(&view_dir, view, notes)?;
-    let (actual, dirs) = actual_state(&view_dir)?;
+    // The desired-link computation is CPU-bound and the actual-state read is
+    // syscall-bound, and the two are independent, so overlap them: the slugify /
+    // relative-path work runs while the readdirs and readlinks are in flight.
+    let (desired, actual) = rayon::join(
+        || desired_links(&view_dir, view, notes),
+        || actual_state(&view_dir),
+    );
+    let desired = desired?;
+    let (actual, dirs) = actual?;
 
     // A configured view always has a root directory, even with no matching notes.
     fsutil::create_dir_all(&view_dir)?;
