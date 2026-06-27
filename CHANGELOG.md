@@ -22,8 +22,10 @@ and this project adheres to
   that actually changed are touched, instead of tearing down and regenerating
   every view tree from scratch. Unchanged links keep their identity, and a
   mutation's filesystem cost is proportional to what changed rather than to the
-  whole vault. `reconcile`'s summary now reads `synced N views` rather than
-  `rebuilt N views`.
+  whole vault. On a 3000-note vault with two views (Apple M1), this cuts a
+  mutation or `reconcile` from roughly 820 ms to 135–150 ms (about 5–6×), with
+  the saved time being almost entirely filesystem syscalls. `reconcile`'s
+  summary now reads `synced N views` rather than `rebuilt N views`.
 - `view remove` no longer deletes the view's directory. ntropy never deletes a
   directory: it prunes the view's `.gitignore` entry and leaves the now-stale
   directory in place, reporting it so you can delete it yourself. `reconcile`
