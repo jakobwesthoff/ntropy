@@ -2,12 +2,12 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Filesystem primitives: the single place in the crate that mutates the
+//! Filesystem primitives: the single place in the crate that touches the
 //! filesystem.
 //!
-//! Every write, symlink, rename and directory wipe goes through here, which
-//! localizes error handling and, crucially, the Unix-only symlink assumption
-//! (ADR 0020). No higher layer calls `std::fs` mutators or
+//! Every write, symlink, rename, and directory read or removal goes through
+//! here, which localizes error handling and, crucially, the Unix-only symlink
+//! assumption (ADR 0020). No higher layer calls `std::fs` or
 //! `std::os::unix::fs::symlink` directly; they call these helpers instead
 //! (ADRs 0008, 0020).
 

@@ -196,7 +196,7 @@ them:
 ntropy reconcile
 ```
 
-That realigns any drifted filenames and rebuilds every view, and you're back in
+That realigns any drifted filenames and re-syncs every view, and you're back in
 sync.
 
 ## Commands
@@ -208,7 +208,7 @@ sync.
 | `today` | Open today's note, creating it from the [`today` template](#daily-notes-with-today) on first use that day. `--no-edit` (`--print`) just prints the path. |
 | `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
-| `reconcile` | Realign filenames whose slug drifted from the title and rebuild every view (catches up after edits made outside ntropy). |
+| `reconcile` | Realign filenames whose slug drifted from the title and re-sync every view (catches up after edits made outside ntropy). |
 | `view list\|add\|remove` | Manage [materialized views](#materialized-views), e.g. `ntropy view add by-status --field status`. |
 | `tags` | List every tag with its note count. |
 | `info` | Show the active vault and how it was resolved, the global default, and stats: note/tag/view/template counts, skipped-note warnings, the creation-date span, the top tags, and the template names. |
@@ -307,7 +307,7 @@ Because the leaves are symlinks to the canonical files, there is still exactly
 one copy of every note; the view is just another door into it. `cd` into it,
 `grep` it, point a file browser at it, open the links in any editor. It refreshes
 automatically after every ntropy command that changes notes, and `ntropy
-reconcile` rebuilds it from scratch.
+reconcile` brings it back in sync after out-of-band edits.
 
 You control views per vault with `ntropy view`:
 
@@ -522,8 +522,6 @@ an ambiguous match) it's shown as `date  title  [tags]  (id)`.
   low thousands of notes, not hundred-thousand-note archives. In return,
   everything stays plain, greppable, committable files — and there's room to add
   caching later without resorting to a real database.
-- **Views rebuild wholesale.** A change tears the symlink trees down and rebuilds
-  them rather than patching in place. Already flagged to make incremental.
 - **Views can drift on out-of-band edits.** Change frontmatter or rename files
   behind ntropy's back and the views won't catch up until the next `ntropy
   reconcile` — one command away.

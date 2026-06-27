@@ -26,7 +26,7 @@ use crate::vault::ResolveError;
 /// The unified error type returned across the library surface.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-    /// A filesystem primitive (write, symlink, rename, dir wipe) failed.
+    /// A filesystem primitive (write, symlink, rename, directory read/removal) failed.
     #[error(transparent)]
     Fs(#[from] FsError),
 

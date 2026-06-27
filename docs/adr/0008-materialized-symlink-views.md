@@ -24,14 +24,14 @@ so the vault can be moved or copied without breaking links. Hardlinks were
 rejected: they cannot span filesystems, cannot point at directories, and make
 "which is the real note" ambiguous.
 
-Refresh: on ntropy mutations (create/edit/retitle/delete), and fully on
-`reconcile` (catch-up after out-of-band edits).
+Refresh: on ntropy mutations (create/edit/retitle/delete), and on `reconcile`
+(catch-up after out-of-band edits).
 
-v1 note: the post-mutation refresh is implemented as a full rebuild of the
-configured view trees (remove + regenerate), not true incremental per-link
-updates. This is a deliberate simplification under the soft performance target
-(ADR 0020); it is always correct and prunes stale links. Incremental updates
-are deferred and tracked in `todos/`.
+The refresh is incremental. Each configured view is diffed against its on-disk
+tree and only the changed links are touched; a leaf that already points where it
+should is left in place. The result is what a from-scratch rebuild would produce
+— stale links pruned, always correct — but a mutation pays filesystem writes
+proportional to what changed rather than to the whole vault.
 
 ## Consequences
 

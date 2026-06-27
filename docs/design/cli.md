@@ -120,8 +120,8 @@ is required, since there is no prompt.
 ### `reconcile`
 
 Realign filenames whose slugs drifted from their titles after out-of-band
-edits, refresh inter-note link targets to the current filenames, rebuild
-the materialized view trees, and sync the root `.gitignore` to the configured
+edits, refresh inter-note link targets to the current filenames, sync the
+materialized view trees, and sync the root `.gitignore` to the configured
 views (ADR 0032).
 
 After renaming, it rewrites stale link targets in note bodies so links keep
@@ -138,7 +138,7 @@ It prints a `Reconciling vault at <path>...` line, one `renamed <from> -> <to>`
 line per realignment, one `relinked <from> -> <to> in <file>` line per refreshed
 link, one `ignored <entry>` line per added ignore and a `stopped ignoring ...`
 line per pruned one, and a closing summary of the notes scanned, files renamed,
-links relinked, views rebuilt, ignore entries added and removed, and warnings.
+links relinked, views synced, ignore entries added and removed, and warnings.
 The summary always prints, so a no-op run is no longer silent.
 
 ### `view list|add|remove`

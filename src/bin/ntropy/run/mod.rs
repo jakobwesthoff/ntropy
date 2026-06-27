@@ -303,7 +303,7 @@ fn cmd_delete(vault: &Vault, selector: String, force: bool, interactive: bool) -
         }
     }
 
-    // The resolution scan above already surfaced any warnings; the rebuild
+    // The resolution scan above already surfaced any warnings; the view sync
     // scans the same vault, so its warnings are discarded to avoid printing
     // each one twice.
     ops::delete_note(vault, &path).context("while deleting the note")?;
@@ -362,10 +362,10 @@ fn cmd_tags(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
 // Shared helpers
 // =============================================================================
 
-/// Open a note in the editor, then realign its filename and rebuild views.
+/// Open a note in the editor, then realign its filename and sync views.
 ///
 /// Only the touched note is realigned, so an out-of-band drift elsewhere is
-/// never renamed silently (ADR 0004); the view rebuild then reflects any title
+/// never renamed silently (ADR 0004); the view sync then reflects any title
 /// or tag change made during the edit.
 fn open_and_refresh(vault: &Vault, path: &Path) -> Result<()> {
     editor::open(path)?;

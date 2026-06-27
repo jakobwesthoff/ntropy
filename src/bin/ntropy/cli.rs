@@ -90,7 +90,7 @@ pub enum Command {
         query: Vec<String>,
     },
 
-    /// Realign drifted filenames, rebuild views, and sync `.gitignore`.
+    /// Realign drifted filenames, re-sync views, and sync `.gitignore`.
     ///
     /// Brings the root `.gitignore` in line with the configured views, adding
     /// missing entries and pruning those for views you have removed. ntropy

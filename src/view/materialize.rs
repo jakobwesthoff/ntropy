@@ -480,7 +480,7 @@ mod sync_tests {
 
         assert!(
             !vault.root().join("by-tag/ghost").exists(),
-            "stray empty directory pruned (wipe parity)"
+            "stray empty directory pruned"
         );
         assert!(group_dir(&vault, "real").is_dir(), "real group kept");
     }

@@ -122,15 +122,17 @@ entry is derived.
 View links are refreshed two ways:
 
 - After any ntropy mutation (create, edit, retitle, delete), so views stay
-  current in day-to-day use. In v1 this is implemented as a **full rebuild** of
-  the configured view trees rather than true incremental per-link updates: each
-  view directory is removed and regenerated from the current note set. This is
-  a deliberate, pragmatic deviation from ADR 0008's literal "incremental",
-  justified by the soft performance target (ADR 0020); it is always correct and
-  prunes stale links for free. Incremental updates are deferred (see
-  `todos/`).
-- Fully, by `reconcile`, which rebuilds the view trees and catches up after
-  edits made outside ntropy (direct `$EDITOR` use, scripts, manual changes).
+  current in day-to-day use.
+- By `reconcile`, which additionally catches up after edits made outside ntropy
+  (direct `$EDITOR` use, scripts, manual changes).
+
+Both paths sync incrementally: each configured view is diffed against its
+on-disk tree and only the changed links are touched, leaving unchanged leaves in
+place. The outcome matches a from-scratch rebuild — stale links pruned, always
+correct — but a mutation's filesystem cost tracks what actually changed rather
+than the whole vault. Pruning stays inside the view trees ntropy owns and keeps
+each configured view's root directory, so nothing else in the vault is
+disturbed.
 
 `reconcile` is also what realigns filenames whose slugs have drifted from their
 titles after out-of-band edits. When ntropy itself launches the editor, it

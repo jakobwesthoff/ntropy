@@ -443,7 +443,7 @@ mod tests {
     }
 
     #[test]
-    fn rebuild_prunes_stale_links() {
+    fn refresh_prunes_stale_links() {
         let (_guard, vault) = vault_with_view();
         let path = write_note(
             &vault,

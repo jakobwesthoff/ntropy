@@ -16,9 +16,9 @@ use crate::reconcile;
 use crate::scan::ScanWarning;
 use crate::vault::Vault;
 
-/// Delete the note file at `path` and rebuild the views.
+/// Delete the note file at `path` and sync the views.
 ///
-/// Returns the scan warnings produced while rebuilding (so a caller can honor
+/// Returns the scan warnings produced while syncing (so a caller can honor
 /// `--strict`).
 pub fn delete_note(vault: &Vault, path: &Path) -> Result<Vec<ScanWarning>> {
     fsutil::remove_file(path)?;
@@ -47,7 +47,7 @@ mod tests {
 
         delete_note(&vault, &path).expect("delete");
         assert!(!path.exists());
-        // The note's group is gone after the rebuild.
+        // The note's group is gone after the sync.
         assert!(!vault.root().join("by-tag/work").exists());
     }
 }

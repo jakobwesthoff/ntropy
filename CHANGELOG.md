@@ -17,6 +17,13 @@ and this project adheres to
 
 ### Changed
 
+- Materialized views now refresh incrementally. After a mutation (and during
+  `reconcile`), each view is diffed against its on-disk tree and only the links
+  that actually changed are touched, instead of tearing down and regenerating
+  every view tree from scratch. Unchanged links keep their identity, and a
+  mutation's filesystem cost is proportional to what changed rather than to the
+  whole vault. `reconcile`'s summary now reads `synced N views` rather than
+  `rebuilt N views`.
 - `view remove` no longer deletes the view's directory. ntropy never deletes a
   directory: it prunes the view's `.gitignore` entry and leaves the now-stale
   directory in place, reporting it so you can delete it yourself. `reconcile`
