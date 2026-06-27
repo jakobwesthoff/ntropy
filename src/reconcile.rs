@@ -2,11 +2,11 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Filename realignment and view rebuilding (ADRs 0004, 0008).
+//! Filename realignment and view syncing (ADRs 0004, 0008).
 //!
-//! Two freshness operations live here. [`refresh_views`] is the full rebuild
-//! ntropy runs after any mutation to keep views current (the deliberate v1
-//! stand-in for incremental link updates). [`reconcile`] additionally realigns
+//! Two freshness operations live here. [`refresh_views`] syncs the materialized
+//! views to the current notes, which ntropy runs after any mutation to keep them
+//! current. [`reconcile`] additionally realigns
 //! the filenames of notes whose slug has drifted from their title, the explicit
 //! catch-up after out-of-band edits. A single-note realignment ([`realign`]) is
 //! exposed for the editor flow, where only the touched note is realigned so a
@@ -47,8 +47,8 @@ pub struct LinkRewrite {
 pub struct ReconcileReport {
     /// Number of valid notes scanned in `all-notes/`.
     pub notes_scanned: usize,
-    /// Number of materialized views rebuilt.
-    pub views_rebuilt: usize,
+    /// Number of materialized views synced.
+    pub views_synced: usize,
     /// Files renamed because their slug had drifted.
     pub renamed: Vec<Rename>,
     /// Link targets refreshed to point at their notes' current filenames.
@@ -61,33 +61,33 @@ pub struct ReconcileReport {
     pub warnings: Vec<ScanWarning>,
 }
 
-/// Rebuild all configured views from the current note set (no realignment).
+/// Sync all configured views to the current note set (no realignment).
 ///
 /// Returns the scan warnings so a caller can honor `--strict`.
 pub fn refresh_views(vault: &Vault) -> Result<Vec<ScanWarning>> {
     let scan = scan::scan_notes_dir(&vault.layout().all_notes())?;
     let views = load_views(vault)?;
-    rebuild_and_sync(vault, &views, &scan.notes)?;
+    sync_views_and_gitignore(vault, &views, &scan.notes)?;
     Ok(scan.warnings)
 }
 
-/// Rebuild every view and bring `.gitignore` in step with them.
+/// Sync every view and bring `.gitignore` in step with them.
 ///
 /// The two derived-state updates that must move together — the symlink trees
-/// and the ignore file — live here so every full-rebuild path shares them and
-/// they cannot drift. The `view` layer stays unaware of `.gitignore`; the
-/// composition is owned here.
-fn rebuild_and_sync(
+/// and the ignore file — live here so every sync path shares them and they
+/// cannot drift. The `view` layer stays unaware of `.gitignore`; the composition
+/// is owned here.
+fn sync_views_and_gitignore(
     vault: &Vault,
     views: &[ViewDef],
     notes: &[Note],
 ) -> Result<gitignore::SyncReport> {
-    view::rebuild_all(vault, views, notes)?;
+    view::sync_all(vault, views, notes)?;
     let names: Vec<&str> = views.iter().map(|v| v.name.as_str()).collect();
     gitignore::sync(vault, &names)
 }
 
-/// Realign drifted filenames, then rebuild all views.
+/// Realign drifted filenames, then sync all views.
 pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
     let scan = scan::scan_notes_dir(&vault.layout().all_notes())?;
     let mut notes = scan.notes;
@@ -112,11 +112,11 @@ pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
     let links_rewritten = rewrite_links(&notes)?;
 
     let views = load_views(vault)?;
-    let gitignore = rebuild_and_sync(vault, &views, &notes)?;
+    let gitignore = sync_views_and_gitignore(vault, &views, &notes)?;
 
     Ok(ReconcileReport {
         notes_scanned: notes.len(),
-        views_rebuilt: views.len(),
+        views_synced: views.len(),
         renamed,
         links_rewritten,
         gitignore_added: gitignore.added,
@@ -278,7 +278,7 @@ mod tests {
         );
         let report = reconcile(&vault).expect("reconcile");
         assert_eq!(report.notes_scanned, 1);
-        assert_eq!(report.views_rebuilt, 1);
+        assert_eq!(report.views_synced, 1);
         assert_eq!(report.warnings.len(), 1);
         assert!(report.renamed.is_empty());
     }

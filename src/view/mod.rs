@@ -16,7 +16,7 @@ use crate::error::Result;
 use crate::note::Note;
 use crate::vault::Vault;
 
-pub use materialize::build_view;
+pub use materialize::sync_view;
 
 /// A view definition: an output directory name plus the field it groups by.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,15 +34,14 @@ impl ViewDef {
     }
 }
 
-/// Rebuild every given view from the current note set.
+/// Sync every given view to the current note set.
 ///
-/// This is the full-rebuild path ntropy uses to keep views fresh after a
-/// mutation and during `reconcile`: each view directory is regenerated from
-/// scratch, which is always correct and prunes stale links (ADR 0008; the v1
-/// deviation from literal incremental updates is tracked as follow-up work).
-pub fn rebuild_all(vault: &Vault, views: &[ViewDef], notes: &[Note]) -> Result<()> {
+/// The path ntropy uses to keep views fresh after a mutation and during
+/// `reconcile`: each view is diffed against its on-disk tree and only the changed
+/// links are touched, which is always correct and prunes stale links (ADR 0008).
+pub fn sync_all(vault: &Vault, views: &[ViewDef], notes: &[Note]) -> Result<()> {
     for view in views {
-        build_view(vault, view, notes)?;
+        sync_view(vault, view, notes)?;
     }
     Ok(())
 }
