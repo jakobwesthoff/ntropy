@@ -17,7 +17,7 @@
 //! concerns live in the binary (`src/bin/ntropy/`).
 
 pub mod error;
-pub mod fsutil;
+pub(crate) mod fsutil;
 
 pub mod datetime;
 pub mod id;

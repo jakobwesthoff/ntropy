@@ -109,16 +109,6 @@ pub fn create_dir_all(path: &Path) -> Result<()> {
     std::fs::create_dir_all(path).map_err(|e| FsError::new("creating directory", path, e))
 }
 
-/// Remove `path` and all its contents. Removing a missing directory is not an
-/// error.
-pub fn remove_dir_all(path: &Path) -> Result<()> {
-    match std::fs::remove_dir_all(path) {
-        Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-        Err(e) => Err(FsError::new("removing directory", path, e)),
-    }
-}
-
 /// Wipe `path` and recreate it as an empty directory.
 ///
 /// Used to rebuild a materialized view tree from scratch (ADR 0008): removing
