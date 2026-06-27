@@ -120,18 +120,26 @@ is required, since there is no prompt.
 ### `reconcile`
 
 Realign filenames whose slugs drifted from their titles after out-of-band
-edits, refresh inter-note link targets to the current filenames, and rebuild
-the materialized view trees.
+edits, refresh inter-note link targets to the current filenames, rebuild
+the materialized view trees, and sync the root `.gitignore` to the configured
+views (ADR 0032).
 
 After renaming, it rewrites stale link targets in note bodies so links keep
 resolving and stay clickable in plain Markdown viewers (ADR 0028); links inside
 fenced or inline code are left untouched.
 
+The `.gitignore` sync adds an entry for every configured view and prunes the
+entries of views removed from config, leaving user-authored lines untouched.
+ntropy never deletes a directory, so a removed view's directory stays on disk;
+because its ignore entry is gone it becomes visible to git, which the run
+reports so the user can delete it.
+
 It prints a `Reconciling vault at <path>...` line, one `renamed <from> -> <to>`
 line per realignment, one `relinked <from> -> <to> in <file>` line per refreshed
-link, and a closing summary of the notes scanned, files renamed, links
-relinked, views rebuilt and warnings. The summary always prints, so a no-op run
-is no longer silent.
+link, one `ignored <entry>` line per added ignore and a `stopped ignoring ...`
+line per pruned one, and a closing summary of the notes scanned, files renamed,
+links relinked, views rebuilt, ignore entries added and removed, and warnings.
+The summary always prints, so a no-op run is no longer silent.
 
 ### `view list|add|remove`
 
@@ -144,8 +152,11 @@ edit` in v1; editing a view is remove + add.
 - `view add <name> --field <field>` — define a new view and materialize it (the
   view's directory is its name; grouping values are always normalized, ADR
   0009/0023, so there is no case flag). The name must not be reserved
-  (`all-notes`, `.ntropy`) or already in use.
-- `view remove <name>` — delete a view definition and its directory.
+  (`all-notes`, `.ntropy`, `.gitignore`) or already in use. Adding a view also
+  records its directory in `.gitignore` (ADR 0032).
+- `view remove <name>` — delete a view definition and prune its `.gitignore`
+  entry. The view's directory is left on disk (ntropy never deletes a
+  directory) and reported so you can remove it yourself.
 
 ### `tags`
 

@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- ntropy maintains a root `.gitignore` listing the derived materialized view
+  directories, so committing a vault no longer tracks them. The entries stay in
+  sync with the configured views through `init`, `reconcile`, and `view
+  add`/`view remove`; lines you add to the file yourself are never touched.
+
+### Changed
+
+- `view remove` no longer deletes the view's directory. ntropy never deletes a
+  directory: it prunes the view's `.gitignore` entry and leaves the now-stale
+  directory in place, reporting it so you can delete it yourself. `reconcile`
+  likewise prunes entries for views removed from config without touching their
+  directories.
+
 ## 1.1.0 - 2026-06-26
 
 ### Fixed

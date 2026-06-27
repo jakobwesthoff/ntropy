@@ -90,7 +90,12 @@ pub enum Command {
         query: Vec<String>,
     },
 
-    /// Realign drifted filenames and rebuild views.
+    /// Realign drifted filenames, rebuild views, and sync `.gitignore`.
+    ///
+    /// Brings the root `.gitignore` in line with the configured views, adding
+    /// missing entries and pruning those for views you have removed. ntropy
+    /// never deletes a directory, so a removed view's directory is left in place
+    /// and reported for you to delete.
     Reconcile,
 
     /// Delete a note by id or query.
@@ -123,7 +128,7 @@ pub enum Command {
 pub enum ViewCommand {
     /// List configured views.
     List,
-    /// Define a new view grouping by a frontmatter field.
+    /// Define a new view grouping by a frontmatter field, and ignore its directory.
     Add {
         /// The view's output-directory name.
         name: String,
@@ -131,7 +136,10 @@ pub enum ViewCommand {
         #[arg(long)]
         field: String,
     },
-    /// Remove a view definition and its directory.
+    /// Remove a view definition and prune its `.gitignore` entry.
+    ///
+    /// The view's directory is left on disk (ntropy never deletes a directory)
+    /// and reported so you can remove it yourself.
     Remove {
         /// The view name to remove.
         name: String,

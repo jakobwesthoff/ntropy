@@ -7,8 +7,9 @@ views are derived from them. It consolidates the decisions in
 [ADR 0004](../adr/0004-note-identity-and-filename-strategy.md),
 [ADR 0006](../adr/0006-hierarchical-tags-by-slash-convention.md),
 [ADR 0007](../adr/0007-vault-directory-layout.md),
-[ADR 0008](../adr/0008-materialized-symlink-views.md), and
-[ADR 0009](../adr/0009-generic-group-by-field-view-definitions.md).
+[ADR 0008](../adr/0008-materialized-symlink-views.md),
+[ADR 0009](../adr/0009-generic-group-by-field-view-definitions.md), and
+[ADR 0032](../adr/0032-auto-managed-gitignore-for-views.md).
 
 ## On-disk structure
 
@@ -20,6 +21,7 @@ at the note set:
       by-tag/           materialized view: symlink tree over the tags field
       by-<field>/       further materialized views, one directory per view
       .ntropy/          configuration / templates (exact use to be decided)
+      .gitignore        auto-managed ignore list for the view directories
 
 `all-notes/` is the one special directory: it holds the real Markdown files.
 Every `by-<field>/` directory holds only symlinks pointing back into
@@ -133,6 +135,22 @@ View links are refreshed two ways:
 `reconcile` is also what realigns filenames whose slugs have drifted from their
 titles after out-of-band edits. When ntropy itself launches the editor, it
 performs that realignment immediately on editor exit.
+
+## Version control
+
+A vault is plain files, so committing it to git is a first-class use case. The
+view directories are derived symlink trees, so ntropy keeps them out of version
+control on the user's behalf (ADR 0032): it maintains a root `.gitignore` whose
+managed entries mirror exactly the configured views. Every view-affecting
+operation syncs it — adding a view's entry, pruning the entry of a view that has
+left the configuration — while never touching a line the user wrote. Ownership
+is tracked by a marker comment placed above each managed entry, so only ntropy's
+own entries are ever pruned.
+
+ntropy never deletes a directory. Removing a view (whether by `view remove` or by
+editing config and reconciling) prunes the ignore entry but leaves the view's
+now-stale directory on disk; the command reports it so the user can delete it.
+Because its ignore entry is gone, that directory becomes visible to git.
 
 ## Open points
 

@@ -16,7 +16,7 @@ Commands:
   new        Create a note from a template and open it
   today      Open today's note, creating it from the `today` template if absent
   search     Browse, filter, full-text search, or open a note by id or query [aliases: list]
-  reconcile  Realign drifted filenames and rebuild views
+  reconcile  Realign drifted filenames, rebuild views, and sync `.gitignore`
   delete     Delete a note by id or query
   view       Manage materialized view definitions
   tags       List all tags with note counts

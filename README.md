@@ -126,9 +126,15 @@ non-`.md` files are left alone, so you can keep images and attachments right nex
 to your notes without ntropy adopting them as notes.
 
 Because all of this is just files, the whole vault is yours to version: `git
-init` in it and commit your notes like any other text. You'll want to add the
-derived `by-*/` view directories to `.gitignore` — they're regenerated on demand,
-so there's no reason to track them.
+init` in it and commit your notes like any other text. The derived `by-*/` view
+directories don't belong in git, and ntropy keeps them out for you: it maintains
+a root `.gitignore` whose entries always match your configured views, adding one
+when you add a view and pruning it when you remove one. Your own lines in that
+file are never touched.
+
+ntropy never deletes a directory. When a view is removed its directory is left
+behind (and, no longer ignored, it shows up in `git status`); the command tells
+you so you can delete the stale tree yourself.
 
 ### Finding the vault
 
