@@ -14,7 +14,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use rayon::prelude::*;
 use serde_yaml_ng::Value;
 
 use crate::error::Result;
@@ -46,15 +45,8 @@ type DirSet = BTreeSet<PathBuf>;
 pub fn sync_view(vault: &Vault, view: &ViewDef, notes: &[Note]) -> Result<()> {
     let view_dir = vault.layout().view_dir(&view.name);
 
-    // The desired-link computation is CPU-bound and the actual-state read is
-    // syscall-bound, and the two are independent, so overlap them: the slugify /
-    // relative-path work runs while the readdirs and readlinks are in flight.
-    let (desired, actual) = rayon::join(
-        || desired_links(&view_dir, view, notes),
-        || actual_state(&view_dir),
-    );
-    let desired = desired?;
-    let (actual, dirs) = actual?;
+    let desired = desired_links(&view_dir, view, notes)?;
+    let (actual, dirs) = actual_state(&view_dir)?;
 
     // A configured view always has a root directory, even with no matching notes.
     fsutil::create_dir_all(&view_dir)?;
@@ -100,11 +92,8 @@ fn desired_links(
     view: &ViewDef,
     notes: &[Note],
 ) -> Result<BTreeMap<PathBuf, PathBuf>> {
-    // Group notes by normalized field value. The group-by itself stays serial:
-    // it is a cheap `normalize` (or a tag-list clone) per note, a small Amdahl
-    // floor not worth a parallel pre-pass. Sorting here is only to keep the
-    // parallel map's input order stable; the path-keyed `BTreeMap` below makes
-    // the final projection deterministic regardless of completion order.
+    // Group notes by normalized field value. A `BTreeMap` keeps the projection
+    // deterministic, which matters for reproducible disambiguation and tests.
     let mut groups: BTreeMap<String, Vec<&Note>> = BTreeMap::new();
     for note in notes {
         for value in group_values(note, &view.field) {
@@ -112,58 +101,30 @@ fn desired_links(
         }
     }
 
-    // Each group writes a disjoint subdirectory and disambiguates only within
-    // itself, so the per-group leaf construction is embarrassingly parallel.
-    // Build each group's leaves in parallel, then flatten into the path-keyed
-    // map: disjoint subtrees mean keys never collide, so the merge is
-    // conflict-free and the output is identical to a serial build.
-    let groups: Vec<(String, Vec<&Note>)> = groups.into_iter().collect();
-    let per_group: Vec<Vec<(PathBuf, PathBuf)>> = groups
-        .into_par_iter()
-        .map(|(value, group_notes)| group_leaves(view_dir, &value, &group_notes))
-        .collect::<Result<_>>()?;
-
     let mut desired = BTreeMap::new();
-    for leaf in per_group.into_iter().flatten() {
-        desired.insert(leaf.0, leaf.1);
-    }
-    Ok(desired)
-}
+    for (value, group_notes) in groups {
+        // A value's `/` segments nest into subdirectories.
+        let leaf_dir = view_dir.join(&value);
 
-/// The leaves a single group contributes: `(leaf path, stored target)` pairs.
-///
-/// Disambiguation ([`leaf::leaf_names`]) is scoped to the group, so this is the
-/// largest unit that can be built independently of the rest of the view.
-fn group_leaves(
-    view_dir: &Path,
-    value: &str,
-    group_notes: &[&Note],
-) -> Result<Vec<(PathBuf, PathBuf)>> {
-    // A value's `/` segments nest into subdirectories.
-    let leaf_dir = view_dir.join(value);
+        let mut inputs = Vec::with_capacity(group_notes.len());
+        for note in &group_notes {
+            inputs.push(LeafInput {
+                id: note.id,
+                date: note.created_date()?,
+                slug: slug::slugify(&note.title),
+            });
+        }
+        let names = leaf::leaf_names(&inputs);
 
-    let mut inputs = Vec::with_capacity(group_notes.len());
-    for note in group_notes {
-        inputs.push(LeafInput {
-            id: note.id,
-            date: note.created_date()?,
-            slug: slug::slugify(&note.title),
-        });
-    }
-    let names = leaf::leaf_names(&inputs);
-
-    let leaves = group_notes
-        .iter()
-        .zip(names)
-        .map(|(note, name)| {
+        for (note, name) in group_notes.iter().zip(names) {
             let link = leaf_dir.join(&name);
             // The stored target is relative to the link's own directory, so the
             // vault stays relocatable (ADR 0008).
             let target = fsutil::relative_path(&leaf_dir, &note.path);
-            (link, target)
-        })
-        .collect();
-    Ok(leaves)
+            desired.insert(link, target);
+        }
+    }
+    Ok(desired)
 }
 
 /// The view tree's current contents: every file keyed by path, plus every
@@ -174,59 +135,24 @@ fn group_leaves(
 /// not matching its desired symlink. The directory set drives empty-directory
 /// pruning. A missing view directory yields empty collections (the first build).
 fn actual_state(view_dir: &Path) -> Result<(LeafMap, DirSet)> {
-    // Walk the tree in parallel into a flat entry list, then sort the entries
-    // into the two collections serially. The walk's disjoint subtrees never
-    // produce colliding paths, and the `BTreeMap`/`BTreeSet` impose a stable
-    // order, so the result is identical to a serial walk.
     let mut files = LeafMap::new();
     let mut dirs = DirSet::new();
-    for entry in walk(view_dir)? {
-        match entry {
-            Entry::Leaf(path, target) => {
-                files.insert(path, target);
-            }
-            Entry::Dir(path) => {
-                dirs.insert(path);
-            }
-        }
-    }
+    collect_state(view_dir, &mut files, &mut dirs)?;
     Ok((files, dirs))
 }
 
-/// One node seen by the parallel walk: a `Leaf` is any file occupying a path
-/// (`Some(target)` for a symlink read without following, `None` otherwise); a
-/// `Dir` is a descended directory, recorded so the prune pass can see every
-/// directory including the empty ones.
-enum Entry {
-    Leaf(PathBuf, Option<PathBuf>),
-    Dir(PathBuf),
-}
-
-/// Recursively walk `dir`, reading every directory's entries in parallel so
-/// sibling subtrees walk concurrently (parallelizing `readdir` across the tree's
-/// breadth) and each leaf's `read_link` runs in the pool.
-///
-/// A directory is checked before `is_symlink`, so a symlink-to-a-directory is
-/// treated as a leaf (its `is_dir` is false) and read with `read_link` rather
-/// than descended, matching the serial walk. A missing directory yields no
-/// entries (the first build, before the view dir exists).
-fn walk(dir: &Path) -> Result<Vec<Entry>> {
-    let nested: Vec<Vec<Entry>> = fsutil::read_dir_entries(dir)?
-        .into_par_iter()
-        .map(|(path, file_type)| -> Result<Vec<Entry>> {
-            if file_type.is_dir() {
-                let mut entries = walk(&path)?;
-                entries.push(Entry::Dir(path));
-                Ok(entries)
-            } else if file_type.is_symlink() {
-                let target = fsutil::read_link(&path)?;
-                Ok(vec![Entry::Leaf(path, Some(target))])
-            } else {
-                Ok(vec![Entry::Leaf(path, None)])
-            }
-        })
-        .collect::<Result<_>>()?;
-    Ok(nested.into_iter().flatten().collect())
+fn collect_state(dir: &Path, files: &mut LeafMap, dirs: &mut DirSet) -> Result<()> {
+    for (path, file_type) in fsutil::read_dir_entries(dir)? {
+        if file_type.is_dir() {
+            dirs.insert(path.clone());
+            collect_state(&path, files, dirs)?;
+        } else if file_type.is_symlink() {
+            files.insert(path.clone(), Some(fsutil::read_link(&path)?));
+        } else {
+            files.insert(path, None);
+        }
+    }
+    Ok(())
 }
 
 /// The normalized grouping values a note contributes for `field`.
@@ -655,176 +581,6 @@ mod sync_tests {
         let leaf = only_entry(&group);
         let name = leaf.file_name().expect("name").to_string_lossy().into_owned();
         assert!(name.ends_with("review.md"), "expected reshuffle, got {name}");
-    }
-
-    /// Recursively collect every symlink under `root` as `(path relative to
-    /// `strip`, stored target)`, sorted. Stripping the per-tempdir prefix makes
-    /// trees from two independent vaults directly comparable; targets are already
-    /// stored relative to their link, so they need no stripping.
-    fn collect_tree(root: &Path, strip: &Path) -> Vec<(String, String)> {
-        let mut out = Vec::new();
-        let mut stack = vec![root.to_path_buf()];
-        while let Some(dir) = stack.pop() {
-            for entry in std::fs::read_dir(&dir).expect("read dir") {
-                let path = entry.expect("entry").path();
-                let file_type = std::fs::symlink_metadata(&path).expect("lstat").file_type();
-                if file_type.is_symlink() {
-                    let rel = path.strip_prefix(strip).expect("strip prefix");
-                    let target = std::fs::read_link(&path).expect("readlink");
-                    out.push((
-                        rel.to_string_lossy().into_owned(),
-                        target.to_string_lossy().into_owned(),
-                    ));
-                } else if file_type.is_dir() {
-                    stack.push(path);
-                }
-            }
-        }
-        out.sort();
-        out
-    }
-
-    /// A larger corpus across many tag groups, nested paths, and several
-    /// intra-group title collisions, materialized into two fresh vaults. The two
-    /// trees must be byte-identical (parallel grouping/merge stays deterministic)
-    /// and must equal the expected sorted leaf set.
-    #[test]
-    fn parallel_desired_links_is_deterministic_across_two_vaults() {
-        // Distinct ULIDs; the first three share a timestamp prefix so equal
-        // titles in the same group collide and gain a ULID tail.
-        const IDS: &[&str] = &[
-            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
-            "01ARZ3NDEKTSV4RRFFQ69G5FBW",
-            "01ARZ3NDEKTSV4RRFFQ69G5FCX",
-            "01BX5ZZKBKACTAV9WEVGEMMVRZ",
-            "01C0AAAAAAAAAAAAAAAAAAAAAA",
-            "01D0BBBBBBBBBBBBBBBBBBBBBB",
-            "01E0CCCCCCCCCCCCCCCCCCCCCC",
-            "01F0DDDDDDDDDDDDDDDDDDDDDD",
-        ];
-
-        // (filename suffix, title, tags) — many groups, nested paths, and the
-        // first three colliding on "Review" within `dup`.
-        let corpus: &[(&str, &str, &str)] = &[
-            ("a.md", "Review", "[dup, area/work]"),
-            ("b.md", "Review", "[dup, area/work/deep]"),
-            ("c.md", "Review", "[dup]"),
-            ("d.md", "Planning", "[area/home, status/active]"),
-            ("e.md", "Notes", "[status/active]"),
-            ("f.md", "Ideas", "[area/home, area/work]"),
-            ("g.md", "Log", "[journal/2026, journal/2026/06]"),
-            ("h.md", "Recipe", "[cooking]"),
-        ];
-
-        let build = || {
-            let (guard, vault) = vault_with_views(&[("by-tag", "tags")]);
-            for (id, (suffix, title, tags)) in IDS.iter().zip(corpus) {
-                write_note(
-                    &vault,
-                    &format!("{id}-{suffix}"),
-                    &format!("---\ntitle: {title}\ntags: {tags}\n---\nx\n"),
-                );
-            }
-            sync(&vault);
-            let tree = collect_tree(&vault.root().join("by-tag"), vault.root());
-            (guard, tree)
-        };
-
-        let (_g1, tree1) = build();
-        let (_g2, tree2) = build();
-
-        assert_eq!(tree1, tree2, "two independent vaults must materialize identically");
-
-        // The leaf paths the corpus must produce, independent of disambiguation
-        // tails which are asserted structurally below.
-        let leaf_paths: Vec<&str> = tree1.iter().map(|(p, _)| p.as_str()).collect();
-        // Leaf placements summed over the corpus's per-note tag fan-out
-        // (2+2+1+2+1+2+2+1).
-        assert_eq!(leaf_paths.len(), 13, "expected 13 leaf placements, got {leaf_paths:?}");
-        // The three colliding "Review" notes each land in `dup` with a ULID tail.
-        let dup_leaves: Vec<&&str> = leaf_paths
-            .iter()
-            .filter(|p| p.starts_with("by-tag/dup/"))
-            .collect();
-        assert_eq!(dup_leaves.len(), 3, "all three colliders placed in dup");
-        for tail in ["FAV", "FBW", "FCX"] {
-            assert!(
-                dup_leaves.iter().any(|p| p.contains(tail)),
-                "collider {tail} disambiguated in dup, got {dup_leaves:?}"
-            );
-        }
-        // Every stored target resolves (relative target back into all-notes).
-        for (_, target) in &tree1 {
-            assert!(target.contains("all-notes/"), "target points into all-notes: {target}");
-        }
-    }
-
-    /// The parallel walk must see every leaf and every descended directory of a
-    /// wide, deeply nested, high-cardinality tree, classify symlinks vs. stray
-    /// files correctly, and treat a symlink-to-a-directory as a leaf.
-    #[test]
-    fn parallel_walk_collects_every_leaf_and_directory() {
-        let tmp = tempfile::tempdir().expect("temp dir");
-        let root = tmp.path();
-
-        // A wide top with a deep nest on one branch, a one-leaf-per-directory
-        // (high-cardinality) branch, an empty directory, stray non-symlink files
-        // placed at depth, and a symlink pointing at a directory.
-        std::fs::create_dir_all(root.join("a/b/c")).expect("mkdir nest");
-        std::fs::create_dir_all(root.join("empty")).expect("mkdir empty");
-        for i in 0..5 {
-            std::fs::create_dir_all(root.join(format!("card/g{i}"))).expect("mkdir card");
-            std::os::unix::fs::symlink("../../../all-notes/x.md", root.join(format!("card/g{i}/leaf.md")))
-                .expect("card leaf");
-        }
-        std::os::unix::fs::symlink("../all-notes/top.md", root.join("toplink.md")).expect("top link");
-        std::os::unix::fs::symlink("../all-notes/deep.md", root.join("a/b/c/deep.md")).expect("deep link");
-        // Stray non-symlink files at the top and deep in the tree.
-        std::fs::write(root.join("README.txt"), b"junk").expect("stray top");
-        std::fs::write(root.join("a/b/notes.txt"), b"junk").expect("stray deep");
-        // A symlink whose target is a directory: a leaf, never descended.
-        std::fs::create_dir_all(root.join("realdir")).expect("mkdir realdir");
-        std::fs::write(root.join("realdir/inside.md"), b"x").expect("inside");
-        std::os::unix::fs::symlink("realdir", root.join("dirlink")).expect("dir symlink");
-
-        let (files, dirs) = actual_state(root).expect("walk");
-
-        let leaf = |p: &str| root.join(p);
-        // Symlinks map to their stored target; stray files map to None.
-        assert_eq!(files.get(&leaf("toplink.md")), Some(&Some(PathBuf::from("../all-notes/top.md"))));
-        assert_eq!(files.get(&leaf("a/b/c/deep.md")), Some(&Some(PathBuf::from("../all-notes/deep.md"))));
-        assert_eq!(files.get(&leaf("README.txt")), Some(&None));
-        assert_eq!(files.get(&leaf("a/b/notes.txt")), Some(&None));
-        // A symlink-to-a-directory is a leaf, read not followed.
-        assert_eq!(files.get(&leaf("dirlink")), Some(&Some(PathBuf::from("realdir"))));
-        // It is not descended: the directory's real content is reached via the
-        // real `realdir`, never through `dirlink`.
-        assert!(!files.contains_key(&leaf("dirlink/inside.md")));
-        for i in 0..5 {
-            assert_eq!(
-                files.get(&leaf(&format!("card/g{i}/leaf.md"))),
-                Some(&Some(PathBuf::from("../../../all-notes/x.md"))),
-            );
-        }
-        // 2 + 1(dirlink) + 1(inside.md regular) + 2 stray + 5 card = 11 leaves.
-        assert_eq!(files.len(), 11, "every file is recorded: {files:?}");
-
-        // Every descended directory is recorded, including the empty one.
-        let expected_dirs: DirSet = [
-            "a", "a/b", "a/b/c", "empty", "realdir", "card",
-            "card/g0", "card/g1", "card/g2", "card/g3", "card/g4",
-        ]
-        .iter()
-        .map(|p| root.join(p))
-        .collect();
-        assert_eq!(dirs, expected_dirs, "every directory recorded including empties");
-    }
-
-    #[test]
-    fn parallel_walk_on_a_missing_directory_is_empty() {
-        let tmp = tempfile::tempdir().expect("temp dir");
-        let (files, dirs) = actual_state(&tmp.path().join("does-not-exist")).expect("walk");
-        assert!(files.is_empty() && dirs.is_empty());
     }
 
     #[test]
