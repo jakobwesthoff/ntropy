@@ -9,8 +9,12 @@ Accepted
 The `edit`-ambiguity decision is superseded by
 [ADR 0031](0031-merge-edit-into-search.md): `edit` is now a hidden alias of
 `search`, which lists ambiguous matches instead of erroring. The strict
-ambiguity rule survives only for `delete`. The selector id-or-query rule, the
-plain table format, and the ordering decision still stand.
+ambiguity rule survives only for `delete`.
+
+The tab-separated plain table format is superseded by
+[ADR 0033](0033-aligned-plain-table-output.md): the tables now render
+space-aligned and the `awk`/`cut` positional contract is retired. The selector
+id-or-query rule and the ordering decision still stand.
 
 ## Context
 

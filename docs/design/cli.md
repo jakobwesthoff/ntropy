@@ -16,12 +16,15 @@ The command surface and its behavior. Consolidates
   [ADR 0026](../adr/0026-project-local-vault-pointer-file.md).
 - **Interactivity:** interactive on a TTY, non-interactive when piped.
   `--non-interactive` / `-n` forces non-interactive.
-- **Output:** decorated for a TTY; when piped/`-n`, a tab-separated table of
-  `id<TAB>date<TAB>title<TAB>tags<TAB>path`, one note per line, led by an
-  uppercase column header (awk/cut-friendly; tags comma-joined; `tail -n +2`
-  drops the header). All plain tab tables carry a header. No JSON in v1. Where a
-  note is named to a human (delete prompts/confirmations, ambiguous-match lists)
-  it is shown as the reference `date  title  [tags]  (id)`.
+- **Output:** decorated for a TTY; the plain tables are space-aligned for every
+  invocation (TTY, piped, `-n`): the note table is `id date title tags path`,
+  one note per line, led by an uppercase column header, columns padded to their
+  widest cell in Unicode display width with the last column unpadded (tags
+  comma-joined; `tail -n +2` drops the header). All plain tables carry a header.
+  The tab-separated `awk`/`cut` positional format is retired (ADR 0033);
+  structured JSON output for machine consumers is planned. Where a note is named
+  to a human (delete prompts/confirmations, ambiguous-match lists) it is shown
+  as the reference `date  title  [tags]  (id)`.
 - **Ordering:** results are newest first (creation time descending) by default.
 - **Editor:** `$VISUAL` then `$EDITOR`; error if neither is set.
 - **Bare `ntropy`:** with no subcommand, prints help.
@@ -148,7 +151,7 @@ with a frontmatter field; see
 [vault-layout-and-views.md](vault-layout-and-views.md)). There is no `view
 edit` in v1; editing a view is remove + add.
 
-- `view list` — list configured views (`name<TAB>field`).
+- `view list` — list configured views as the aligned `NAME FIELD` table.
 - `view add <name> --field <field>` — define a new view and materialize it (the
   view's directory is its name; grouping values are always normalized, ADR
   0009/0023, so there is no case flag). The name must not be reserved
@@ -161,7 +164,7 @@ edit` in v1; editing a view is remove + add.
 ### `tags`
 
 List all distinct full tag strings across the vault with their note counts,
-sorted alphabetically (`tag<TAB>count`).
+sorted alphabetically, as the aligned `TAG COUNT` table.
 
 ### `info`
 
