@@ -27,11 +27,11 @@ struct Scored {
 
 /// A row currently inside the viewport, handed to the renderer (or a test).
 pub struct VisibleRow<'a> {
-    /// The matchable, highlightable part of the row (shown first).
-    pub matchable: &'a str,
+    /// The displayed, highlightable part of the row (shown first).
+    pub display: &'a str,
     /// Trailing text shown but never matched or highlighted (e.g. an id).
     pub suffix: &'a str,
-    /// Char positions in `matchable` that matched the query, ascending.
+    /// Char positions in `display` that matched the query, ascending.
     pub positions: &'a [u32],
     /// Whether this row is the current selection.
     pub selected: bool,
@@ -39,13 +39,13 @@ pub struct VisibleRow<'a> {
 
 /// The picker's interaction state over an owned set of items of type `T`.
 pub struct PickerState<T> {
-    /// The candidate items, index-aligned with `matchable`/`suffix`/`haystacks`.
+    /// The candidate items, index-aligned with `display`/`suffix`/`haystacks`.
     items: Vec<T>,
-    /// The matchable, highlightable text per item.
-    matchable: Vec<String>,
+    /// The displayed, highlightable text per item.
+    display: Vec<String>,
     /// The trailing display-only text per item (shown, never matched).
     suffix: Vec<String>,
-    /// Pre-converted match haystacks per item (the same text as `matchable`).
+    /// Pre-converted match haystacks per item (the same text as `display`).
     haystacks: Vec<Utf32String>,
     /// Reused fuzzy matcher; allocates a large scratch buffer, so it is kept.
     matcher: Matcher,
@@ -72,17 +72,17 @@ impl<T> PickerState<T> {
         debug_assert_eq!(items.len(), rows.len(), "one row per item");
         let haystacks: Vec<Utf32String> = rows
             .iter()
-            .map(|r| Utf32String::from(r.matchable.as_str()))
+            .map(|r| Utf32String::from(r.display.as_str()))
             .collect();
-        let mut matchable: Vec<String> = Vec::with_capacity(rows.len());
+        let mut display: Vec<String> = Vec::with_capacity(rows.len());
         let mut suffix: Vec<String> = Vec::with_capacity(rows.len());
         for row in rows {
-            matchable.push(row.matchable);
+            display.push(row.display);
             suffix.push(row.suffix);
         }
         let mut state = Self {
             items,
-            matchable,
+            display,
             suffix,
             haystacks,
             matcher: Matcher::new(Config::DEFAULT),
@@ -243,7 +243,7 @@ impl<T> PickerState<T> {
             .map(|i| {
                 let s = &self.scored[i];
                 VisibleRow {
-                    matchable: &self.matchable[s.item],
+                    display: &self.display[s.item],
                     suffix: &self.suffix[s.item],
                     positions: &s.positions,
                     selected: i == self.selected,
@@ -298,7 +298,7 @@ impl<T> PickerState<T> {
             let pointer = if row.selected { "> " } else { "  " };
             let marked: HashSet<u32> = row.positions.iter().copied().collect();
             let mut line = String::new();
-            for (i, c) in row.matchable.chars().enumerate() {
+            for (i, c) in row.display.chars().enumerate() {
                 if marked.contains(&(i as u32)) {
                     let _ = write!(line, "[{c}]");
                 } else {
@@ -325,7 +325,7 @@ mod tests {
         let picker_rows = items
             .iter()
             .map(|s| Row {
-                matchable: s.clone(),
+                display: s.clone(),
                 suffix: String::new(),
             })
             .collect();
@@ -507,7 +507,7 @@ mod tests {
     fn suffix_is_shown_but_not_matched() {
         let items = vec!["alpha".to_string()];
         let rows = vec![Row {
-            matchable: "alpha".to_string(),
+            display: "alpha".to_string(),
             suffix: "  (ZID)".into(),
         }];
         let mut s = PickerState::new(items, rows, 10);
@@ -529,12 +529,12 @@ mod tests {
         assert_eq!(s.into_selected(), None);
     }
 
-    /// Collect `(matchable, selected)` for the non-blank lines, top to bottom.
+    /// Collect `(display, selected)` for the non-blank lines, top to bottom.
     fn line_rows(s: &PickerState<String>) -> Vec<(String, bool)> {
         s.list_lines()
             .into_iter()
             .flatten()
-            .map(|r| (r.matchable.to_string(), r.selected))
+            .map(|r| (r.display.to_string(), r.selected))
             .collect()
     }
 

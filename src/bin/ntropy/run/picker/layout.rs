@@ -8,7 +8,7 @@
 //! followed by the display-only ULID. Aligning the columns needs the widths of
 //! *all* candidates at once (the title column is padded to the widest title,
 //! and so on), so this is a batch step run before the picker starts rather than
-//! a per-row render. The matchable string carries the padding verbatim, which
+//! a per-row render. The display string carries the padding verbatim, which
 //! keeps the fuzzy match positions aligned with what is drawn.
 //!
 //! Column widths are derived from absolute caps, not the terminal width, so the
@@ -57,7 +57,7 @@ pub fn align_candidates(candidates: &[Candidate]) -> Vec<Row> {
                 parts.push(pad(&tags[i], tags_w));
             }
             Row {
-                matchable: parts.join("  "),
+                display: parts.join("  "),
                 suffix: format!("  ({})", candidate.id),
             }
         })
@@ -151,19 +151,15 @@ mod tests {
         ]);
         // The short title is padded so both dates start at the same column.
         let date_col = |m: &str| m.find("(2026").expect("date present");
-        assert_eq!(date_col(&rows[0].matchable), date_col(&rows[1].matchable));
-        assert!(rows[0].matchable.starts_with("short "));
+        assert_eq!(date_col(&rows[0].display), date_col(&rows[1].display));
+        assert!(rows[0].display.starts_with("short "));
     }
 
     #[test]
     fn over_long_title_is_ellipsis_truncated_to_the_cap() {
         let long = "x".repeat(60);
         let rows = align_candidates(&[candidate(ULID_A, &long, "2026-06-25", &[])]);
-        let title: String = rows[0]
-            .matchable
-            .chars()
-            .take_while(|c| *c != '(')
-            .collect();
+        let title: String = rows[0].display.chars().take_while(|c| *c != '(').collect();
         let title = title.trim_end();
         assert_eq!(title.chars().count(), TITLE_CAP);
         assert!(title.ends_with('…'));
@@ -173,8 +169,8 @@ mod tests {
     fn title_exactly_at_cap_is_not_truncated() {
         let exact = "y".repeat(TITLE_CAP);
         let rows = align_candidates(&[candidate(ULID_A, &exact, "2026-06-25", &[])]);
-        assert!(rows[0].matchable.starts_with(&exact));
-        assert!(!rows[0].matchable.contains('…'));
+        assert!(rows[0].display.starts_with(&exact));
+        assert!(!rows[0].display.contains('…'));
     }
 
     #[test]
@@ -183,12 +179,12 @@ mod tests {
             candidate(ULID_A, "t", "2026-06-25", &["work"]),
             candidate(ULID_B, "t", "2026-06-25", &["home", "urgent"]),
         ]);
-        assert!(rows[0].matchable.contains("[work]"));
-        assert!(rows[1].matchable.contains("[home, urgent]"));
+        assert!(rows[0].display.contains("[work]"));
+        assert!(rows[1].display.contains("[home, urgent]"));
         // Both ULID suffixes start at the same offset thanks to tag padding.
         assert_eq!(
-            rows[0].matchable.chars().count(),
-            rows[1].matchable.chars().count()
+            rows[0].display.chars().count(),
+            rows[1].display.chars().count()
         );
     }
 
@@ -196,11 +192,7 @@ mod tests {
     fn over_long_tag_list_is_truncated_within_the_cap() {
         let many: Vec<&str> = vec!["alpha", "beta", "gamma", "delta", "epsilon", "zeta"];
         let rows = align_candidates(&[candidate(ULID_A, "t", "2026-06-25", &many)]);
-        let tags: String = rows[0]
-            .matchable
-            .chars()
-            .skip_while(|c| *c != '[')
-            .collect();
+        let tags: String = rows[0].display.chars().skip_while(|c| *c != '[').collect();
         assert!(tags.chars().count() <= TAGS_CAP);
         assert!(tags.contains('…'));
     }
@@ -208,7 +200,7 @@ mod tests {
     #[test]
     fn rows_without_tags_omit_the_tag_column_entirely() {
         let rows = align_candidates(&[candidate(ULID_A, "t", "2026-06-25", &[])]);
-        assert!(!rows[0].matchable.contains('['));
+        assert!(!rows[0].display.contains('['));
     }
 
     #[test]
@@ -219,15 +211,15 @@ mod tests {
         ]);
         // The tagless row pads its (blank) tag column so both suffixes align.
         assert_eq!(
-            rows[0].matchable.chars().count(),
-            rows[1].matchable.chars().count()
+            rows[0].display.chars().count(),
+            rows[1].display.chars().count()
         );
     }
 
     #[test]
     fn all_empty_titles_drop_the_title_column() {
         let rows = align_candidates(&[candidate(ULID_A, "", "2026-06-25", &["work"])]);
-        assert!(rows[0].matchable.starts_with("(2026-06-25)"));
+        assert!(rows[0].display.starts_with("(2026-06-25)"));
     }
 
     #[test]
@@ -239,7 +231,7 @@ mod tests {
     #[test]
     fn date_is_always_present_and_fixed_width() {
         let rows = align_candidates(&[candidate(ULID_A, "title", "2026-06-25", &["work"])]);
-        assert!(rows[0].matchable.contains("(2026-06-25)"));
+        assert!(rows[0].display.contains("(2026-06-25)"));
     }
 
     #[test]
@@ -251,12 +243,12 @@ mod tests {
     fn single_candidate_pads_to_its_own_width() {
         let rows = align_candidates(&[candidate(ULID_A, "solo", "2026-06-25", &["x"])]);
         assert_eq!(rows.len(), 1);
-        assert!(rows[0].matchable.starts_with("solo  (2026-06-25)  [x]"));
+        assert!(rows[0].display.starts_with("solo  (2026-06-25)  [x]"));
     }
 
     /// The display column at which the date starts (each `(` opens the date).
-    fn date_column(matchable: &str) -> usize {
-        let prefix: String = matchable.chars().take_while(|c| *c != '(').collect();
+    fn date_column(display: &str) -> usize {
+        let prefix: String = display.chars().take_while(|c| *c != '(').collect();
         prefix.width()
     }
 
@@ -265,11 +257,7 @@ mod tests {
         // 30 CJK chars span 60 display columns, well over the 48-column cap.
         let wide = "ナ".repeat(30);
         let rows = align_candidates(&[candidate(ULID_A, &wide, "2026-06-25", &[])]);
-        let title: String = rows[0]
-            .matchable
-            .chars()
-            .take_while(|c| *c != '(')
-            .collect();
+        let title: String = rows[0].display.chars().take_while(|c| *c != '(').collect();
         let title = title.trim_end();
         assert!(title.ends_with('…'));
         // The whole title column never exceeds the cap in display columns.
@@ -283,11 +271,8 @@ mod tests {
             candidate(ULID_B, "ascii", "2026-06-25", &[]),
         ]);
         // Despite different char counts, both dates begin at the same column.
-        assert_eq!(
-            date_column(&rows[0].matchable),
-            date_column(&rows[1].matchable)
-        );
+        assert_eq!(date_column(&rows[0].display), date_column(&rows[1].display));
         // The CJK title (3 chars, 6 columns) is the widest, so it sets the cap.
-        assert_eq!(date_column(&rows[0].matchable), 6 + 2);
+        assert_eq!(date_column(&rows[0].display), 6 + 2);
     }
 }

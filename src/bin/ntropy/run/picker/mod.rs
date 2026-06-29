@@ -33,14 +33,14 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 pub use layout::align_candidates;
 use state::{PickerState, VisibleRow};
 
-/// One picker row split into its matchable and display-only parts.
+/// One picker row split into its displayed and display-only parts.
 ///
-/// The fuzzy matcher and the match-highlighting run over `matchable` only;
-/// `suffix` is shown (dimmed) but never matched, so a long identifier can be
-/// visible without polluting the query or the highlight.
+/// The match-highlighting runs over `display` only; `suffix` is shown (dimmed)
+/// but never matched, so a long identifier can be visible without polluting the
+/// query or the highlight.
 pub struct Row {
-    /// The matchable, highlightable text (shown first).
-    pub matchable: String,
+    /// The displayed, highlightable text (shown first).
+    pub display: String,
     /// Trailing display-only text, e.g. a note's ULID.
     pub suffix: String,
 }
@@ -273,7 +273,7 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
     // straddle the right edge.
     let mut drawn = UnicodeWidthStr::width(pointer);
     let positions = row.positions;
-    for (i, c) in row.matchable.chars().enumerate() {
+    for (i, c) in row.display.chars().enumerate() {
         let w = c.width().unwrap_or(0);
         if drawn + w > width {
             break;
