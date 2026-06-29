@@ -10,8 +10,8 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-TAG	COUNT
-area/work	2
-programming/rust	1
+TAG               COUNT
+area/work         2
+programming/rust  1
 
 ----- stderr -----

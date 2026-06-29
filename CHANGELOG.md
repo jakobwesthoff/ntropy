@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- The plain tables (`search`/`list`, `tags`, `view list`) now render with
+  space-aligned columns for every invocation, including piped and `-n` output.
+  Columns are padded to their widest cell in Unicode display width with the last
+  column left unpadded, so values that overflow a tab stop no longer push the
+  following columns out of line. The tab-separated `awk`/`cut` positional format
+  is retired (ADR 0033); `tail -n +2` still drops the header. Structured (JSON)
+  output for machine consumers is planned.
+
 ## 1.2.0 - 2026-06-27
 
 ### Added

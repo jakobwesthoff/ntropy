@@ -303,6 +303,41 @@ fn search_filters_by_tag() {
     });
 }
 
+/// Columns line up even when titles differ wildly in width, including a CJK
+/// title whose display width exceeds its `char` count. The padding is driven by
+/// the widest title, so the `TAGS` column starts at the same offset on every
+/// row (ADR 0033). ULIDs and dates redact to fixed tokens, so the alignment is
+/// read off the un-redacted `TITLE`/`TAGS` columns.
+#[test]
+fn search_aligns_varied_width_titles() {
+    // A third ULID, ordered after A and B so the newest-first listing is C,B,A.
+    const ULID_C: &str = "01CRZ3NDEKTSV4RRFFQ69G5FAV";
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "mid",
+        "---\ntitle: Mid Title\ntags: [area/home]\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "long",
+        "---\ntitle: A Much Longer Note Title\ntags: [area/work]\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_C,
+        "wide",
+        "---\ntitle: 日本語\ntags: [lang/jp]\n---\nbody\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
 #[test]
 fn search_full_text() {
     let dir = setup_vault();

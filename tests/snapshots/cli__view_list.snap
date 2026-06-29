@@ -11,8 +11,8 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-NAME	FIELD
-by-tag	tags
-by-status	status
+NAME       FIELD
+by-tag     tags
+by-status  status
 
 ----- stderr -----

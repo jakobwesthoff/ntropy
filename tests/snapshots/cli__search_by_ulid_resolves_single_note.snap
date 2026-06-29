@@ -12,7 +12,7 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-ID	DATE	TITLE	TAGS	PATH
-[ULID]	[DATE]	Wanted		[VAULT]/all-notes/[ULID]-wanted.md
+ID                          DATE        TITLE   TAGS  PATH
+[ULID]  [DATE]  Wanted        [VAULT]/all-notes/[ULID]-wanted.md
 
 ----- stderr -----

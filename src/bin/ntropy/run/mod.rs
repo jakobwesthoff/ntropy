@@ -315,12 +315,7 @@ fn cmd_view(vault: &Vault, sub: ViewCommand) -> Result<ExitCode> {
     match sub {
         ViewCommand::List => {
             let views = ops::list_views(vault).context("while listing views")?;
-            let stdout = std::io::stdout();
-            let mut out = stdout.lock();
-            writeln!(out, "NAME\tFIELD")?;
-            for view in views {
-                writeln!(out, "{}\t{}", view.name, view.field)?;
-            }
+            output::print_views(&views)?;
         }
         ViewCommand::Add { name, field } => {
             ops::add_view(vault, &name, &field).context("while adding the view")?;
