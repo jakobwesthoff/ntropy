@@ -60,10 +60,15 @@ fn redacted(vault: &Path) -> insta::Settings {
         settings.add_filter(&regex::escape(&canon.to_string_lossy()), "[VAULT]");
     }
     settings.add_filter(&regex::escape(&vault.to_string_lossy()), "[VAULT]");
-    settings.add_filter(r"[0-9A-HJKMNP-TV-Z]{26}", "[ULID]");
+    // The ULID and date tokens are the exact width of the values they replace
+    // (26 and 10 characters). The plain tables align columns on the real values
+    // before redaction (ADR 0033), so a same-width token keeps the snapshot's
+    // `ID` and `DATE` columns aligned with their header instead of collapsing to
+    // a shorter placeholder that would look ragged.
+    settings.add_filter(r"[0-9A-HJKMNP-TV-Z]{26}", "[ULID....................]");
     // Derived dates render in the local timezone (ADR 0010), so redact them to
     // keep snapshots stable across machines.
-    settings.add_filter(r"\d{4}-\d{2}-\d{2}", "[DATE]");
+    settings.add_filter(r"\d{4}-\d{2}-\d{2}", "[DATE....]");
     settings
 }
 

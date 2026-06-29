@@ -12,6 +12,6 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-Deleted [DATE]  Doomed  ([ULID])
+Deleted [DATE....]  Doomed  ([ULID....................])
 
 ----- stderr -----

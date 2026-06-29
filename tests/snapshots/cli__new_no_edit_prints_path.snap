@@ -3,8 +3,6 @@ source: tests/cli.rs
 info:
   program: ntropy
   args:
-    - "--vault"
-    - /var/folders/sy/j_tvsf5n5g3055p026gwzw1c0000gn/T/.tmpSw9BHL
     - new
     - My First Note
     - "--no-edit"
@@ -14,6 +12,6 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-[VAULT]/all-notes/[ULID]-my-first-note.md
+[VAULT]/all-notes/[ULID....................]-my-first-note.md
 
 ----- stderr -----

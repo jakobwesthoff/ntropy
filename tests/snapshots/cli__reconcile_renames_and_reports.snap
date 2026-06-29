@@ -11,7 +11,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 Reconciling vault at [VAULT]...
-renamed [ULID]-old.md -> [ULID]-brand-new.md
+renamed [ULID....................]-old.md -> [ULID....................]-brand-new.md
 ignored /by-tag/
 Scanned 1 note, renamed 1 file, relinked 0 links, synced 1 view, ignored 1 entry, unignored 0 entries, 0 warnings.
 

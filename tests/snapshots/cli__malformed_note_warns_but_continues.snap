@@ -12,7 +12,7 @@ success: true
 exit_code: 0
 ----- stdout -----
 ID                          DATE        TITLE  TAGS  PATH
-[ULID]  [DATE]  Good         [VAULT]/all-notes/[ULID]-good.md
+[ULID....................]  [DATE....]  Good         [VAULT]/all-notes/[ULID....................]-good.md
 
 ----- stderr -----
-warning: skipped `[ULID]-bad.md`: the frontmatter has no `title` field
+warning: skipped `[ULID....................]-bad.md`: the frontmatter has no `title` field

@@ -12,8 +12,8 @@ success: true
 exit_code: 0
 ----- stdout -----
 ID                          DATE        TITLE                     TAGS       PATH
-[ULID]  [DATE]  日本語                    lang/jp    [VAULT]/all-notes/[ULID]-wide.md
-[ULID]  [DATE]  A Much Longer Note Title  area/work  [VAULT]/all-notes/[ULID]-long.md
-[ULID]  [DATE]  Mid Title                 area/home  [VAULT]/all-notes/[ULID]-mid.md
+[ULID....................]  [DATE....]  日本語                    lang/jp    [VAULT]/all-notes/[ULID....................]-wide.md
+[ULID....................]  [DATE....]  A Much Longer Note Title  area/work  [VAULT]/all-notes/[ULID....................]-long.md
+[ULID....................]  [DATE....]  Mid Title                 area/home  [VAULT]/all-notes/[ULID....................]-mid.md
 
 ----- stderr -----

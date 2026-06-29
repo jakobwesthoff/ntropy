@@ -13,6 +13,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 ID                          DATE        TITLE      TAGS       PATH
-[ULID]  [DATE]  Work Note  area/work  [VAULT]/all-notes/[ULID]-work.md
+[ULID....................]  [DATE....]  Work Note  area/work  [VAULT]/all-notes/[ULID....................]-work.md
 
 ----- stderr -----

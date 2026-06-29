@@ -14,6 +14,6 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-[VAULT]/all-notes/[ULID]-standup.md
+[VAULT]/all-notes/[ULID....................]-standup.md
 
 ----- stderr -----
