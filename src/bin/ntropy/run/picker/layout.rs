@@ -59,9 +59,28 @@ pub fn align_candidates(candidates: &[Candidate]) -> Vec<Row> {
             Row {
                 display: parts.join("  "),
                 suffix: format!("  ({})", candidate.id),
+                search: search_text(candidate),
             }
         })
         .collect()
+}
+
+/// The full content scored against the query, in display order
+/// (`title  date  tags`) but untruncated, unpadded and without the display
+/// scaffolding (no brackets). Empty fields are skipped so the corpus never
+/// carries a stray double space. The ULID is excluded, matching the
+/// display-only `suffix`.
+fn search_text(candidate: &Candidate) -> String {
+    let tags = candidate.tags.join(", ");
+    [
+        candidate.title.as_str(),
+        candidate.date.as_str(),
+        tags.as_str(),
+    ]
+    .into_iter()
+    .filter(|field| !field.is_empty())
+    .collect::<Vec<_>>()
+    .join("  ")
 }
 
 /// The bracketed tag list (`[a, b]`), or empty when the note has no tags.
@@ -274,5 +293,55 @@ mod tests {
         assert_eq!(date_column(&rows[0].display), date_column(&rows[1].display));
         // The CJK title (3 chars, 6 columns) is the widest, so it sets the cap.
         assert_eq!(date_column(&rows[0].display), 6 + 2);
+    }
+
+    // -------------------------------------------------------------------------
+    // Full-content search corpus
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn search_carries_the_full_title_when_display_truncates_it() {
+        // A title past the cap is ellipsis-clipped for display, but its tail must
+        // stay searchable.
+        let long = format!("{}TAILWORD", "x".repeat(60));
+        let rows = align_candidates(&[candidate(ULID_A, &long, "2026-06-25", &[])]);
+        assert!(rows[0].display.contains('…'));
+        assert!(!rows[0].display.contains("TAILWORD"));
+        assert!(rows[0].search.contains("TAILWORD"));
+        assert!(rows[0].search.starts_with(&long));
+    }
+
+    #[test]
+    fn search_carries_the_full_tag_list_when_display_truncates_it() {
+        // Enough tags to overflow TAGS_CAP so a later tag is clipped from the
+        // display column but remains in the search corpus.
+        let many = ["alpha", "beta", "gamma", "delta", "epsilon", "lasttag"];
+        let rows = align_candidates(&[candidate(ULID_A, "t", "2026-06-25", &many)]);
+        assert!(rows[0].display.contains('…'));
+        assert!(!rows[0].display.contains("lasttag"));
+        assert!(rows[0].search.contains("lasttag"));
+    }
+
+    #[test]
+    fn search_contains_the_date() {
+        let rows = align_candidates(&[candidate(ULID_A, "title", "2026-06-25", &["work"])]);
+        assert!(rows[0].search.contains("2026-06-25"));
+    }
+
+    #[test]
+    fn search_is_plain_without_brackets_or_padding() {
+        // The corpus joins fields with a single double space and carries no
+        // display scaffolding: tags appear unbracketed and there is no run of
+        // padding spaces.
+        let rows = align_candidates(&[candidate(ULID_A, "note", "2026-06-25", &["work", "home"])]);
+        assert_eq!(rows[0].search, "note  2026-06-25  work, home");
+    }
+
+    #[test]
+    fn search_skips_empty_fields() {
+        // A note with no title and no tags yields just the date, with no leading
+        // or trailing separator.
+        let rows = align_candidates(&[candidate(ULID_A, "", "2026-06-25", &[])]);
+        assert_eq!(rows[0].search, "2026-06-25");
     }
 }

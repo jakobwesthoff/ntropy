@@ -18,6 +18,15 @@ and this project adheres to
   is retired (ADR 0033); `tail -n +2` still drops the header. Structured (JSON)
   output for machine consumers is planned.
 
+### Fixed
+
+- The interactive picker now fuzzy-searches the full note content. Titles and
+  tag lists are clipped to fit their columns, but the matcher previously only
+  saw the clipped text, so a long title's tail or a tag past the visible cap was
+  unfindable. Matching now runs over the untruncated title, tags and date, while
+  the columns stay width-capped; a match that lands in clipped-away text ranks
+  the note without painting a stray highlight.
+
 ## 1.2.0 - 2026-06-27
 
 ### Added

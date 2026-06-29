@@ -16,13 +16,27 @@ use nucleo::{Config, Matcher, Utf32String};
 
 use super::Row;
 
-/// One ranked result: the item it points at and the matched character
-/// positions within that item's rendered row.
+/// The two pre-converted nucleo haystacks for one row, in their distinct
+/// coordinate spaces.
+///
+/// Scoring and filtering run over `search` (the full content); the highlight
+/// pass re-runs the query over `display` so the positions it returns are already
+/// char indices into the drawn text. Keeping both pre-converted avoids
+/// reallocating a [`Utf32String`] on every keystroke.
+struct Haystacks {
+    /// Full content; what a query is scored and filtered against.
+    search: Utf32String,
+    /// The displayed text; what the highlight pass matches against.
+    display: Utf32String,
+}
+
+/// One ranked result: the item it points at and the highlight positions within
+/// that item's displayed text.
 struct Scored {
-    /// Index into [`PickerState::rows`] / `items`.
+    /// Index into [`PickerState::display`] / `items`.
     item: usize,
-    /// Char positions in the rendered row that the query matched, ascending.
-    positions: Vec<u32>,
+    /// Char positions in the displayed text to highlight, ascending.
+    highlights: Vec<u32>,
 }
 
 /// A row currently inside the viewport, handed to the renderer (or a test).
@@ -31,8 +45,8 @@ pub struct VisibleRow<'a> {
     pub display: &'a str,
     /// Trailing text shown but never matched or highlighted (e.g. an id).
     pub suffix: &'a str,
-    /// Char positions in `display` that matched the query, ascending.
-    pub positions: &'a [u32],
+    /// Char positions in `display` to highlight, ascending.
+    pub highlights: &'a [u32],
     /// Whether this row is the current selection.
     pub selected: bool,
 }
@@ -45,8 +59,8 @@ pub struct PickerState<T> {
     display: Vec<String>,
     /// The trailing display-only text per item (shown, never matched).
     suffix: Vec<String>,
-    /// Pre-converted match haystacks per item (the same text as `display`).
-    haystacks: Vec<Utf32String>,
+    /// Pre-converted search and display haystacks per item.
+    haystacks: Vec<Haystacks>,
     /// Reused fuzzy matcher; allocates a large scratch buffer, so it is kept.
     matcher: Matcher,
     /// The current query text.
@@ -70,13 +84,14 @@ impl<T> PickerState<T> {
     /// to at least one so movement and scrolling always have room.
     pub fn new(items: Vec<T>, rows: Vec<Row>, height: usize) -> Self {
         debug_assert_eq!(items.len(), rows.len(), "one row per item");
-        let haystacks: Vec<Utf32String> = rows
-            .iter()
-            .map(|r| Utf32String::from(r.display.as_str()))
-            .collect();
         let mut display: Vec<String> = Vec::with_capacity(rows.len());
         let mut suffix: Vec<String> = Vec::with_capacity(rows.len());
+        let mut haystacks: Vec<Haystacks> = Vec::with_capacity(rows.len());
         for row in rows {
+            haystacks.push(Haystacks {
+                search: Utf32String::from(row.search.as_str()),
+                display: Utf32String::from(row.display.as_str()),
+            });
             display.push(row.display);
             suffix.push(row.suffix);
         }
@@ -99,10 +114,14 @@ impl<T> PickerState<T> {
     /// Recompute the ranked result set for the current query.
     ///
     /// An empty query keeps every item in its original (newest-first) order with
-    /// no highlights. A non-empty query is fuzzy-matched against each row; rows
-    /// that match are ranked by score descending, ties broken by original index
-    /// so equal-score rows stay newest-first. The cursor and scroll reset to the
-    /// top because the result set has changed underneath them.
+    /// no highlights. A non-empty query is matched in two passes per row: scoring
+    /// runs over the full `search` content (so a match in truncated-away text
+    /// still ranks the row), and a second pass over the `display` text yields the
+    /// highlight positions in display coordinates. A row whose only match lives
+    /// in hidden content therefore ranks but shows no highlight. Rows are ordered
+    /// by score descending, ties broken by original index so equal-score rows
+    /// stay newest-first. The cursor and scroll reset to the top because the
+    /// result set has changed underneath them.
     fn recompute(&mut self) {
         self.selected = 0;
         self.offset = 0;
@@ -112,7 +131,7 @@ impl<T> PickerState<T> {
             self.scored = (0..self.items.len())
                 .map(|item| Scored {
                     item,
-                    positions: Vec::new(),
+                    highlights: Vec::new(),
                 })
                 .collect();
             return;
@@ -120,22 +139,30 @@ impl<T> PickerState<T> {
 
         let pattern = Pattern::parse(query, CaseMatching::Smart, Normalization::Smart);
         let mut ranked: Vec<(u32, usize, Vec<u32>)> = Vec::new();
-        let mut positions: Vec<u32> = Vec::new();
+        let mut highlights: Vec<u32> = Vec::new();
         for (item, haystack) in self.haystacks.iter().enumerate() {
-            positions.clear();
-            if let Some(score) =
-                pattern.indices(haystack.slice(..), &mut self.matcher, &mut positions)
-            {
-                positions.sort_unstable();
-                positions.dedup();
-                ranked.push((score, item, positions.clone()));
-            }
+            // The score over the full content decides whether the row matches and
+            // how it ranks.
+            let Some(score) = pattern.score(haystack.search.slice(..), &mut self.matcher) else {
+                continue;
+            };
+            // Highlights come from re-matching the displayed text; a match found
+            // only in hidden content leaves this empty.
+            highlights.clear();
+            pattern.indices(
+                haystack.display.slice(..),
+                &mut self.matcher,
+                &mut highlights,
+            );
+            highlights.sort_unstable();
+            highlights.dedup();
+            ranked.push((score, item, highlights.clone()));
         }
         // Best score first; equal scores keep their original newest-first order.
         ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
         self.scored = ranked
             .into_iter()
-            .map(|(_, item, positions)| Scored { item, positions })
+            .map(|(_, item, highlights)| Scored { item, highlights })
             .collect();
     }
 
@@ -245,7 +272,7 @@ impl<T> PickerState<T> {
                 VisibleRow {
                     display: &self.display[s.item],
                     suffix: &self.suffix[s.item],
-                    positions: &s.positions,
+                    highlights: &s.highlights,
                     selected: i == self.selected,
                 }
             })
@@ -296,7 +323,7 @@ impl<T> PickerState<T> {
         let mut out = String::new();
         for row in self.list_lines().into_iter().flatten() {
             let pointer = if row.selected { "> " } else { "  " };
-            let marked: HashSet<u32> = row.positions.iter().copied().collect();
+            let marked: HashSet<u32> = row.highlights.iter().copied().collect();
             let mut line = String::new();
             for (i, c) in row.display.chars().enumerate() {
                 if marked.contains(&(i as u32)) {
@@ -320,6 +347,9 @@ mod tests {
     use super::*;
 
     /// A fixed candidate set rendered by its own string identity (no suffix).
+    ///
+    /// `search` mirrors `display`, so these fixtures exercise the common case
+    /// where the searched and displayed text coincide.
     fn state(rows: &[&str], height: usize) -> PickerState<String> {
         let items: Vec<String> = rows.iter().map(|s| s.to_string()).collect();
         let picker_rows = items
@@ -327,6 +357,26 @@ mod tests {
             .map(|s| Row {
                 display: s.clone(),
                 suffix: String::new(),
+                search: s.clone(),
+            })
+            .collect();
+        PickerState::new(items, picker_rows, height)
+    }
+
+    /// Build a [`PickerState`] over rows with explicit `display`/`search` text,
+    /// so tests can drive the case where the searched content extends past what
+    /// is displayed.
+    fn state_with_search(rows: &[(&str, &str)], height: usize) -> PickerState<String> {
+        let items: Vec<String> = rows
+            .iter()
+            .map(|(display, _)| display.to_string())
+            .collect();
+        let picker_rows = rows
+            .iter()
+            .map(|(display, search)| Row {
+                display: display.to_string(),
+                suffix: String::new(),
+                search: search.to_string(),
             })
             .collect();
         PickerState::new(items, picker_rows, height)
@@ -509,6 +559,7 @@ mod tests {
         let rows = vec![Row {
             display: "alpha".to_string(),
             suffix: "  (ZID)".into(),
+            search: "alpha".to_string(),
         }];
         let mut s = PickerState::new(items, rows, 10);
         // The suffix is part of the displayed row...
@@ -602,5 +653,56 @@ mod tests {
                 ("a".to_string(), false),
             ]
         );
+    }
+
+    // -------------------------------------------------------------------------
+    // Dual-match: full-content scoring, display-coordinate highlighting
+    // -------------------------------------------------------------------------
+
+    /// Type each character of `query` into the picker in order.
+    fn type_query(s: &mut PickerState<String>, query: &str) {
+        for c in query.chars() {
+            s.push_char(c);
+        }
+    }
+
+    #[test]
+    fn match_only_in_hidden_content_ranks_without_highlighting() {
+        // `hiddenword` exists only in `search`, never in the displayed text, and
+        // shares no 'h' with it, so the display pass finds nothing to mark.
+        let mut s = state_with_search(&[("visible title", "visible title hiddenword")], 10);
+        type_query(&mut s, "hiddenword");
+        assert_eq!(s.counter().0, 1);
+        assert!(s.visible()[0].highlights.is_empty());
+    }
+
+    #[test]
+    fn match_in_visible_content_highlights_display_chars() {
+        // The query hits the displayed text, so highlights are non-empty and stay
+        // within the displayed row's char range.
+        let mut s = state_with_search(&[("alpha", "alpha extra")], 10);
+        s.push_char('a');
+        let visible = s.visible();
+        let highlights = visible[0].highlights;
+        assert!(!highlights.is_empty());
+        let display_chars = visible[0].display.chars().count() as u32;
+        assert!(highlights.iter().all(|&i| i < display_chars));
+    }
+
+    #[test]
+    fn date_like_content_matches_via_search_only() {
+        // A date lives in `search` but not in the `display` text, so the row
+        // matches yet shows no highlight.
+        let mut s = state_with_search(&[("note", "note 2026-06-25")], 10);
+        type_query(&mut s, "2026");
+        assert_eq!(s.counter().0, 1);
+        assert!(s.visible()[0].highlights.is_empty());
+    }
+
+    #[test]
+    fn no_match_in_either_corpus_drops_the_row() {
+        let mut s = state_with_search(&[("alpha", "alpha beta")], 10);
+        type_query(&mut s, "zzz");
+        assert_eq!(s.counter().0, 0);
     }
 }

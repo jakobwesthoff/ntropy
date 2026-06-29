@@ -33,16 +33,19 @@ use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 pub use layout::align_candidates;
 use state::{PickerState, VisibleRow};
 
-/// One picker row split into its displayed and display-only parts.
+/// One picker row split by role: searched, displayed, and display-only.
 ///
-/// The match-highlighting runs over `display` only; `suffix` is shown (dimmed)
-/// but never matched, so a long identifier can be visible without polluting the
-/// query or the highlight.
+/// Fuzzy scoring runs over `search` (the full content, which may extend past
+/// what the width-capped columns can show); match-highlighting runs over
+/// `display`; `suffix` is shown (dimmed) but never matched, so a long
+/// identifier can be visible without polluting the query or the highlight.
 pub struct Row {
     /// The displayed, highlightable text (shown first).
     pub display: String,
     /// Trailing display-only text, e.g. a note's ULID.
     pub suffix: String,
+    /// The full content scored against the query, untruncated and unpadded.
+    pub search: String,
 }
 
 /// Present `items` in the interactive picker and return the chosen one.
@@ -272,13 +275,13 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
     // display columns; a wide character is dropped whole rather than allowed to
     // straddle the right edge.
     let mut drawn = UnicodeWidthStr::width(pointer);
-    let positions = row.positions;
+    let highlights = row.highlights;
     for (i, c) in row.display.chars().enumerate() {
         let w = c.width().unwrap_or(0);
         if drawn + w > width {
             break;
         }
-        let matched = positions.binary_search(&(i as u32)).is_ok();
+        let matched = highlights.binary_search(&(i as u32)).is_ok();
         if matched {
             queue!(stdout, style::SetForegroundColor(style::Color::Yellow))?;
         }
