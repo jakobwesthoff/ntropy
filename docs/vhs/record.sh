@@ -127,4 +127,4 @@ vhs demo.tape
 echo "==> Cleaning up demo vault..."
 rm -rf "$VAULT"
 
-echo "==> Done. Outputs: docs/vhs/demo.webm and docs/vhs/demo.mp4"
+echo "==> Done. Outputs: docs/pages/assets/demo.webm and docs/pages/assets/demo.mp4"

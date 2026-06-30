@@ -39,8 +39,9 @@ This will:
 - `demo.webm` — WebM (smaller, modern browsers)
 - `demo.mp4` — MP4 (broader compatibility)
 
-Both land in this directory. They are git-ignored; move them wherever the
-landing page or README needs them.
+Both land in `docs/pages/assets/`, where the landing page generator picks them
+up. They are committed alongside the page so the GitHub Pages deploy has the
+video without rendering VHS in CI; re-run `./record.sh` to refresh them.
 
 ## What the demo shows
 

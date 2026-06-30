@@ -6,7 +6,3 @@
 
 # Transient commit-message file used by the commit workflow.
 .tmp-commit-msg
-
-# Generated demo recordings (see docs/vhs/).
-/docs/vhs/demo.webm
-/docs/vhs/demo.mp4

@@ -1,8 +1,8 @@
 # ntropy demo - single terminal
 # Run with: ./record.sh   (it seeds the vault this tape expects)
 
-Output demo.webm
-Output demo.mp4
+Output ../pages/assets/demo.webm
+Output ../pages/assets/demo.mp4
 
 Set Shell "zsh"
 Set FontFamily "VictorMono NFM SemiBold"

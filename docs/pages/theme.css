@@ -1,0 +1,32 @@
+/* ntropy theme — teal accent on a near-black base, matching the palette the
+   demo recording uses (docs/vhs/demo.tape): brand teal in the cyan slot over a
+   #0f0f12 background. Only the variables and rules that differ from the base
+   theme are set here; everything else inherits the generator defaults. */
+
+:root {
+  /* Brand teal. Primary and hover MUST stay plain hex — the favicon generator
+     parses them as hex, not CSS. */
+  --color-primary: #2dd4bf;
+  --color-primary-hover: #14b8a6;
+  --color-primary-subtle: #134e4a;
+  --color-primary-rgb: 45, 212, 191;
+
+  /* Near-black backgrounds tuned to the demo palette so the page and the
+     recording read as one surface. */
+  --color-bg: #0f0f12;
+  --color-bg-transparent: rgba(15, 15, 18, 0.9);
+  --color-bg-alt: #16161c;
+  --color-bg-card: #1c1c22;
+  --color-bg-code: #16161c;
+  --color-bg-titlebar: #1a1a1e;
+  --color-border: #2a2a32;
+}
+
+/* Hero title: a teal-into-mint gradient that lifts the short, lowercase
+   wordmark above the default white-to-primary fade. Override only
+   `background-image` — the base rule clips the gradient to the glyphs with
+   `background-clip: text` and a transparent fill, and the `background`
+   shorthand would reset that clip to `border-box`, painting a solid block. */
+.hero h1 {
+  background-image: linear-gradient(135deg, #5eead4 0%, #2dd4bf 45%, #0d9488 100%);
+}

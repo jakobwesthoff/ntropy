@@ -556,6 +556,35 @@ cargo insta review   # interactively accept/reject pending snapshots
 cargo insta accept   # accept all pending snapshots
 ```
 
+## Project page
+
+The landing page is generated from `docs/pages/` by the
+[project-page-starter](https://github.com/jakobwesthoff/project-page-starter)
+generator. A push to `main` that touches `README.md` or `docs/pages/` rebuilds
+and deploys it through [`.github/workflows/pages.yml`](.github/workflows/pages.yml).
+To build it manually (the generator runs on [Bun](https://bun.sh)):
+
+All commands run from this repo's root:
+
+```bash
+# One-time: clone the generator beside this repo and install its dependencies
+git clone https://github.com/jakobwesthoff/project-page-starter.git ../project-page-starter
+(cd ../project-page-starter/generator && bun install)
+
+# Build docs/pages into ./dist
+bun run ../project-page-starter/generator/bin/generate.ts \
+  --docs ./docs/pages \
+  --readme ./README.md \
+  --output ./dist \
+  --templates ../project-page-starter/templates
+
+# Preview locally, then open the printed URL
+bunx serve dist
+```
+
+The demo recording in `docs/pages/assets/` is produced by `docs/vhs/record.sh`
+(see [`docs/vhs/README.md`](docs/vhs/README.md)).
+
 ## Design
 
 The full design is recorded as decision records under [`docs/adr/`](docs/adr/)
