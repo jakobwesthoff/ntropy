@@ -39,33 +39,23 @@ After out-of-band edits, the filename slug can drift from the title and the
 materialized views go stale until reconcile runs. It is cheap and idempotent;
 when in doubt, run it.
 
-### YAML-unsafe titles
+### YAML-special titles
 
-`ntropy new` substitutes the title verbatim into the template's
-`title: {{title}}` line. A title that breaks YAML there makes `new` fail — and
-it can leave the broken note file behind in `all-notes/`, which every later
-command then skips with a warning until you delete or repair it. This bites on
-`: ` inside the title and on a leading YAML syntax character (`[`, `{`, `#`,
-`-`, `&`, `*`, `"`, `'`):
+`ntropy new` quotes or escapes the title as needed when it substitutes into
+the template's `title: {{title}}` line, so a title with `: ` inside it or a
+leading YAML syntax character (`[`, `{`, `#`, `-`, `&`, `*`, `"`, `'`) creates
+successfully:
 
 ```bash
-ntropy new --no-edit Q3: Planning kickoff      # FAILS: invalid YAML
-ntropy new --no-edit "[draft] roadmap"          # FAILS: invalid YAML
+ntropy new --no-edit "Q3: Planning kickoff"   # OK: frontmatter is quoted
+ntropy new --no-edit "[draft] roadmap"        # OK: frontmatter is quoted
 ```
 
-For such titles, create with a plain provisional title, then set the real one
-as a quoted YAML string and reconcile:
-
-```bash
-path=$(ntropy new --no-edit q3 planning kickoff)
-# edit "$path": set the frontmatter title to
-#   title: "Q3: Planning kickoff"
-ntropy reconcile
-```
-
-The same rule applies whenever you write frontmatter by hand: quote any YAML
-value that contains `: ` or starts with YAML syntax. Interior quotes in an
-otherwise plain title (`He said "go"`) are fine unquoted.
+This covers template placeholder substitution into frontmatter. When you
+write frontmatter by hand — a custom field in a note, or a template of your
+own — the usual YAML rule applies: quote any value that contains `: ` or
+starts with YAML syntax. Interior quotes in an otherwise plain value
+(`He said "go"`) are fine unquoted.
 
 ### Retitling a note
 

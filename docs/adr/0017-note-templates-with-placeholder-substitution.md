@@ -6,6 +6,12 @@ Date: 2026-06-24
 
 Accepted
 
+The verbatim-substitution contract is superseded, for the frontmatter region
+only, by [ADR 0034](0034-context-aware-frontmatter-substitution.md): a
+placeholder there is now escaped or quoted for the YAML syntax around it on
+its line. Body substitution, the placeholder set, and the templates
+directory layout are unchanged.
+
 ## Context
 
 New notes are created from a template (ADR 0015). The template needs a

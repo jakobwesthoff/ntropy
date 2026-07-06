@@ -46,7 +46,6 @@ language for filtering, and materialized symlink views for filesystem browsing.
 |-------|----|
 | `ntropy new My note` — blocks in an editor | `ntropy new --no-edit My note` |
 | Write a new file into `all-notes/` yourself | `path=$(ntropy new --no-edit …)`, then edit `$path` |
-| `ntropy new --no-edit Q3: Planning` — `:` breaks the YAML and strands a malformed file | create with a plain title, then set `title: "Q3: Planning"` in frontmatter and reconcile |
 | Rename a note file to retitle it | edit the frontmatter `title`, then `ntropy reconcile` |
 | Put `id:` or `created:` in frontmatter | nothing — identity and date live in the filename ULID |
 | `ntropy delete -n -f tag:old` — broad query | `ntropy delete -n -f <full-26-char-ulid>` |

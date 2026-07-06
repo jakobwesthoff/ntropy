@@ -185,6 +185,27 @@ fn new_missing_named_template_errors() {
 }
 
 #[test]
+fn new_no_edit_accepts_a_yaml_special_title() {
+    // Reproduces the bug in
+    // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
+    // a `: ` in the title used to break the default template's YAML and leave
+    // no note behind. Frontmatter substitution is now YAML-aware (ADR 0034),
+    // so the same title now creates a well-formed note.
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["new", "Q3: Planning kickoff", "--no-edit"]);
+        assert_cmd_snapshot!("new_yaml_special_title", cmd);
+    });
+
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n"]);
+        assert_cmd_snapshot!("search_shows_yaml_special_title", cmd);
+    });
+}
+
+#[test]
 fn today_creates_then_reuses_the_daily_note() {
     let dir = setup_vault();
     let templates = dir.path().join(".ntropy/templates");

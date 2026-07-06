@@ -1,0 +1,17 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - search
+    - "-n"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+ID                          DATE        TITLE                 TAGS  PATH
+[ULID....................]  [DATE....]  Q3: Planning kickoff        [VAULT]/all-notes/[ULID....................]-q3-planning-kickoff.md
+
+----- stderr -----

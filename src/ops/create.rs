@@ -128,6 +128,21 @@ mod tests {
     }
 
     #[test]
+    fn yaml_special_title_creates_a_well_formed_note() {
+        // Reproduces the bug in
+        // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
+        // a title containing `: ` used to break the default template's
+        // `title: {{title}}` line. `create_note` now succeeds and the file it
+        // writes is a well-formed note (ADR 0034).
+        let (_guard, vault) = temp_vault();
+        let note = create_note(&vault, "Q3: Planning kickoff", None).expect("create");
+        assert_eq!(note.title, "Q3: Planning kickoff");
+
+        let on_disk = std::fs::read_to_string(&note.path).expect("read");
+        assert!(on_disk.contains("title: 'Q3: Planning kickoff'"));
+    }
+
+    #[test]
     fn uses_custom_template_when_present() {
         let (_guard, vault) = temp_vault();
         let templates = vault.layout().templates_dir();

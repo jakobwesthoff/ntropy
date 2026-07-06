@@ -24,6 +24,11 @@ and this project adheres to
   head -2`) no longer panics with `failed printing to stdout: Broken pipe (os
   error 32)`. ntropy now exits quietly on a closed stdout pipe, like
   conventional Unix tools (status 141).
+- Titles with YAML-special characters (`Q3: Planning kickoff`, `[draft]
+  roadmap`, `#hashtag first`) previously made `new` fail. Frontmatter
+  placeholder substitution is now YAML-aware, quoting or escaping a
+  substituted value only when its surrounding YAML needs it, so such titles
+  work.
 
 ## v1.3.0 - 2026-06-29
 
