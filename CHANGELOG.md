@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- An agent skill under `skills/ntropy/` that teaches LLM coding agents how to
+  drive ntropy: a `SKILL.md` with the vault model and the non-interactive
+  ground rules (always `-n`, `--no-edit` on `new`/`today`, `reconcile` after
+  direct edits), plus reference docs on writing notes, querying, vaults, and
+  views. Install it with `npx skills add jakobwesthoff/ntropy` or by copying
+  the directory into an agent's skills folder; see the README's "Agent skill"
+  section.
+
 ## v1.3.0 - 2026-06-29
 
 ### Changed

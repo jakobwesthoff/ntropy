@@ -513,6 +513,35 @@ Exit codes are scriptable: a `search` that matches nothing exits non-zero, so
 parsing a single line. Where a note has to be named back to you (a delete prompt,
 an ambiguous match) it's shown as `date  title  [tags]  (id)`.
 
+## Agent skill
+
+LLM coding agents can drive ntropy well, since the CLI is fully scriptable,
+but they have to know the house rules: always pass `-n`, create notes with `ntropy
+new --no-edit` instead of hand-writing files into `all-notes/`, run `ntropy
+reconcile` after editing a note directly. The repo ships an agent skill that
+teaches exactly that: [`skills/ntropy/`](skills/ntropy/) holds a `SKILL.md`
+with the vault model and those rules, plus reference docs on writing notes,
+querying, vaults, and views. Its description marks it as relevant to any task
+involving ntropy or a note vault, so an agent with the skill installed picks it
+up on its own the moment a task touches one.
+
+The quickest install is the [`skills` CLI](https://skills.sh), which places the
+skill into Claude Code, Cursor, Codex, and most other SKILL.md-aware agents.
+It installs project-level by default and user-wide with `-g`:
+
+```bash
+npx skills add jakobwesthoff/ntropy
+```
+
+Or skip the tooling and copy the directory by hand. For Claude Code it belongs
+at `~/.claude/skills/ntropy` (every project) or `<project>/.claude/skills/ntropy`
+(just that project):
+
+```bash
+git clone https://github.com/jakobwesthoff/ntropy.git
+cp -R ntropy/skills/ntropy ~/.claude/skills/ntropy
+```
+
 ## Limitations
 
 - **macOS and Linux only.** Views are real symlink trees, which Windows makes
