@@ -519,7 +519,9 @@ LLM coding agents can drive ntropy well, since the CLI is fully scriptable,
 but they have to know the house rules: always pass `-n`, create notes with `ntropy
 new --no-edit` instead of hand-writing files into `all-notes/`, run `ntropy
 reconcile` after editing a note directly. The repo ships an agent skill that
-teaches exactly that: [`skills/ntropy/`](skills/ntropy/) holds a `SKILL.md`
+teaches exactly that:
+[`skills/ntropy/`](https://github.com/jakobwesthoff/ntropy/tree/main/skills/ntropy)
+holds a `SKILL.md`
 with the vault model and those rules, plus reference docs on writing notes,
 querying, vaults, and views. Its description marks it as relevant to any task
 involving ntropy or a note vault, so an agent with the skill installed picks it
@@ -590,7 +592,8 @@ cargo insta accept   # accept all pending snapshots
 The landing page is generated from `docs/pages/` by the
 [project-page-starter](https://github.com/jakobwesthoff/project-page-starter)
 generator. A push to `main` that touches `README.md` or `docs/pages/` rebuilds
-and deploys it through [`.github/workflows/pages.yml`](.github/workflows/pages.yml).
+and deploys it through
+[`.github/workflows/pages.yml`](https://github.com/jakobwesthoff/ntropy/blob/main/.github/workflows/pages.yml).
 To build it manually (the generator runs on [Bun](https://bun.sh)):
 
 All commands run from this repo's root:
@@ -612,15 +615,17 @@ bunx serve dist
 ```
 
 The demo recording in `docs/pages/assets/` is produced by `docs/vhs/record.sh`
-(see [`docs/vhs/README.md`](docs/vhs/README.md)).
+(see [`docs/vhs/README.md`](https://github.com/jakobwesthoff/ntropy/blob/main/docs/vhs/README.md)).
 
 ## Design
 
-The full design is recorded as decision records under [`docs/adr/`](docs/adr/)
-and narrative documents under [`docs/design/`](docs/design/).
+The full design is recorded as decision records under
+[`docs/adr/`](https://github.com/jakobwesthoff/ntropy/tree/main/docs/adr)
+and narrative documents under
+[`docs/design/`](https://github.com/jakobwesthoff/ntropy/tree/main/docs/design).
 
 ## License
 
-ntropy is licensed under the Mozilla Public License 2.0. See [`LICENSE`](LICENSE).
+ntropy is licensed under the Mozilla Public License 2.0. See [`LICENSE`](https://github.com/jakobwesthoff/ntropy/blob/main/LICENSE).
 
 Copyright (c) 2026 Jakob Westhoff <jakob@westhoffswelt.de>
