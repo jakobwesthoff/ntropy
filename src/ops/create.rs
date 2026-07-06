@@ -42,16 +42,24 @@ pub fn create_note(vault: &Vault, title: &str, template: Option<&str>) -> Result
     };
     let content = template::render(&template, &vars);
 
+    // A malformed template (e.g. one missing a `title` field, or one that
+    // embeds `{{title}}` into a bare plain scalar where a `: `-bearing title
+    // breaks the line) renders to text `Note::parse` rejects. Parsing before
+    // anything touches disk means a failed `new` leaves nothing behind for the
+    // rest of the CLI to warn about on every later scan. `modified` is
+    // unknown for content that only exists in memory, so it is filled in
+    // below once the file has actually been stat'd.
+    let all_notes = vault.layout().all_notes();
+    let path = all_notes.join(filename::build(&id, &slug));
+    let mut note = Note::parse(path.clone(), &content, None)?;
+
     // The canonical store must exist before the atomic write places a temp file
     // beside the destination; creating it is idempotent on an initialized vault.
-    let all_notes = vault.layout().all_notes();
     fsutil::create_dir_all(&all_notes)?;
-
-    let path = all_notes.join(filename::build(&id, &slug));
     fsutil::atomic_write(&path, content.as_bytes())?;
 
-    let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
-    Ok(Note::parse(path, &content, modified)?)
+    note.modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+    Ok(note)
 }
 
 /// The outcome of resolving today's note: the note plus whether it was created.
@@ -173,6 +181,70 @@ mod tests {
         assert_eq!(note.tags, vec!["meeting"]);
         let on_disk = std::fs::read_to_string(&note.path).expect("read");
         assert!(on_disk.contains("Agenda for Standup"));
+    }
+
+    #[test]
+    fn template_without_title_field_errors_and_leaves_no_stray_file() {
+        // Reproduces aspect 1 of
+        // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
+        // a custom template whose frontmatter has no `title` field renders to a
+        // file `Note::parse` rejects. `create_note` must fail without writing
+        // anything to `all-notes/`.
+        let (_guard, vault) = temp_vault();
+        let templates = vault.layout().templates_dir();
+        std::fs::create_dir_all(&templates).expect("mkdir templates");
+        std::fs::write(
+            vault.layout().default_template(),
+            "---\ntags: []\n---\nBody with no title field.\n",
+        )
+        .expect("write template");
+
+        let err = create_note(&vault, "Hello World", None).expect_err("invalid note");
+        assert!(matches!(
+            err,
+            crate::error::Error::Note(crate::note::NoteError::Frontmatter(_))
+        ));
+
+        let all_notes = vault.layout().all_notes();
+        let stray = if all_notes.is_dir() {
+            std::fs::read_dir(&all_notes)
+                .expect("read all-notes")
+                .count()
+        } else {
+            0
+        };
+        assert_eq!(stray, 0, "a failed create must not strand any file");
+    }
+
+    #[test]
+    fn embedded_placeholder_breaking_yaml_errors_and_leaves_no_stray_file() {
+        // ADR 0034 substitutes `{{title}}` verbatim when it appears embedded in
+        // a bare plain scalar (e.g. `title: Meeting {{title}} notes`), rather
+        // than quoting the whole line as it does for a placeholder that is the
+        // entire value. A title containing `: ` still breaks the YAML in that
+        // case, so this pins the validate-before-write safety net that catches
+        // exactly that row.
+        let (_guard, vault) = temp_vault();
+        let templates = vault.layout().templates_dir();
+        std::fs::create_dir_all(&templates).expect("mkdir templates");
+        std::fs::write(
+            vault.layout().default_template(),
+            "---\ntitle: Meeting {{title}} notes\ntags: []\n---\nBody.\n",
+        )
+        .expect("write template");
+
+        let err = create_note(&vault, "Q3: Planning kickoff", None).expect_err("invalid yaml note");
+        assert!(matches!(err, crate::error::Error::Note(_)));
+
+        let all_notes = vault.layout().all_notes();
+        let stray = if all_notes.is_dir() {
+            std::fs::read_dir(&all_notes)
+                .expect("read all-notes")
+                .count()
+        } else {
+            0
+        };
+        assert_eq!(stray, 0, "a failed create must not strand any file");
     }
 
     #[test]

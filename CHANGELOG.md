@@ -29,6 +29,11 @@ and this project adheres to
   placeholder substitution is now YAML-aware, quoting or escaping a
   substituted value only when its surrounding YAML needs it, so such titles
   work.
+- A `new` whose template rendered an invalid note (e.g. one missing a `title`
+  field) previously left the malformed file behind in `all-notes/`; every
+  later command then warned about it until it was cleaned up by hand. The
+  rendered note is now validated before anything is written, so a failed
+  `new` leaves nothing behind.
 
 ## v1.3.0 - 2026-06-29
 

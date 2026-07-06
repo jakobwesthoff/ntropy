@@ -206,6 +206,36 @@ fn new_no_edit_accepts_a_yaml_special_title() {
 }
 
 #[test]
+fn new_no_edit_with_invalid_template_leaves_no_stray_file() {
+    // Aspect 1 of
+    // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
+    // a template whose rendered output is not a well-formed note (here, no
+    // `title` field) must fail `new` without leaving a file in `all-notes/`.
+    let dir = setup_vault();
+    let templates = dir.path().join(".ntropy/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(
+        templates.join("default.md"),
+        "---\ntags: []\n---\nBody with no title field.\n",
+    )
+    .expect("write broken default template");
+
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["new", "Hello World", "--no-edit"]);
+        assert_cmd_snapshot!(cmd);
+    });
+
+    // No note was created.
+    assert_eq!(
+        fs::read_dir(dir.path().join("all-notes"))
+            .expect("read all-notes")
+            .count(),
+        0
+    );
+}
+
+#[test]
 fn today_creates_then_reuses_the_daily_note() {
     let dir = setup_vault();
     let templates = dir.path().join(".ntropy/templates");
