@@ -498,15 +498,20 @@ picker jumps to any note by title.
 
 Pipe ntropy anywhere, or pass `-n`/`--non-interactive`, and it drops all the
 interactive niceties: no picker, no editor, just plain text on stdout. `search`
-then prints one note per line as a tab-separated table:
+then prints one note per line as a space-aligned `ID DATE TITLE TAGS PATH`
+table: each column is padded to its widest cell in Unicode display width and
+separated from the next by two or more spaces, except the last column, which
+is left unpadded so no line carries trailing whitespace. Rows are newest
+first, tags comma-joined, led by an uppercase header row so the output is
+self-describing.
 
-```
-ID<TAB>DATE<TAB>TITLE<TAB>TAGS<TAB>PATH
-```
-
-newest first, tags comma-joined, led by an uppercase header row so the output is
-self-describing. `awk` and `cut` work on it directly, and `tail -n +2` drops the
-header. (`tags` and `view list` print headers too.)
+Split it with `awk -F'  +'` (field separator: a run of two or more spaces),
+for example `awk -F'  +' '{print $1}'` for the ID column; `tail -n +2` still
+drops the header. One caveat: a cell can itself contain a two-space run (a
+title with doubled spaces is rendered verbatim), which shifts the fields after
+it — so treat TITLE and the columns after it as best-effort rather than a
+positional contract. ID and DATE can never contain spaces and are always safe.
+(`tags` and `view list` print headers too.)
 
 Exit codes are scriptable: a `search` that matches nothing exits non-zero, so
 `if ntropy search -n tag:urgent; then …` branches on "did anything match" without
