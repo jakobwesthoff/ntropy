@@ -18,6 +18,13 @@ and this project adheres to
   the directory into an agent's skills folder; see the README's "Agent skill"
   section.
 
+### Fixed
+
+- Piping ntropy's output into a reader that exits early (e.g. `ntropy info |
+  head -2`) no longer panics with `failed printing to stdout: Broken pipe (os
+  error 32)`. ntropy now exits quietly on a closed stdout pipe, like
+  conventional Unix tools (status 141).
+
 ## v1.3.0 - 2026-06-29
 
 ### Changed

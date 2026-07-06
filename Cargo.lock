@@ -674,6 +674,7 @@ dependencies = [
  "insta",
  "insta-cmd",
  "jiff",
+ "libc",
  "lsp-server",
  "lsp-types",
  "nucleo",
