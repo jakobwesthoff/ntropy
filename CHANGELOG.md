@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `init` now seeds a `README.md` in the vault root that identifies the
+  directory as an ntropy vault, links to <https://ntropy.westhoffswelt.de>,
+  and shows how to install the CLI (`cargo install ntropy`), so anyone who
+  discovers a vault knows how to access it. Like the templates, it is written
+  only when absent: a re-init restores a deleted README but never overwrites
+  an edited one. `README.md` is now a reserved name, so a view cannot clobber
+  it.
+
 ## v1.4.0 - 2026-07-06
 
 ### Added

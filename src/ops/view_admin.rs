@@ -141,6 +141,16 @@ mod tests {
     }
 
     #[test]
+    fn add_rejects_readme_as_view_name() {
+        let (_g, v) = temp_vault();
+        let err = add_view(&v, "README.md", "tags").expect_err("reserved");
+        assert!(matches!(
+            err,
+            Error::ViewAdmin(ViewAdminError::ReservedName(_))
+        ));
+    }
+
+    #[test]
     fn add_rejects_duplicate() {
         let (_g, v) = temp_vault();
         add_view(&v, "by-tag", "tags").expect("add");

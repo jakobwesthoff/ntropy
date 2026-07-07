@@ -23,6 +23,7 @@ path; passing both a path and `--vault` to `init` is rejected as a conflict:
 <vault>/
 ├── all-notes/            # canonical notes, <ulid>-<slug>.md — the source of truth
 ├── by-tag/               # seeded materialized view (symlinks, derived, disposable)
+├── README.md             # seeded: identifies the vault, links the ntropy docs
 ├── .gitignore            # auto-managed: ignores the view directories
 └── .ntropy/              # the only reserved directory
     ├── config.toml       # per-vault view definitions
@@ -114,8 +115,8 @@ Templates are plain files under `<vault>/.ntropy/templates/`, not config. See
 
 ## Reserved names
 
-Inside a vault, `all-notes`, `.ntropy`, and `.gitignore` are reserved, as is
-every configured view name. `.ntropy-vault` is reserved as the pointer-file
+Inside a vault, `all-notes`, `.ntropy`, `.gitignore`, and `README.md` are
+reserved, as is every configured view name. `.ntropy-vault` is reserved as the pointer-file
 name. MUST NOT create your own files or directories under these names.
 
 ## Vaults under git

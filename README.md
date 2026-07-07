@@ -118,6 +118,7 @@ A vault is an ordinary directory with a few well-known children:
 │   └── 01j8za2…-q3-planning.md
 ├── by-tag/           # a materialized view: symlinks grouped by the `tags` field
 ├── by-status/        # another view, grouped by the `status` field
+├── README.md         # seeded by `init`: what this directory is, how to get ntropy
 └── .ntropy/          # config and templates (the only reserved directory)
 ```
 

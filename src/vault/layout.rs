@@ -26,12 +26,15 @@ pub const TODAY_TEMPLATE_FILE: &str = "today.md";
 pub const POINTER_FILE: &str = ".ntropy-vault";
 /// The auto-managed root ignore file listing the derived view directories.
 pub const GITIGNORE_FILE: &str = ".gitignore";
+/// The root README explaining the vault to someone who discovers it.
+pub const README_FILE: &str = "README.md";
 
 /// Top-level names reserved by ntropy; a view directory may use none of them.
 ///
-/// `.gitignore` is reserved alongside the canonical directories so a view can
-/// never be named after, and thereby clobber, the file ntropy manages.
-pub const RESERVED_NAMES: [&str; 3] = [ALL_NOTES_DIR, NTROPY_DIR, GITIGNORE_FILE];
+/// `.gitignore` and `README.md` are reserved alongside the canonical
+/// directories so a view can never be named after, and thereby clobber, a
+/// file ntropy manages.
+pub const RESERVED_NAMES: [&str; 4] = [ALL_NOTES_DIR, NTROPY_DIR, GITIGNORE_FILE, README_FILE];
 
 /// Computes the well-known paths of a vault rooted at a directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -90,6 +93,11 @@ impl Layout {
     pub fn gitignore_file(&self) -> PathBuf {
         self.root.join(GITIGNORE_FILE)
     }
+
+    /// `<root>/README.md`, the vault README seeded by `init`.
+    pub fn readme_file(&self) -> PathBuf {
+        self.root.join(README_FILE)
+    }
 }
 
 /// Whether `path` looks like a vault: it contains a `.ntropy/` directory.
@@ -121,6 +129,7 @@ mod tests {
         );
         assert_eq!(layout.view_dir("by-tag"), PathBuf::from("/vault/by-tag"));
         assert_eq!(layout.gitignore_file(), PathBuf::from("/vault/.gitignore"));
+        assert_eq!(layout.readme_file(), PathBuf::from("/vault/README.md"));
     }
 
     #[test]
@@ -136,6 +145,7 @@ mod tests {
         assert!(is_reserved_name("all-notes"));
         assert!(is_reserved_name(".ntropy"));
         assert!(is_reserved_name(".gitignore"));
+        assert!(is_reserved_name("README.md"));
         assert!(!is_reserved_name("by-tag"));
     }
 }
