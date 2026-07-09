@@ -89,7 +89,7 @@ fn materialize_body(doc: &PreparedDocument) -> String {
     // The prepared table follows extraction order; sorting by descending start
     // makes the back-to-front rewrite independent of that order.
     let mut links: Vec<&super::ResolvedLink> = doc.links.iter().collect();
-    links.sort_by(|a, b| b.range.start.cmp(&a.range.start));
+    links.sort_by_key(|link| std::cmp::Reverse(link.range.start));
 
     for link in links {
         let replacement = match &link.target_title {
