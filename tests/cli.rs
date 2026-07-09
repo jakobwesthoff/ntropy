@@ -6,8 +6,11 @@
 //! code with `insta-cmd` (ADR 0021).
 //!
 //! Only non-interactive paths are exercised; the picker and editor TUIs are
-//! validated manually (ADR 0021). Snapshots redact the temporary vault path and
-//! ULIDs so they are stable across runs.
+//! validated manually (ADR 0021). Interactivity keys off the controlling
+//! terminal (ADR 0036), which exists for a local `cargo test` but not
+//! necessarily in CI, so every invocation that would branch on it must pass
+//! `-n` or `--print` to stay deterministic across both. Snapshots redact the
+//! temporary vault path and ULIDs so they are stable across runs.
 
 use std::fs;
 use std::path::Path;

@@ -414,12 +414,18 @@ fn report_ambiguous(selector: &str, notes: &[ntropy::note::Note]) -> Result<()> 
     Ok(())
 }
 
-/// Prompt on stdin for a yes/no confirmation.
+/// Prompt on the controlling terminal for a yes/no confirmation.
+///
+/// Question and answer both bypass stdout/stdin, so a redirected stream can
+/// neither swallow the prompt nor feed the answer (ADR 0036). Confirmation is
+/// only ever requested in interactive mode, which guarantees the terminal
+/// exists.
 fn confirm(prompt: &str) -> Result<bool> {
-    print!("{prompt}");
-    std::io::stdout().flush()?;
+    let tty = interact::open_tty().context("while opening the controlling terminal")?;
+    write!(&tty, "{prompt}").context("while writing the confirmation prompt")?;
+    (&tty).flush()?;
     let mut line = String::new();
-    std::io::stdin().lock().read_line(&mut line)?;
+    std::io::BufReader::new(&tty).read_line(&mut line)?;
     Ok(matches!(
         line.trim().to_ascii_lowercase().as_str(),
         "y" | "yes"

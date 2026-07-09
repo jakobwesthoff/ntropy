@@ -2,14 +2,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! The interactive fuzzy picker (ADR 0014, ADR 0027).
+//! The interactive fuzzy picker (ADR 0027, ADR 0036).
 //!
 //! ntropy renders its own picker over the `nucleo` matcher and `crossterm`
 //! rather than a picker library, so the selection bar adapts to any terminal
 //! theme (it uses reverse video instead of a hardcoded background) and the
-//! whole UI stays under our control. The public surface is the single generic
-//! [`pick`] function; everything else is private, so swapping the engine never
-//! touches call sites.
+//! whole UI stays under our control. It draws on the controlling terminal,
+//! keeping stdout free for piped data (ADR 0036). The public surface is the
+//! single generic [`pick`] function; everything else is private, so swapping
+//! the engine never touches call sites.
 //!
 //! All interaction logic lives in [`state::PickerState`] and is unit tested
 //! without a TTY (ADR 0021). This module is the thin glue that maps `crossterm`
@@ -18,7 +19,8 @@
 mod layout;
 mod state;
 
-use std::io::{self, Write};
+use std::fs::File;
+use std::io::Write;
 
 use anyhow::{Context, Result};
 use crossterm::style::Attribute;
@@ -61,7 +63,14 @@ pub fn pick<T>(items: Vec<T>, render_all: impl FnOnce(&[T]) -> Vec<Row>) -> Resu
         return Ok(None);
     }
 
-    let mut stdout = io::stdout();
+    // The picker draws on the controlling terminal, never on stdout, so stdout
+    // stays a pure data channel: `search -p | pbcopy` shows the picker and
+    // pipes only the selected path (ADR 0036).
+    let mut tty = super::interact::open_tty()
+        .context("while opening the controlling terminal for the picker")?;
+    let mut teardown_tty = tty
+        .try_clone()
+        .context("while cloning the terminal handle")?;
     terminal::enable_raw_mode().context("while enabling raw mode")?;
     // Arm raw-mode teardown the instant raw mode is on, before any further
     // fallible setup. If entering the alternate screen below fails, this guard
@@ -69,17 +78,15 @@ pub fn pick<T>(items: Vec<T>, render_all: impl FnOnce(&[T]) -> Vec<Row>) -> Resu
     let _raw_guard = TerminalGuard::new(|| {
         let _ = terminal::disable_raw_mode();
     });
-    execute!(stdout, terminal::EnterAlternateScreen)
-        .context("while entering the alternate screen")?;
+    execute!(tty, terminal::EnterAlternateScreen).context("while entering the alternate screen")?;
     // Armed only after the alternate screen is actually entered, so it leaves
     // exactly what was entered. It drops before the raw guard (reverse arming
     // order), leaving the alternate screen before raw mode is disabled.
-    let _alt_guard = TerminalGuard::new(|| {
-        let mut stdout = io::stdout();
-        let _ = execute!(stdout, terminal::LeaveAlternateScreen, cursor::Show);
+    let _alt_guard = TerminalGuard::new(move || {
+        let _ = execute!(teardown_tty, terminal::LeaveAlternateScreen, cursor::Show);
     });
 
-    run_loop(&mut stdout, items, render_all)
+    run_loop(&mut tty, items, render_all)
 }
 
 /// Restores one piece of terminal state when dropped, on every exit path
@@ -106,7 +113,7 @@ impl<F: FnMut()> Drop for TerminalGuard<F> {
 
 /// The read-draw-react loop. Returns the selection, or `None` on abort.
 fn run_loop<T>(
-    stdout: &mut io::Stdout,
+    tty: &mut File,
     items: Vec<T>,
     render_all: impl FnOnce(&[T]) -> Vec<Row>,
 ) -> Result<Option<T>> {
@@ -115,7 +122,7 @@ fn run_loop<T>(
     let mut state = PickerState::new(items, picker_rows, list_height(rows));
 
     loop {
-        draw(stdout, &state, cols).context("while drawing the picker")?;
+        draw(tty, &state, cols).context("while drawing the picker")?;
 
         match event::read().context("while reading a key event")? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
@@ -169,9 +176,9 @@ fn list_height(terminal_rows: u16) -> usize {
 
 /// Draw the whole picker, bottom-anchored: the list region (best match at the
 /// bottom), a divider, the prompt, a second divider, then the dimmed `m/n` stats.
-fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result<()> {
+fn draw<T>(tty: &mut File, state: &PickerState<T>, cols: u16) -> Result<()> {
     queue!(
-        stdout,
+        tty,
         cursor::MoveTo(0, 0),
         terminal::Clear(terminal::ClearType::All),
     )?;
@@ -182,30 +189,30 @@ fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result
     let list_rows = lines.len() as u16;
     for (i, line) in lines.iter().enumerate() {
         if let Some(row) = line {
-            queue!(stdout, cursor::MoveTo(0, i as u16))?;
-            draw_row(stdout, row, cols)?;
+            queue!(tty, cursor::MoveTo(0, i as u16))?;
+            draw_row(tty, row, cols)?;
         }
     }
 
     // Divider directly above the prompt.
-    queue!(stdout, cursor::MoveTo(0, list_rows))?;
-    draw_divider(stdout, cols)?;
+    queue!(tty, cursor::MoveTo(0, list_rows))?;
+    draw_divider(tty, cols)?;
 
     // Prompt, framed by a second divider below it.
     let prompt_row = list_rows + 1;
     queue!(
-        stdout,
+        tty,
         cursor::MoveTo(0, prompt_row),
         style::Print(format!("{PROMPT_PREFIX}{}", state.query())),
         cursor::MoveTo(0, prompt_row + 1),
     )?;
-    draw_divider(stdout, cols)?;
+    draw_divider(tty, cols)?;
 
     // Dimmed stats under the second divider, aligned under the query text.
     let (matching, total) = state.counter();
     let rank = state.selected_rank();
     queue!(
-        stdout,
+        tty,
         cursor::MoveTo(0, prompt_row + 2),
         style::SetAttribute(Attribute::Dim),
         style::Print(stats_line(cols as usize, rank, matching, total)),
@@ -214,16 +221,16 @@ fn draw<T>(stdout: &mut io::Stdout, state: &PickerState<T>, cols: u16) -> Result
 
     // Park the cursor at the end of the query so typing reads naturally.
     let prompt_col = (PROMPT_PREFIX.width() + state.query().width()) as u16;
-    queue!(stdout, cursor::MoveTo(prompt_col, prompt_row))?;
+    queue!(tty, cursor::MoveTo(prompt_col, prompt_row))?;
 
-    stdout.flush().context("while flushing the picker frame")?;
+    tty.flush().context("while flushing the picker frame")?;
     Ok(())
 }
 
 /// Draw a full-width colored divider line.
-fn draw_divider(stdout: &mut io::Stdout, cols: u16) -> Result<()> {
+fn draw_divider(tty: &mut File, cols: u16) -> Result<()> {
     queue!(
-        stdout,
+        tty,
         style::SetForegroundColor(DIVIDER_COLOR),
         style::Print(divider_line(cols as usize, '─')),
         style::ResetColor,
@@ -258,16 +265,16 @@ fn stats_line(width: usize, rank: Option<usize>, matching: usize, total: usize) 
 /// matched characters are yellow on either row; the display-only ULID suffix is
 /// dimmed (or rides the cyan body on the selected row). All colors are the
 /// terminal's own ANSI palette, so the picker adapts to its theme.
-fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<()> {
+fn draw_row(tty: &mut File, row: &VisibleRow<'_>, cols: u16) -> Result<()> {
     let width = cols as usize;
     let selected = row.selected;
     let pointer = if selected { SELECTION_POINTER } else { "  " };
 
     // The selected row's body is cyan; the pointer shares that accent.
     if selected {
-        queue!(stdout, style::SetForegroundColor(style::Color::Cyan))?;
+        queue!(tty, style::SetForegroundColor(style::Color::Cyan))?;
     }
-    queue!(stdout, style::Print(pointer))?;
+    queue!(tty, style::Print(pointer))?;
 
     // Truncate to the terminal width (in display columns) so a long row never
     // wraps and breaks the layout. The matchable part is drawn first (matches in
@@ -283,15 +290,15 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
         }
         let matched = highlights.binary_search(&(i as u32)).is_ok();
         if matched {
-            queue!(stdout, style::SetForegroundColor(style::Color::Yellow))?;
+            queue!(tty, style::SetForegroundColor(style::Color::Yellow))?;
         }
-        queue!(stdout, style::Print(c))?;
+        queue!(tty, style::Print(c))?;
         if matched {
             // Restore the row's base color after a highlighted character.
             if selected {
-                queue!(stdout, style::SetForegroundColor(style::Color::Cyan))?;
+                queue!(tty, style::SetForegroundColor(style::Color::Cyan))?;
             } else {
-                queue!(stdout, style::ResetColor)?;
+                queue!(tty, style::ResetColor)?;
             }
         }
         drawn += w;
@@ -301,24 +308,24 @@ fn draw_row(stdout: &mut io::Stdout, row: &VisibleRow<'_>, cols: u16) -> Result<
         // The ULID is dimmed on unselected rows; on the selected row it simply
         // rides the cyan body color.
         if !selected {
-            queue!(stdout, style::SetAttribute(Attribute::Dim))?;
+            queue!(tty, style::SetAttribute(Attribute::Dim))?;
         }
         for c in row.suffix.chars() {
             let w = c.width().unwrap_or(0);
             if drawn + w > width {
                 break;
             }
-            queue!(stdout, style::Print(c))?;
+            queue!(tty, style::Print(c))?;
             drawn += w;
         }
         if !selected {
-            queue!(stdout, style::SetAttribute(Attribute::NormalIntensity))?;
+            queue!(tty, style::SetAttribute(Attribute::NormalIntensity))?;
         }
     }
 
     // Reset styling so it never bleeds into the next line or a blank area.
     queue!(
-        stdout,
+        tty,
         style::SetAttribute(Attribute::Reset),
         style::ResetColor
     )?;

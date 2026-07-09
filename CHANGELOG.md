@@ -19,6 +19,15 @@ and this project adheres to
 
 ### Changed
 
+- **Breaking:** interactivity now keys off the controlling terminal instead of
+  stdout. Redirecting output no longer switches ntropy into plain mode; only
+  `-n` (or the absence of a terminal, as in cron and CI) does. The picker, the
+  delete confirmation, and the editor all talk to the controlling terminal
+  directly, so `ntropy search -p | pbcopy` opens the picker and pipes only the
+  selected path. Scripts that piped or captured output without flags must now
+  say so: `ntropy search ... | grep` needs `-n` for the table, and
+  `path=$(ntropy new Title)` needs `-p` (or `-n`) to print the path instead of
+  opening the editor.
 - The `--no-edit` flag on `new` and `today` is renamed to `--print`, which was
   previously its alias, and gains the short form `-p`. `--no-edit` keeps
   working as a hidden alias, so existing scripts are unaffected.
