@@ -7,6 +7,7 @@ The command surface and its behavior. Consolidates
 [ADR 0018](../adr/0018-cli-command-surface.md),
 [ADR 0031](../adr/0031-merge-edit-into-search.md),
 [ADR 0036](../adr/0036-interactivity-keyed-to-the-controlling-terminal.md),
+[ADR 0037](../adr/0037-render-command-surface.md),
 and the query DSL in [query-and-search.md](query-and-search.md).
 
 ## Global behavior
@@ -138,6 +139,39 @@ redirected streams can neither swallow the question nor feed the answer
 ambiguous selector opens the picker pre-filtered interactively, and errors
 with a non-zero exit under `-n` (ADR 0025). In non-interactive mode `--force`
 is required, since there is no prompt.
+
+### `render <id|query>`
+
+Turn one note into a document artifact. v1 produces a PDF through pandoc with
+typst as the PDF engine, so both tools must be installed and on `PATH`; an
+engine whose tools are missing is an error naming what to install, never a
+silent fall-back. The selector follows the same id-or-query rule as `search`.
+Like `delete`, `render` must resolve to exactly one note: an ambiguous selector
+opens the picker pre-filtered interactively, and errors with the candidate list
+under `-n` (ADR 0025/0036). A cancelled picker exits non-zero under `-p`, so
+`open "$(ntropy render -p ...)"` branches correctly, and is a successful no-op
+without it, like `delete`.
+
+- `--to <format>` names the output format and defaults to `pdf`.
+- `--engine <name>` overrides the format's default engine; v1 has only the
+  `pandoc` engine, so the flag accepts that single value and exists so
+  invocations written today keep working when other engines arrive.
+- `--output <path>` / `-o` names the artifact; the default is `./<slug>.pdf` in
+  the current directory, from the slug component of the note's filename. An
+  existing file at the target is overwritten.
+- `--print` / `-p` prints the artifact's path to stdout as one line on success;
+  without it stdout stays silent and the file is the outcome (ADR 0036).
+- Scan warnings print to stderr and fail the command under `--strict`, matching
+  `search`.
+
+`render` is read-only: no filename realignment and no view refresh.
+
+Examples:
+
+    ntropy render 01ARZ3NDEKTSV4RRFFQ69G5FAV        # render one note by id
+    ntropy render tag:work -n                        # error on an ambiguous selector
+    open "$(ntropy render -p 'text:"quarterly"')"    # render, then open the PDF
+    ntropy render 01ARZ3NDEKTSV4RRFFQ69G5FAV -o report.pdf
 
 ### `reconcile`
 

@@ -209,6 +209,7 @@ sync.
 | `today` | Open today's note, creating it from the [`today` template](#daily-notes-with-today) on first use that day. `--print`/`-p` just prints the path. |
 | `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it. |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
+| `render <id\|query>` | [Render one note to a PDF](#rendering-notes-to-pdf) via pandoc and typst (both required on `PATH`). Must resolve to exactly one note. `--to` picks the format (default `pdf`), `-o` the output path (default `./<slug>.pdf`), `-p` prints the artifact path. |
 | `reconcile` | Realign filenames whose slug drifted from the title and re-sync every view (catches up after edits made outside ntropy). |
 | `view list\|add\|remove` | Manage [materialized views](#materialized-views), e.g. `ntropy view add by-status --field status`. |
 | `tags` | List every tag with its note count. |
@@ -444,6 +445,30 @@ editor's preview, and any other Markdown tool follow them for free.
 
 You can type these by hand, but you don't have to — that's what the
 [language server](#language-server) is for.
+
+## Rendering notes to PDF
+
+`ntropy render` turns a single note into a typeset PDF — title, date, and tags
+up top, the body below, and links to other notes replaced by their titles:
+
+```bash
+# Render a note into ./<slug>.pdf in the current directory
+ntropy render 01j8za2…
+
+# Name the output yourself, and open the result in one go
+open "$(ntropy render -p 01j8za2… -o q3-report.pdf)"
+```
+
+Rendering calls out to two external tools that you need to install yourself:
+[pandoc](https://pandoc.org) converts the note and
+[typst](https://typst.app) typesets the PDF. Both must be on your `PATH` —
+for example via `brew install pandoc typst` — and ntropy tells you exactly
+what's missing if they aren't.
+
+> [!NOTE]
+> This is the first iteration of ntropy's rendering infrastructure. It is
+> built around interchangeable rendering engines, and more output formats,
+> styling control, and further engines are planned for future releases.
 
 ## Language server
 

@@ -1,9 +1,9 @@
 ---
 name: ntropy
 description: >-
-  Create, search, edit, and delete notes in ntropy Markdown vaults; create and
-  manage vaults, views, and templates. Use for any task involving ntropy, a
-  note vault, or .ntropy-vault files.
+  Create, search, edit, delete, and render notes to PDF in ntropy Markdown
+  vaults; create and manage vaults, views, and templates. Use for any task
+  involving ntropy, a note vault, or .ntropy-vault files.
 metadata:
   tags: ntropy, notes, markdown, vault, cli
 ---
@@ -40,6 +40,9 @@ language for filtering, and materialized symlink views for filesystem browsing.
 6. **Delete by ULID, with `-f`.** `delete` requires exactly one match and, in
    non-interactive mode, `--force`. Search first, then
    `ntropy delete -n -f <ulid>`.
+7. **`render` needs pandoc and typst on `PATH`.** It resolves to exactly one
+   note; pass `-p` to capture the artifact path (`out=$(ntropy render -n -p
+   <ulid>)`).
 
 ## Do / don't
 
@@ -63,6 +66,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy today --print` | Print today's daily note path, creating it on first use each day. |
 | `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
+| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document (v1: PDF via pandoc + typst, both required on `PATH`). Resolves to exactly one note; `-p` prints the artifact path. |
 | `ntropy reconcile` | Realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
 | `ntropy tags -n` | Every tag with its note count — check this before inventing new tags. |
