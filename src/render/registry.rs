@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use super::{RenderError, Renderer};
+use super::{Pandoc, RenderError, Renderer};
 
 /// The format selected when the user names none.
 pub const DEFAULT_FORMAT: &str = "pdf";
@@ -38,22 +38,20 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// The registry ntropy ships with.
+    /// The registry ntropy ships with: `pdf` produced by the pandoc engine.
     pub fn new() -> Self {
-        Registry {
+        let mut registry = Registry {
             formats: HashMap::new(),
-        }
+        };
+        registry.register("pdf", "pdf", "pandoc", Box::new(Pandoc));
+        registry
     }
 
     /// Register `renderer` as an engine named `engine` producing `format` with
     /// artifact extension `extension`. The first engine registered for a format
     /// becomes its default.
     ///
-    /// This is the sole registration path for engines. While no engine ships,
-    /// only the registry tests call it, so the dead-code lint fires in the
-    /// production build; the allow is grounded because removing the method
-    /// would remove the only way an engine can ever be registered.
-    #[allow(dead_code)]
+    /// This is the sole registration path for engines.
     fn register(
         &mut self,
         format: &str,
@@ -208,12 +206,20 @@ mod tests {
         insta::assert_snapshot!(err, @"unknown output format `docx`");
     }
 
-    /// A registry with no registered engines resolves nothing, not even the
-    /// default format.
+    /// The shipping registry serves `pdf` through pandoc: the default format
+    /// resolves with no engine named and with `pandoc` named explicitly, and its
+    /// extension is `pdf`. An unknown engine for `pdf` is still an error.
     #[test]
-    fn empty_registry_resolves_nothing() {
+    fn shipped_registry_resolves_pdf_through_pandoc() {
         let registry = Registry::new();
-        assert!(registry.resolve(DEFAULT_FORMAT, None).is_err());
-        assert!(registry.extension(DEFAULT_FORMAT).is_err());
+        assert!(registry.resolve(DEFAULT_FORMAT, None).is_ok());
+        assert!(registry.resolve(DEFAULT_FORMAT, Some("pandoc")).is_ok());
+        assert_eq!(
+            registry
+                .extension(DEFAULT_FORMAT)
+                .expect("pdf is registered"),
+            "pdf"
+        );
+        assert!(registry.resolve(DEFAULT_FORMAT, Some("wkhtml")).is_err());
     }
 }

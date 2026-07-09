@@ -22,9 +22,11 @@ use std::path::{Path, PathBuf};
 
 use crate::id::Id;
 
+pub mod pandoc;
 pub mod prepare;
 pub mod registry;
 
+pub use pandoc::Pandoc;
 pub use prepare::prepare;
 pub use registry::{DEFAULT_FORMAT, Registry};
 
