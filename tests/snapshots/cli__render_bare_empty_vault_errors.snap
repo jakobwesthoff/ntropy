@@ -1,0 +1,16 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - render
+    - "-n"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+No notes matched your search criteria.

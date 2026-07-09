@@ -12,18 +12,19 @@ produced by one engine, `pandoc`, which delegates typesetting to typst.
 
 ## CLI surface
 
-    ntropy render <id|query> [--to <format>] [--engine <name>] [-o <path>] [-p]
+    ntropy render [id|query] [--to <format>] [--engine <name>] [-o <path>] [-p]
 
 - The selector follows the id-or-query rule shared with `search` and
   `delete`: a full 26-char ULID resolves directly to that note, anything
-  else runs as a DSL query. It is required; `render` has no
-  browse-everything mode.
-- Like `delete`, `render` must resolve to exactly one note: an ambiguous
-  selector opens the picker pre-filtered interactively, and errors with the
-  candidate list under `-n` (ADR 0025). Interactivity keys off the
-  controlling terminal (ADR 0036). A cancelled picker exits non-zero under
-  `-p`, so `open "$(ntropy render -p ...)"` branches correctly, and is a
-  successful no-op without it, like `delete`.
+  else runs as a DSL query. Like `search`, it is optional: omitted, every
+  note feeds the picker for fuzzy selection.
+- Like `delete`, `render` must resolve to exactly one note: several
+  matches open the picker pre-filtered interactively; under `-n` an
+  ambiguous selector errors with the candidate list (ADR 0025), and a bare
+  invocation with more than one note asks for a selector. Interactivity
+  keys off the controlling terminal (ADR 0036). A cancelled picker exits
+  non-zero under `-p`, so `open "$(ntropy render -p ...)"` branches
+  correctly, and is a successful no-op without it, like `delete`.
 - `--to <format>` selects the output format and defaults to `pdf`.
 - `--engine <name>` overrides the format's default engine. v1 has one
   engine, `pandoc`, so the flag accepts only that value; it exists so that

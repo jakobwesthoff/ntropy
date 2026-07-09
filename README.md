@@ -209,7 +209,7 @@ sync.
 | `today` | Open today's note, creating it from the [`today` template](#daily-notes-with-today) on first use that day. `--print`/`-p` just prints the path. |
 | `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it. |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
-| `render <id\|query>` | [Render one note to a PDF](#rendering-notes-to-pdf) via pandoc and typst (both required on `PATH`). Must resolve to exactly one note. `--to` picks the format (default `pdf`), `-o` the output path (default `./<slug>.pdf`), `-p` prints the artifact path. |
+| `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) via pandoc and typst (both required on `PATH`). Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`), `-o` the output path (default `./<slug>.pdf`), `-p` prints the artifact path. |
 | `reconcile` | Realign filenames whose slug drifted from the title and re-sync every view (catches up after edits made outside ntropy). |
 | `view list\|add\|remove` | Manage [materialized views](#materialized-views), e.g. `ntropy view add by-status --field status`. |
 | `tags` | List every tag with its note count. |

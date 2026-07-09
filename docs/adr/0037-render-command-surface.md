@@ -28,16 +28,18 @@ verb.
 
 A new top-level `render` subcommand:
 
-    ntropy render <id|query> [--to <format>] [--engine <name>] [-o <path>] [-p]
+    ntropy render [id|query] [--to <format>] [--engine <name>] [-o <path>] [-p]
 
 `render` is chosen over `export`: it matches the rendering-engine naming
 and emphasizes the transformation.
 
-- The selector is required and follows the id-or-query rule shared with
-  `search` and `delete`.
-- One invocation renders exactly one note. Like `delete`, an ambiguous
-  selector opens the picker pre-filtered interactively and errors with the
-  candidate list under `-n`.
+- The selector follows the id-or-query rule shared with `search` and
+  `delete`. Like `search`, it is optional: omitted, the whole vault feeds
+  the picker for fuzzy selection.
+- One invocation renders exactly one note. Like `delete`, several matches
+  open the picker pre-filtered interactively; under `-n` an ambiguous
+  selector errors with the candidate list, and a bare invocation with more
+  than one note asks for a selector.
 - `--to` names the output format and defaults to `pdf`. `--engine`
   overrides the format's default engine; with only the `pandoc` engine in
   v1 it accepts a single value, and exists so invocations written today

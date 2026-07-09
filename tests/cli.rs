@@ -617,12 +617,47 @@ exit 0
 }
 
 #[test]
-fn render_requires_a_selector() {
-    // The selector is required, so a bare `render` is a clap usage error.
+fn render_bare_empty_vault_errors() {
+    // A blank selector browses all notes, so an empty vault is a no-match,
+    // reported with `search`'s wording and a non-zero exit.
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
-        cmd.arg("render");
+        cmd.args(["render", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_bare_single_note_renders() {
+    // With exactly one note in the vault a bare invocation needs no narrowing,
+    // so it renders that note even without a picker.
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "only", "---\ntitle: Only\n---\nbody\n");
+    write_stub_pandoc(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.env("PATH", STUB_BIN);
+        cmd.current_dir(dir.path());
+        cmd.args(["render", "-n", "-p"]);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert_eq!(
+        fs::read_to_string(dir.path().join("only.pdf")).expect("artifact exists"),
+        "stub pdf\n"
+    );
+}
+
+#[test]
+fn render_bare_several_notes_needs_a_selector_under_n() {
+    // Without a picker a bare invocation has no way to narrow several notes,
+    // so it asks for a selector instead of dumping an ambiguity list.
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "alpha", "---\ntitle: Alpha\n---\n");
+    write_note(dir.path(), ULID_B, "beta", "---\ntitle: Beta\n---\n");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", "-n"]);
         assert_cmd_snapshot!(cmd);
     });
 }

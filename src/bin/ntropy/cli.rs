@@ -124,8 +124,8 @@ pub enum Command {
     /// and on `PATH`.
     Render {
         /// A full ULID or a query DSL expression (joined from trailing
-        /// arguments).
-        #[arg(required = true, value_name = "ID|QUERY")]
+        /// arguments; omitted = choose from all notes).
+        #[arg(value_name = "ID|QUERY")]
         selector: Vec<String>,
         /// The output format (v1: `pdf`).
         #[arg(long, value_name = "FORMAT", default_value = ntropy::render::DEFAULT_FORMAT)]

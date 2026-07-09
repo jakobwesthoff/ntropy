@@ -29,8 +29,9 @@ use super::{exit_for_warnings, output, picker, report_ambiguous};
 ///
 /// The engine is resolved before the vault is even scanned, so an unknown
 /// format or engine fails fast without any filesystem work. Selection then
-/// mirrors `delete`: exactly one note must survive, an ambiguous selector opens
-/// the picker interactively and errors under `-n`.
+/// mirrors `search`'s entry (a blank selector browses every note) combined
+/// with `delete`'s exactly-one rule: several surviving notes open the picker
+/// interactively and error under `-n`.
 //
 // Each parameter is an independent dispatch input threaded straight from the
 // parsed CLI, exactly as the sibling `cmd_*` functions take theirs; bundling
@@ -60,9 +61,16 @@ pub fn cmd_render(
         .context("while resolving the output extension")?
         .to_string();
 
-    // Resolve the selector to its matching notes, surfacing any scan warnings.
-    let matches =
-        ops::resolve_selection(vault, &selector).context("while resolving the selector")?;
+    // A blank selector browses the whole vault, exactly as `search` enters its
+    // picker; anything else resolves as a full ULID or a DSL query (the
+    // id-or-query rule of ADR 0025). Scan warnings surface either way.
+    let selector = super::optional(&selector).map(str::to_string);
+    let matches = match selector.as_deref() {
+        Some(selector) => {
+            ops::resolve_selection(vault, selector).context("while resolving the selector")?
+        }
+        None => ops::search(vault, None).context("while listing notes")?,
+    };
     output::print_warnings(&matches.warnings);
 
     // Narrow to exactly one note, honoring the ambiguity rule shared with
@@ -70,7 +78,10 @@ pub fn cmd_render(
     // recovered from the resolved set by id, since rendering needs its body.
     let note = match matches.notes.as_slice() {
         [] => {
-            eprintln!("error: no note matches `{selector}`");
+            match &selector {
+                Some(selector) => eprintln!("error: no note matches `{selector}`"),
+                None => eprintln!("No notes matched your search criteria."),
+            }
             return Ok(ExitCode::FAILURE);
         }
         [note] => note.clone(),
@@ -90,7 +101,16 @@ pub fn cmd_render(
                     None => return Ok(ExitCode::SUCCESS),
                 }
             } else {
-                report_ambiguous(&selector, notes)?;
+                match &selector {
+                    Some(selector) => report_ambiguous(selector, notes)?,
+                    // Without a picker there is nothing to narrow a bare
+                    // invocation with, so it asks for a selector instead of
+                    // dumping every note as an ambiguity list.
+                    None => eprintln!(
+                        "error: rendering needs a selector in non-interactive mode ({} notes)",
+                        notes.len()
+                    ),
+                }
                 return Ok(ExitCode::FAILURE);
             }
         }

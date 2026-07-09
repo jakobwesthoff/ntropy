@@ -15,11 +15,11 @@ Render a note to a document artifact.
 
 v1 produces a PDF via pandoc and typst; both tools must be installed and on `PATH`.
 
-Usage: ntropy render [OPTIONS] <ID|QUERY>...
+Usage: ntropy render [OPTIONS] [ID|QUERY]...
 
 Arguments:
-  <ID|QUERY>...
-          A full ULID or a query DSL expression (joined from trailing arguments)
+  [ID|QUERY]...
+          A full ULID or a query DSL expression (joined from trailing arguments; omitted = choose from all notes)
 
 Options:
       --to <FORMAT>

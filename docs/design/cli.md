@@ -140,17 +140,19 @@ ambiguous selector opens the picker pre-filtered interactively, and errors
 with a non-zero exit under `-n` (ADR 0025). In non-interactive mode `--force`
 is required, since there is no prompt.
 
-### `render <id|query>`
+### `render [id|query]`
 
 Turn one note into a document artifact. v1 produces a PDF through pandoc with
 typst as the PDF engine, so both tools must be installed and on `PATH`; an
 engine whose tools are missing is an error naming what to install, never a
-silent fall-back. The selector follows the same id-or-query rule as `search`.
-Like `delete`, `render` must resolve to exactly one note: an ambiguous selector
-opens the picker pre-filtered interactively, and errors with the candidate list
-under `-n` (ADR 0025/0036). A cancelled picker exits non-zero under `-p`, so
-`open "$(ntropy render -p ...)"` branches correctly, and is a successful no-op
-without it, like `delete`.
+silent fall-back. The selector follows the same id-or-query rule as `search`
+and, like `search`, is optional: omitted, every note feeds the picker for
+fuzzy selection. Like `delete`, `render` must resolve to exactly one note:
+several matches open the picker pre-filtered interactively; under `-n` an
+ambiguous selector errors with the candidate list (ADR 0025/0036), and a bare
+invocation with more than one note asks for a selector. A cancelled picker
+exits non-zero under `-p`, so `open "$(ntropy render -p ...)"` branches
+correctly, and is a successful no-op without it, like `delete`.
 
 - `--to <format>` names the output format and defaults to `pdf`.
 - `--engine <name>` overrides the format's default engine; v1 has only the
@@ -168,6 +170,7 @@ without it, like `delete`.
 
 Examples:
 
+    ntropy render                                    # pick any note fuzzily, like search
     ntropy render 01ARZ3NDEKTSV4RRFFQ69G5FAV        # render one note by id
     ntropy render tag:work -n                        # error on an ambiguous selector
     open "$(ntropy render -p 'text:"quarterly"')"    # render, then open the PDF

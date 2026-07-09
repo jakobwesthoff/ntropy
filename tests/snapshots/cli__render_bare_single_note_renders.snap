@@ -1,0 +1,18 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - render
+    - "-n"
+    - "-p"
+  env:
+    EDITOR: "true"
+    PATH: stub-bin
+---
+success: true
+exit_code: 0
+----- stdout -----
+only.pdf
+
+----- stderr -----
