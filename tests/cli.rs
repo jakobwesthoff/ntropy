@@ -481,6 +481,99 @@ fn search_by_ulid_resolves_single_note() {
 }
 
 #[test]
+fn search_print_leaves_non_interactive_output_unchanged() {
+    // `--print` only redirects an interactive selection to stdout; without a
+    // TTY the plain table prints exactly as it does without the flag
+    // (ADR 0035).
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "older",
+        "---\ntitle: Older\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "newer",
+        "---\ntitle: Newer\n---\nbody\n",
+    );
+
+    let plain = ntropy(dir.path())
+        .args(["search", "-n"])
+        .output()
+        .expect("run ntropy");
+    let printed = ntropy(dir.path())
+        .args(["search", "-n", "--print"])
+        .output()
+        .expect("run ntropy");
+    assert_eq!(plain.status.code(), printed.status.code());
+    assert_eq!(plain.stdout, printed.stdout);
+    assert_eq!(plain.stderr, printed.stderr);
+
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n", "--print"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn search_print_short_flag_resolves_single_note() {
+    // The short form `-p` parses on `search` and, without a TTY, prints the
+    // lone match as the usual one-row table (ADR 0035).
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", ULID_A, "-p", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn search_print_no_match_exits_nonzero() {
+    // The no-match contract of ADR 0031 holds under `--print`: message on
+    // stderr, nothing on stdout, non-zero exit.
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", ULID_A, "--print", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn search_no_edit_is_a_hidden_alias_of_print() {
+    // As on `new`/`today`, `--no-edit` parses as an alias of `--print` but the
+    // help only documents `--print`/`-p` (ADR 0035).
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "a", "---\ntitle: A\n---\nbody\n");
+
+    let aliased = ntropy(dir.path())
+        .args(["search", "--no-edit", "-n"])
+        .output()
+        .expect("run ntropy");
+    assert!(aliased.status.success(), "--no-edit must parse on search");
+
+    let help = ntropy(dir.path())
+        .args(["search", "--help"])
+        .output()
+        .expect("run ntropy");
+    let help_text = String::from_utf8_lossy(&help.stdout);
+    assert!(help_text.contains("--print"), "help must document --print");
+    assert!(
+        !help_text.contains("--no-edit"),
+        "help must not advertise the hidden alias, got: {help_text}"
+    );
+}
+
+#[test]
 fn search_empty_vault_exits_nonzero() {
     // An empty result, even a bare listing of an empty vault, exits non-zero
     // with the message on stderr (ADR 0031).

@@ -62,7 +62,9 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     match command {
         // Handled above, before vault resolution.
         Command::Init { .. } => unreachable!("init is dispatched before vault resolution"),
-        Command::Search { query } => cmd_search(&cli.global, &vault, join(&query), interactive),
+        Command::Search { query, print } => {
+            cmd_search(&cli.global, &vault, join(&query), print, interactive)
+        }
         Command::New {
             title,
             template,
@@ -144,6 +146,7 @@ fn cmd_search(
     global: &GlobalArgs,
     vault: &Vault,
     selector: String,
+    print: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
     // A bare invocation browses the whole vault; a selector resolves a full ULID
@@ -168,19 +171,32 @@ fn cmd_search(
         }
         notes => {
             if interactive {
-                // On a TTY a lone match opens straight away; several open the
-                // picker pre-filtered to them.
-                if let [note] = notes {
-                    open_and_refresh(vault, &note.path)?;
+                // On a TTY a lone match is selected straight away; several open
+                // the picker pre-filtered to them.
+                let selected = if let [note] = notes {
+                    Some(note.path.clone())
                 } else {
                     let candidates = ops::to_candidates(notes)?;
-                    if let Some(selected) = picker::pick(candidates, picker::align_candidates)? {
-                        open_and_refresh(vault, &selected.path)?;
-                    }
+                    picker::pick(candidates, picker::align_candidates)?.map(|s| s.path)
+                };
+                match selected {
+                    // `--print` writes the selection's path to stdout instead
+                    // of opening the editor (ADR 0035). Nothing was edited, so
+                    // no realign or view refresh is needed.
+                    Some(path) if print => println!("{}", path.display()),
+                    Some(path) => open_and_refresh(vault, &path)?,
+                    // A cancelled picker produced no path, so under `--print`
+                    // the command fails and `p=$(ntropy search -p ...)`
+                    // branches correctly; without `--print` a cancel stays a
+                    // successful no-op.
+                    None if print => return Ok(ExitCode::FAILURE),
+                    None => {}
                 }
             } else {
                 // Without a TTY the editor never opens, mirroring `new`/`today`
-                // (ADR 0015); the plain table is printed instead.
+                // (ADR 0015); the plain table is printed instead. `--print`
+                // only redirects an interactive selection, so it changes
+                // nothing here (ADR 0035).
                 output::print_notes(notes)?;
             }
             Ok(exit_for_warnings(global.strict, &matches.warnings))

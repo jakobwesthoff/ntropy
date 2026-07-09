@@ -8,6 +8,15 @@ and this project adheres to
 
 ## Unreleased
 
+### Added
+
+- `search` (and its aliases `list` and `edit`) now takes `--print`/`-p`: on a
+  TTY the selected note's path is printed to stdout instead of opening the
+  editor. A lone match prints directly; several matches open the picker and
+  the chosen note's path prints; cancelling the picker exits non-zero so
+  `p=$(ntropy search -p ...)` branches correctly. Without a TTY the flag
+  changes nothing; the plain table prints as before.
+
 ### Changed
 
 - The `--no-edit` flag on `new` and `today` is renamed to `--print`, which was

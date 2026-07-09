@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - search
+    - "-n"
+    - "--print"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+ID                          DATE        TITLE  TAGS  PATH
+[ULID....................]  [DATE....]  Newer        [VAULT]/all-notes/[ULID....................]-newer.md
+[ULID....................]  [DATE....]  Older        [VAULT]/all-notes/[ULID....................]-older.md
+
+----- stderr -----

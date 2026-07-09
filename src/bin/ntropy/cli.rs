@@ -92,6 +92,11 @@ pub enum Command {
         /// arguments; omitted = all notes).
         #[arg(value_name = "ID|QUERY")]
         query: Vec<String>,
+        /// Print the selected note's path instead of opening the editor.
+        // `--no-edit` is accepted as a hidden alias for consistency with
+        // `new`/`today` (ADR 0035).
+        #[arg(short = 'p', long, alias = "no-edit")]
+        print: bool,
     },
 
     /// Realign drifted filenames, re-sync views, and sync `.gitignore`.
