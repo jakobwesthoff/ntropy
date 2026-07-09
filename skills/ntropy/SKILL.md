@@ -6,7 +6,6 @@ description: >-
   note vault, or .ntropy-vault files.
 metadata:
   tags: ntropy, notes, markdown, vault, cli
-  version-basis: authored against ntropy 1.3.0; describes the stable core model
 ---
 
 # Working with ntropy
@@ -22,10 +21,10 @@ language for filtering, and materialized symlink views for filesystem browsing.
 ## Golden rules for agents
 
 1. **ALWAYS run non-interactively.** Pass `-n` on every command and
-   `--no-edit` on `new`/`today`. Without them, on a TTY ntropy opens an
+   `--print` on `new`/`today`. Without them, on a TTY ntropy opens an
    interactive fuzzy picker or the user's `$VISUAL`/`$EDITOR` and blocks.
 2. **NEVER hand-create files in `all-notes/`.** Create with
-   `ntropy new --no-edit <title>` (it prints the path), then edit that file.
+   `ntropy new --print <title>` (it prints the path), then edit that file.
 3. **Run `ntropy reconcile` after editing note files directly.** Direct edits
    to a title or frontmatter leave the filename slug and the views stale;
    reconcile realigns filenames, refreshes inter-note links, and re-syncs
@@ -44,8 +43,8 @@ language for filtering, and materialized symlink views for filesystem browsing.
 
 | DON'T | DO |
 |-------|----|
-| `ntropy new My note` — blocks in an editor | `ntropy new --no-edit My note` |
-| Write a new file into `all-notes/` yourself | `path=$(ntropy new --no-edit …)`, then edit `$path` |
+| `ntropy new My note` — blocks in an editor | `ntropy new --print My note` |
+| Write a new file into `all-notes/` yourself | `path=$(ntropy new --print …)`, then edit `$path` |
 | Rename a note file to retitle it | edit the frontmatter `title`, then `ntropy reconcile` |
 | Put `id:` or `created:` in frontmatter | nothing — identity and date live in the filename ULID |
 | `ntropy delete -n -f tag:old` — broad query | `ntropy delete -n -f <full-26-char-ulid>` |
@@ -58,8 +57,8 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | Command | Purpose |
 |---------|---------|
 | `ntropy init [path]` | Scaffold or complete a vault; idempotent. `--set-default` records it as the global default. |
-| `ntropy new --no-edit <title…>` | Create a note from a template, print its path. `-t <name>` picks `.ntropy/templates/<name>.md`. |
-| `ntropy today --no-edit` | Print today's daily note path, creating it on first use each day. |
+| `ntropy new --print <title…>` | Create a note from a template, print its path. `-t <name>` picks `.ntropy/templates/<name>.md`. |
+| `ntropy today --print` | Print today's daily note path, creating it on first use each day. |
 | `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
 | `ntropy reconcile` | Realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
@@ -85,7 +84,7 @@ recipes for global, project-local, and custom vaults:
 **Create a well-formed note:**
 
 ```bash
-path=$(ntropy new --no-edit Quarterly review)
+path=$(ntropy new --print Quarterly review)
 # edit "$path": fill frontmatter (title, tags, free fields) and the body
 ntropy reconcile
 ```

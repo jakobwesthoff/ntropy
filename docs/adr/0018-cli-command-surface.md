@@ -8,7 +8,9 @@ Accepted
 
 The `edit` command is superseded by
 [ADR 0031](0031-merge-edit-into-search.md), which folds it into `search` as a
-hidden alias.
+hidden alias. The `--no-edit`/`--print` flag naming is superseded by
+[ADR 0035](0035-generic-print-flag-replaces-no-edit.md): the flag is
+`--print`/`-p`, with `--no-edit` as a hidden alias.
 
 ## Context
 

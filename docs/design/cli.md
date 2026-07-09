@@ -59,7 +59,8 @@ substituted), then open it in the editor.
 - `--template <name>` / `-t <name>`: use `.ntropy/templates/<name>.md` instead
   of `default.md`. A missing named template is an error; the implicit default
   falls back to the embedded template when `default.md` is absent.
-- `--no-edit` / `--print`: create and print the path only (no editor).
+- `--print` / `-p`: create and print the path only (no editor). `--no-edit`
+  is a hidden alias (ADR 0035).
 
 On editor exit, ntropy reconciles the note (slug realignment, view links).
 
@@ -69,7 +70,7 @@ Open today's note, the daily-note convenience. The note is identified by its
 title being today's local date; if one exists it is opened, otherwise it is
 created from `.ntropy/templates/today.md` (which `init` seeds and titles by
 `{{date}}` with a `daily` tag). When several notes share today's date as their
-title, the newest is opened. Shares `--no-edit`/`--print` with `new`. The
+title, the newest is opened. Shares `--print`/`-p` with `new`. The
 template must exist; a vault predating it must re-run `init`.
 
 ### `search [id|query]`
@@ -82,6 +83,9 @@ DSL expression (the id-or-query rule shared with `delete`).
 - On a TTY: a single match opens directly in the editor; several launch the
   interactive picker pre-filtered to them, and Enter opens the selection. The
   note reconciles on editor exit, like `new`.
+- `--print` / `-p`: on a TTY, print the selected note's path instead of
+  opening it; a cancelled picker exits non-zero. Piped or with `-n` the flag
+  changes nothing. `--no-edit` is a hidden alias (ADR 0035).
 - Piped or `-n`: prints the matching notes as plain lines (one row for a single
   match, the full table for several). The editor never opens without a TTY,
   mirroring `new`/`today` (ADR 0015).

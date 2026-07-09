@@ -21,12 +21,12 @@ Always create through `ntropy new` so the ULID and filename are right, then
 edit the file it prints:
 
 ```bash
-path=$(ntropy new --no-edit Refactor the parser)   # trailing args join into the title
+path=$(ntropy new --print Refactor the parser)   # trailing args join into the title
 # now write frontmatter/body into "$path" with your file tools
 ntropy reconcile                                    # realign filename + views after direct edits
 ```
 
-`--no-edit` (alias `--print`) creates the note and prints its path instead of
+`--print` (short form `-p`) creates the note and prints its path instead of
 opening an editor. This is the agent path; the editor flow is for humans.
 
 **FORBIDDEN: hand-creating files in `all-notes/`.** You would have to invent a
@@ -47,8 +47,8 @@ leading YAML syntax character (`[`, `{`, `#`, `-`, `&`, `*`, `"`, `'`) creates
 successfully:
 
 ```bash
-ntropy new --no-edit "Q3: Planning kickoff"   # OK: frontmatter is quoted
-ntropy new --no-edit "[draft] roadmap"        # OK: frontmatter is quoted
+ntropy new --print "Q3: Planning kickoff"   # OK: frontmatter is quoted
+ntropy new --print "[draft] roadmap"        # OK: frontmatter is quoted
 ```
 
 This covers template placeholder substitution into frontmatter. When you
@@ -120,8 +120,8 @@ Every `ntropy new` stamps a note from a template in
 `<vault>/.ntropy/templates/`; the filename minus `.md` is the template name:
 
 ```bash
-ntropy new --no-edit Standup --template meeting   # uses .ntropy/templates/meeting.md
-ntropy new --no-edit Some thought                 # uses default.md
+ntropy new --print Standup --template meeting   # uses .ntropy/templates/meeting.md
+ntropy new --print Some thought                 # uses default.md
 ```
 
 A named template that does not exist is an error, never a silent fallback.
@@ -159,7 +159,7 @@ title creates immediate slug drift that the next reconcile has to rename away.
 
 ## Daily notes
 
-`ntropy today --no-edit` prints the path of today's note, creating it from
+`ntropy today --print` prints the path of today's note, creating it from
 `.ntropy/templates/today.md` on first use each day (the note is identified by
 its title being today's date). Shape daily notes by editing that template. It
 must exist; a vault predating it just needs `ntropy init <vault>` re-run, which
@@ -184,7 +184,7 @@ plain lexical sort of `all-notes/` is chronological.
 
 ## Well-behaved note checklist
 
-- Created via `ntropy new --no-edit`, never hand-placed in `all-notes/`.
+- Created via `ntropy new --print`, never hand-placed in `all-notes/`.
 - Frontmatter has `title`; `tags` is a flat string list; no `id`/date fields.
 - YAML values containing `: ` or starting with YAML syntax are quoted.
 - Field names and values reused consistently with the rest of the vault.
