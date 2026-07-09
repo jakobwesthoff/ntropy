@@ -42,9 +42,11 @@ impl Renderer for Pandoc {
             format!("date={}", doc.created).into(),
         ];
 
-        // Tags feed both the visible subtitle and the PDF's keyword metadata.
-        // With no tags there is nothing to typeset or record, so both entries
-        // are dropped rather than emitted empty (resolved decision 4).
+        // Tags are typeset as the subtitle, which pandoc's typst template
+        // treats as escaped content. They are deliberately not passed as
+        // `keywords`: the stock template splices that value verbatim into typst
+        // code, where any plain string fails to compile. With no tags there is
+        // nothing to typeset, so the entry is dropped rather than emitted empty.
         if !doc.tags.is_empty() {
             let subtitle = doc
                 .tags
@@ -52,11 +54,8 @@ impl Renderer for Pandoc {
                 .map(|tag| format!("#{tag}"))
                 .collect::<Vec<_>>()
                 .join(" · ");
-            let keywords = doc.tags.join(",");
             args.push("--metadata".into());
             args.push(format!("subtitle={subtitle}").into());
-            args.push("--metadata".into());
-            args.push(format!("keywords={keywords}").into());
         }
 
         args.push("--output".into());
@@ -266,8 +265,6 @@ mod tests {
             date=2020-01-01
             --metadata
             subtitle=#area/work · #programming/rust
-            --metadata
-            keywords=area/work,programming/rust
             --output
             /artifacts/note.pdf
         ");
@@ -357,7 +354,6 @@ mod tests {
         let args = argv(&ctx);
         assert!(args.contains(&"title=Über Größe 日本語".to_string()));
         assert!(args.contains(&"subtitle=#Área/Work · #Life/Café".to_string()));
-        assert!(args.contains(&"keywords=Área/Work,Life/Café".to_string()));
     }
 
     #[test]
@@ -370,17 +366,15 @@ mod tests {
         let args = argv(&ctx);
         assert!(args.contains(&r#"title=a=b "quoted""#.to_string()));
         assert!(args.contains(&"subtitle=#x·y".to_string()));
-        assert!(args.contains(&"keywords=x·y".to_string()));
     }
 
     #[test]
-    fn empty_tags_omit_subtitle_and_keywords() {
+    fn empty_tags_omit_the_subtitle() {
         let document = doc("Untagged", &[], "body", Vec::new());
         let mut ctx = FakeContext::new();
         Pandoc.render(&document, &mut ctx).expect("render succeeds");
         let args = argv(&ctx);
         assert!(!args.iter().any(|a| a.starts_with("subtitle=")));
-        assert!(!args.iter().any(|a| a.starts_with("keywords=")));
         insta::assert_snapshot!(args.join("\n"), @r"
         /staging/note.md
         --from
@@ -396,13 +390,13 @@ mod tests {
     }
 
     #[test]
-    fn two_tags_join_subtitle_and_keywords() {
+    fn two_tags_join_the_subtitle() {
         let document = doc("Tagged", &["a", "b"], "body", Vec::new());
         let mut ctx = FakeContext::new();
         Pandoc.render(&document, &mut ctx).expect("render succeeds");
         let args = argv(&ctx);
         assert!(args.contains(&"subtitle=#a · #b".to_string()));
-        assert!(args.contains(&"keywords=a,b".to_string()));
+        assert!(!args.iter().any(|a| a.starts_with("keywords=")));
     }
 
     #[test]

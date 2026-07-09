@@ -65,7 +65,8 @@ binary. Both tools are found via `PATH`; there are no configurable tool
 paths in v1. The engine stages the body with frontmatter stripped and
 resolved links replaced by the target's current title as emphasized text,
 and passes title, date, and tags as `--metadata` arguments (tags as the
-typeset `subtitle` and as `keywords`).
+typeset `subtitle`; the `keywords` slot is unusable because pandoc's stock
+typst template splices its value verbatim into typst code).
 
 ### Testing
 

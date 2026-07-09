@@ -133,16 +133,18 @@ Materialization, the lossy half owned by this engine:
   Each resolved link is replaced by the target note's current title as
   emphasized text (`*Title*`); an unresolved link keeps its display text.
 - Metadata travels as `--metadata` arguments: `title` (the note title),
-  `date` (the prepared creation date), `subtitle` (the tags, each
-  `#`-prefixed, joined with ` · `), and `keywords` (the tags,
-  comma-joined). Title, date, and tags are typeset by pandoc's stock typst
-  template, and the tags also land in the PDF's document metadata.
+  `date` (the prepared creation date), and `subtitle` (the tags, each
+  `#`-prefixed, joined with ` · `). Title, date, and tags are typeset by
+  pandoc's stock typst template. The `keywords` metadata is deliberately
+  not set: the stock template splices its value verbatim into typst code,
+  where any plain string fails to compile, so tags travel only as the
+  subtitle.
 
 The invocation:
 
     pandoc <staged.md> --from gfm --pdf-engine=typst \
         --metadata title=... --metadata date=... \
-        --metadata subtitle=... --metadata keywords=... \
+        --metadata subtitle=... \
         --output <artifact.pdf>
 
 `--from gfm` pins the reading of note bodies to GitHub-flavored Markdown
