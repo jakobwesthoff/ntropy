@@ -8,9 +8,12 @@
 //! (orchestration), so dependencies only ever point downward:
 //!
 //! ```text
-//! ops → {query, view, reconcile, config, scan, template, link, gitignore}
+//! ops → {query, view, reconcile, config, scan, template, link, gitignore, render}
 //!     → {note, vault} → {fsutil, id, datetime, text}
 //! ```
+//!
+//! [`render`] sits alongside [`query`] and [`link`], depending on [`note`],
+//! [`link`], [`datetime`], and [`id`].
 //!
 //! [`error`] sits to the side, used by every layer. The library is headless:
 //! it performs no terminal I/O, spawns no editor, and runs no picker. Those
@@ -31,6 +34,7 @@ pub mod gitignore;
 pub mod link;
 pub mod query;
 pub mod reconcile;
+pub mod render;
 pub mod scan;
 pub mod template;
 pub mod view;

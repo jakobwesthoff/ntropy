@@ -19,6 +19,7 @@ use crate::id::IdError;
 use crate::note::NoteError;
 use crate::ops::ViewAdminError;
 use crate::query::QueryError;
+use crate::render::RenderError;
 use crate::scan::ScanError;
 use crate::template::TemplateError;
 use crate::vault::ResolveError;
@@ -65,6 +66,10 @@ pub enum Error {
     /// A view administration command was rejected.
     #[error(transparent)]
     ViewAdmin(#[from] ViewAdminError),
+
+    /// A note could not be rendered to an output artifact.
+    #[error(transparent)]
+    Render(#[from] RenderError),
 }
 
 /// Convenience alias for results carrying the crate [`Error`].
