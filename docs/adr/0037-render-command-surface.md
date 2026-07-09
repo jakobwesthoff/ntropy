@@ -49,8 +49,10 @@ and emphasizes the transformation.
   target is overwritten.
 - `--print`/`-p` prints the artifact's path to stdout as one line on
   success, extending the flag of ADR 0035 to a command that produces a
-  file instead of opening the editor. Without it, nothing is written to
-  stdout.
+  file instead of opening the editor. Without it, a `Rendering
+  <reference>...` line announces the work and a completion report names
+  the artifact, the format and engine, and the artifact's size, in the
+  human-report style of `delete` and `reconcile`.
 - Scan warnings print to stderr and fail the command under `--strict`,
   matching `search`.
 - `render` is read-only: no filename realignment and no view refresh.

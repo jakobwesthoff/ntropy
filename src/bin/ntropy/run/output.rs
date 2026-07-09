@@ -177,6 +177,22 @@ pub fn print_warnings(warnings: &[ScanWarning]) {
     }
 }
 
+/// A byte count as a short human-readable figure: whole bytes below a KiB,
+/// otherwise one decimal in binary units, matching the sizes `ls -lh` shows.
+pub fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["KiB", "MiB", "GiB", "TiB"];
+    if bytes < 1024 {
+        return format!("{bytes} B");
+    }
+    let mut size = bytes as f64 / 1024.0;
+    let mut unit = 0;
+    while size >= 1024.0 && unit < UNITS.len() - 1 {
+        size /= 1024.0;
+        unit += 1;
+    }
+    format!("{size:.1} {}", UNITS[unit])
+}
+
 // =============================================================================
 // Aligned table renderer (ADR 0033)
 // =============================================================================
@@ -246,6 +262,18 @@ mod tests {
     use super::*;
 
     const ULID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+
+    #[test]
+    fn human_size_picks_the_binary_unit() {
+        assert_eq!(human_size(0), "0 B");
+        assert_eq!(human_size(9), "9 B");
+        assert_eq!(human_size(1023), "1023 B");
+        assert_eq!(human_size(1024), "1.0 KiB");
+        assert_eq!(human_size(12_700), "12.4 KiB");
+        assert_eq!(human_size(1024 * 1024), "1.0 MiB");
+        assert_eq!(human_size(3 * 1024 * 1024 * 1024 / 2), "1.5 GiB");
+        assert_eq!(human_size(u64::MAX), "16777216.0 TiB");
+    }
 
     #[test]
     fn reference_without_tags_omits_brackets() {

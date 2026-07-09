@@ -13,5 +13,7 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
+Rendering [DATE....]  Wanted  ([ULID....................])...
+Rendered wanted.pdf (pdf via pandoc, 9 B)
 
 ----- stderr -----

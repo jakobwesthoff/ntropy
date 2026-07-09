@@ -34,8 +34,11 @@ produced by one engine, `pandoc`, which delegates typesetting to typst.
   slug component of the note's filename. An existing file at the target is
   overwritten.
 - `--print` / `-p` prints the artifact's path to stdout as one line on
-  success, so `open "$(ntropy render -p ...)"` composes. Without it,
-  nothing is written to stdout; the artifact file is the outcome.
+  success, so `open "$(ntropy render -p ...)"` composes. Without it, a
+  `Rendering <reference>...` line announces the work before the engine
+  runs, and a completion report names the artifact, the format and engine
+  that produced it, and its size:
+  `Rendered quarterly-review.pdf (pdf via pandoc, 12.4 KiB)`.
 - Scan warnings print to stderr and fail the command under `--strict`,
   matching `search`.
 - `render` is read-only with respect to the vault: nothing was edited, so

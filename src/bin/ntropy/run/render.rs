@@ -60,6 +60,15 @@ pub fn cmd_render(
         .extension(&to)
         .context("while resolving the output extension")?
         .to_string();
+    // The engine's name feeds the completion report; an explicit `--engine`
+    // already carries it, otherwise it is the format's default.
+    let engine_name = match &engine {
+        Some(engine) => engine.clone(),
+        None => registry
+            .default_engine(&to)
+            .context("while resolving the engine name")?
+            .to_string(),
+    };
 
     // A blank selector browses the whole vault, exactly as `search` enters its
     // picker; anything else resolves as a full ULID or a DSL query (the
@@ -121,6 +130,16 @@ pub fn cmd_render(
     // overwritten (ADR 0037).
     let output_path = output.unwrap_or_else(|| default_output_path(&note.slug, &extension));
 
+    // Announce the work before the engine runs: external typesetting can take
+    // a few seconds, and under `--print` stdout stays reserved for the path
+    // (ADR 0036), so the narration only appears without it.
+    if !print {
+        println!(
+            "Rendering {}...",
+            output::note_reference(&note).context("while formatting the note reference")?
+        );
+    }
+
     // Links resolve against the whole vault, so one extra scan builds the index
     // the preparation reads (resolved decision 5). Its warnings repeat the
     // resolution scan's on the same vault, so they are discarded here to avoid
@@ -135,10 +154,20 @@ pub fn cmd_render(
         .render(&doc, &mut ctx)
         .context("while rendering the note")?;
 
-    // `--print` writes exactly the artifact path to stdout; without it stdout
-    // stays silent and the file is the outcome (ADR 0036).
+    // `--print` writes exactly the artifact path to stdout for command
+    // substitution (ADR 0036); otherwise a completion report names the
+    // artifact, the format and engine that produced it, and its size.
     if print {
         println!("{}", output_path.display());
+    } else {
+        let size = std::fs::metadata(&output_path)
+            .context("while reading the artifact's size")?
+            .len();
+        println!(
+            "Rendered {} ({to} via {engine_name}, {})",
+            output_path.display(),
+            output::human_size(size)
+        );
     }
 
     Ok(exit_for_warnings(global.strict, &matches.warnings))

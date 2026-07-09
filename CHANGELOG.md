@@ -19,8 +19,9 @@ and this project adheres to
   (default `pdf`), `--engine` overrides the format's default engine,
   `--output`/`-o` names the artifact (default `./<slug>.pdf`, overwriting any
   existing file), and `--print`/`-p` prints the artifact path to stdout on
-  success so `open "$(ntropy render -p ...)"` composes. Rendering is read-only
-  with respect to the vault.
+  success so `open "$(ntropy render -p ...)"` composes; without `-p` the
+  command narrates the render and reports the artifact, engine, and size.
+  Rendering is read-only with respect to the vault.
 - `search` (and its aliases `list` and `edit`) now takes `--print`/`-p`: on a
   TTY the selected note's path is printed to stdout instead of opening the
   editor. A lone match prints directly; several matches open the picker and

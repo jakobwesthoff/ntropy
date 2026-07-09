@@ -13,6 +13,7 @@ info:
 success: false
 exit_code: 1
 ----- stdout -----
+Rendering [DATE....]  Wanted  ([ULID....................])...
 
 ----- stderr -----
 error: while rendering the note: required tool `pandoc` is not available: install pandoc and typst; both must be on PATH

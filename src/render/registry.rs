@@ -105,6 +105,16 @@ impl Registry {
             .map(|entry| entry.extension)
             .ok_or_else(|| RenderError::UnknownFormat(format.to_string()))
     }
+
+    /// The name of the engine a format resolves to when the caller names none,
+    /// so a report can say which engine produced an artifact. An unregistered
+    /// format is [`RenderError::UnknownFormat`].
+    pub fn default_engine(&self, format: &str) -> Result<&str, RenderError> {
+        self.formats
+            .get(format)
+            .map(|entry| entry.default_engine.as_str())
+            .ok_or_else(|| RenderError::UnknownFormat(format.to_string()))
+    }
 }
 
 impl Default for Registry {
@@ -195,6 +205,21 @@ mod tests {
             registry.extension("html").expect("html is registered"),
             "html"
         );
+    }
+
+    #[test]
+    fn default_engine_names_the_first_registered() {
+        let registry = populated();
+        assert_eq!(
+            registry
+                .default_engine("pdf")
+                .expect("pdf has a default engine"),
+            "pandoc"
+        );
+        let err = registry
+            .default_engine("docx")
+            .expect_err("an unregistered format has no default engine");
+        insta::assert_snapshot!(err, @"unknown output format `docx`");
     }
 
     #[test]

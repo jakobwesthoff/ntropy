@@ -161,8 +161,10 @@ correctly, and is a successful no-op without it, like `delete`.
 - `--output <path>` / `-o` names the artifact; the default is `./<slug>.pdf` in
   the current directory, from the slug component of the note's filename. An
   existing file at the target is overwritten.
-- `--print` / `-p` prints the artifact's path to stdout as one line on success;
-  without it stdout stays silent and the file is the outcome (ADR 0036).
+- `--print` / `-p` prints the artifact's path to stdout as one line on success
+  (ADR 0036); without it a `Rendering <reference>...` line announces the work
+  and a completion report follows:
+  `Rendered quarterly-review.pdf (pdf via pandoc, 12.4 KiB)`.
 - Scan warnings print to stderr and fail the command under `--strict`, matching
   `search`.
 
