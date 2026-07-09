@@ -14,13 +14,14 @@
 //!
 //! All interaction logic lives in [`state::PickerState`] and is unit tested
 //! without a TTY (ADR 0021). This module is the thin glue that maps `crossterm`
-//! key events onto that state and draws it.
+//! key events onto that state and draws it. Each frame is buffered and reaches
+//! the terminal as a single write, with the cursor hidden until it is parked
+//! at the prompt, so redraws neither flicker nor leave cursor trails.
 
 mod layout;
 mod state;
 
-use std::fs::File;
-use std::io::Write;
+use std::io::{self, Write};
 
 use anyhow::{Context, Result};
 use crossterm::style::Attribute;
@@ -86,8 +87,18 @@ pub fn pick<T>(items: Vec<T>, render_all: impl FnOnce(&[T]) -> Vec<Row>) -> Resu
         let _ = execute!(teardown_tty, terminal::LeaveAlternateScreen, cursor::Show);
     });
 
-    run_loop(&mut tty, items, render_all)
+    // The tty file is unbuffered, so without this every `queue!` would be its
+    // own syscall — hundreds per frame — and the terminal would render the
+    // partially painted states in between, cursor hops included. Buffering
+    // delivers each frame as one write; `draw` flushes once per frame.
+    let mut frame = io::BufWriter::with_capacity(FRAME_BUFFER_BYTES, tty);
+
+    run_loop(&mut frame, items, render_all)
 }
+
+/// The frame buffer size: comfortably a full redraw of a large terminal, so a
+/// frame never flushes partially.
+const FRAME_BUFFER_BYTES: usize = 64 * 1024;
 
 /// Restores one piece of terminal state when dropped, on every exit path
 /// (`?`, normal return, panic). One guard is armed per setup step so a failure
@@ -113,7 +124,7 @@ impl<F: FnMut()> Drop for TerminalGuard<F> {
 
 /// The read-draw-react loop. Returns the selection, or `None` on abort.
 fn run_loop<T>(
-    tty: &mut File,
+    tty: &mut impl Write,
     items: Vec<T>,
     render_all: impl FnOnce(&[T]) -> Vec<Row>,
 ) -> Result<Option<T>> {
@@ -176,9 +187,14 @@ fn list_height(terminal_rows: u16) -> usize {
 
 /// Draw the whole picker, bottom-anchored: the list region (best match at the
 /// bottom), a divider, the prompt, a second divider, then the dimmed `m/n` stats.
-fn draw<T>(tty: &mut File, state: &PickerState<T>, cols: u16) -> Result<()> {
+fn draw<T>(tty: &mut impl Write, state: &PickerState<T>, cols: u16) -> Result<()> {
+    // The cursor is hidden while the frame paints and shown again only once it
+    // is parked at the prompt, so the terminal never sees it anywhere else —
+    // cursor-trail animations (kitty, ghostty) would otherwise chase every
+    // intermediate `MoveTo`.
     queue!(
         tty,
+        cursor::Hide,
         cursor::MoveTo(0, 0),
         terminal::Clear(terminal::ClearType::All),
     )?;
@@ -219,16 +235,17 @@ fn draw<T>(tty: &mut File, state: &PickerState<T>, cols: u16) -> Result<()> {
         style::SetAttribute(Attribute::Reset),
     )?;
 
-    // Park the cursor at the end of the query so typing reads naturally.
+    // Park the cursor at the end of the query so typing reads naturally, and
+    // only now make it visible again.
     let prompt_col = (PROMPT_PREFIX.width() + state.query().width()) as u16;
-    queue!(tty, cursor::MoveTo(prompt_col, prompt_row))?;
+    queue!(tty, cursor::MoveTo(prompt_col, prompt_row), cursor::Show)?;
 
     tty.flush().context("while flushing the picker frame")?;
     Ok(())
 }
 
 /// Draw a full-width colored divider line.
-fn draw_divider(tty: &mut File, cols: u16) -> Result<()> {
+fn draw_divider(tty: &mut impl Write, cols: u16) -> Result<()> {
     queue!(
         tty,
         style::SetForegroundColor(DIVIDER_COLOR),
@@ -265,7 +282,7 @@ fn stats_line(width: usize, rank: Option<usize>, matching: usize, total: usize) 
 /// matched characters are yellow on either row; the display-only ULID suffix is
 /// dimmed (or rides the cyan body on the selected row). All colors are the
 /// terminal's own ANSI palette, so the picker adapts to its theme.
-fn draw_row(tty: &mut File, row: &VisibleRow<'_>, cols: u16) -> Result<()> {
+fn draw_row(tty: &mut impl Write, row: &VisibleRow<'_>, cols: u16) -> Result<()> {
     let width = cols as usize;
     let selected = row.selected;
     let pointer = if selected { SELECTION_POINTER } else { "  " };
