@@ -579,6 +579,255 @@ fn search_empty_vault_exits_nonzero() {
     });
 }
 
+/// The relative `PATH` entry the stub-pandoc tests set. It is a directory
+/// inside the vault, so the entry is a fixed relative name rather than a
+/// host-specific temp path: insta-cmd records set env vars verbatim in the
+/// snapshot's `info` block (filters do not reach it), so a relative value keeps
+/// those snapshots stable. A relative `PATH` component resolves against the
+/// process's working directory, which the tests set to the vault.
+const STUB_BIN: &str = "stub-bin";
+
+/// Write a fake `pandoc` into `<vault>/stub-bin/`. It scans its args for
+/// `--output`, writes a fixed string to that path, and exits 0, so the success
+/// path is exercised deterministically without the toolchain (resolved
+/// decision 2); the real pandoc/typst are never executed. `stub-bin` lives in
+/// the vault root, which the scanner never walks, so it is invisible to
+/// selection.
+fn write_stub_pandoc(vault: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let bin = vault.join(STUB_BIN);
+    fs::create_dir_all(&bin).expect("stub-bin dir");
+    let script = r#"#!/bin/sh
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --output) shift; out="$1" ;;
+  esac
+  shift
+done
+if [ -n "$out" ]; then
+  printf 'stub pdf\n' > "$out"
+fi
+exit 0
+"#;
+    let path = bin.join("pandoc");
+    fs::write(&path, script).expect("write stub pandoc");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub pandoc");
+}
+
+#[test]
+fn render_requires_a_selector() {
+    // The selector is required, so a bare `render` is a clap usage error.
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("render");
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_help_pins_the_flag_surface() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", "--help"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_ambiguous_selector_errors_under_n() {
+    // Two matches with no picker (`-n`): the candidate list prints to stderr
+    // and the command fails, mirroring `delete` (ADR 0025).
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "alpha",
+        "---\ntitle: Alpha\ntags: [work]\n---\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "beta",
+        "---\ntitle: Beta\ntags: [work]\n---\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", "tag:work", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_no_match_errors() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", "tag:nonexistent", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_unknown_format_errors() {
+    // The engine resolves before any scan, so an unknown format fails first.
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "wanted", "---\ntitle: Wanted\n---\n");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", ULID_A, "--to", "docx", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_unknown_engine_errors() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "wanted", "---\ntitle: Wanted\n---\n");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", ULID_A, "--engine", "weasyprint", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_missing_pandoc_reports_unavailable() {
+    // `PATH` points at an empty dir so pandoc is not found; the binary is
+    // launched by its absolute path, so scrubbing `PATH` is safe. The error
+    // names pandoc as the tool to install.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", ULID_A, "-n"]);
+        // A relative `PATH` naming a directory that does not exist keeps the
+        // recorded env deterministic while ensuring pandoc is not found.
+        cmd.env("PATH", "no-such-bin");
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_scan_warnings_print_and_strict_fails() {
+    // A malformed sibling note warns on stderr while the good note still
+    // renders (stub pandoc); `--strict` promotes the warning to a failure.
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "good", "---\ntitle: Good\n---\nbody\n");
+    write_note(dir.path(), ULID_B, "bad", "---\ntags: [x]\n---\n");
+    write_stub_pandoc(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut lenient = ntropy(dir.path());
+        lenient.args(["render", ULID_A, "-p", "-n"]);
+        lenient.env("PATH", STUB_BIN);
+        assert_cmd_snapshot!("render_warnings_lenient", lenient);
+
+        let mut strict = ntropy(dir.path());
+        strict.args(["render", ULID_A, "-p", "-n", "--strict"]);
+        strict.env("PATH", STUB_BIN);
+        assert_cmd_snapshot!("render_warnings_strict", strict);
+    });
+}
+
+#[test]
+fn render_default_output_names_the_slug() {
+    // Without `-p`, stdout stays silent and the artifact lands at `<slug>.pdf`
+    // in the working directory (here the vault root).
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    write_stub_pandoc(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", ULID_A, "-n"]);
+        cmd.env("PATH", STUB_BIN);
+        assert_cmd_snapshot!(cmd);
+    });
+    let artifact = dir.path().join("wanted.pdf");
+    assert_eq!(
+        fs::read_to_string(&artifact).expect("read artifact"),
+        "stub pdf\n"
+    );
+}
+
+#[test]
+fn render_print_emits_the_artifact_path() {
+    // `-p` prints exactly the artifact path as one line.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    write_stub_pandoc(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", ULID_A, "-p", "-n"]);
+        cmd.env("PATH", STUB_BIN);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_output_flag_is_honored() {
+    // `-o` overrides the default name; the artifact appears at the given path.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    write_stub_pandoc(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", ULID_A, "-o", "custom.pdf", "-p", "-n"]);
+        cmd.env("PATH", STUB_BIN);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(dir.path().join("custom.pdf").exists());
+    // The default name was not used.
+    assert!(!dir.path().join("wanted.pdf").exists());
+}
+
+#[test]
+fn render_overwrites_an_existing_artifact() {
+    // A pre-existing file at the target is replaced silently (ADR 0037).
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    let target = dir.path().join("wanted.pdf");
+    fs::write(&target, "stale content").expect("seed stale artifact");
+    write_stub_pandoc(dir.path());
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-n"]);
+    cmd.env("PATH", STUB_BIN);
+    let status = cmd.status().expect("run render");
+    assert!(status.success());
+    assert_eq!(
+        fs::read_to_string(&target).expect("read artifact"),
+        "stub pdf\n"
+    );
+}
+
 #[test]
 fn info_reports_vault_and_stats() {
     let dir = setup_vault();

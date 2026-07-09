@@ -10,6 +10,16 @@ and this project adheres to
 
 ### Added
 
+- `render <id|query>` produces a document artifact from a single note. v1
+  renders a PDF through pandoc with typst as the PDF engine, so both must be
+  installed and on `PATH`. The selector follows the id-or-query rule of
+  `search`/`delete`; an ambiguous selector opens the picker interactively and
+  errors with the candidate list under `-n`. `--to` selects the format
+  (default `pdf`), `--engine` overrides the format's default engine,
+  `--output`/`-o` names the artifact (default `./<slug>.pdf`, overwriting any
+  existing file), and `--print`/`-p` prints the artifact path to stdout on
+  success so `open "$(ntropy render -p ...)"` composes. Rendering is read-only
+  with respect to the vault.
 - `search` (and its aliases `list` and `edit`) now takes `--print`/`-p`: on a
   TTY the selected note's path is printed to stdout instead of opening the
   editor. A lone match prints directly; several matches open the picker and

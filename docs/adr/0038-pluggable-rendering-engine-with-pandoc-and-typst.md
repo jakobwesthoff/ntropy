@@ -76,9 +76,10 @@ the `insta` snapshot. No v1 test executes pandoc or typst.
 ## Consequences
 
 - ntropy gains its first runtime tool dependency beyond the editor:
-  `render` works only where pandoc and typst are installed. ntropy's own
-  binary, build, and distribution are unchanged — no new crates, no
-  linked libraries.
+  `render` works only where pandoc and typst are installed. Staging the
+  intermediate render workspace promotes the `tempfile` crate from
+  dev-dependencies into the runtime dependency tree; there are still no
+  linked C libraries and distribution is unchanged.
 - The exact pandoc invocation is pinned by snapshot without the tools
   installed, so the test suite runs everywhere it does today.
 - Adding an engine or format is a library-only change against `Renderer`

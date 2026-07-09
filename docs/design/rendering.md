@@ -21,7 +21,9 @@ produced by one engine, `pandoc`, which delegates typesetting to typst.
 - Like `delete`, `render` must resolve to exactly one note: an ambiguous
   selector opens the picker pre-filtered interactively, and errors with the
   candidate list under `-n` (ADR 0025). Interactivity keys off the
-  controlling terminal (ADR 0036).
+  controlling terminal (ADR 0036). A cancelled picker exits non-zero under
+  `-p`, so `open "$(ntropy render -p ...)"` branches correctly, and is a
+  successful no-op without it, like `delete`.
 - `--to <format>` selects the output format and defaults to `pdf`.
 - `--engine <name>` overrides the format's default engine. v1 has one
   engine, `pandoc`, so the flag accepts only that value; it exists so that
@@ -161,9 +163,10 @@ tools installed:
   `stage_file` and `run` call and feeds back scripted outputs. The recorded
   sequence, staged contents and full argv included, is the snapshot,
   pinning the exact pandoc invocation without executing pandoc.
-- No v1 test executes pandoc or typst; the real subprocess path is
-  validated manually. CLI contract tests pass `-n` or `--print` per
-  ADR 0036.
+- CLI contract tests exercise the command end-to-end through a test-owned
+  stub `pandoc` placed on `PATH`; the real pandoc and typst are never
+  executed by tests, so the real-toolchain output stays validated manually.
+  Contract tests pass `-n` or `--print` per ADR 0036.
 
 ## Module layout
 

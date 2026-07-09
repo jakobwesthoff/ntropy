@@ -1,0 +1,51 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - render
+    - "--help"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Render a note to a document artifact.
+
+v1 produces a PDF via pandoc and typst; both tools must be installed and on `PATH`.
+
+Usage: ntropy render [OPTIONS] <ID|QUERY>...
+
+Arguments:
+  <ID|QUERY>...
+          A full ULID or a query DSL expression (joined from trailing arguments)
+
+Options:
+      --to <FORMAT>
+          The output format (v1: `pdf`)
+          
+          [default: pdf]
+
+      --vault <PATH>
+          Operate on the vault at this path (overrides all other resolution)
+
+      --engine <NAME>
+          Override the format's default engine (v1: `pandoc`)
+
+  -n, --non-interactive
+          Force non-interactive (plain) behavior even on a TTY
+
+  -o, --output <PATH>
+          Write the artifact here instead of `./<slug>.<ext>`
+
+      --strict
+          Treat malformed/badly-named notes as errors instead of warnings
+
+  -p, --print
+          Print the artifact's path to stdout on success
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+----- stderr -----

@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - render
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - "--engine"
+    - weasyprint
+    - "-n"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while selecting the render engine: unknown engine `weasyprint` for format `pdf`

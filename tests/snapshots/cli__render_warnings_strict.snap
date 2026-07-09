@@ -1,0 +1,21 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - render
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - "-p"
+    - "-n"
+    - "--strict"
+  env:
+    EDITOR: "true"
+    PATH: stub-bin
+---
+success: false
+exit_code: 1
+----- stdout -----
+good.pdf
+
+----- stderr -----
+warning: skipped `[ULID....................]-bad.md`: the frontmatter has no `title` field

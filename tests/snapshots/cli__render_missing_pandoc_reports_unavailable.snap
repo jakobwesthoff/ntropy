@@ -1,0 +1,18 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - render
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - "-n"
+  env:
+    EDITOR: "true"
+    PATH: no-such-bin
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while rendering the note: required tool `pandoc` is not available: install pandoc and typst; both must be on PATH

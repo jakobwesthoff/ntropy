@@ -1,0 +1,20 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - render
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: the following required arguments were not provided:
+  <ID|QUERY>...
+
+Usage: ntropy render <ID|QUERY>...
+
+For more information, try '--help'.

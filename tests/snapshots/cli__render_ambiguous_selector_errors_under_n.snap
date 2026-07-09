@@ -1,0 +1,20 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - render
+    - "tag:work"
+    - "-n"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: `tag:work` is ambiguous (2 matches):
+  [DATE....]  Beta  [work]  ([ULID....................])
+  [DATE....]  Alpha  [work]  ([ULID....................])
+refine the query or pass a full ULID
