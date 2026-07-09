@@ -15,8 +15,10 @@
 //! All interaction logic lives in [`state::PickerState`] and is unit tested
 //! without a TTY (ADR 0021). This module is the thin glue that maps `crossterm`
 //! key events onto that state and draws it. Each frame is buffered and reaches
-//! the terminal as a single write, with the cursor hidden until it is parked
-//! at the prompt, so redraws neither flicker nor leave cursor trails.
+//! the terminal as a single write bracketed by a synchronized update (DEC
+//! mode 2026), erases per line rather than clearing the screen, and keeps the
+//! cursor hidden until it is parked at the prompt, so redraws neither flicker
+//! nor leave cursor trails.
 
 mod layout;
 mod state;
@@ -83,8 +85,16 @@ pub fn pick<T>(items: Vec<T>, render_all: impl FnOnce(&[T]) -> Vec<Row>) -> Resu
     // Armed only after the alternate screen is actually entered, so it leaves
     // exactly what was entered. It drops before the raw guard (reverse arming
     // order), leaving the alternate screen before raw mode is disabled.
+    // Ending a synchronized update that was never begun is a no-op, so the
+    // guard can always close one; without this, an error between the frame's
+    // begin/end markers would leave the terminal waiting out its sync timeout.
     let _alt_guard = TerminalGuard::new(move || {
-        let _ = execute!(teardown_tty, terminal::LeaveAlternateScreen, cursor::Show);
+        let _ = execute!(
+            teardown_tty,
+            terminal::EndSynchronizedUpdate,
+            terminal::LeaveAlternateScreen,
+            cursor::Show
+        );
     });
 
     // The tty file is unbuffered, so without this every `queue!` would be its
@@ -132,8 +142,12 @@ fn run_loop<T>(
     let picker_rows = render_all(&items);
     let mut state = PickerState::new(items, picker_rows, list_height(rows));
 
+    // The first frame paints a fresh alternate screen and every later frame
+    // erases per line, so a full clear is only needed again after a resize.
+    let mut clear_all = true;
     loop {
-        draw(tty, &state, cols).context("while drawing the picker")?;
+        draw(tty, &state, cols, clear_all).context("while drawing the picker")?;
+        clear_all = false;
 
         match event::read().context("while reading a key event")? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
@@ -163,6 +177,7 @@ fn run_loop<T>(
             Event::Resize(new_cols, new_rows) => {
                 cols = new_cols;
                 state.set_height(list_height(new_rows));
+                clear_all = true;
             }
             _ => {}
         }
@@ -187,39 +202,53 @@ fn list_height(terminal_rows: u16) -> usize {
 
 /// Draw the whole picker, bottom-anchored: the list region (best match at the
 /// bottom), a divider, the prompt, a second divider, then the dimmed `m/n` stats.
-fn draw<T>(tty: &mut impl Write, state: &PickerState<T>, cols: u16) -> Result<()> {
-    // The cursor is hidden while the frame paints and shown again only once it
-    // is parked at the prompt, so the terminal never sees it anywhere else —
-    // cursor-trail animations (kitty, ghostty) would otherwise chase every
-    // intermediate `MoveTo`.
-    queue!(
-        tty,
-        cursor::Hide,
-        cursor::MoveTo(0, 0),
-        terminal::Clear(terminal::ClearType::All),
-    )?;
+///
+/// `clear_all` wipes the screen before painting; it is needed after a resize,
+/// where rows the frame does not touch may hold reflowed leftovers.
+fn draw<T>(tty: &mut impl Write, state: &PickerState<T>, cols: u16, clear_all: bool) -> Result<()> {
+    // The frame is bracketed by a synchronized update (DEC mode 2026): a
+    // supporting terminal applies everything in between as one atomic screen
+    // swap, so a display refresh can never catch the frame half painted.
+    // Others ignore the markers. The cursor is hidden while the frame paints
+    // and shown again only once it is parked at the prompt, so the terminal
+    // never sees it anywhere else — cursor-trail animations (kitty, ghostty)
+    // would otherwise chase every intermediate `MoveTo`.
+    queue!(tty, terminal::BeginSynchronizedUpdate, cursor::Hide)?;
+    if clear_all {
+        queue!(
+            tty,
+            cursor::MoveTo(0, 0),
+            terminal::Clear(terminal::ClearType::All),
+        )?;
+    }
 
-    // The list region is exactly `height` lines; blanks (`None`) at the top are
-    // left clear so the rows hug the divider and prompt below them.
+    // The list region is exactly `height` lines; blanks (`None`) at the top
+    // keep the rows hugging the divider and prompt below them. Every row is
+    // erased only from the end of its new content, never blanked up front: a
+    // full-screen clear followed by a repaint flickers on terminals without
+    // synchronized updates when a refresh lands between the two.
     let lines = state.list_lines();
     let list_rows = lines.len() as u16;
     for (i, line) in lines.iter().enumerate() {
+        queue!(tty, cursor::MoveTo(0, i as u16))?;
         if let Some(row) = line {
-            queue!(tty, cursor::MoveTo(0, i as u16))?;
             draw_row(tty, row, cols)?;
         }
+        queue!(tty, terminal::Clear(terminal::ClearType::UntilNewLine))?;
     }
 
-    // Divider directly above the prompt.
+    // Divider directly above the prompt (full width, nothing left to erase).
     queue!(tty, cursor::MoveTo(0, list_rows))?;
     draw_divider(tty, cols)?;
 
-    // Prompt, framed by a second divider below it.
+    // Prompt, framed by a second divider below it. The clear erases what a
+    // longer previous query left behind.
     let prompt_row = list_rows + 1;
     queue!(
         tty,
         cursor::MoveTo(0, prompt_row),
         style::Print(format!("{PROMPT_PREFIX}{}", state.query())),
+        terminal::Clear(terminal::ClearType::UntilNewLine),
         cursor::MoveTo(0, prompt_row + 1),
     )?;
     draw_divider(tty, cols)?;
@@ -233,12 +262,18 @@ fn draw<T>(tty: &mut impl Write, state: &PickerState<T>, cols: u16) -> Result<()
         style::SetAttribute(Attribute::Dim),
         style::Print(stats_line(cols as usize, rank, matching, total)),
         style::SetAttribute(Attribute::Reset),
+        terminal::Clear(terminal::ClearType::UntilNewLine),
     )?;
 
     // Park the cursor at the end of the query so typing reads naturally, and
     // only now make it visible again.
     let prompt_col = (PROMPT_PREFIX.width() + state.query().width()) as u16;
-    queue!(tty, cursor::MoveTo(prompt_col, prompt_row), cursor::Show)?;
+    queue!(
+        tty,
+        cursor::MoveTo(prompt_col, prompt_row),
+        cursor::Show,
+        terminal::EndSynchronizedUpdate,
+    )?;
 
     tty.flush().context("while flushing the picker frame")?;
     Ok(())

@@ -112,9 +112,11 @@ word) and Ctrl-U (clear) edit the query; Up / Ctrl-P move toward worse matches
 and Down / Ctrl-N toward the best; Enter selects; Esc / Ctrl-C aborts. Matched
 characters are yellow and the selected row cyan with a `▌` bar, all from the
 terminal's own ANSI palette so the picker adapts to its theme. Each frame is
-delivered to the terminal as one buffered write with the cursor hidden until
-it is parked at the prompt, so redraws neither flicker nor trigger
-cursor-trail animations.
+delivered to the terminal as one buffered write bracketed by a synchronized
+update (DEC mode 2026, applied atomically where supported), erases per line
+instead of clearing the screen, and keeps the cursor hidden until it is
+parked at the prompt, so redraws neither flicker nor trigger cursor-trail
+animations.
 
 Examples:
 
