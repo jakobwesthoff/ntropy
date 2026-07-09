@@ -22,8 +22,10 @@ use std::path::{Path, PathBuf};
 
 use crate::id::Id;
 
+pub mod prepare;
 pub mod registry;
 
+pub use prepare::prepare;
 pub use registry::{DEFAULT_FORMAT, Registry};
 
 // =========================================================
