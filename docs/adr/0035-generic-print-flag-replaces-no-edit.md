@@ -10,6 +10,12 @@ Supersedes the `--no-edit` flag naming of
 [ADR 0015](0015-editor-integration-and-new-note-flow.md) and
 [ADR 0018](0018-cli-command-surface.md).
 
+The non-interactive `--print` behavior is superseded by
+[ADR 0036](0036-interactivity-keyed-to-the-controlling-terminal.md): without
+a picker, `--print` prints every match one path per line instead of leaving
+the table unchanged, and interactivity itself keys off the controlling
+terminal rather than stdout.
+
 ## Context
 
 `new` and `today` suppressed the editor with `--no-edit`, which carried

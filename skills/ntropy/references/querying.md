@@ -55,9 +55,12 @@ There are no comparison operators (`>`, `<`, date ranges) in the language.
 
 ## Non-interactive output
 
-ALWAYS pass `-n` (or pipe the output; both suppress the picker and the
-editor). The plain table is one note per line, newest first, space-aligned
-columns padded to the widest cell, with an uppercase header row:
+ALWAYS pass `-n`. Piping or capturing the output does NOT suppress the picker
+or the editor: ntropy stays interactive whenever a controlling terminal
+exists, so an un-flagged command inside `$(...)` or a pipeline blocks waiting
+for keys. Only `-n` guarantees plain behavior. The plain table is one note per
+line, newest first, space-aligned columns padded to the widest cell, with an
+uppercase header row:
 
 ```
 ID                          DATE        TITLE                TAGS                   PATH
@@ -71,15 +74,20 @@ spaces stay parseable:
 ```bash
 # All matching IDs (first column is a fixed-width 26-char ULID):
 ntropy search -n tag:work | tail -n +2 | awk '{print $1}'
-
-# The file path of one note by ULID (last column):
-ntropy search -n 01KWVBW61WHJY7K27WNETSF641 | tail -n +2 | awk -F'  +' '{print $NF}'
 ```
 
-The `awk -F'  +'` split misparses a title containing two consecutive spaces; if
-that matters, resolve the path by ULID glob instead:
-`<vault>/all-notes/<ulid>-*.md`. `tags` and `view list` print the same style of
-headed, space-aligned table.
+For file paths, skip the table entirely: `--print`/`-p` prints one path per
+line and nothing else, so no parsing is needed:
+
+```bash
+# The file path of one note by ULID:
+path=$(ntropy search -n -p 01KWVBW61WHJY7K27WNETSF641)
+
+# Every matching path, newest first:
+ntropy search -n -p tag:work
+```
+
+`tags` and `view list` print the same style of headed, space-aligned table.
 
 ## Exit codes
 

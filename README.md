@@ -262,9 +262,12 @@ ntropy search '(tag:work or tag:side-project) and not status:done'
 
 ## The interactive picker
 
-When `search` matches several notes on a terminal it opens a fuzzy picker; a
-single match skips straight to opening the note, and a full ULID jumps right to
-it. (Piped or with `-n` there's no picker at all — see [Scripting](#scripting).)
+When `search` matches several notes it opens a fuzzy picker; a single match
+skips straight to opening the note, and a full ULID jumps right to it. The
+picker draws on your terminal even while stdout feeds a pipe, so
+`ntropy search -p | pbcopy` picks interactively and pipes just the chosen
+note's path. (With `-n` there's no picker at all — see
+[Scripting](#scripting).)
 
 It's bottom-anchored, like a shell prompt: the input line sits at the bottom and
 results stack upward, best match closest to your cursor. Type to filter live.
@@ -497,9 +500,12 @@ picker jumps to any note by title.
 
 ## Scripting
 
-Pipe ntropy anywhere, or pass `-n`/`--non-interactive`, and it drops all the
-interactive niceties: no picker, no editor, just plain text on stdout. `search`
-then prints one note per line as a space-aligned `ID DATE TITLE TAGS PATH`
+Pass `-n`/`--non-interactive` and ntropy drops all the interactive niceties:
+no picker, no editor, just plain text on stdout. Piping alone doesn't do that
+— ntropy stays interactive as long as it can reach your terminal, so scripts
+and command substitutions must say `-n` (the same happens automatically where
+no terminal exists, like cron or CI). `search -n`
+prints one note per line as a space-aligned `ID DATE TITLE TAGS PATH`
 table: each column is padded to its widest cell in Unicode display width and
 separated from the next by two or more spaces, except the last column, which
 is left unpadded so no line carries trailing whitespace. Rows are newest
@@ -513,6 +519,10 @@ title with doubled spaces is rendered verbatim), which shifts the fields after
 it — so treat TITLE and the columns after it as best-effort rather than a
 positional contract. ID and DATE can never contain spaces and are always safe.
 (`tags` and `view list` print headers too.)
+
+File paths need no parsing at all: `search -n -p` prints every match as one
+path per line (`ntropy search -n -p tag:work | xargs grep -l deadline`), and
+`new -p`/`today -p` print the created note's path.
 
 Exit codes are scriptable: a `search` that matches nothing exits non-zero, so
 `if ntropy search -n tag:urgent; then …` branches on "did anything match" without

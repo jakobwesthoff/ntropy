@@ -6,6 +6,12 @@ Date: 2026-06-24
 
 Accepted
 
+The stdout-based detection and the auto output mode are superseded by
+[ADR 0036](0036-interactivity-keyed-to-the-controlling-terminal.md):
+interactivity keys off the controlling terminal and `-n`; redirecting stdout
+no longer switches to plain output. The picker-in-house decision stands
+(ADR 0027).
+
 ## Context
 
 ntropy must serve both interactive use (fuzzy-pick a note, open it) and

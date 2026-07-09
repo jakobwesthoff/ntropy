@@ -21,8 +21,10 @@ language for filtering, and materialized symlink views for filesystem browsing.
 ## Golden rules for agents
 
 1. **ALWAYS run non-interactively.** Pass `-n` on every command and
-   `--print` on `new`/`today`. Without them, on a TTY ntropy opens an
-   interactive fuzzy picker or the user's `$VISUAL`/`$EDITOR` and blocks.
+   `--print` on `new`/`today`. Without them ntropy opens an interactive fuzzy
+   picker or the user's `$VISUAL`/`$EDITOR` and blocks whenever a controlling
+   terminal exists — piping or capturing the output does NOT prevent that, so
+   `$(ntropy search …)` without `-n` hangs waiting for keys.
 2. **NEVER hand-create files in `all-notes/`.** Create with
    `ntropy new --print <title>` (it prints the path), then edit that file.
 3. **Run `ntropy reconcile` after editing note files directly.** Direct edits
@@ -59,7 +61,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy init [path]` | Scaffold or complete a vault; idempotent. `--set-default` records it as the global default. |
 | `ntropy new --print <title…>` | Create a note from a template, print its path. `-t <name>` picks `.ntropy/templates/<name>.md`. |
 | `ntropy today --print` | Print today's daily note path, creating it on first use each day. |
-| `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. |
+| `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
 | `ntropy reconcile` | Realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
@@ -95,8 +97,9 @@ Frontmatter rules, tags, inter-note links, and template authoring:
 **Find and read notes:**
 
 ```bash
-ntropy search -n 'tag:work and not status:done'   # table: ID DATE TITLE TAGS PATH
-ntropy search -n 01KWVBW61WHJY7K27WNETSF641       # one note by ULID
+ntropy search -n 'tag:work and not status:done'    # table: ID DATE TITLE TAGS PATH
+ntropy search -n 01KWVBW61WHJY7K27WNETSF641        # one note by ULID
+path=$(ntropy search -n -p 01KWVBW61WHJY7K27WNETSF641)   # just the file path
 ```
 
 Full query language (`tag:`, `field:`, `text:`, `and`/`or`/`not`), output

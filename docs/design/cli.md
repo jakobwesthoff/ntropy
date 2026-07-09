@@ -5,8 +5,9 @@ The command surface and its behavior. Consolidates
 [ADR 0015](../adr/0015-editor-integration-and-new-note-flow.md),
 [ADR 0016](../adr/0016-configuration-format-location-and-vault-resolution.md),
 [ADR 0018](../adr/0018-cli-command-surface.md),
-[ADR 0031](../adr/0031-merge-edit-into-search.md), and the query DSL in
-[query-and-search.md](query-and-search.md).
+[ADR 0031](../adr/0031-merge-edit-into-search.md),
+[ADR 0036](../adr/0036-interactivity-keyed-to-the-controlling-terminal.md),
+and the query DSL in [query-and-search.md](query-and-search.md).
 
 ## Global behavior
 
@@ -14,10 +15,14 @@ The command surface and its behavior. Consolidates
   (nearest ancestor with either a `.ntropy-vault` pointer file or a `.ntropy/`
   dir; the pointer wins in the same dir) > global config default vault. See
   [ADR 0026](../adr/0026-project-local-vault-pointer-file.md).
-- **Interactivity:** interactive on a TTY, non-interactive when piped.
-  `--non-interactive` / `-n` forces non-interactive.
-- **Output:** decorated for a TTY; the plain tables are space-aligned for every
-  invocation (TTY, piped, `-n`): the note table is `id date title tags path`,
+- **Interactivity:** interactive whenever a controlling terminal (`/dev/tty`)
+  is available; `--non-interactive` / `-n` forces non-interactive, and
+  environments without a controlling terminal (cron, CI) are non-interactive
+  automatically. Redirecting stdout does not demote to non-interactive: stdout
+  is purely a data channel, and the picker, the delete confirmation, and the
+  editor all talk to the controlling terminal directly (ADR 0036).
+- **Output:** the plain tables are space-aligned for every
+  invocation: the note table is `id date title tags path`,
   one note per line, led by an uppercase column header, columns padded to their
   widest cell in Unicode display width with the last column unpadded (tags
   comma-joined; `tail -n +2` drops the header). All plain tables carry a header.
@@ -80,15 +85,18 @@ The single browse / filter / full-text / open entry point (visible alias:
 notes; a full 26-char ULID resolves directly to that note; anything else is a
 DSL expression (the id-or-query rule shared with `delete`).
 
-- On a TTY: a single match opens directly in the editor; several launch the
+- Interactive: a single match opens directly in the editor; several launch the
   interactive picker pre-filtered to them, and Enter opens the selection. The
-  note reconciles on editor exit, like `new`.
-- `--print` / `-p`: on a TTY, print the selected note's path instead of
-  opening it; a cancelled picker exits non-zero. Piped or with `-n` the flag
-  changes nothing. `--no-edit` is a hidden alias (ADR 0035).
-- Piped or `-n`: prints the matching notes as plain lines (one row for a single
-  match, the full table for several). The editor never opens without a TTY,
-  mirroring `new`/`today` (ADR 0015).
+  note reconciles on editor exit, like `new`. Nothing is written to stdout, so
+  a redirected stdout receives nothing without `--print` (ADR 0036).
+- `--print` / `-p`: print paths to stdout instead of opening the editor.
+  Interactively the picker chooses the one path (`search -p | pbcopy`); a
+  cancelled picker exits non-zero. With `-n` (or no controlling terminal)
+  every match prints, one path per line, newest first. `--no-edit` is a
+  hidden alias (ADR 0035).
+- `-n` (or no controlling terminal): prints the matching notes as the plain
+  table (one row for a single match, the full table for several). The editor
+  never opens, mirroring `new`/`today` (ADR 0015).
 - No match, in any mode: prints `No notes matched your search criteria.` to
   stderr and exits non-zero. An empty-vault listing exits non-zero too
   (ADR 0031).
@@ -119,9 +127,11 @@ Examples:
 
 Remove a note (its canonical file) and refresh the views. The selector follows
 the same id-or-query rule as `search`. Deletion prompts for confirmation unless
-`--force`/`-f` is given. Unlike `search`, `delete` must resolve to exactly one
-note: an ambiguous selector opens the picker pre-filtered on a TTY, and errors
-with a non-zero exit piped/`-n` (ADR 0025). In non-interactive mode `--force`
+`--force`/`-f` is given; the prompt goes through the controlling terminal, so
+redirected streams can neither swallow the question nor feed the answer
+(ADR 0036). Unlike `search`, `delete` must resolve to exactly one note: an
+ambiguous selector opens the picker pre-filtered interactively, and errors
+with a non-zero exit under `-n` (ADR 0025). In non-interactive mode `--force`
 is required, since there is no prompt.
 
 ### `reconcile`
