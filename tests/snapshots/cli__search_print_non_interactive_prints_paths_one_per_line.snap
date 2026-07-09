@@ -4,15 +4,15 @@ info:
   program: ntropy
   args:
     - search
-    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
-    - "-p"
     - "-n"
+    - "--print"
   env:
     EDITOR: "true"
 ---
 success: true
 exit_code: 0
 ----- stdout -----
-[VAULT]/all-notes/[ULID....................]-wanted.md
+[VAULT]/all-notes/[ULID....................]-newer.md
+[VAULT]/all-notes/[ULID....................]-older.md
 
 ----- stderr -----

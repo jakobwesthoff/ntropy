@@ -481,10 +481,9 @@ fn search_by_ulid_resolves_single_note() {
 }
 
 #[test]
-fn search_print_leaves_non_interactive_output_unchanged() {
-    // `--print` only redirects an interactive selection to stdout; without a
-    // TTY the plain table prints exactly as it does without the flag
-    // (ADR 0035).
+fn search_print_non_interactive_prints_paths_one_per_line() {
+    // With no picker to choose one note, `--print` covers every match: one
+    // path per line, newest first, nothing else on stdout (ADR 0035).
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -498,19 +497,6 @@ fn search_print_leaves_non_interactive_output_unchanged() {
         "newer",
         "---\ntitle: Newer\n---\nbody\n",
     );
-
-    let plain = ntropy(dir.path())
-        .args(["search", "-n"])
-        .output()
-        .expect("run ntropy");
-    let printed = ntropy(dir.path())
-        .args(["search", "-n", "--print"])
-        .output()
-        .expect("run ntropy");
-    assert_eq!(plain.status.code(), printed.status.code());
-    assert_eq!(plain.stdout, printed.stdout);
-    assert_eq!(plain.stderr, printed.stderr);
-
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
         cmd.args(["search", "-n", "--print"]);
@@ -520,8 +506,8 @@ fn search_print_leaves_non_interactive_output_unchanged() {
 
 #[test]
 fn search_print_short_flag_resolves_single_note() {
-    // The short form `-p` parses on `search` and, without a TTY, prints the
-    // lone match as the usual one-row table (ADR 0035).
+    // The short form `-p` parses on `search`; non-interactively a lone match
+    // prints as exactly one path line (ADR 0035).
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -560,6 +546,11 @@ fn search_no_edit_is_a_hidden_alias_of_print() {
         .output()
         .expect("run ntropy");
     assert!(aliased.status.success(), "--no-edit must parse on search");
+    let stdout = String::from_utf8_lossy(&aliased.stdout);
+    assert!(
+        stdout.trim_end().ends_with("-a.md"),
+        "--no-edit must print the matching note's path, got: {stdout}"
+    );
 
     let help = ntropy(dir.path())
         .args(["search", "--help"])

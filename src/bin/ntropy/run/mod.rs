@@ -192,11 +192,16 @@ fn cmd_search(
                     None if print => return Ok(ExitCode::FAILURE),
                     None => {}
                 }
+            } else if print {
+                // With no picker to choose one note, `--print` covers every
+                // match: one path per line, in the table's newest-first order,
+                // ready for `xargs` and friends.
+                for note in notes {
+                    println!("{}", note.path.display());
+                }
             } else {
                 // Without a TTY the editor never opens, mirroring `new`/`today`
-                // (ADR 0015); the plain table is printed instead. `--print`
-                // only redirects an interactive selection, so it changes
-                // nothing here (ADR 0035).
+                // (ADR 0015); the plain table is printed instead.
                 output::print_notes(notes)?;
             }
             Ok(exit_for_warnings(global.strict, &matches.warnings))

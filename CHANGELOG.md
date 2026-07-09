@@ -14,8 +14,8 @@ and this project adheres to
   TTY the selected note's path is printed to stdout instead of opening the
   editor. A lone match prints directly; several matches open the picker and
   the chosen note's path prints; cancelling the picker exits non-zero so
-  `p=$(ntropy search -p ...)` branches correctly. Without a TTY the flag
-  changes nothing; the plain table prints as before.
+  `p=$(ntropy search -p ...)` branches correctly. Non-interactively (`-n`)
+  every match prints as one path per line, newest first.
 
 ### Changed
 
