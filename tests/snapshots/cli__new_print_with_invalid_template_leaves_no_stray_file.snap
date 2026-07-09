@@ -1,12 +1,11 @@
 ---
 source: tests/cli.rs
-assertion_line: 226
 info:
   program: ntropy
   args:
     - new
     - Hello World
-    - "--no-edit"
+    - "--print"
   env:
     EDITOR: "true"
 ---

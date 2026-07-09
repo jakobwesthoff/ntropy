@@ -66,9 +66,9 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Command::New {
             title,
             template,
-            no_edit,
-        } => cmd_new(&vault, join(&title), template, no_edit, interactive),
-        Command::Today { no_edit } => cmd_today(&vault, no_edit, interactive),
+            print,
+        } => cmd_new(&vault, join(&title), template, print, interactive),
+        Command::Today { print } => cmd_today(&vault, print, interactive),
         Command::Reconcile => cmd_reconcile(&cli.global, &vault),
         Command::Delete { selector, force } => {
             cmd_delete(&vault, join(&selector), force, interactive)
@@ -192,7 +192,7 @@ fn cmd_new(
     vault: &Vault,
     title: String,
     template: Option<String>,
-    no_edit: bool,
+    print: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
     let note =
@@ -200,7 +200,7 @@ fn cmd_new(
 
     // Open the editor only when interactive and not explicitly suppressed;
     // otherwise create-and-print for scripting (ADR 0015).
-    if !no_edit && interactive {
+    if !print && interactive {
         open_and_refresh(vault, &note.path)?;
     } else {
         reconcile::refresh_views(vault).context("while refreshing views")?;
@@ -209,12 +209,12 @@ fn cmd_new(
     Ok(ExitCode::SUCCESS)
 }
 
-fn cmd_today(vault: &Vault, no_edit: bool, interactive: bool) -> Result<ExitCode> {
+fn cmd_today(vault: &Vault, print: bool, interactive: bool) -> Result<ExitCode> {
     let outcome = ops::today_note(vault).context("while preparing today's note")?;
 
     // Mirror `new`: open interactively unless suppressed, otherwise refresh views
     // and print the path for scripting (ADR 0015).
-    if !no_edit && interactive {
+    if !print && interactive {
         open_and_refresh(vault, &outcome.note.path)?;
     } else {
         reconcile::refresh_views(vault).context("while refreshing views")?;

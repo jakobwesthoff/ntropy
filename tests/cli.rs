@@ -130,13 +130,52 @@ fn init_rejects_path_and_vault_together() {
 }
 
 #[test]
-fn new_no_edit_prints_path() {
+fn new_print_prints_path() {
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
-        cmd.args(["new", "My First Note", "--no-edit"]);
+        cmd.args(["new", "My First Note", "--print"]);
         assert_cmd_snapshot!(cmd);
     });
+}
+
+#[test]
+fn new_print_short_flag_prints_path() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["new", "My First Note", "-p"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn no_edit_is_a_hidden_alias_of_print() {
+    // `--no-edit` still parses as an alias of `--print` for backward
+    // compatibility, but the help only documents `--print`/`-p` (ADR 0035).
+    let dir = setup_vault();
+
+    let aliased = ntropy(dir.path())
+        .args(["new", "Aliased", "--no-edit"])
+        .output()
+        .expect("run ntropy");
+    assert!(aliased.status.success(), "--no-edit must behave as --print");
+    let stdout = String::from_utf8_lossy(&aliased.stdout);
+    assert!(
+        stdout.trim_end().ends_with("-aliased.md"),
+        "--no-edit must print the created note's path, got: {stdout}"
+    );
+
+    let help = ntropy(dir.path())
+        .args(["new", "--help"])
+        .output()
+        .expect("run ntropy");
+    let help_text = String::from_utf8_lossy(&help.stdout);
+    assert!(help_text.contains("--print"), "help must document --print");
+    assert!(
+        !help_text.contains("--no-edit"),
+        "help must not advertise the hidden alias, got: {help_text}"
+    );
 }
 
 #[test]
@@ -152,7 +191,7 @@ fn new_uses_named_template() {
 
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
-        cmd.args(["new", "Standup", "--template", "meeting", "--no-edit"]);
+        cmd.args(["new", "Standup", "--template", "meeting", "--print"]);
         assert_cmd_snapshot!(cmd);
     });
 
@@ -172,7 +211,7 @@ fn new_missing_named_template_errors() {
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
-        cmd.args(["new", "X", "-t", "absent", "--no-edit"]);
+        cmd.args(["new", "X", "-t", "absent", "--print"]);
         assert_cmd_snapshot!(cmd);
     });
     // No note was created.
@@ -185,7 +224,7 @@ fn new_missing_named_template_errors() {
 }
 
 #[test]
-fn new_no_edit_accepts_a_yaml_special_title() {
+fn new_print_accepts_a_yaml_special_title() {
     // Reproduces the bug in
     // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
     // a `: ` in the title used to break the default template's YAML and leave
@@ -194,7 +233,7 @@ fn new_no_edit_accepts_a_yaml_special_title() {
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
-        cmd.args(["new", "Q3: Planning kickoff", "--no-edit"]);
+        cmd.args(["new", "Q3: Planning kickoff", "--print"]);
         assert_cmd_snapshot!("new_yaml_special_title", cmd);
     });
 
@@ -206,7 +245,7 @@ fn new_no_edit_accepts_a_yaml_special_title() {
 }
 
 #[test]
-fn new_no_edit_with_invalid_template_leaves_no_stray_file() {
+fn new_print_with_invalid_template_leaves_no_stray_file() {
     // Aspect 1 of
     // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
     // a template whose rendered output is not a well-formed note (here, no
@@ -222,7 +261,7 @@ fn new_no_edit_with_invalid_template_leaves_no_stray_file() {
 
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
-        cmd.args(["new", "Hello World", "--no-edit"]);
+        cmd.args(["new", "Hello World", "--print"]);
         assert_cmd_snapshot!(cmd);
     });
 
@@ -248,12 +287,13 @@ fn today_creates_then_reuses_the_daily_note() {
 
     redacted(dir.path()).bind(|| {
         let mut first = ntropy(dir.path());
-        first.args(["today", "--no-edit"]);
+        first.args(["today", "--print"]);
         assert_cmd_snapshot!("today_first", first);
 
-        // A second run reuses the same note (same printed path).
+        // A second run reuses the same note (same printed path); it also uses
+        // the `-p` spelling, so both forms of the flag are exercised.
         let mut again = ntropy(dir.path());
-        again.args(["today", "--no-edit"]);
+        again.args(["today", "-p"]);
         assert_cmd_snapshot!("today_again", again);
     });
 
@@ -271,7 +311,7 @@ fn today_without_template_errors() {
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
-        cmd.args(["today", "--no-edit"]);
+        cmd.args(["today", "--print"]);
         assert_cmd_snapshot!(cmd);
     });
     assert_eq!(

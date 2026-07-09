@@ -7,7 +7,7 @@ info:
     - Standup
     - "--template"
     - meeting
-    - "--no-edit"
+    - "--print"
   env:
     EDITOR: "true"
 ---

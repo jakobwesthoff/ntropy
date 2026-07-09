@@ -4,7 +4,7 @@ info:
   program: ntropy
   args:
     - today
-    - "--no-edit"
+    - "--print"
   env:
     EDITOR: "true"
 ---

@@ -67,15 +67,19 @@ pub enum Command {
         #[arg(short = 't', long, value_name = "NAME")]
         template: Option<String>,
         /// Create and print the path only; do not open the editor.
-        #[arg(long, visible_alias = "print")]
-        no_edit: bool,
+        // `--no-edit` is accepted as a hidden alias for
+        // backward compatibility (ADR 0035).
+        #[arg(short = 'p', long, alias = "no-edit")]
+        print: bool,
     },
 
     /// Open today's note, creating it from the `today` template if absent.
     Today {
         /// Create and print the path only; do not open the editor.
-        #[arg(long, visible_alias = "print")]
-        no_edit: bool,
+        // `--no-edit` is accepted as a hidden alias for
+        // backward compatibility (ADR 0035).
+        #[arg(short = 'p', long, alias = "no-edit")]
+        print: bool,
     },
 
     /// Browse, filter, full-text search, or open a note by id or query.

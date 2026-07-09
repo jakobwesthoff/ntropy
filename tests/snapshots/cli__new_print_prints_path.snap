@@ -4,7 +4,7 @@ info:
   program: ntropy
   args:
     - new
-    - "Q3: Planning kickoff"
+    - My First Note
     - "--print"
   env:
     EDITOR: "true"
@@ -12,6 +12,6 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-[VAULT]/all-notes/[ULID....................]-q3-planning-kickoff.md
+[VAULT]/all-notes/[ULID....................]-my-first-note.md
 
 ----- stderr -----

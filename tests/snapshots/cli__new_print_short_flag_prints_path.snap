@@ -5,7 +5,7 @@ info:
   args:
     - new
     - My First Note
-    - "--no-edit"
+    - "-p"
   env:
     EDITOR: "true"
 ---
