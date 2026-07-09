@@ -14,6 +14,7 @@ mod interact;
 mod lsp;
 mod output;
 mod picker;
+mod render;
 
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -75,6 +76,22 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Command::Delete { selector, force } => {
             cmd_delete(&vault, join(&selector), force, interactive)
         }
+        Command::Render {
+            selector,
+            to,
+            engine,
+            output,
+            print,
+        } => render::cmd_render(
+            &cli.global,
+            &vault,
+            join(&selector),
+            to,
+            engine,
+            output,
+            print,
+            interactive,
+        ),
         Command::View(sub) => cmd_view(&vault, sub),
         Command::Tags => cmd_tags(&cli.global, &vault),
         // Handled above, before vault resolution.

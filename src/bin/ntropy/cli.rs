@@ -118,6 +118,29 @@ pub enum Command {
         force: bool,
     },
 
+    /// Render a note to a document artifact.
+    ///
+    /// v1 produces a PDF via pandoc and typst; both tools must be installed
+    /// and on `PATH`.
+    Render {
+        /// A full ULID or a query DSL expression (joined from trailing
+        /// arguments).
+        #[arg(required = true, value_name = "ID|QUERY")]
+        selector: Vec<String>,
+        /// The output format (v1: `pdf`).
+        #[arg(long, value_name = "FORMAT", default_value = ntropy::render::DEFAULT_FORMAT)]
+        to: String,
+        /// Override the format's default engine (v1: `pandoc`).
+        #[arg(long, value_name = "NAME")]
+        engine: Option<String>,
+        /// Write the artifact here instead of `./<slug>.<ext>`.
+        #[arg(short = 'o', long, value_name = "PATH")]
+        output: Option<PathBuf>,
+        /// Print the artifact's path to stdout on success.
+        #[arg(short = 'p', long)]
+        print: bool,
+    },
+
     /// Manage materialized view definitions.
     #[command(subcommand)]
     View(ViewCommand),

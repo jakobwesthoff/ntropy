@@ -18,6 +18,7 @@ Commands:
   search     Browse, filter, full-text search, or open a note by id or query [aliases: list]
   reconcile  Realign drifted filenames, re-sync views, and sync `.gitignore`
   delete     Delete a note by id or query
+  render     Render a note to a document artifact
   view       Manage materialized view definitions
   tags       List all tags with note counts
   info       Show the active vault, its resolution, and vault statistics
