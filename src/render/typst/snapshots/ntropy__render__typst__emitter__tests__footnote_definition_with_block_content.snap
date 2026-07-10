@@ -1,0 +1,12 @@
+---
+source: src/render/typst/emitter.rs
+expression: "body(\"Ref.[^b]\\n\\n[^b]: Intro:\\n\\n    - one\\n    - two\\n\\n    ```\\n    code\\n    ```\")"
+---
+Ref\.#footnote[Intro\:
+
+- one
+- two
+
+```
+code
+```]

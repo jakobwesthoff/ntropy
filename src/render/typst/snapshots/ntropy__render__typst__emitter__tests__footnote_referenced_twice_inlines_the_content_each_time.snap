@@ -1,0 +1,5 @@
+---
+source: src/render/typst/emitter.rs
+expression: "body(\"First.[^n] Second.[^n]\\n\\n[^n]: Shared.\")"
+---
+First\.#footnote[Shared\.] Second\.#footnote[Shared\.]

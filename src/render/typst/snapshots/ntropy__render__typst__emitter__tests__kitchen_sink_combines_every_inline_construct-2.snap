@@ -1,0 +1,12 @@
+---
+source: src/render/typst/emitter.rs
+expression: warnings
+---
+[
+    Warning {
+        message: "remote image cannot be embedded; linked instead: https://host/img.png",
+    },
+    Warning {
+        message: "dropped raw HTML: <div>raw block</div>",
+    },
+]

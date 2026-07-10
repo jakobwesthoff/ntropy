@@ -1,0 +1,14 @@
+---
+source: src/render/typst/emitter.rs
+expression: out
+---
+= A #emph[heading] with #raw("code")
+
+Prose with #strong[strong], #emph[emph], #strike[strike], an autolink #link("https://example.com")[https\:\/\/example\.com], an email #link("mailto:a@b.org")[a\@b\.org], and a #emph[Resolved Title] plus an #link("https://ext")[external]\.
+
+A footnote reference\.#footnote[Footnote body with #emph[emphasis] and a second line\.] And a dangling display #emph[text]\.
+
+#image("pic.png") then #link("https://host/img.png")[remote]\.
+
+- item with #raw("inline")
+- item with #link("https://li.st")[link]
