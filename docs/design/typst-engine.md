@@ -229,7 +229,9 @@ identical file.
 ```typst
 // Prelude: engine-owned definitions; the theming hook.
 #let callout(kind: "note", body) = ...
-#let note(title: none, frontmatter: (:), body) = ...
+#let notelink(body) = ...
+#let task(done: false) = ...
+#let note(title: none, frontmatter: (:), paper: "a4", body) = ...
 
 #show: note.with(
   title: "My Note",
@@ -238,6 +240,7 @@ identical file.
     created: "2026-07-10",
     ...
   ),
+  paper: "a4",
 )
 
 // Converted body.
@@ -249,6 +252,10 @@ identical file.
   integers/floats/booleans to their Typst counterparts, null to `none`,
   sequences to arrays, mappings to dictionaries. A metadata value can
   therefore never be interpreted as Typst code, whatever it contains.
+- **The paper size is baked into the document** as the template's
+  `paper:` argument (the vault's configured render option, see
+  Configuration in [rendering.md](rendering.md)); the enum's names are
+  Typst's own paper identifiers, passed through verbatim.
 - **The template receives all frontmatter fields** and the default
   `note` displays all of them: the title prominently, every other field
   as key-value lines beneath, nested values included. Which fields to

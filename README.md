@@ -467,6 +467,18 @@ what's missing if it isn't on your `PATH`.
 `--to typst` writes the emitted Typst document (a `.typ` file) instead of a
 PDF, needing no external tool at all.
 
+**Paper size.** Rendering defaults to a4. A `[render]` section in the vault's
+`.ntropy/config.toml` picks a different format:
+
+```toml
+[render]
+paper = "us-letter"
+```
+
+Supported values: `a3`, `a4`, `a5`, `iso-b5`, `jis-b5`, `us-letter`,
+`us-legal`, `us-tabloid`, `us-executive`, `us-oficio`. An unknown value is a
+config error naming the bad name, reported before anything renders.
+
 > [!NOTE]
 > ntropy's rendering infrastructure is built around interchangeable rendering
 > engines. Styling and theming control is planned for future releases.
@@ -585,6 +597,34 @@ at `~/.claude/skills/ntropy` (every project) or `<project>/.claude/skills/ntropy
 git clone https://github.com/jakobwesthoff/ntropy.git
 cp -R ntropy/skills/ntropy ~/.claude/skills/ntropy
 ```
+
+## Markdown flavor
+
+Notes are GitHub-flavored Markdown: what GitHub renders is what ntropy
+understands, so a vault reads the same on github.com, in your editor's
+preview, and in a rendered PDF. The full supported surface:
+
+| Feature | Syntax |
+| :--- | :--- |
+| Headings | `#` through `######` |
+| Emphasis, strong, strikethrough | `*em*`, `**strong**`, `~~gone~~` |
+| Inline code, code blocks | `` `code` ``, fenced ` ``` ` blocks with a language tag for syntax highlighting |
+| Lists | `-` bullets, `1.` numbered (explicit numbers are kept), nesting by indentation |
+| Task lists | `- [ ]` open, `- [x]` done |
+| Tables | pipe tables with `:---`, `:---:`, `---:` column alignment |
+| Block quotes | `>` prefixed lines |
+| Callouts | `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` |
+| Footnotes | `[^label]` references with `[^label]: text` definitions, in any order |
+| Links | `[text](url)`, bare URLs and `www.` hosts autolink, `<mail@example.org>` |
+| Note links | ordinary links targeting a note's filename — see [Linking between notes](#linking-between-notes) |
+| Images | `![alt](path)` relative to the note |
+| Horizontal rules | `---` on its own line |
+
+Deliberately not supported: math (`$x^2$` stays literal text), definition
+lists, and emoji shortcodes (`:smile:` stays text). Raw HTML renders on
+GitHub but is dropped with a warning when rendering to PDF, and remote
+image URLs become links there since PDF rendering never touches the
+network.
 
 ## Limitations
 

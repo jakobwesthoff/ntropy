@@ -212,11 +212,24 @@ tools installed:
 The selector plumbing is reused as-is: `ops::resolve_selection` and the
 generic picker already serve `search` and `delete` unchanged.
 
+## Configuration
+
+Render options live in the `[render]` section of the vault's
+`config.toml` and are typed enums, so a typo is a config parse error
+naming the bad value before anything scans or renders. The options are
+loaded by the binary and handed to `Registry::new`, which constructs the
+engines with them; each engine decides how to honor a setting for the
+formats it produces. One option exists: `paper` (default `a4`; also
+`a3`, `a5`, `iso-b5`, `jis-b5`, `us-letter`, `us-legal`, `us-tabloid`,
+`us-executive`, `us-oficio`), which the typst engine passes into the
+emitted document's template application.
+
 ## Deferred
 
 Not supported:
 
 - rendering more than one note per invocation,
 - styling and template control,
-- a config surface for rendering (per-format engine defaults, tool paths),
+- a config surface for engine selection (per-format engine defaults,
+  tool paths),
 - a render action inside the search picker.

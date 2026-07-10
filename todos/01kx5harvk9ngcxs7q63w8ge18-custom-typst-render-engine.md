@@ -13,13 +13,6 @@ The redesigned default theme is implemented (prelude defining `note`,
 `callout`, `notelink`, `task`; a4, chips, per-kind callout colors, code
 chips/panels, drawn checkboxes, colored links). Remaining theming work:
 
-- **Paper-size configuration** (decided 2026-07-10, not yet built): a
-  general render option in the vault config (`.ntropy/config.toml`,
-  `[render] paper = "a4"`, default a4) — a serde serialize/deserializable
-  **enum** of supported paper formats defined in the renderer (initial
-  variants proposed: a4, a5, us-letter, us-legal), with each renderer
-  deciding how to honor the setting; the typst engine passes it as the
-  typed `paper:` argument the default theme's `note` already accepts.
 - **User-provided themes**: the mechanism for a vault to replace the
   embedded prelude with its own. Not yet designed.
 - **Smart quotes revisit.** Deferred again during basic theming (user,

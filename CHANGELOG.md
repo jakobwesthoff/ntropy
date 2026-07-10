@@ -12,6 +12,10 @@ and this project adheres to
 
 - `render --to typst` writes the note as a Typst document, converted by
   ntropy's own Markdown-to-Typst engine and needing no external tool on `PATH`.
+- The render paper size is configurable per vault: a `[render]` section in
+  `.ntropy/config.toml` with `paper = "us-letter"` (or `a3`, `a5`, `iso-b5`,
+  `jis-b5`, `us-legal`, `us-tabloid`, `us-executive`, `us-oficio`; the
+  default stays `a4`).
 
 ### Changed
 
