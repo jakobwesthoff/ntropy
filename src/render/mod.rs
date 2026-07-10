@@ -25,6 +25,7 @@ use crate::id::Id;
 pub mod pandoc;
 pub mod prepare;
 pub mod registry;
+pub mod typst;
 
 pub use pandoc::Pandoc;
 pub use prepare::prepare;
