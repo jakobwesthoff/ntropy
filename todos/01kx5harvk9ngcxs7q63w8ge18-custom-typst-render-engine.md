@@ -13,9 +13,6 @@ The redesigned default theme is implemented (prelude defining `note`,
 `callout`, `notelink`, `task`; a4, chips, per-kind callout colors, code
 chips/panels, drawn checkboxes, colored links). Remaining theming work:
 
-- **Default-look taste iteration** (open questions from the 2026-07-10
-  review, not yet answered): title centered vs. left-aligned; callouts
-  tinted-fill vs. bar-only; tables content-width vs. full-width.
 - **Paper-size configuration** (decided 2026-07-10, not yet built): a
   general render option in the vault config (`.ntropy/config.toml`,
   `[render] paper = "a4"`, default a4) — a serde serialize/deserializable

@@ -141,7 +141,8 @@ expression: artifact
     text(fill: luma(60), it.body),
   )
 
-  // Tables: horizontal rules only, bold header row.
+  // Tables: horizontal rules only, bold header row, centered on the page
+  // while keeping their content width.
   set table(
     stroke: (x, y) => if y == 0 {
       (bottom: 0.8pt + luma(120))
@@ -151,6 +152,7 @@ expression: artifact
     inset: 7pt,
   )
   show table.cell.where(y: 0): set text(weight: "bold")
+  show table: it => align(center, it)
 
   // Links in classic muted blue; thematic breaks in light grey.
   show link: set text(fill: rgb("#0969da"))
