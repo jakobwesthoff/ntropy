@@ -30,6 +30,7 @@ pub mod typst;
 pub use pandoc::Pandoc;
 pub use prepare::prepare;
 pub use registry::{DEFAULT_FORMAT, Registry};
+pub use typst::Typst;
 
 // =========================================================
 // The host capability an engine drives
@@ -40,7 +41,11 @@ pub use registry::{DEFAULT_FORMAT, Registry};
 /// The library defines the capability; the binary supplies the one production
 /// implementation (temporary-directory staging plus `std::process::Command`),
 /// and tests hand in a recording fake. The context grows a primitive only when
-/// a real engine needs it; v1 needs exactly these three.
+/// a real engine needs it (ADR 0038): the pandoc engine drives an external tool
+/// via [`stage_file`](RenderContext::stage_file) and
+/// [`run`](RenderContext::run), while the typst engine emits the artifact
+/// itself through [`write_output`](RenderContext::write_output) and reports
+/// degraded content through [`warn`](RenderContext::warn).
 pub trait RenderContext {
     /// Materialize an intermediate file in a render-scoped workspace and return
     /// its path, so a later step can hand that path to an external tool.
@@ -48,6 +53,15 @@ pub trait RenderContext {
 
     /// Execute an external tool and return its captured output.
     fn run(&mut self, invocation: &Invocation) -> Result<ToolOutput, RenderError>;
+
+    /// Write the final artifact directly, for an engine that produces the output
+    /// bytes itself rather than delegating to an external tool.
+    fn write_output(&mut self, contents: &[u8]) -> Result<(), RenderError>;
+
+    /// Report a non-fatal degradation: content the engine could not carry
+    /// faithfully into the artifact. The host surfaces the message and, under
+    /// `--strict`, counts it toward a failing exit like a scan warning.
+    fn warn(&mut self, message: &str);
 
     /// The path the final artifact must land at.
     fn output_path(&self) -> &Path;
@@ -162,6 +176,14 @@ pub enum RenderError {
         source: io::Error,
     },
 
+    /// Writing the final artifact failed for an engine that produces the output
+    /// bytes itself (no external tool involved).
+    #[error("while writing the output artifact")]
+    WriteOutput {
+        #[source]
+        source: io::Error,
+    },
+
     /// Launching the external tool failed for a reason other than absence.
     #[error("while spawning `{program}`")]
     Spawn {
@@ -212,6 +234,14 @@ mod tests {
             source: io::Error::new(io::ErrorKind::PermissionDenied, "denied"),
         };
         insta::assert_snapshot!(err, @"while staging file `note.md`");
+    }
+
+    #[test]
+    fn write_output_message() {
+        let err = RenderError::WriteOutput {
+            source: io::Error::new(io::ErrorKind::PermissionDenied, "denied"),
+        };
+        insta::assert_snapshot!(err, @"while writing the output artifact");
     }
 
     #[test]

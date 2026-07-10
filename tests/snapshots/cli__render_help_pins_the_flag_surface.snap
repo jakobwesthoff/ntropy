@@ -13,7 +13,7 @@ exit_code: 0
 ----- stdout -----
 Render a note to a document artifact.
 
-v1 produces a PDF via pandoc and typst; both tools must be installed and on `PATH`.
+`--to` selects the output format: `pdf` (the default) or `typst`, the emitted Typst document. The `pdf` format shells out to pandoc and typst, so both must be on `PATH`; the `typst` format needs no external tool.
 
 Usage: ntropy render [OPTIONS] [ID|QUERY]...
 
@@ -23,7 +23,7 @@ Arguments:
 
 Options:
       --to <FORMAT>
-          The output format (v1: `pdf`)
+          The output format: `pdf` (default) or `typst`
           
           [default: pdf]
 
@@ -31,7 +31,7 @@ Options:
           Operate on the vault at this path (overrides all other resolution)
 
       --engine <NAME>
-          Override the format's default engine (v1: `pandoc`)
+          Override the format's default engine (`pdf`'s default is `pandoc`)
 
   -n, --non-interactive
           Force non-interactive (plain) behavior even on a TTY

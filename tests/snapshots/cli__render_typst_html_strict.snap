@@ -1,0 +1,24 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - render
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - "--to"
+    - typst
+    - "-p"
+    - "-n"
+    - "--strict"
+  env:
+    EDITOR: "true"
+    PATH: no-such-bin
+---
+success: false
+exit_code: 1
+----- stdout -----
+wanted.typ
+
+----- stderr -----
+warning: dropped raw HTML: <div>
+warning: dropped raw HTML: </div>

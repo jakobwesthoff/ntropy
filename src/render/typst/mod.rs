@@ -21,6 +21,9 @@
 
 pub mod document;
 pub mod emitter;
+pub mod engine;
 pub mod prelude;
 pub mod value;
 pub mod writer;
+
+pub use engine::Typst;

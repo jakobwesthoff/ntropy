@@ -864,6 +864,93 @@ fn render_overwrites_an_existing_artifact() {
 }
 
 #[test]
+fn render_to_typst_writes_a_real_artifact_without_any_tool() {
+    // `--to typst` emits the document itself, so no stub binary is needed: with
+    // `PATH` pointing at a directory that does not exist, the render still
+    // succeeds and the `.typ` artifact carries the prelude application and the
+    // converted body.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nThe note body text.\n",
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    let status = cmd.status().expect("run render");
+    assert!(status.success());
+
+    let artifact = fs::read_to_string(dir.path().join("wanted.typ")).expect("typ artifact exists");
+    assert!(
+        artifact.contains("#show: note.with"),
+        "template application missing: {artifact}"
+    );
+    assert!(
+        artifact.contains("The note body text"),
+        "converted body missing: {artifact}"
+    );
+}
+
+#[test]
+fn render_to_typ_alias_behaves_like_typst() {
+    // `typ` is an unlisted alias of `typst`: it produces the identical artifact
+    // even though it appears in no help text.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nThe note body text.\n",
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typ", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    let status = cmd.status().expect("run render");
+    assert!(status.success());
+
+    let artifact = fs::read_to_string(dir.path().join("wanted.typ")).expect("typ artifact exists");
+    assert!(
+        artifact.contains("#show: note.with"),
+        "template application missing: {artifact}"
+    );
+    assert!(
+        artifact.contains("The note body text"),
+        "converted body missing: {artifact}"
+    );
+}
+
+#[test]
+fn render_to_typst_raw_html_warns_and_strict_fails() {
+    // Raw HTML degrades: the emitter drops it and warns on stderr. The lenient
+    // run still succeeds; `--strict` promotes the engine warning to a failure,
+    // exactly as scan warnings behave.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nBefore <div>raw</div> after.\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut lenient = ntropy(dir.path());
+        lenient.args(["render", ULID_A, "--to", "typst", "-p", "-n"]);
+        lenient.current_dir(dir.path());
+        lenient.env("PATH", "no-such-bin");
+        assert_cmd_snapshot!("render_typst_html_lenient", lenient);
+
+        let mut strict = ntropy(dir.path());
+        strict.args(["render", ULID_A, "--to", "typst", "-p", "-n", "--strict"]);
+        strict.current_dir(dir.path());
+        strict.env("PATH", "no-such-bin");
+        assert_cmd_snapshot!("render_typst_html_strict", strict);
+    });
+}
+
+#[test]
 fn info_reports_vault_and_stats() {
     let dir = setup_vault();
     write_note(

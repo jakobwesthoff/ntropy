@@ -120,17 +120,18 @@ pub enum Command {
 
     /// Render a note to a document artifact.
     ///
-    /// v1 produces a PDF via pandoc and typst; both tools must be installed
-    /// and on `PATH`.
+    /// `--to` selects the output format: `pdf` (the default) or `typst`, the
+    /// emitted Typst document. The `pdf` format shells out to pandoc and typst,
+    /// so both must be on `PATH`; the `typst` format needs no external tool.
     Render {
         /// A full ULID or a query DSL expression (joined from trailing
         /// arguments; omitted = choose from all notes).
         #[arg(value_name = "ID|QUERY")]
         selector: Vec<String>,
-        /// The output format (v1: `pdf`).
+        /// The output format: `pdf` (default) or `typst`.
         #[arg(long, value_name = "FORMAT", default_value = ntropy::render::DEFAULT_FORMAT)]
         to: String,
-        /// Override the format's default engine (v1: `pandoc`).
+        /// Override the format's default engine (`pdf`'s default is `pandoc`).
         #[arg(long, value_name = "NAME")]
         engine: Option<String>,
         /// Write the artifact here instead of `./<slug>.<ext>`.

@@ -8,6 +8,11 @@ and this project adheres to
 
 ## Unreleased
 
+### Added
+
+- `render --to typst` emits the note as a Typst document through ntropy's own
+  Markdown-to-Typst engine, needing no external tool on `PATH`.
+
 ### Changed
 
 - The content `init` seeds a vault with (the `README.md` and the `default` and

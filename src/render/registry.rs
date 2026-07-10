@@ -14,10 +14,22 @@
 
 use std::collections::HashMap;
 
-use super::{Pandoc, RenderError, Renderer};
+use super::{Pandoc, RenderError, Renderer, Typst};
 
 /// The format selected when the user names none.
 pub const DEFAULT_FORMAT: &str = "pdf";
+
+/// Fold an accepted format alias to its canonical name.
+///
+/// `typ` is an unlisted alias of `typst` (it appears in no help text or docs),
+/// so every lookup path normalizes here before touching the format map. An
+/// unknown name passes through unchanged, so it still reports as itself.
+fn canonical_format(format: &str) -> &str {
+    match format {
+        "typ" => "typst",
+        other => other,
+    }
+}
 
 /// One format's extension and the engines that produce it.
 ///
@@ -38,12 +50,14 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// The registry ntropy ships with: `pdf` produced by the pandoc engine.
+    /// The registry ntropy ships with: `pdf` produced by the pandoc engine, and
+    /// `typst` produced by the ntropy-owned typst engine.
     pub fn new() -> Self {
         let mut registry = Registry {
             formats: HashMap::new(),
         };
         registry.register("pdf", "pdf", "pandoc", Box::new(Pandoc));
+        registry.register("typst", "typ", "typst", Box::new(Typst::for_typst_format()));
         registry
     }
 
@@ -82,6 +96,7 @@ impl Registry {
         format: &str,
         engine: Option<&str>,
     ) -> Result<&dyn Renderer, RenderError> {
+        let format = canonical_format(format);
         let entry = self
             .formats
             .get(format)
@@ -100,6 +115,7 @@ impl Registry {
     /// The artifact filename extension for a format, used to derive the default
     /// output path. An unregistered format is [`RenderError::UnknownFormat`].
     pub fn extension(&self, format: &str) -> Result<&str, RenderError> {
+        let format = canonical_format(format);
         self.formats
             .get(format)
             .map(|entry| entry.extension)
@@ -110,6 +126,7 @@ impl Registry {
     /// so a report can say which engine produced an artifact. An unregistered
     /// format is [`RenderError::UnknownFormat`].
     pub fn default_engine(&self, format: &str) -> Result<&str, RenderError> {
+        let format = canonical_format(format);
         self.formats
             .get(format)
             .map(|entry| entry.default_engine.as_str())
@@ -246,5 +263,62 @@ mod tests {
             "pdf"
         );
         assert!(registry.resolve(DEFAULT_FORMAT, Some("wkhtml")).is_err());
+    }
+
+    /// The shipping registry serves `typst` through the typst engine: the format
+    /// resolves with no engine named and with `typst` named explicitly, and its
+    /// extension is `typ`. `pdf` keeps its own default engine, proving the two
+    /// registrations stay independent.
+    #[test]
+    fn shipped_registry_resolves_typst_through_the_typst_engine() {
+        let registry = Registry::new();
+        assert!(registry.resolve("typst", None).is_ok());
+        assert!(registry.resolve("typst", Some("typst")).is_ok());
+        assert_eq!(
+            registry.extension("typst").expect("typst is registered"),
+            "typ"
+        );
+        assert_eq!(
+            registry
+                .default_engine("typst")
+                .expect("typst has a default engine"),
+            "typst"
+        );
+        assert_eq!(
+            registry.default_engine("pdf").expect("pdf is registered"),
+            "pandoc"
+        );
+    }
+
+    /// The pandoc engine produces `pdf`, not `typst`, so requesting it under
+    /// `typst` is `UnknownEngine`: the registry never crosses format boundaries.
+    #[test]
+    fn typst_format_rejects_the_pandoc_engine() {
+        let registry = Registry::new();
+        let err = registry
+            .resolve("typst", Some("pandoc"))
+            .err()
+            .expect("a foreign-format engine does not resolve");
+        insta::assert_snapshot!(err, @"unknown engine `pandoc` for format `typst`");
+    }
+
+    /// `typ` is an unlisted alias of `typst`: it resolves the same engine, the
+    /// same extension, and the same default across every lookup path.
+    #[test]
+    fn typ_alias_resolves_like_typst() {
+        let registry = Registry::new();
+        assert!(registry.resolve("typ", None).is_ok());
+        assert_eq!(
+            registry.extension("typ").expect("the alias resolves"),
+            "typ"
+        );
+        assert_eq!(
+            registry
+                .default_engine("typ")
+                .expect("the alias has a default engine"),
+            "typst"
+        );
+        // The alias only reaches the canonical format, never a foreign engine.
+        assert!(registry.resolve("typ", Some("pandoc")).is_err());
     }
 }

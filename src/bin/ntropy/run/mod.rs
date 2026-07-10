@@ -221,7 +221,7 @@ fn cmd_search(
                 // (ADR 0015); the plain table is printed instead.
                 output::print_notes(notes)?;
             }
-            Ok(exit_for_warnings(global.strict, &matches.warnings))
+            Ok(exit_for_warnings(global.strict, &matches.warnings, 0))
         }
     }
 }
@@ -292,7 +292,7 @@ fn cmd_reconcile(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
         plural(report.gitignore_removed.len(), "entry", "entries"),
         plural(report.warnings.len(), "warning", "warnings"),
     );
-    Ok(exit_for_warnings(global.strict, &report.warnings))
+    Ok(exit_for_warnings(global.strict, &report.warnings, 0))
 }
 
 fn cmd_delete(vault: &Vault, selector: String, force: bool, interactive: bool) -> Result<ExitCode> {
@@ -388,7 +388,7 @@ fn cmd_tags(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
     let list = ops::list_tags(vault).context("while listing tags")?;
     output::print_warnings(&list.warnings);
     output::print_tags(&list.tags)?;
-    Ok(exit_for_warnings(global.strict, &list.warnings))
+    Ok(exit_for_warnings(global.strict, &list.warnings, 0))
 }
 
 // =============================================================================
@@ -459,9 +459,13 @@ fn optional(query: &str) -> Option<&str> {
     }
 }
 
-/// The exit code for a command that ran but hit scan warnings under `--strict`.
-fn exit_for_warnings(strict: bool, warnings: &[ScanWarning]) -> ExitCode {
-    if strict && !warnings.is_empty() {
+/// The exit code for a command that ran but hit warnings under `--strict`.
+///
+/// `extra` folds in warnings that are not scan warnings (the render engine's
+/// degradation reports), so those also fail a strict run; commands with none
+/// pass `0`.
+fn exit_for_warnings(strict: bool, warnings: &[ScanWarning], extra: usize) -> ExitCode {
+    if strict && (!warnings.is_empty() || extra > 0) {
         ExitCode::FAILURE
     } else {
         ExitCode::SUCCESS

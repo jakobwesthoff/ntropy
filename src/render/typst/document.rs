@@ -28,11 +28,6 @@ use super::writer::TypstWriter;
 /// writer's string-literal channel, and the frontmatter through
 /// [`value_literal`] on the whole mapping, so both reach the template as inert
 /// data.
-// The typst engine of this same phase is the production consumer; until it
-// wires assembly into the render pipeline the crate has no in-crate caller,
-// and clippy runs with `-D warnings`. The reviewer removes this allow when the
-// engine calls `assemble`.
-#[allow(dead_code)]
 pub fn assemble(title: &str, frontmatter: &Mapping, body: &str) -> String {
     let mut writer = TypstWriter::new();
     writer.syntax(PRELUDE);

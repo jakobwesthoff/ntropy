@@ -130,6 +130,8 @@ mod tests {
         output: PathBuf,
         staged: Vec<(String, String)>,
         invocations: Vec<Invocation>,
+        warnings: Vec<String>,
+        outputs: Vec<Vec<u8>>,
         scripted: VecDeque<Result<ToolOutput, RenderError>>,
     }
 
@@ -139,6 +141,8 @@ mod tests {
                 output: PathBuf::from("/artifacts/note.pdf"),
                 staged: Vec::new(),
                 invocations: Vec::new(),
+                warnings: Vec::new(),
+                outputs: Vec::new(),
                 scripted: VecDeque::new(),
             }
         }
@@ -168,6 +172,15 @@ mod tests {
             }))
         }
 
+        fn write_output(&mut self, contents: &[u8]) -> Result<(), RenderError> {
+            self.outputs.push(contents.to_vec());
+            Ok(())
+        }
+
+        fn warn(&mut self, message: &str) {
+            self.warnings.push(message.to_string());
+        }
+
         fn output_path(&self) -> &Path {
             &self.output
         }
@@ -192,6 +205,12 @@ mod tests {
             for arg in &invocation.args {
                 lines.push(format!("    {}", arg.to_string_lossy()));
             }
+        }
+        for message in &ctx.warnings {
+            lines.push(format!("WARN {message}"));
+        }
+        for contents in &ctx.outputs {
+            lines.push(format!("WRITE-OUTPUT {} bytes", contents.len()));
         }
         lines.join("\n")
     }
@@ -417,6 +436,22 @@ mod tests {
             }
             other => panic!("expected ToolFailed, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn fake_context_records_warnings_and_output_writes() {
+        // The pandoc engine never drives these primitives, so this pins the
+        // recording seam the typst-facing contexts rely on directly.
+        let mut ctx = FakeContext::new();
+        ctx.warn("remote image dropped");
+        ctx.write_output(b"typst document")
+            .expect("recording write succeeds");
+        assert_eq!(ctx.warnings, vec!["remote image dropped".to_string()]);
+        assert_eq!(ctx.outputs, vec![b"typst document".to_vec()]);
+        insta::assert_snapshot!(transcript(&ctx), @r"
+        WARN remote image dropped
+        WRITE-OUTPUT 14 bytes
+        ");
     }
 
     #[test]

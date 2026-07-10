@@ -170,7 +170,13 @@ pub fn cmd_render(
         );
     }
 
-    Ok(exit_for_warnings(global.strict, &matches.warnings))
+    // Engine degradation warnings (dropped HTML, remote images) fail a strict
+    // run just like scan warnings, so they fold into the same exit decision.
+    Ok(exit_for_warnings(
+        global.strict,
+        &matches.warnings,
+        ctx.warning_count(),
+    ))
 }
 
 /// The default artifact path: the note's slug joined to the format's extension,
@@ -189,12 +195,24 @@ fn default_output_path(slug: &str, extension: &str) -> PathBuf {
 struct ProcessContext {
     staging: tempfile::TempDir,
     output: PathBuf,
+    /// The number of degradation warnings the engine reported, so the caller
+    /// can fold them into the `--strict` exit decision alongside scan warnings.
+    warnings: usize,
 }
 
 impl ProcessContext {
     fn new(output: PathBuf) -> std::io::Result<Self> {
         let staging = tempfile::TempDir::new()?;
-        Ok(Self { staging, output })
+        Ok(Self {
+            staging,
+            output,
+            warnings: 0,
+        })
+    }
+
+    /// How many degradation warnings the engine reported during the render.
+    fn warning_count(&self) -> usize {
+        self.warnings
     }
 }
 
@@ -234,6 +252,17 @@ impl RenderContext for ProcessContext {
             stdout: output.stdout,
             stderr: output.stderr,
         })
+    }
+
+    fn write_output(&mut self, contents: &[u8]) -> Result<(), RenderError> {
+        std::fs::write(&self.output, contents).map_err(|source| RenderError::WriteOutput { source })
+    }
+
+    fn warn(&mut self, message: &str) {
+        // Engine warnings go to stderr, keeping the `-p` stdout contract clean
+        // (ADR 0036), in the same visual style as scan warnings.
+        eprintln!("warning: {message}");
+        self.warnings += 1;
     }
 
     fn output_path(&self) -> &Path {
@@ -295,6 +324,39 @@ mod tests {
         assert!(!out.success);
         assert_eq!(out.stdout, b"out\n");
         assert_eq!(out.stderr, b"err\n");
+    }
+
+    #[test]
+    fn write_output_writes_bytes_to_the_output_path() {
+        let staging = tempfile::TempDir::new().expect("temp dir");
+        let out = staging.path().join("note.typ");
+        let mut ctx = ProcessContext::new(out.clone()).expect("context");
+        ctx.write_output(b"#show: note.with(title: \"T\",)")
+            .expect("write succeeds");
+        assert_eq!(
+            std::fs::read_to_string(&out).expect("read artifact"),
+            "#show: note.with(title: \"T\",)"
+        );
+    }
+
+    #[test]
+    fn write_output_maps_an_unwritable_path_to_write_output_error() {
+        // A path whose parent directory does not exist cannot be written, so the
+        // io error maps to the dedicated variant rather than escaping raw.
+        let mut ctx = ProcessContext::new(PathBuf::from("/no/such/dir/note.typ")).expect("context");
+        let err = ctx
+            .write_output(b"body")
+            .expect_err("an unwritable path errors");
+        assert!(matches!(err, RenderError::WriteOutput { .. }));
+    }
+
+    #[test]
+    fn warn_counts_reported_warnings() {
+        let mut ctx = ProcessContext::new(PathBuf::from("out.typ")).expect("context");
+        assert_eq!(ctx.warning_count(), 0);
+        ctx.warn("remote image dropped");
+        ctx.warn("raw HTML dropped");
+        assert_eq!(ctx.warning_count(), 2);
     }
 
     #[test]
