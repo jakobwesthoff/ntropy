@@ -8,6 +8,11 @@ and this project adheres to
 
 ## v1.7.1 - 2026-07-10
 
+### Changed
+
+- Dependencies updated to their latest compatible releases: `anyhow` 1.0.103,
+  `ignore` 0.4.28, `jiff` 0.2.32, `regex` 1.13.0.
+
 ### Fixed
 
 - `render` to `pdf` no longer dies silently when the typesetting tool exits
