@@ -716,7 +716,7 @@ fn render_unknown_format_errors() {
     write_note(dir.path(), ULID_A, "wanted", "---\ntitle: Wanted\n---\n");
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
-        cmd.args(["render", ULID_A, "--to", "docx", "-n"]);
+        cmd.args(["render", ULID_A, "--to", "no-such-format", "-n"]);
         assert_cmd_snapshot!(cmd);
     });
 }
@@ -727,7 +727,7 @@ fn render_unknown_engine_errors() {
     write_note(dir.path(), ULID_A, "wanted", "---\ntitle: Wanted\n---\n");
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
-        cmd.args(["render", ULID_A, "--engine", "weasyprint", "-n"]);
+        cmd.args(["render", ULID_A, "--engine", "no-such-engine", "-n"]);
         assert_cmd_snapshot!(cmd);
     });
 }

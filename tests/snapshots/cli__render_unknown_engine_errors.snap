@@ -6,7 +6,7 @@ info:
     - render
     - 01ARZ3NDEKTSV4RRFFQ69G5FAV
     - "--engine"
-    - weasyprint
+    - no-such-engine
     - "-n"
   env:
     EDITOR: "true"
@@ -16,4 +16,4 @@ exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-error: while selecting the render engine: unknown engine `weasyprint` for format `pdf`
+error: while selecting the render engine: unknown engine `no-such-engine` for format `pdf`

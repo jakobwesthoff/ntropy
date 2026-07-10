@@ -6,7 +6,7 @@ info:
     - render
     - 01ARZ3NDEKTSV4RRFFQ69G5FAV
     - "--to"
-    - docx
+    - no-such-format
     - "-n"
   env:
     EDITOR: "true"
@@ -16,4 +16,4 @@ exit_code: 1
 ----- stdout -----
 
 ----- stderr -----
-error: while selecting the render engine: unknown output format `docx`
+error: while selecting the render engine: unknown output format `no-such-format`

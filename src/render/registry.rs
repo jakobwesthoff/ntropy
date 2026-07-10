@@ -186,20 +186,20 @@ mod tests {
         let registry = populated();
         // `&dyn Renderer` is not `Debug`, so unwrap the error side directly.
         let err = registry
-            .resolve("docx", None)
+            .resolve("no-such-format", None)
             .err()
             .expect("an unregistered format does not resolve");
-        insta::assert_snapshot!(err, @"unknown output format `docx`");
+        insta::assert_snapshot!(err, @"unknown output format `no-such-format`");
     }
 
     #[test]
     fn resolve_unknown_engine() {
         let registry = populated();
         let err = registry
-            .resolve("pdf", Some("wkhtml"))
+            .resolve("pdf", Some("no-such-engine"))
             .err()
             .expect("an unregistered engine does not resolve");
-        insta::assert_snapshot!(err, @"unknown engine `wkhtml` for format `pdf`");
+        insta::assert_snapshot!(err, @"unknown engine `no-such-engine` for format `pdf`");
     }
 
     #[test]
@@ -236,18 +236,18 @@ mod tests {
             "typst"
         );
         let err = registry
-            .default_engine("docx")
+            .default_engine("no-such-format")
             .expect_err("an unregistered format has no default engine");
-        insta::assert_snapshot!(err, @"unknown output format `docx`");
+        insta::assert_snapshot!(err, @"unknown output format `no-such-format`");
     }
 
     #[test]
     fn extension_unknown() {
         let registry = populated();
         let err = registry
-            .extension("docx")
+            .extension("no-such-format")
             .expect_err("an unregistered format has no extension");
-        insta::assert_snapshot!(err, @"unknown output format `docx`");
+        insta::assert_snapshot!(err, @"unknown output format `no-such-format`");
     }
 
     /// The shipping registry serves `pdf` through the typst engine: the default
@@ -271,7 +271,11 @@ mod tests {
                 .expect("pdf is registered"),
             "pdf"
         );
-        assert!(registry.resolve(DEFAULT_FORMAT, Some("wkhtml")).is_err());
+        assert!(
+            registry
+                .resolve(DEFAULT_FORMAT, Some("no-such-engine"))
+                .is_err()
+        );
     }
 
     /// The shipping registry serves `typst` through the typst engine: the format
@@ -305,10 +309,10 @@ mod tests {
     fn typst_format_rejects_an_unregistered_engine() {
         let registry = Registry::new();
         let err = registry
-            .resolve("typst", Some("wkhtml"))
+            .resolve("typst", Some("no-such-engine"))
             .err()
             .expect("an unregistered engine does not resolve");
-        insta::assert_snapshot!(err, @"unknown engine `wkhtml` for format `typst`");
+        insta::assert_snapshot!(err, @"unknown engine `no-such-engine` for format `typst`");
     }
 
     /// `typ` is an unlisted alias of `typst`: it resolves the same engine, the
@@ -329,6 +333,6 @@ mod tests {
         );
         // The alias only reaches the canonical format, never an unregistered
         // engine.
-        assert!(registry.resolve("typ", Some("wkhtml")).is_err());
+        assert!(registry.resolve("typ", Some("no-such-engine")).is_err());
     }
 }
