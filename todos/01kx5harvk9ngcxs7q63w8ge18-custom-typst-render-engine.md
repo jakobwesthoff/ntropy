@@ -9,32 +9,22 @@ left out of that implementation.
 
 ## Theming
 
-Theming is the next step (user, 2026-07-10): a better default theme and
-user-provided themes. The emitted document already carries the designated hook:
-an inlined **prelude** defining the `note` and `callout` functions, applied via
-`#show: note.with(title:, frontmatter:)`. A theme is a different prelude
-defining those two functions; the converted body never changes. Presentation
-decisions belong here, not in the emitter: which frontmatter fields to feature
-or hide, per-kind callout colors and symbols, and typography.
+The redesigned default theme is implemented (prelude defining `note`,
+`callout`, `notelink`, `task`; a4, chips, per-kind callout colors, code
+chips/panels, drawn checkboxes, colored links). Remaining theming work:
 
-- **Basic theming (first step, user, 2026-07-10)**: a nicer default look via
-  a redesigned default prelude — a4 page setup, typography tuning on the
-  bundled fonts (only Libertinus Serif, New Computer Modern, and DejaVu Sans
-  Mono ship with typst; system fonts are not portable), subdued metadata
-  block, styled code blocks and inline-code chips, per-kind callout colors,
-  lighter tables, quieter quotes/rules, colored links. Includes the
-  `#notelink` hook (decided): the emitter emits resolved note links through a
-  prelude-defined `notelink` function (default look: the emphasized title)
-  so themes can style them distinctly. Decisions on configuration (user,
-  2026-07-10): paper size is a general render option in the vault config
-  (`.ntropy/config.toml`, `[render] paper = "a4"`, default a4) — a serde
-  serialize/deserializable **enum** of supported paper formats defined in the
-  renderer (initial variants proposed: a4, a5, us-letter, us-legal), with
-  each renderer deciding how to honor the setting; the typst engine passes it
-  as a typed `paper:` argument into `note.with(...)`, and the default theme
-  applies a4 via `set page`. The default theme skips frontmatter fields with
-  empty values (empty string/array/mapping, null) — the template still
-  receives them; skipping is pure presentation (user, 2026-07-10).
+- **Default-look taste iteration** (open questions from the 2026-07-10
+  review, not yet answered): title centered vs. left-aligned; callouts
+  tinted-fill vs. bar-only; tables content-width vs. full-width.
+- **Paper-size configuration** (decided 2026-07-10, not yet built): a
+  general render option in the vault config (`.ntropy/config.toml`,
+  `[render] paper = "a4"`, default a4) — a serde serialize/deserializable
+  **enum** of supported paper formats defined in the renderer (initial
+  variants proposed: a4, a5, us-letter, us-legal), with each renderer
+  deciding how to honor the setting; the typst engine passes it as the
+  typed `paper:` argument the default theme's `note` already accepts.
+- **User-provided themes**: the mechanism for a vault to replace the
+  embedded prelude with its own. Not yet designed.
 - **Smart quotes revisit.** Deferred again during basic theming (user,
   2026-07-10). The emitter escapes `'` and `"` unconditionally, so they
   render as straight quotes in the PDF and a theme cannot re-smarten them.
