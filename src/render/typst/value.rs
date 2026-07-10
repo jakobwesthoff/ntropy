@@ -27,11 +27,6 @@ use super::writer::TypstWriter;
 
 /// Translate a frontmatter value into a Typst value literal string ready to
 /// splice into `note.with(frontmatter: ...)`.
-// The document-assembly step of this same phase is the production consumer;
-// until it lands the module has no in-crate caller, and clippy runs with
-// `-D warnings`. The reviewer removes this allow when assembly wires the
-// translation in.
-#[allow(dead_code)]
 pub fn value_literal(value: &Value) -> String {
     let mut writer = TypstWriter::new();
     write_value(&mut writer, value);

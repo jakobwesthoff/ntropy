@@ -1,0 +1,86 @@
+---
+source: src/render/typst/document.rs
+expression: document
+---
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// Engine-owned definitions inlined ahead of every emitted document. They are
+// the seam a theme replaces: a theme is a different prelude defining `note`
+// and `callout`, while the converted body below stays identical. Inlining
+// (rather than importing) keeps the emitted `typst` artifact a single
+// self-contained file that compiles next to the note.
+
+// Render a frontmatter value as legible inline text. Strings pass through as
+// themselves; arrays and dictionaries recurse so nested metadata stays
+// readable rather than collapsing to a Typst repr; every other scalar (int,
+// float, bool, none, datetime) falls back to its repr, which is faithful and
+// short for leaf values.
+#let fmt-value(value) = {
+  if type(value) == str {
+    value
+  } else if type(value) == array {
+    value.map(fmt-value).join(", ")
+  } else if type(value) == dictionary {
+    value.pairs().map(((k, v)) => k + ": " + fmt-value(v)).join("; ")
+  } else {
+    repr(value)
+  }
+}
+
+// A callout is a GFM admonition (note, tip, important, warning, caution). The
+// default look is deliberately plain: a block set off by a left rule and inset
+// with a bold, capitalized lead-in naming the kind. Every kind renders through
+// this one form, so an unrecognized kind is handled by the same code path and
+// simply shows its own capitalized name as the lead-in.
+#let callout(kind: "note", body) = {
+  let lead = upper(kind.slice(0, 1)) + kind.slice(1)
+  block(
+    width: 100%,
+    stroke: (left: 2pt + luma(160)),
+    inset: (left: 1em, top: 0.6em, bottom: 0.6em, right: 0.6em),
+    {
+      strong(lead)
+      linebreak()
+      body
+    },
+  )
+}
+
+// The document template. It receives the note title and the complete
+// frontmatter mapping, and lays them out as the plain default: the title
+// prominent and centered, then every other frontmatter field as a key-value
+// line, then the converted body. The title is the one field with a featured
+// place of its own, so it is excluded from the key-value lines; which further
+// fields to feature or hide is a presentation decision that belongs to a
+// theme, so the default hides nothing else.
+#let note(title: none, frontmatter: (:), body) = {
+  // A conditional set rule: a `set` inside an `if` block would be scoped to
+  // that block and never reach the document. The guard also avoids
+  // `set document(title: none)`, which would be a type error.
+  set document(title: title) if title != none
+
+  if title != none {
+    align(center, text(size: 1.6em, weight: "bold", title))
+    v(0.4em)
+  }
+
+  let fields = frontmatter.pairs().filter(((key, _)) => key != "title")
+  for (key, value) in fields {
+    [#strong(key + ":") #fmt-value(value)]
+    linebreak()
+  }
+
+  if fields.len() > 0 {
+    v(0.8em)
+  }
+
+  body
+}
+
+#show: note.with(title: "Example Note", frontmatter: ("title": "Example Note", "tags": ("area/work", "programming/rust"), "created": "2026-07-10", "meta": ("draft": true, "revision": 3)),)
+
+= A heading
+
+Some body text.
