@@ -1,0 +1,9 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"> First.\\n>\\n> Second.\")"
+---
+#quote(block: true)[
+First\.
+
+Second\.
+]

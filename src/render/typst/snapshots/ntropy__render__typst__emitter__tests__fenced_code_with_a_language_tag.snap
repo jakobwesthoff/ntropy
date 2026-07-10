@@ -1,0 +1,7 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"```rust\\nlet x = 1;\\n```\")"
+---
+```rust
+let x = 1;
+```

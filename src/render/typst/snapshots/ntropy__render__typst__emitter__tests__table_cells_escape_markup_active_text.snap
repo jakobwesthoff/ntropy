@@ -1,0 +1,10 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"| Name | Note |\\n| --- | --- |\\n| a*b | c_d |\")"
+---
+#table(
+columns: 2,
+align: (auto, auto,),
+table.header([Name], [Note],),
+[a\*b], [c\_d],
+)

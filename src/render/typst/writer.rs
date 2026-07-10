@@ -112,9 +112,6 @@ impl TypstWriter {
     /// outside the emitter. Keeping it module-private makes that reviewable:
     /// the emitter is the only caller, and any user data in a `syntax`
     /// argument is a visible defect in the diff.
-    // Its production caller is the emitter event loop, which arrives in the
-    // next phase and removes this allow; until then only tests call it.
-    #[allow(dead_code)]
     pub(super) fn syntax(&mut self, s: &str) {
         self.out.push_str(s);
     }

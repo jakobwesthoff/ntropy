@@ -1,0 +1,15 @@
+---
+source: src/render/typst/emitter.rs
+expression: emit(input)
+---
+= Heading one level
+
+== Heading two level
+
+=== Heading three level
+
+==== Heading \[four\] level
+
+===== Heading \~five \= plus \+ level
+
+====== Heading \#six level

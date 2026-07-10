@@ -1,0 +1,7 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"```\\nplain code\\n```\")"
+---
+```
+plain code
+```

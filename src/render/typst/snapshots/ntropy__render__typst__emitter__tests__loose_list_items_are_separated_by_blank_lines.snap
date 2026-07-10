@@ -1,0 +1,7 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"- a\\n\\n- b\")"
+---
+- a
+
+- b

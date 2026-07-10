@@ -1,0 +1,11 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"| H1 | H2 | H3 |\\n| --- | --- | --- |\\n| a | b | c |\\n| d |\")"
+---
+#table(
+columns: 3,
+align: (auto, auto, auto,),
+table.header([H1], [H2], [H3],),
+[a], [b], [c],
+[d], [], [],
+)

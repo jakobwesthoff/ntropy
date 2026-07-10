@@ -1,0 +1,6 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"- [ ] todo\\n- [x] done\")"
+---
+- ☐ todo
+- ☑ done

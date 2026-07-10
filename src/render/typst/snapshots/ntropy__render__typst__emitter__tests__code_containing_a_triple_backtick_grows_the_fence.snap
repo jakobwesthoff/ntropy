@@ -1,0 +1,7 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"````\\na ``` fence inside\\n````\")"
+---
+````
+a ``` fence inside
+````

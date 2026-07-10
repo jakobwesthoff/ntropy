@@ -1,0 +1,7 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"> [!FOO]\\n> body\")"
+---
+#quote(block: true)[
+\[!FOO\] body
+]

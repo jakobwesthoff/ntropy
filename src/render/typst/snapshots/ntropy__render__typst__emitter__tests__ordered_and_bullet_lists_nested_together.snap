@@ -1,0 +1,8 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"1. first\\n   - bullet a\\n   - bullet b\\n2. second\")"
+---
+1. first
+   - bullet a
+   - bullet b
+2. second

@@ -1,0 +1,11 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"- a\\n- b\\n\\ntext between\\n\\n- c\\n- d\")"
+---
+- a
+- b
+
+text between
+
+- c
+- d

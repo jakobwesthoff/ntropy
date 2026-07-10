@@ -18,6 +18,7 @@ jiff = "0.2.29"
 lsp-server = "0.8.0"
 lsp-types = "0.97.0"
 nucleo = "0.5.0"
+pulldown-cmark = { version = "0.13.4", default-features = false }
 regex = "1.12.4"
 regex-syntax = "0.8.11"
 serde = { version = "1.0.228", features = ["derive"] }

@@ -1,0 +1,9 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"- First paragraph.\\n\\n  Second paragraph.\\n- Next item\")"
+---
+- First paragraph\.
+
+  Second paragraph\.
+
+- Next item

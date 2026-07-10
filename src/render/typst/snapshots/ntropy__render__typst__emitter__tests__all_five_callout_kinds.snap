@@ -1,0 +1,23 @@
+---
+source: src/render/typst/emitter.rs
+expression: emit(input)
+---
+#callout(kind: "note")[
+a note
+]
+
+#callout(kind: "tip")[
+a tip
+]
+
+#callout(kind: "important")[
+an important
+]
+
+#callout(kind: "warning")[
+a warning
+]
+
+#callout(kind: "caution")[
+a caution
+]

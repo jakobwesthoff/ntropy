@@ -1,0 +1,8 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"    indented code\\n    second line\")"
+---
+```
+indented code
+second line
+```

@@ -1,0 +1,7 @@
+---
+source: src/render/typst/emitter.rs
+expression: "emit(\"- outer\\n  - middle\\n    - inner\")"
+---
+- outer
+  - middle
+    - inner

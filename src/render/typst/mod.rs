@@ -19,4 +19,5 @@
 //! its own write method so the context is chosen lexically at the call
 //! site, never through a mode flag.
 
+pub mod emitter;
 pub mod writer;
