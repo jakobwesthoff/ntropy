@@ -20,4 +20,5 @@
 //! site, never through a mode flag.
 
 pub mod emitter;
+pub mod value;
 pub mod writer;
