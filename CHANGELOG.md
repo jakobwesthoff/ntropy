@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- The content `init` seeds a vault with (the `README.md` and the `default` and
+  `today` templates) now lives as real files under `src/vault/seed/`, embedded
+  at compile time rather than written as Rust string literals (ADR 0039). A
+  seeded vault is byte-for-byte unchanged.
+
 ## v1.6.1 - 2026-07-09
 
 ### Fixed

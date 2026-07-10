@@ -262,8 +262,11 @@ mod tests {
     fn today_note_creates_then_reuses() {
         let (_guard, vault) = temp_vault();
         std::fs::create_dir_all(vault.layout().templates_dir()).expect("templates");
-        std::fs::write(vault.layout().today_template(), template::TODAY_TEMPLATE)
-            .expect("seed today");
+        std::fs::write(
+            vault.layout().today_template(),
+            crate::vault::seed::TODAY_TEMPLATE,
+        )
+        .expect("seed today");
 
         let first = today_note(&vault).expect("first");
         assert!(first.created);

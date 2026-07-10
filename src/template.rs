@@ -7,8 +7,9 @@
 //! A template is Markdown-with-frontmatter holding a fixed set of `{{…}}`
 //! placeholders. Substitution is hand-rolled (no template-engine dependency):
 //! a single pass replaces the four recognized placeholders and leaves anything
-//! else, including unknown placeholders, verbatim. v1 ships one default
-//! template, embedded here and written to disk by `init`.
+//! else, including unknown placeholders, verbatim. The templates a vault starts
+//! out with live in [`vault::seed`](crate::vault::seed); this module only
+//! resolves, reads, and renders them.
 //!
 //! The one exception to plain verbatim substitution is the frontmatter block:
 //! a value substituted there sits inside YAML, which gives some placeholder
@@ -19,30 +20,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::note::frontmatter;
-
-/// The built-in default template.
-///
-/// Frontmatter carries the required `title` and an empty `tags` list; the body
-/// is a single heading echoing the title.
-pub const DEFAULT_TEMPLATE: &str = "\
----
-title: {{title}}
-tags: []
----
-# {{title}}
-";
-
-/// The built-in `today` template, seeded by `init`.
-///
-/// The daily note is titled by its date and carries a `daily` tag; the `today`
-/// command finds an existing note with today's date as title before creating one.
-pub const TODAY_TEMPLATE: &str = "\
----
-title: {{date}}
-tags: [daily]
----
-# {{date}}
-";
+use crate::vault::seed;
 
 /// The values substituted into a template's placeholders.
 pub struct TemplateVars {
@@ -74,8 +52,8 @@ pub enum TemplateError {
     InvalidName { name: String },
 }
 
-/// Read the template at `path`, falling back to [`DEFAULT_TEMPLATE`] when the
-/// file does not exist.
+/// Read the template at `path`, falling back to [`seed::DEFAULT_TEMPLATE`]
+/// when the file does not exist.
 ///
 /// A missing file is normal (the vault may predate the template, or a user may
 /// have removed it), so it yields the embedded default. Any other read failure
@@ -83,7 +61,9 @@ pub enum TemplateError {
 pub fn load_or_default(path: &Path) -> Result<String, TemplateError> {
     match std::fs::read_to_string(path) {
         Ok(text) => Ok(text),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(DEFAULT_TEMPLATE.to_string()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Ok(seed::DEFAULT_TEMPLATE.to_string())
+        }
         Err(source) => Err(TemplateError::Io {
             path: path.to_path_buf(),
             source,
@@ -469,7 +449,7 @@ mod tests {
 
     #[test]
     fn default_template_renders_to_valid_note() {
-        let rendered = render(DEFAULT_TEMPLATE, &vars());
+        let rendered = render(seed::DEFAULT_TEMPLATE, &vars());
         insta::assert_snapshot!(rendered, @r"
         ---
         title: My Note
@@ -673,7 +653,7 @@ mod tests {
         // just that it parses) is what "no snapshot churn" means here — the
         // ADR 0034 split must not change this template's known-good output.
         assert_eq!(
-            render(TODAY_TEMPLATE, &vars()),
+            render(seed::TODAY_TEMPLATE, &vars()),
             "---\ntitle: 2026-06-25\ntags: [daily]\n---\n# 2026-06-25\n"
         );
     }
@@ -700,7 +680,10 @@ mod tests {
 
     #[test]
     fn default_template_with_nasty_title_parses_as_a_real_note() {
-        let rendered = render(DEFAULT_TEMPLATE, &vars_with_title("Q3: Planning kickoff"));
+        let rendered = render(
+            seed::DEFAULT_TEMPLATE,
+            &vars_with_title("Q3: Planning kickoff"),
+        );
         let note = crate::note::Note::parse(
             std::path::PathBuf::from(
                 "/vault/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-q3-planning-kickoff.md",
@@ -716,7 +699,7 @@ mod tests {
     fn load_missing_falls_back_to_default() {
         let dir = tempfile::tempdir().expect("temp dir");
         let text = load_or_default(&dir.path().join("default.md")).expect("load");
-        assert_eq!(text, DEFAULT_TEMPLATE);
+        assert_eq!(text, seed::DEFAULT_TEMPLATE);
     }
 
     #[test]

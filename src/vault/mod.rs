@@ -9,9 +9,13 @@
 //! contents or scanning; higher layers combine it with those. Keeping it that
 //! thin is what lets it sit at the bottom of the dependency graph alongside the
 //! filesystem and kernel primitives.
+//!
+//! Alongside it, [`seed`] carries the content those well-known files start out
+//! with, embedded from a file tree at compile time.
 
 pub mod layout;
 pub mod resolve;
+pub mod seed;
 
 use std::path::{Path, PathBuf};
 
