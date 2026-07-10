@@ -209,7 +209,7 @@ sync.
 | `today` | Open today's note, creating it from the [`today` template](#daily-notes-with-today) on first use that day. `--print`/`-p` just prints the path. |
 | `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it. |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
-| `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) via pandoc and typst (both required on `PATH`). Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`), `-o` the output path (default `./<slug>.pdf`), `-p` prints the artifact path. |
+| `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) with ntropy's own typst engine (only `typst` required on `PATH`). Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`, or `typst` for the emitted Typst document), `--engine pandoc` selects the legacy engine, `-o` the output path (default `./<slug>.<ext>`), `-p` prints the artifact path. |
 | `reconcile` | Realign filenames whose slug drifted from the title and re-sync every view (catches up after edits made outside ntropy). |
 | `view list\|add\|remove` | Manage [materialized views](#materialized-views), e.g. `ntropy view add by-status --field status`. |
 | `tags` | List every tag with its note count. |
@@ -459,16 +459,19 @@ ntropy render 01j8za2…
 open "$(ntropy render -p 01j8za2… -o q3-report.pdf)"
 ```
 
-Rendering calls out to two external tools that you need to install yourself:
-[pandoc](https://pandoc.org) converts the note and
-[typst](https://typst.app) typesets the PDF. Both must be on your `PATH` —
-for example via `brew install pandoc typst` — and ntropy tells you exactly
-what's missing if they aren't.
+ntropy converts the note to Typst with its own engine and only typesets the
+PDF with [typst](https://typst.app), so that is the single tool you install
+yourself — for example via `brew install typst`. ntropy tells you exactly
+what's missing if it isn't on your `PATH`.
+
+`--to typst` writes the emitted Typst document (a `.typ` file) instead of a
+PDF, needing no external tool at all. `--engine pandoc` selects the legacy
+engine, which converts the note with [pandoc](https://pandoc.org) and typesets
+with typst, so it needs both on your `PATH`.
 
 > [!NOTE]
-> This is the first iteration of ntropy's rendering infrastructure. It is
-> built around interchangeable rendering engines, and more output formats,
-> styling control, and further engines are planned for future releases.
+> ntropy's rendering infrastructure is built around interchangeable rendering
+> engines. Styling and theming control is planned for future releases.
 
 ## Language server
 

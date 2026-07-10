@@ -10,15 +10,15 @@ and this project adheres to
 
 ### Added
 
-- `render --to typst` emits the note as a Typst document through ntropy's own
-  Markdown-to-Typst engine, needing no external tool on `PATH`.
+- `render --to typst` writes the note as a Typst document, converted by
+  ntropy's own Markdown-to-Typst engine and needing no external tool on `PATH`.
 
 ### Changed
 
-- `render` to `pdf` now defaults to ntropy's own typst engine, which compiles
-  the note with the external `typst` binary, so only `typst` need be installed
-  and on `PATH`. The pandoc engine remains selectable via `--engine pandoc`,
-  which needs both pandoc and typst.
+- `render` to `pdf` now defaults to ntropy's own typst engine, which converts
+  the note and compiles it with the external `typst` binary, so only `typst`
+  must be installed and on `PATH`. The pandoc engine stays selectable via
+  `--engine pandoc`, which needs both pandoc and typst.
 - The content `init` seeds a vault with (the `README.md` and the `default` and
   `today` templates) now lives as real files under `src/vault/seed/`, embedded
   at compile time rather than written as Rust string literals (ADR 0039). A

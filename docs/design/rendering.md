@@ -1,14 +1,21 @@
 # Rendering
 
-The `render` command and its engine: how a note becomes an output artifact
+The `render` command and its engines: how a note becomes an output artifact
 such as a PDF. Decisions are recorded in
-[ADR 0037](../adr/0037-render-command-surface.md) and
-[ADR 0038](../adr/0038-pluggable-rendering-engine-with-pandoc-and-typst.md);
+[ADR 0037](../adr/0037-render-command-surface.md),
+[ADR 0038](../adr/0038-pluggable-rendering-engine-with-pandoc-and-typst.md), and
+[ADR 0040](../adr/0040-custom-typst-engine-with-own-markdown-emitter.md);
 selector semantics in [query-and-search.md](query-and-search.md), the overall
 command surface in [cli.md](cli.md).
 
-v1 renders exactly one note per invocation and ships one format, `pdf`,
-produced by one engine, `pandoc`, which delegates typesetting to typst.
+`render` produces one output artifact from a single note. Two formats ship:
+`pdf`, the default, and `typst`, the emitted Typst document. Both come from
+ntropy's own engine, which converts the note to Typst markup; the `typst` format
+hands that markup out directly, while the `pdf` format compiles it with the
+external `typst` binary. The pandoc engine stays selectable for `pdf` via
+`--engine pandoc`. The typst engine's full model lives in
+[typst-engine.md](typst-engine.md); this document covers the shared command
+surface, preparation, execution model, and the pandoc engine.
 
 ## CLI surface
 
@@ -25,20 +32,22 @@ produced by one engine, `pandoc`, which delegates typesetting to typst.
   keys off the controlling terminal (ADR 0036). A cancelled picker exits
   non-zero under `-p`, so `open "$(ntropy render -p ...)"` branches
   correctly, and is a successful no-op without it, like `delete`.
-- `--to <format>` selects the output format and defaults to `pdf`.
-- `--engine <name>` overrides the format's default engine. v1 has one
-  engine, `pandoc`, so the flag accepts only that value; it exists so that
-  invocations written today keep working when alternative engines arrive.
+- `--to <format>` selects the output format, `pdf` (the default) or
+  `typst`.
+- `--engine <name>` overrides the format's default engine. The `pdf`
+  format is produced by the typst engine by default, with `pandoc` also
+  available; the `typst` format has only the typst engine.
 - `--output <path>` / `-o` names the artifact. The default is
-  `./<slug>.pdf` in the current working directory, where `<slug>` is the
-  slug component of the note's filename. An existing file at the target is
+  `./<slug>.<ext>` in the current working directory, where `<slug>` is the
+  slug component of the note's filename and `<ext>` is the format's
+  extension (`pdf` or `typ`). An existing file at the target is
   overwritten.
 - `--print` / `-p` prints the artifact's path to stdout as one line on
   success, so `open "$(ntropy render -p ...)"` composes. Without it, a
   `Rendering <reference>...` line announces the work before the engine
   runs, and a completion report names the artifact, the format and engine
   that produced it, and its size:
-  `Rendered quarterly-review.pdf (pdf via pandoc, 12.4 KiB)`.
+  `Rendered quarterly-review.pdf (pdf via typst, 12.4 KiB)`.
 - Scan warnings print to stderr and fail the command under `--strict`,
   matching `search`.
 - `render` is read-only with respect to the vault: nothing was edited, so
@@ -46,8 +55,9 @@ produced by one engine, `pandoc`, which delegates typesetting to typst.
 
 ## Formats and engines
 
-A **format** is the artifact kind the user asks for (`pdf`). An **engine**
-is an implementation able to produce one or more formats. The registry maps
+A **format** is the artifact kind the user asks for (`pdf`, `typst`). An
+**engine** is an implementation able to produce one or more formats. The
+registry maps
 every format to the engines that produce it, one marked as the format's
 default: `--to` picks the format, `--engine` optionally picks the engine
 within it.
@@ -84,12 +94,18 @@ The library defines the engine abstraction; the binary contributes only the
 ability to touch the outside world.
 
 ```rust
-/// Everything an engine may ask the host to do.
+/// Everything an engine may ask the host to do while rendering.
 pub trait RenderContext {
     /// Materialize an intermediate file in a render-scoped workspace.
     fn stage_file(&mut self, name: &str, contents: &[u8]) -> Result<PathBuf, RenderError>;
     /// Execute an external tool and return its captured output.
     fn run(&mut self, invocation: &Invocation) -> Result<ToolOutput, RenderError>;
+    /// Write the final artifact directly, for an engine that produces the
+    /// output bytes itself rather than delegating to an external tool.
+    fn write_output(&mut self, contents: &[u8]) -> Result<(), RenderError>;
+    /// Report a non-fatal degradation: content the engine could not carry
+    /// faithfully into the artifact.
+    fn warn(&mut self, message: &str);
     /// The path the final artifact must land at.
     fn output_path(&self) -> &Path;
 }
@@ -103,33 +119,64 @@ pub trait Renderer {
 }
 ```
 
+An `Invocation` carries the program and its argument vector, plus an optional
+stdin payload and working directory, so an engine can feed a tool its work on
+standard input and choose the directory it runs in (the typst `pdf` pipeline
+uses both).
+
 An engine's chain is ordinary sequential Rust inside `render`: stage files,
 run tools, derive later steps from earlier output. Multi-step chains,
 conditionals, and intermediate artifacts need no plan language, because the
 logic never leaves the library; only the effects do.
 
 The binary supplies the single production `RenderContext`: `stage_file`
-backed by a temporary directory that is removed when the render ends, and
-`run` backed by `std::process::Command`. That one implementation serves
-every engine, so adding an engine never touches the binary. Probing for an
-engine's external tools is likewise the binary's job, next to the spawn;
-the library defines the error the probe reports through.
+backed by a temporary directory that is removed when the render ends, `run`
+backed by `std::process::Command`, `write_output` backed by a filesystem
+write to the artifact path, and `warn` printing to stderr. That one
+implementation serves every engine, so adding an engine never touches the
+binary. Probing for an engine's external tools is likewise the binary's job,
+next to the spawn; the library defines the error the probe reports through.
+
+Two placement details live with the production context because a tool may run
+in a directory other than where the user stood:
+
+- **Output-path absolutization.** The binary joins a relative `-o` path onto
+  the process working directory before building the context, so a tool run in
+  the note's own directory cannot land the artifact next to the note. The
+  user-facing prints keep the path as the user gave it.
+- **Program resolution in the parent's context.** The binary resolves a bare
+  program name against `PATH` relative to the parent process cwd before
+  spawning, because a spawn that first changed directory would otherwise
+  resolve a relative `PATH` entry against the child's directory. A resolution
+  failure is the missing-tool error naming what to install.
 
 This is a capability reading of ADR 0013's headless rule: the library still
 contains no spawn call and no ambient effect; it requests effects through a
 context handed in by its host. Tests hand in a fake context instead (see
 Testing).
 
-The context grows a primitive only when a real engine needs it. v1 needs
-exactly the three methods above.
+The context grows a primitive only when a real engine needs it: the pandoc
+engine drives an external tool through `stage_file` and `run`, while the typst
+engine emits its artifact through `write_output` and reports degraded content
+through `warn`. A `warn` message prints to stderr and, under `--strict`, counts
+toward a failing exit like a scan warning.
+
+## The typst engine
+
+The default `pdf` engine and the `typst` format are produced by ntropy's own
+engine, which converts the note body to Typst markup with its own emitter and
+delegates only typesetting to the `typst` binary. Its escaping model, element
+mapping, document assembly, and asset resolution are documented in
+[typst-engine.md](typst-engine.md).
 
 ## The pandoc engine
 
-The v1 `pdf` engine converts the note with pandoc and delegates PDF
-typesetting to typst: pandoc's typst PDF engine runs the `typst` binary
-itself, so both tools must be installed. Both are found via `PATH` (pandoc
-by ntropy, typst by pandoc); there are no configurable tool paths in v1. A
-missing tool fails the render with an error naming what to install.
+The pandoc engine, selectable for `pdf` via `--engine pandoc`, converts the
+note with pandoc and delegates PDF typesetting to typst: pandoc's typst PDF
+engine runs the `typst` binary itself, so both tools must be installed. Both
+are found via `PATH` (pandoc by ntropy, typst by pandoc); there are no
+configurable tool paths. A missing tool fails the render with an error naming
+what to install.
 
 Materialization, the lossy half owned by this engine:
 
@@ -155,8 +202,8 @@ The invocation:
 rather than pandoc's own dialect, whose extensions (such as citation
 syntax) would give plain note text special meaning.
 
-Appearance is pandoc's stock typst output; v1 has no template or styling
-configuration.
+Appearance is pandoc's stock typst output; this engine has no template or
+styling configuration.
 
 ## Testing
 
@@ -166,19 +213,23 @@ tools installed:
 - Preparation: the `PreparedDocument` built from fixture notes is
   snapshot with `insta`.
 - Engines: tests hand `render` a fake `RenderContext` that records every
-  `stage_file` and `run` call and feeds back scripted outputs. The recorded
-  sequence, staged contents and full argv included, is the snapshot,
-  pinning the exact pandoc invocation without executing pandoc.
-- CLI contract tests exercise the command end-to-end through a test-owned
-  stub `pandoc` placed on `PATH`; the real pandoc and typst are never
-  executed by tests, so the real-toolchain output stays validated manually.
-  Contract tests pass `-n` or `--print` per ADR 0036.
+  `stage_file`, `run`, `write_output`, and `warn` call and feeds back
+  scripted outputs. The recorded sequence, staged contents and full argv
+  included, is the snapshot, pinning the exact invocation without executing
+  any tool. The typst engine's own escaping and emitter correctness is
+  verified in-process against the `typst-syntax` parser (see
+  [typst-engine.md](typst-engine.md)).
+- CLI contract tests exercise the command end-to-end through test-owned stub
+  `pandoc` and `typst` binaries placed on `PATH`; the real pandoc and typst
+  are never executed by tests, so the real-toolchain output stays validated
+  manually. Contract tests pass `-n` or `--print` per ADR 0036.
 
 ## Module layout
 
 - `src/render/` (library): the document model and shared preparation, the
-  format/engine registry, `Renderer`, `RenderContext`, `RenderError`, and
-  the pandoc engine's chain logic.
+  format/engine registry, `Renderer`, `RenderContext`, `RenderError`, the
+  pandoc engine's chain logic, and the typst engine under
+  `src/render/typst/`.
 - `src/bin/ntropy/run/render.rs` (binary): `cmd_render` (selector
   resolution, picker on ambiguity, output-path defaulting) and the
   production `RenderContext`.
@@ -186,12 +237,11 @@ tools installed:
 The selector plumbing is reused as-is: `ops::resolve_selection` and the
 generic picker already serve `search` and `delete` unchanged.
 
-## Deferred beyond v1
+## Deferred
 
-Not part of v1:
+Not supported:
 
 - rendering more than one note per invocation,
 - styling and template control,
 - a config surface for rendering (per-format engine defaults, tool paths),
-- a render action inside the search picker,
-- further formats and engines.
+- a render action inside the search picker.

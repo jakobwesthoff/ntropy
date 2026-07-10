@@ -155,17 +155,18 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Heading level n | `=`×n, space, escaped text, newline (Markdown caps at 6; no clamping needed) |
 | Emphasis / strong / strikethrough | `#emph[...]` / `#strong[...]` / `#strike[...]` |
 | Inline code | `#raw("...")`, string-literal escaping — renders identically to backtick markup (visually verified, typst 0.15) |
-| Code block | content-sized fence, language tag, verbatim body |
+| Code block | content-sized fence, language tag, verbatim body. The language tag is the info string's first whitespace-delimited token, and only when it is identifier-shaped (alphanumeric, `-`, `_`); anything else yields no tag, since the tag is spliced after the opening fence unescaped |
 | Bullet list item | `- ` at line start |
 | Ordered list item | `<n>. ` markers — markup carries explicit start numbers, so `6.` survives without `#enum(start:)` |
 | Nested lists | child items indented under their parent, so Typst sees the nesting |
 | Block quote | `#quote(block: true)[...]`, trailing newline |
 | Callout (`> [!NOTE]` …) | `#callout(kind: "note")[...]`, defined by the prelude (see below) |
 | Link (external URL) | `#link("url")[escaped label]` |
-| Bare URL in text (`https://...`, `www....`) | detected by the emitter over text events (GFM autolink rules; pulldown-cmark has no option for this — verified) and emitted as `#link("url")[url]`; `linkify` crate vs. own regex decided at implementation time |
+| Bare URL in text (`https://...`, `www....`) | detected by the emitter with the `linkify` crate over text events (GFM autolink rules; pulldown-cmark has no option for this — verified) and emitted as `#link("url")[url]`; a `www.` URL gains an `https://` scheme in the target |
+| Email autolink (`<user@host>` or bare in text) | `#link("mailto:user@host")[user@host]`; the `mailto:` scheme is added so the link is actionable |
 | Note link, resolved | `#emph[Title]`, the target note's current title emphasized |
-| Note link, unresolved | the display text, escaped |
-| Task list item | bullet item with a `☐ ` / `☑ ` lead-in (plain Unicode) |
+| Note link, unresolved | the wrapper is dropped and the display text's inner inline events are re-emitted, so markup inside the display text survives |
+| Task list item | bullet item with a `□ ` / `☒ ` lead-in — plain Unicode chosen for coverage in typst's default fonts (U+2610/U+2611 render as a missing glyph and an emoji there) |
 | Footnote | `#footnote[...]` inlined at the reference site; definitions are buffered because pulldown-cmark delivers them separately from references |
 | Thematic break | `#line(length: 100%)` |
 | Soft / hard break | single space / `#linebreak()` |
