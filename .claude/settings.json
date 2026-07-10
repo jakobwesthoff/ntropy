@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cargo fmt *)",
+      "Bash(cargo add *)",
+      "Bash(cargo remove *)",
+      "Bash(cargo fetch *)",
+      "Bash(cargo insta *)",
+      "Bash(cargo llvm-cov *)",
+      "Bash(cargo package *)",
+      "Bash(INSTA_UPDATE=always cargo test *)",
+      "Bash(INSTA_UPDATE=force cargo test *)",
+      "Bash(INSTA_UPDATE=no cargo test *)",
+      "Bash(just check *)",
+      "Bash(just clippy *)",
+      "Bash(just coverage *)",
+      "Bash(ntropy --help)",
+      "Bash(ntropy info)",
+      "Bash(ntropy info *)",
+      "Bash(ntropy search *)",
+      "Bash(ntropy init *)",
+      "Bash(ntropy new *)",
+      "Bash(./target/debug/ntropy --version)",
+      "Bash(./target/debug/ntropy reconcile *)",
+      "Bash(./target/debug/ntropy view *)",
+      "Bash(EDITOR=true adrs new *)",
+      "Bash(pandoc --version)",
+      "Bash(pandoc -D *)",
+      "Bash(pandoc --print-default-data-file=*)"
+    ]
+  }
+}
