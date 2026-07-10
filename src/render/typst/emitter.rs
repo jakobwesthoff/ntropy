@@ -379,8 +379,12 @@ impl<'a> Emitter<'a> {
             Event::SoftBreak => self.inline_break(" "),
             Event::HardBreak => self.inline_break("#linebreak()"),
             Event::Rule => self.append_block("#line(length: 100%)\n"),
+            // The marker glyphs are U+2612 (ballot box with x) and U+25A1
+            // (white square): both are covered by typst's default fonts as
+            // matching monochrome forms, where the ballot boxes U+2610/U+2611
+            // render as a missing glyph and an emoji respectively.
             Event::TaskListMarker(checked) => {
-                self.inline_syntax(if checked { "☑ " } else { "☐ " });
+                self.inline_syntax(if checked { "☒ " } else { "□ " });
             }
             Event::FootnoteReference(label) => self.footnote_reference(&label),
             // A raw HTML block's text arrives as `Html` events between its
