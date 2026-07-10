@@ -88,6 +88,12 @@ pub trait Renderer {
 pub struct Invocation {
     pub program: String,
     pub args: Vec<OsString>,
+    /// Bytes piped to the child's standard input. `None` leaves the child with
+    /// no input to read, for a tool that takes its work through arguments alone.
+    pub stdin: Option<Vec<u8>>,
+    /// The child's working directory. `None` runs it in the host's current
+    /// directory, matching an unconfigured spawn.
+    pub cwd: Option<PathBuf>,
 }
 
 /// The captured result of an external-tool call.
@@ -222,9 +228,9 @@ mod tests {
     fn renderer_unavailable_message() {
         let err = RenderError::RendererUnavailable {
             tool: "pandoc".to_string(),
-            hint: "install pandoc and typst".to_string(),
+            hint: "install pandoc; it must be on PATH".to_string(),
         };
-        insta::assert_snapshot!(err, @"required tool `pandoc` is not available: install pandoc and typst");
+        insta::assert_snapshot!(err, @"required tool `pandoc` is not available: install pandoc; it must be on PATH");
     }
 
     #[test]

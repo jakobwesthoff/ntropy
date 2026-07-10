@@ -64,6 +64,8 @@ impl Renderer for Pandoc {
         let invocation = Invocation {
             program: "pandoc".to_string(),
             args,
+            stdin: None,
+            cwd: None,
         };
 
         let out = ctx.run(&invocation)?;
@@ -204,6 +206,14 @@ mod tests {
             lines.push(format!("RUN {}", invocation.program));
             for arg in &invocation.args {
                 lines.push(format!("    {}", arg.to_string_lossy()));
+            }
+            // stdin and cwd are recorded only when the invocation carries them,
+            // so an argument-only call (pandoc) keeps its transcript unchanged.
+            if let Some(stdin) = &invocation.stdin {
+                lines.push(format!("    STDIN {} bytes", stdin.len()));
+            }
+            if let Some(cwd) = &invocation.cwd {
+                lines.push(format!("    CWD {}", cwd.display()));
             }
         }
         for message in &ctx.warnings {
@@ -451,6 +461,27 @@ mod tests {
         insta::assert_snapshot!(transcript(&ctx), @r"
         WARN remote image dropped
         WRITE-OUTPUT 14 bytes
+        ");
+    }
+
+    #[test]
+    fn transcript_records_stdin_and_cwd_when_present() {
+        // An invocation carrying a stdin payload and a working directory records
+        // both under the RUN block, the seam the typst pdf pipeline relies on.
+        let mut ctx = FakeContext::new();
+        let invocation = Invocation {
+            program: "typst".to_string(),
+            args: vec!["compile".into(), "-".into()],
+            stdin: Some(b"#show: note.with()".to_vec()),
+            cwd: Some(PathBuf::from("/vault/all-notes")),
+        };
+        ctx.run(&invocation).expect("recording run succeeds");
+        insta::assert_snapshot!(transcript(&ctx), @r"
+        RUN typst
+            compile
+            -
+            STDIN 18 bytes
+            CWD /vault/all-notes
         ");
     }
 
