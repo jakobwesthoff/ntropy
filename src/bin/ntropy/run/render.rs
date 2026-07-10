@@ -202,6 +202,38 @@ fn default_output_path(slug: &str, extension: &str) -> PathBuf {
     PathBuf::from(format!("{slug}.{extension}"))
 }
 
+/// Ignore `SIGPIPE` process-wide for the lifetime of the value, restoring the
+/// previous disposition on drop.
+///
+/// A pipe write to a closed read end raises `SIGPIPE`; with the signal
+/// ignored, the write fails with `EPIPE` instead, which the caller handles as
+/// an ordinary error. The disposition is process-wide state (a thread-local
+/// mask does not contain it on macOS, where the signal is delivered
+/// process-wide), so the scope is kept to the piped tool exchange and the
+/// previous disposition — the fatal default that gives ntropy its quiet exit
+/// when its own stdout pipe closes — comes back the moment the scope ends.
+struct SigpipeIgnoredScope {
+    previous: libc::sighandler_t,
+}
+
+impl SigpipeIgnoredScope {
+    fn new() -> Self {
+        // SAFETY: `SIGPIPE` and `SIG_IGN` are valid signal/handler constants,
+        // and `signal` returns the previous handler for the restore.
+        let previous = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
+        SigpipeIgnoredScope { previous }
+    }
+}
+
+impl Drop for SigpipeIgnoredScope {
+    fn drop(&mut self) {
+        // SAFETY: `self.previous` came from the paired `signal` call above.
+        unsafe {
+            libc::signal(libc::SIGPIPE, self.previous);
+        }
+    }
+}
+
 /// Resolve `path` to an absolute location, joining a relative path onto `cwd`
 /// and leaving an already-absolute path untouched.
 ///
@@ -353,6 +385,16 @@ impl RenderContext for ProcessContext {
             // decoupling the two directions is what keeps a large payload from
             // deadlocking against a child that fills its stdout pipe mid-read.
             Some(payload) => {
+                // The process runs with `SIGPIPE` at its default, fatal
+                // disposition (see `main`), and a pipe write to a child that
+                // already exited raises it — on macOS delivered process-wide,
+                // so a thread-local signal mask cannot contain it. Ignoring
+                // the signal for the duration of the piped exchange turns
+                // that write into a plain `EPIPE` error; the guard restores
+                // the previous disposition on every exit path, keeping the
+                // quiet-exit behavior for ntropy's own stdout intact.
+                let _sigpipe = SigpipeIgnoredScope::new();
+
                 let mut child = command
                     .stdin(Stdio::piped())
                     .stdout(Stdio::piped())

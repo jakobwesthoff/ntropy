@@ -601,9 +601,11 @@ fn write_stub_typst(vault: &Path) {
     // Draining stdin mirrors the real compiler consuming the document; the last
     // argument of `typst compile - <path>` is the output path the marker lands
     // at, proving ntropy handed the tool an absolute, working-directory-proof
-    // location.
+    // location. `cat` is named by absolute path: the tests run the stub with
+    // `PATH` reduced to the relative `stub-bin` entry, which resolves against
+    // the child's working directory (the note's), where no `cat` exists.
     let script = r#"#!/bin/sh
-cat > /dev/null
+/bin/cat > /dev/null
 out=""
 for arg in "$@"; do
   out="$arg"
@@ -1055,6 +1057,56 @@ fn render_kitchen_sink_compiles_with_real_typst() {
     println!("  {}", out_dir.join("kitchen-sink.pdf").display());
     println!("  {}", out_dir.join("kitchen-sink.typ").display());
     println!("  {}", out_dir.join("kitchen-sink-1.png").display());
+}
+
+#[test]
+fn render_survives_a_tool_that_exits_without_reading_stdin() {
+    // ntropy restores `SIGPIPE`'s default disposition for its own stdout (see
+    // the sigpipe test at the end of this file), so writing the document to a
+    // child that has already exited must not let the resulting broken pipe
+    // kill the whole process. The stub exits without draining stdin, and the
+    // note is made large enough that the document cannot fit into the kernel
+    // pipe buffer, so the writer is still writing when the child is gone.
+    let dir = setup_vault();
+    let big_body = "A line of filler text to inflate the document.\n".repeat(4096);
+    write_note(
+        dir.path(),
+        ULID_A,
+        "big",
+        &format!("---\ntitle: Big\n---\n{big_body}"),
+    );
+
+    // A stub that writes its artifact and exits immediately, stdin untouched.
+    use std::os::unix::fs::PermissionsExt;
+    let bin = dir.path().join(STUB_BIN);
+    fs::create_dir_all(&bin).expect("stub-bin dir");
+    let script = r#"#!/bin/sh
+out=""
+for arg in "$@"; do
+  out="$arg"
+done
+printf 'stub pdf without reading\n' > "$out"
+exit 0
+"#;
+    let path = bin.join("typst");
+    fs::write(&path, script).expect("write stub typst");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub typst");
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "big.pdf", "-p", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", STUB_BIN);
+    let output = cmd.output().expect("run render");
+    assert!(
+        output.status.success(),
+        "render must survive the unread pipe; status: {:?}, stderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(dir.path().join("big.pdf")).expect("artifact exists"),
+        "stub pdf without reading\n"
+    );
 }
 
 #[test]
