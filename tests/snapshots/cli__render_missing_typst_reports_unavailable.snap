@@ -8,12 +8,12 @@ info:
     - "-n"
   env:
     EDITOR: "true"
-    PATH: stub-bin
+    PATH: no-such-bin
 ---
-success: true
-exit_code: 0
+success: false
+exit_code: 1
 ----- stdout -----
 Rendering [DATE....]  Wanted  ([ULID....................])...
-Rendered wanted.pdf (pdf via typst, 19 B)
 
 ----- stderr -----
+error: while rendering the note: required tool `typst` is not available: install typst; it must be on PATH

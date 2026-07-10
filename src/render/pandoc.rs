@@ -13,7 +13,7 @@
 
 use super::{Invocation, PreparedDocument, RenderContext, RenderError, Renderer};
 
-/// The pandoc-plus-typst engine registered as the default `pdf` producer.
+/// The pandoc-plus-typst engine, selectable for `pdf` via `--engine pandoc`.
 pub struct Pandoc;
 
 impl Renderer for Pandoc {

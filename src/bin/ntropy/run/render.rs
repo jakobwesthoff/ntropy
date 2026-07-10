@@ -149,8 +149,17 @@ pub fn cmd_render(
     let index = link::index(&indexed.notes);
     let doc = prepare(&note, &index).context("while preparing the document")?;
 
+    // The engine may run its tool in the note's own directory (the typst pdf
+    // pipeline does, so relative assets resolve against the note). A relative
+    // output path would then resolve inside that directory rather than where the
+    // user invoked the command, so it is absolutized against the process's
+    // working directory before the engine ever sees it. The user-facing prints
+    // below keep the original, as-given form.
+    let cwd = std::env::current_dir().context("while resolving the current directory")?;
+    let absolute_output = absolutize(&output_path, &cwd);
+
     let mut ctx =
-        ProcessContext::new(output_path.clone()).context("while creating the render workspace")?;
+        ProcessContext::new(absolute_output).context("while creating the render workspace")?;
     renderer
         .render(&doc, &mut ctx)
         .context("while rendering the note")?;
@@ -184,6 +193,19 @@ pub fn cmd_render(
 /// relative to the current directory.
 fn default_output_path(slug: &str, extension: &str) -> PathBuf {
     PathBuf::from(format!("{slug}.{extension}"))
+}
+
+/// Resolve `path` to an absolute location, joining a relative path onto `cwd`
+/// and leaving an already-absolute path untouched.
+///
+/// The engine receives the absolute form so its tool's working directory cannot
+/// change where the artifact lands; the user still sees the path as given.
+fn absolutize(path: &Path, cwd: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        cwd.join(path)
+    }
 }
 
 /// Resolve `program` to a concrete, executable path in the caller's context.
@@ -387,6 +409,22 @@ mod tests {
         assert_eq!(
             default_output_path("quarterly-review", "pdf"),
             PathBuf::from("quarterly-review.pdf")
+        );
+    }
+
+    #[test]
+    fn absolutize_joins_a_relative_path_onto_the_cwd() {
+        assert_eq!(
+            absolutize(Path::new("sub/out.pdf"), Path::new("/work/vault")),
+            PathBuf::from("/work/vault/sub/out.pdf")
+        );
+    }
+
+    #[test]
+    fn absolutize_leaves_an_absolute_path_unchanged() {
+        assert_eq!(
+            absolutize(Path::new("/tmp/out.pdf"), Path::new("/work/vault")),
+            PathBuf::from("/tmp/out.pdf")
         );
     }
 

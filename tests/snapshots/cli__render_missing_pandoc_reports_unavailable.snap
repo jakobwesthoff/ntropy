@@ -5,6 +5,8 @@ info:
   args:
     - render
     - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - "--engine"
+    - pandoc
     - "-n"
   env:
     EDITOR: "true"

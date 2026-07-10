@@ -616,6 +616,36 @@ exit 0
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub pandoc");
 }
 
+/// Write a fake `typst` into `<vault>/stub-bin/`. It drains stdin (the emitted
+/// document ntropy pipes in on `typst compile -`), takes its last argument as
+/// the output path, writes a fixed marker there, and exits 0, so the default
+/// pdf pipeline's success path is exercised without the real compiler. Like the
+/// pandoc stub it lives in the vault root, invisible to selection.
+fn write_stub_typst(vault: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let bin = vault.join(STUB_BIN);
+    fs::create_dir_all(&bin).expect("stub-bin dir");
+    // Draining stdin mirrors the real compiler consuming the document; the last
+    // argument of `typst compile - <path>` is the output path the marker lands
+    // at, proving ntropy handed the tool an absolute, working-directory-proof
+    // location.
+    let script = r#"#!/bin/sh
+cat > /dev/null
+out=""
+for arg in "$@"; do
+  out="$arg"
+done
+if [ -n "$out" ]; then
+  printf 'stub pdf via typst\n' > "$out"
+fi
+exit 0
+"#;
+    let path = bin.join("typst");
+    fs::write(&path, script).expect("write stub typst");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub typst");
+}
+
 #[test]
 fn render_bare_empty_vault_errors() {
     // A blank selector browses all notes, so an empty vault is a no-match,
@@ -631,10 +661,11 @@ fn render_bare_empty_vault_errors() {
 #[test]
 fn render_bare_single_note_renders() {
     // With exactly one note in the vault a bare invocation needs no narrowing,
-    // so it renders that note even without a picker.
+    // so it renders that note even without a picker. A bare `--to pdf` now uses
+    // the default typst engine, driven here by the typst stub.
     let dir = setup_vault();
     write_note(dir.path(), ULID_A, "only", "---\ntitle: Only\n---\nbody\n");
-    write_stub_pandoc(dir.path());
+    write_stub_typst(dir.path());
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
         cmd.env("PATH", STUB_BIN);
@@ -644,7 +675,7 @@ fn render_bare_single_note_renders() {
     });
     assert_eq!(
         fs::read_to_string(dir.path().join("only.pdf")).expect("artifact exists"),
-        "stub pdf\n"
+        "stub pdf via typst\n"
     );
 }
 
@@ -730,10 +761,10 @@ fn render_unknown_engine_errors() {
 }
 
 #[test]
-fn render_missing_pandoc_reports_unavailable() {
-    // `PATH` points at an empty dir so pandoc is not found; the binary is
-    // launched by its absolute path, so scrubbing `PATH` is safe. The error
-    // names pandoc as the tool to install.
+fn render_missing_typst_reports_unavailable() {
+    // The default `pdf` engine compiles with `typst`; `PATH` points at a
+    // directory that does not exist so it is not found. The error names typst as
+    // the tool to install, with the per-program hint.
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -745,7 +776,27 @@ fn render_missing_pandoc_reports_unavailable() {
         let mut cmd = ntropy(dir.path());
         cmd.args(["render", ULID_A, "-n"]);
         // A relative `PATH` naming a directory that does not exist keeps the
-        // recorded env deterministic while ensuring pandoc is not found.
+        // recorded env deterministic while ensuring typst is not found.
+        cmd.env("PATH", "no-such-bin");
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_missing_pandoc_reports_unavailable() {
+    // With `--engine pandoc` the legacy engine runs; `PATH` points at a
+    // directory that does not exist so pandoc is not found. The error names
+    // pandoc as the tool to install.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", ULID_A, "--engine", "pandoc", "-n"]);
         cmd.env("PATH", "no-such-bin");
         assert_cmd_snapshot!(cmd);
     });
@@ -754,11 +805,12 @@ fn render_missing_pandoc_reports_unavailable() {
 #[test]
 fn render_scan_warnings_print_and_strict_fails() {
     // A malformed sibling note warns on stderr while the good note still
-    // renders (stub pandoc); `--strict` promotes the warning to a failure.
+    // renders (stub typst, the default engine); `--strict` promotes the warning
+    // to a failure.
     let dir = setup_vault();
     write_note(dir.path(), ULID_A, "good", "---\ntitle: Good\n---\nbody\n");
     write_note(dir.path(), ULID_B, "bad", "---\ntags: [x]\n---\n");
-    write_stub_pandoc(dir.path());
+    write_stub_typst(dir.path());
     redacted(dir.path()).bind(|| {
         let mut lenient = ntropy(dir.path());
         lenient.args(["render", ULID_A, "-p", "-n"]);
@@ -774,8 +826,9 @@ fn render_scan_warnings_print_and_strict_fails() {
 
 #[test]
 fn render_default_output_names_the_slug() {
-    // Without `-p`, stdout stays silent and the artifact lands at `<slug>.pdf`
-    // in the working directory (here the vault root).
+    // Without `-p`, stdout narrates and the completion report names the default
+    // typst engine; the artifact lands at `<slug>.pdf` in the working directory
+    // (here the vault root).
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -783,7 +836,7 @@ fn render_default_output_names_the_slug() {
         "wanted",
         "---\ntitle: Wanted\n---\nbody\n",
     );
-    write_stub_pandoc(dir.path());
+    write_stub_typst(dir.path());
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
         cmd.args(["render", ULID_A, "-n"]);
@@ -793,13 +846,13 @@ fn render_default_output_names_the_slug() {
     let artifact = dir.path().join("wanted.pdf");
     assert_eq!(
         fs::read_to_string(&artifact).expect("read artifact"),
-        "stub pdf\n"
+        "stub pdf via typst\n"
     );
 }
 
 #[test]
 fn render_print_emits_the_artifact_path() {
-    // `-p` prints exactly the artifact path as one line.
+    // `-p` prints exactly the artifact path as one line (default typst engine).
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -807,7 +860,7 @@ fn render_print_emits_the_artifact_path() {
         "wanted",
         "---\ntitle: Wanted\n---\nbody\n",
     );
-    write_stub_pandoc(dir.path());
+    write_stub_typst(dir.path());
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
         cmd.args(["render", ULID_A, "-p", "-n"]);
@@ -818,7 +871,8 @@ fn render_print_emits_the_artifact_path() {
 
 #[test]
 fn render_output_flag_is_honored() {
-    // `-o` overrides the default name; the artifact appears at the given path.
+    // `-o` overrides the default name; the artifact appears at the given path
+    // (default typst engine).
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -826,7 +880,7 @@ fn render_output_flag_is_honored() {
         "wanted",
         "---\ntitle: Wanted\n---\nbody\n",
     );
-    write_stub_pandoc(dir.path());
+    write_stub_typst(dir.path());
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
         cmd.args(["render", ULID_A, "-o", "custom.pdf", "-p", "-n"]);
@@ -850,7 +904,7 @@ fn render_overwrites_an_existing_artifact() {
     );
     let target = dir.path().join("wanted.pdf");
     fs::write(&target, "stale content").expect("seed stale artifact");
-    write_stub_pandoc(dir.path());
+    write_stub_typst(dir.path());
 
     let mut cmd = ntropy(dir.path());
     cmd.args(["render", ULID_A, "-n"]);
@@ -859,7 +913,69 @@ fn render_overwrites_an_existing_artifact() {
     assert!(status.success());
     assert_eq!(
         fs::read_to_string(&target).expect("read artifact"),
+        "stub pdf via typst\n"
+    );
+}
+
+#[test]
+fn render_engine_pandoc_still_renders() {
+    // The legacy pandoc engine stays selectable via `--engine pandoc`: it runs
+    // the pandoc stub and the completion report names it, alongside the new
+    // typst default.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    write_stub_pandoc(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", ULID_A, "--engine", "pandoc", "-n"]);
+        cmd.env("PATH", STUB_BIN);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert_eq!(
+        fs::read_to_string(dir.path().join("wanted.pdf")).expect("read artifact"),
         "stub pdf\n"
+    );
+}
+
+#[test]
+fn render_relative_output_is_absolutized_against_the_invocation_cwd() {
+    // The default typst engine compiles in the note's own directory (all-notes),
+    // so a relative `-o` path must be absolutized against the invocation's cwd
+    // (the vault root) rather than resolving inside all-notes. The artifact lands
+    // at the vault-root-relative location, and all-notes stays free of strays.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    write_stub_typst(dir.path());
+    // The stub writes but does not create parent directories, so the target
+    // subdirectory (under the vault root, where absolutization lands it) exists.
+    fs::create_dir_all(dir.path().join("out")).expect("output subdir");
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "out/report.pdf", "-n"]);
+    cmd.env("PATH", STUB_BIN);
+    let status = cmd.status().expect("run render");
+    assert!(status.success());
+
+    // Absolutized against the vault root (the cwd), not the note's directory.
+    assert_eq!(
+        fs::read_to_string(dir.path().join("out/report.pdf"))
+            .expect("artifact at the cwd-relative path"),
+        "stub pdf via typst\n"
+    );
+    // An unabsolutized path would have landed inside the note's directory.
+    assert!(
+        !dir.path().join("all-notes/out/report.pdf").exists(),
+        "no artifact leaked into the note's directory"
     );
 }
 

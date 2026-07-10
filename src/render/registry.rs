@@ -50,12 +50,17 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// The registry ntropy ships with: `pdf` produced by the pandoc engine, and
-    /// `typst` produced by the ntropy-owned typst engine.
+    /// The registry ntropy ships with: `pdf` produced by the ntropy-owned typst
+    /// engine by default, with the pandoc engine still registered and selectable
+    /// via `--engine pandoc`; and `typst` produced by the typst engine.
+    ///
+    /// The typst engine registers for `pdf` before pandoc, so it wins the format
+    /// default (the first engine registered for a format becomes its default).
     pub fn new() -> Self {
         let mut registry = Registry {
             formats: HashMap::new(),
         };
+        registry.register("pdf", "pdf", "typst", Box::new(Typst::for_pdf_format()));
         registry.register("pdf", "pdf", "pandoc", Box::new(Pandoc));
         registry.register("typst", "typ", "typst", Box::new(Typst::for_typst_format()));
         registry
@@ -226,12 +231,14 @@ mod tests {
 
     #[test]
     fn default_engine_names_the_first_registered() {
+        // The shipping registry registers the typst engine for `pdf` first, so
+        // it stays the default even after `populated` adds another `pdf` engine.
         let registry = populated();
         assert_eq!(
             registry
                 .default_engine("pdf")
                 .expect("pdf has a default engine"),
-            "pandoc"
+            "typst"
         );
         let err = registry
             .default_engine("docx")
@@ -248,13 +255,22 @@ mod tests {
         insta::assert_snapshot!(err, @"unknown output format `docx`");
     }
 
-    /// The shipping registry serves `pdf` through pandoc: the default format
-    /// resolves with no engine named and with `pandoc` named explicitly, and its
-    /// extension is `pdf`. An unknown engine for `pdf` is still an error.
+    /// The shipping registry serves `pdf` through the typst engine by default:
+    /// the default format resolves with no engine named to `typst`, the pandoc
+    /// engine stays selectable via an explicit override, `typst` names it
+    /// explicitly too, and its extension is `pdf`. An unknown engine for `pdf`
+    /// is still an error.
     #[test]
-    fn shipped_registry_resolves_pdf_through_pandoc() {
+    fn shipped_registry_resolves_pdf_through_typst_by_default() {
         let registry = Registry::new();
+        assert_eq!(
+            registry
+                .default_engine(DEFAULT_FORMAT)
+                .expect("pdf has a default engine"),
+            "typst"
+        );
         assert!(registry.resolve(DEFAULT_FORMAT, None).is_ok());
+        assert!(registry.resolve(DEFAULT_FORMAT, Some("typst")).is_ok());
         assert!(registry.resolve(DEFAULT_FORMAT, Some("pandoc")).is_ok());
         assert_eq!(
             registry
@@ -267,8 +283,8 @@ mod tests {
 
     /// The shipping registry serves `typst` through the typst engine: the format
     /// resolves with no engine named and with `typst` named explicitly, and its
-    /// extension is `typ`. `pdf` keeps its own default engine, proving the two
-    /// registrations stay independent.
+    /// extension is `typ`. Both `typst` and `pdf` default to the typst engine,
+    /// which serves each with its own format-specific delivery.
     #[test]
     fn shipped_registry_resolves_typst_through_the_typst_engine() {
         let registry = Registry::new();
@@ -286,7 +302,7 @@ mod tests {
         );
         assert_eq!(
             registry.default_engine("pdf").expect("pdf is registered"),
-            "pandoc"
+            "typst"
         );
     }
 

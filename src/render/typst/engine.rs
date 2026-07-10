@@ -12,7 +12,7 @@
 //! either as a written file or as a compiler invocation.
 
 use super::{document, emitter};
-use crate::render::{PreparedDocument, RenderContext, RenderError, Renderer};
+use crate::render::{Invocation, PreparedDocument, RenderContext, RenderError, Renderer};
 
 /// The ntropy-owned engine registered as `typst`.
 ///
@@ -29,8 +29,9 @@ pub struct Typst {
 enum Format {
     /// The emitted Typst document, written out as the artifact directly.
     Typst,
-    // TODO(pdf format): a `Pdf` variant compiles the same document through the
-    // external `typst` binary; it slots in when the pdf pipeline lands.
+    /// A PDF: the identical emitted document compiled through the external
+    /// `typst` binary.
+    Pdf,
 }
 
 impl Typst {
@@ -39,6 +40,14 @@ impl Typst {
     pub fn for_typst_format() -> Self {
         Typst {
             format: Format::Typst,
+        }
+    }
+
+    /// The engine that produces the `pdf` format: the identical emitted document
+    /// compiled through the external `typst` binary.
+    pub fn for_pdf_format() -> Self {
+        Typst {
+            format: Format::Pdf,
         }
     }
 }
@@ -65,6 +74,40 @@ impl Renderer for Typst {
             // The document is the artifact; the host writes it out. No external
             // tool is involved, so nothing needs to be installed.
             Format::Typst => ctx.write_output(document.as_bytes()),
+
+            // The document is compiled to a PDF by the external `typst` binary.
+            // It rides on stdin, which typst reads as the main file when the
+            // input argument is `-`, and the note's own directory becomes the
+            // working directory so relative asset paths in the document resolve
+            // against the note (the "Asset paths" contract of
+            // `docs/design/typst-engine.md`). The output path reaches typst as
+            // an argument verbatim; it must already be absolute, since a
+            // relative path would resolve inside the moved working directory,
+            // landing the artifact next to the note. Absolutizing is the host's
+            // job, keeping the engine headless: it touches neither the
+            // filesystem nor the working directory itself.
+            Format::Pdf => {
+                let args: Vec<std::ffi::OsString> = vec![
+                    "compile".into(),
+                    "-".into(),
+                    ctx.output_path().as_os_str().to_os_string(),
+                ];
+                let invocation = Invocation {
+                    program: "typst".to_string(),
+                    args,
+                    stdin: Some(document.into_bytes()),
+                    cwd: doc.path.parent().map(|parent| parent.to_path_buf()),
+                };
+
+                let out = ctx.run(&invocation)?;
+                if !out.success {
+                    return Err(RenderError::ToolFailed {
+                        program: "typst".to_string(),
+                        stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
+                    });
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -73,8 +116,9 @@ impl Renderer for Typst {
 mod tests {
     use super::*;
     use crate::id::Id;
-    use crate::render::{Invocation, ResolvedLink, ToolOutput};
+    use crate::render::{ResolvedLink, ToolOutput};
 
+    use std::collections::VecDeque;
     use std::ops::Range;
     use std::path::{Path, PathBuf};
     use std::str::FromStr;
@@ -82,14 +126,18 @@ mod tests {
     const ULID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
     const TARGET_ULID: &str = "01BX5ZZKBKACTAV9WEVGEMMVRZ";
 
-    /// A [`RenderContext`] that records warnings and the written artifact, so
-    /// the whole engine sequence is observable without any filesystem or tool.
-    /// `stage_file` and `run` are unreachable for the typst engine and panic if
-    /// ever called, catching an accidental external dependency.
+    /// A [`RenderContext`] that records warnings, the written artifact, and every
+    /// tool invocation, so the whole engine sequence is observable without any
+    /// filesystem or real tool. `run` returns the next scripted result, or a
+    /// plain success once the script is exhausted, so a test that only inspects
+    /// the invocation need script nothing. `stage_file` is unreachable for the
+    /// typst engine and panics if ever called, catching an accidental staging.
     struct FakeContext {
         output: PathBuf,
         warnings: Vec<String>,
         written: Option<Vec<u8>>,
+        invocations: Vec<Invocation>,
+        scripted: VecDeque<Result<ToolOutput, RenderError>>,
     }
 
     impl FakeContext {
@@ -98,7 +146,22 @@ mod tests {
                 output: PathBuf::from("/artifacts/note.typ"),
                 warnings: Vec::new(),
                 written: None,
+                invocations: Vec::new(),
+                scripted: VecDeque::new(),
             }
+        }
+
+        /// Set the artifact path the context reports, so the pdf arm's output
+        /// argument is observable at a fixed, filesystem-independent location.
+        fn with_output(mut self, output: &str) -> Self {
+            self.output = PathBuf::from(output);
+            self
+        }
+
+        /// Queue the result the next `run` call returns.
+        fn script(mut self, result: Result<ToolOutput, RenderError>) -> Self {
+            self.scripted.push_back(result);
+            self
         }
 
         /// The written artifact decoded as UTF-8. The emitter only ever writes
@@ -111,11 +174,16 @@ mod tests {
 
     impl RenderContext for FakeContext {
         fn stage_file(&mut self, _name: &str, _contents: &[u8]) -> Result<PathBuf, RenderError> {
-            panic!("the typst format writes the artifact itself and stages nothing");
+            panic!("the typst engine writes or compiles the artifact itself and stages nothing");
         }
 
-        fn run(&mut self, _invocation: &Invocation) -> Result<ToolOutput, RenderError> {
-            panic!("the typst format runs no external tool");
+        fn run(&mut self, invocation: &Invocation) -> Result<ToolOutput, RenderError> {
+            self.invocations.push(invocation.clone());
+            self.scripted.pop_front().unwrap_or(Ok(ToolOutput {
+                success: true,
+                stdout: Vec::new(),
+                stderr: Vec::new(),
+            }))
         }
 
         fn write_output(&mut self, contents: &[u8]) -> Result<(), RenderError> {
@@ -197,6 +265,10 @@ mod tests {
             "inline markup not converted: {written}"
         );
         assert!(ctx.warnings.is_empty(), "clean note warns nothing");
+        assert!(
+            ctx.invocations.is_empty(),
+            "the typst format runs no external tool"
+        );
     }
 
     #[test]
@@ -266,5 +338,82 @@ mod tests {
             !written.contains(r#"#link("note.md")"#),
             "an unresolved note link must not emit a plain link: {written}"
         );
+    }
+
+    #[test]
+    fn pdf_arm_builds_the_typst_compile_invocation() {
+        // The pdf arm compiles the identical document the typst format writes.
+        // Render the same note through both formats and prove the pdf arm feeds
+        // the typst-format bytes on stdin, compiles them with `typst compile -`,
+        // targets the (absolute) output path, and runs in the note's directory.
+        let document = doc(
+            "My Note",
+            "tags:\n  - area/work\n",
+            "# Heading\n\nSome *body* text.\n",
+            Vec::new(),
+        );
+
+        let mut typst_ctx = FakeContext::new();
+        Typst::for_typst_format()
+            .render(&document, &mut typst_ctx)
+            .expect("typst-format render succeeds");
+        let expected_document = typst_ctx
+            .written
+            .clone()
+            .expect("the typst format wrote the document");
+
+        let mut ctx = FakeContext::new().with_output("/artifacts/note.pdf");
+        Typst::for_pdf_format()
+            .render(&document, &mut ctx)
+            .expect("pdf render succeeds");
+
+        assert!(
+            ctx.written.is_none(),
+            "the pdf arm delegates to the tool and writes nothing itself"
+        );
+        assert_eq!(ctx.invocations.len(), 1, "exactly one compile invocation");
+        let invocation = &ctx.invocations[0];
+        assert_eq!(invocation.program, "typst");
+        let args: Vec<String> = invocation
+            .args
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args, vec!["compile", "-", "/artifacts/note.pdf"]);
+        assert_eq!(
+            invocation.stdin.as_deref(),
+            Some(expected_document.as_slice()),
+            "stdin carries the exact bytes the typst format writes"
+        );
+        assert_eq!(
+            invocation.cwd.as_deref(),
+            Some(Path::new("/vault/all-notes")),
+            "the note's parent directory is the working directory"
+        );
+    }
+
+    #[test]
+    fn pdf_arm_surfaces_a_compile_failure() {
+        // A non-zero exit from typst fails the render, surfacing the compiler's
+        // own stderr so the user sees why the compile failed.
+        let document = doc("Fails", "{}", "body\n", Vec::new());
+        let mut ctx = FakeContext::new()
+            .with_output("/artifacts/note.pdf")
+            .script(Ok(ToolOutput {
+                success: false,
+                stdout: Vec::new(),
+                stderr: b"error: file would escape the project root".to_vec(),
+            }));
+
+        let err = Typst::for_pdf_format()
+            .render(&document, &mut ctx)
+            .expect_err("a non-zero exit fails the render");
+        match err {
+            RenderError::ToolFailed { program, stderr } => {
+                assert_eq!(program, "typst");
+                assert_eq!(stderr, "error: file would escape the project root");
+            }
+            other => panic!("expected ToolFailed, got {other:?}"),
+        }
     }
 }

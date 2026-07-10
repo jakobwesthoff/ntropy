@@ -5,6 +5,8 @@ info:
   args:
     - render
     - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - "--engine"
+    - pandoc
     - "-n"
   env:
     EDITOR: "true"
@@ -14,6 +16,6 @@ success: true
 exit_code: 0
 ----- stdout -----
 Rendering [DATE....]  Wanted  ([ULID....................])...
-Rendered wanted.pdf (pdf via typst, 19 B)
+Rendered wanted.pdf (pdf via pandoc, 9 B)
 
 ----- stderr -----
