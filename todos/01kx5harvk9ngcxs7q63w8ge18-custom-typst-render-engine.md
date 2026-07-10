@@ -17,10 +17,29 @@ defining those two functions; the converted body never changes. Presentation
 decisions belong here, not in the emitter: which frontmatter fields to feature
 or hide, per-kind callout colors and symbols, and typography.
 
-- **Smart quotes revisit.** The emitter escapes `'` and `"` unconditionally, so
-  they render as straight quotes in the PDF and a theme cannot re-smarten them.
-  Typographic quotes would need a narrow emitter change: stop escaping quotes.
-  This is the one place theming reaches back into the emitter.
+- **Basic theming (first step, user, 2026-07-10)**: a nicer default look via
+  a redesigned default prelude — a4 page setup, typography tuning on the
+  bundled fonts (only Libertinus Serif, New Computer Modern, and DejaVu Sans
+  Mono ship with typst; system fonts are not portable), subdued metadata
+  block, styled code blocks and inline-code chips, per-kind callout colors,
+  lighter tables, quieter quotes/rules, colored links. Includes the
+  `#notelink` hook (decided): the emitter emits resolved note links through a
+  prelude-defined `notelink` function (default look: the emphasized title)
+  so themes can style them distinctly. Decisions on configuration (user,
+  2026-07-10): paper size is a general render option in the vault config
+  (`.ntropy/config.toml`, `[render] paper = "a4"`, default a4) — a serde
+  serialize/deserializable **enum** of supported paper formats defined in the
+  renderer (initial variants proposed: a4, a5, us-letter, us-legal), with
+  each renderer deciding how to honor the setting; the typst engine passes it
+  as a typed `paper:` argument into `note.with(...)`, and the default theme
+  applies a4 via `set page`. The default theme skips frontmatter fields with
+  empty values (empty string/array/mapping, null) — the template still
+  receives them; skipping is pure presentation (user, 2026-07-10).
+- **Smart quotes revisit.** Deferred again during basic theming (user,
+  2026-07-10). The emitter escapes `'` and `"` unconditionally, so they
+  render as straight quotes in the PDF and a theme cannot re-smarten them.
+  Typographic quotes would need a narrow emitter change: stop escaping
+  quotes. This is the one place theming reaches back into the emitter.
 
 ## Assets above the note's directory (`--root` extension)
 
