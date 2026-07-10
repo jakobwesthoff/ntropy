@@ -12,20 +12,25 @@
 //! either as a written file or as a compiler invocation.
 
 use super::{document, emitter};
-use crate::render::{Invocation, PreparedDocument, RenderContext, RenderError, Renderer};
+use crate::render::{
+    Invocation, PreparedDocument, RenderContext, RenderError, RenderOptions, Renderer,
+};
 
 /// The ntropy-owned engine registered as `typst`.
 ///
 /// The engine builds one document from the note and delivers it according to
 /// its format: the `typst` format writes the document itself, the `pdf` format
-/// compiles it with the external tool.
+/// compiles it with the external tool. The render options travel into the
+/// emitted document (the paper as the template's `paper:` argument), so the
+/// `typst`-format artifact carries everything needed to compile identically.
 pub struct Typst {
     format: Format,
+    options: RenderOptions,
 }
 
 /// Which artifact the engine produces. Both formats emit the identical
-/// document and differ only in delivery, so the format is the one piece of
-/// per-registration state the engine carries.
+/// document and differ only in delivery, so the format and the render options
+/// are the per-registration state the engine carries.
 enum Format {
     /// The emitted Typst document, written out as the artifact directly.
     Typst,
@@ -37,17 +42,19 @@ enum Format {
 impl Typst {
     /// The engine that produces the `typst` format: the emitted document written
     /// out directly as the artifact.
-    pub fn for_typst_format() -> Self {
+    pub fn for_typst_format(options: RenderOptions) -> Self {
         Typst {
             format: Format::Typst,
+            options,
         }
     }
 
     /// The engine that produces the `pdf` format: the identical emitted document
     /// compiled through the external `typst` binary.
-    pub fn for_pdf_format() -> Self {
+    pub fn for_pdf_format(options: RenderOptions) -> Self {
         Typst {
             format: Format::Pdf,
+            options,
         }
     }
 }
@@ -61,7 +68,7 @@ impl Renderer for Typst {
         // Convert the body once; the same bytes back every format. Note links
         // resolve against the prepared link table (ADR 0028).
         let (body, warnings) = emitter::emit(&doc.body, &doc.links);
-        let document = document::assemble(&doc.title, &doc.frontmatter, &body);
+        let document = document::assemble(&doc.title, &doc.frontmatter, self.options.paper, &body);
 
         // Every degradation the emitter reported (dropped raw HTML, remote
         // images the offline compiler cannot embed) reaches the host, which
@@ -242,7 +249,7 @@ mod tests {
             Vec::new(),
         );
         let mut ctx = FakeContext::new();
-        Typst::for_typst_format()
+        Typst::for_typst_format(RenderOptions::default())
             .render(&document, &mut ctx)
             .expect("render succeeds");
 
@@ -277,7 +284,7 @@ mod tests {
         // engine forwards the warning to the host.
         let document = doc("HTML", "{}", "<div>raw</div>\n", Vec::new());
         let mut ctx = FakeContext::new();
-        Typst::for_typst_format()
+        Typst::for_typst_format(RenderOptions::default())
             .render(&document, &mut ctx)
             .expect("render succeeds");
 
@@ -303,7 +310,7 @@ mod tests {
         let document = doc("Links", "{}", &body, links);
 
         let mut ctx = FakeContext::new();
-        Typst::for_typst_format()
+        Typst::for_typst_format(RenderOptions::default())
             .render(&document, &mut ctx)
             .expect("render succeeds");
 
@@ -325,7 +332,7 @@ mod tests {
         let document = doc("Links", "{}", &body, links);
 
         let mut ctx = FakeContext::new();
-        Typst::for_typst_format()
+        Typst::for_typst_format(RenderOptions::default())
             .render(&document, &mut ctx)
             .expect("render succeeds");
 
@@ -354,7 +361,7 @@ mod tests {
         );
 
         let mut typst_ctx = FakeContext::new();
-        Typst::for_typst_format()
+        Typst::for_typst_format(RenderOptions::default())
             .render(&document, &mut typst_ctx)
             .expect("typst-format render succeeds");
         let expected_document = typst_ctx
@@ -363,7 +370,7 @@ mod tests {
             .expect("the typst format wrote the document");
 
         let mut ctx = FakeContext::new().with_output("/artifacts/note.pdf");
-        Typst::for_pdf_format()
+        Typst::for_pdf_format(RenderOptions::default())
             .render(&document, &mut ctx)
             .expect("pdf render succeeds");
 
@@ -405,7 +412,7 @@ mod tests {
                 stderr: b"error: file would escape the project root".to_vec(),
             }));
 
-        let err = Typst::for_pdf_format()
+        let err = Typst::for_pdf_format(RenderOptions::default())
             .render(&document, &mut ctx)
             .expect_err("a non-zero exit fails the render");
         match err {
@@ -415,5 +422,43 @@ mod tests {
             }
             other => panic!("expected ToolFailed, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn configured_paper_reaches_the_document_in_both_formats() {
+        use crate::render::{Paper, RenderOptions};
+
+        let options = RenderOptions {
+            paper: Paper::UsLetter,
+        };
+        let document = doc("Paper", "{}", "body\n", Vec::new());
+
+        // The typst format carries the paper in the written artifact.
+        let mut typst_ctx = FakeContext::new();
+        Typst::for_typst_format(options)
+            .render(&document, &mut typst_ctx)
+            .expect("render succeeds");
+        assert!(
+            typst_ctx.document().contains(r#"paper: "us-letter","#),
+            "typst artifact misses the paper: {}",
+            typst_ctx.document()
+        );
+
+        // The pdf format compiles the identical bytes, so the same paper rides
+        // on the compiler's stdin.
+        let mut pdf_ctx = FakeContext::new().with_output("/artifacts/note.pdf");
+        Typst::for_pdf_format(options)
+            .render(&document, &mut pdf_ctx)
+            .expect("render succeeds");
+        let stdin = pdf_ctx.invocations[0]
+            .stdin
+            .clone()
+            .expect("the pdf arm pipes the document");
+        assert!(
+            String::from_utf8(stdin)
+                .expect("the document is UTF-8")
+                .contains(r#"paper: "us-letter","#),
+            "pdf stdin misses the paper"
+        );
     }
 }

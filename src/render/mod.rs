@@ -22,10 +22,12 @@ use std::path::{Path, PathBuf};
 
 use crate::id::Id;
 
+pub mod options;
 pub mod prepare;
 pub mod registry;
 pub mod typst;
 
+pub use options::{Paper, RenderOptions};
 pub use prepare::prepare;
 pub use registry::{DEFAULT_FORMAT, Registry};
 pub use typst::Typst;

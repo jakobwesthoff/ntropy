@@ -2,18 +2,21 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Per-vault config: the materialized view definitions (ADR 0016).
+//! Per-vault config: the materialized view definitions (ADR 0016) and the
+//! render options.
 //!
 //! Stored at `<vault>/.ntropy/config.toml` as an array of `[[view]]` tables,
 //! each pairing a view's output-directory `name` with the frontmatter `field`
-//! it groups by. The `view list|add|remove` commands read and write this file
-//! through the helpers here.
+//! it groups by, plus an optional `[render]` table for output settings. The
+//! `view list|add|remove` commands read and write this file through the
+//! helpers here.
 
 use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
 use super::ConfigError;
+use crate::render::RenderOptions;
 
 /// The parsed per-vault configuration.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,6 +24,11 @@ pub struct PerVaultConfig {
     /// View definitions, serialized as `[[view]]` tables.
     #[serde(default, rename = "view")]
     pub views: Vec<ViewConfig>,
+    /// Render settings, serialized as a `[render]` table. An entirely-default
+    /// section is omitted on write, so configs that never touch rendering
+    /// stay as they are.
+    #[serde(default, skip_serializing_if = "RenderOptions::is_default")]
+    pub render: RenderOptions,
 }
 
 /// One view definition: an output directory name plus the field it groups by.
@@ -143,5 +151,52 @@ mod tests {
             PerVaultConfig::load(&path),
             Err(ConfigError::Parse { .. })
         ));
+    }
+
+    #[test]
+    fn parse_render_paper_setting() {
+        let cfg: PerVaultConfig =
+            toml::from_str("[render]\npaper = \"us-letter\"\n").expect("parse");
+        assert_eq!(cfg.render.paper, crate::render::Paper::UsLetter);
+    }
+
+    #[test]
+    fn absent_render_section_uses_defaults() {
+        let cfg: PerVaultConfig = toml::from_str("").expect("parse");
+        assert_eq!(cfg.render, crate::render::RenderOptions::default());
+    }
+
+    #[test]
+    fn unknown_paper_value_is_a_parse_error_naming_the_value() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[render]\npaper = \"no-such-paper\"\n").expect("write");
+        let err = PerVaultConfig::load(&path).expect_err("an unknown paper does not parse");
+        let message = err.to_string();
+        let source = match &err {
+            ConfigError::Parse { source, .. } => source.to_string(),
+            other => panic!("expected a parse error, got {other:?}"),
+        };
+        assert!(
+            source.contains("no-such-paper") || source.contains("unknown variant"),
+            "the error names the problem: {message}: {source}"
+        );
+    }
+
+    /// A default render section is omitted on write, so the serialized shape
+    /// of view-only configs (pinned by `toml_uses_view_array_of_tables`)
+    /// never changes; a configured paper survives the round-trip.
+    #[test]
+    fn render_section_serializes_only_when_configured() {
+        let mut cfg = PerVaultConfig::default();
+        cfg.add(view("by-tag", "tags"));
+        assert!(!cfg.to_toml().expect("serialize").contains("[render]"));
+
+        cfg.render.paper = crate::render::Paper::JisB5;
+        let text = cfg.to_toml().expect("serialize");
+        assert!(text.contains("[render]"));
+        assert!(text.contains("paper = \"jis-b5\""));
+        let parsed: PerVaultConfig = toml::from_str(&text).expect("parse back");
+        assert_eq!(parsed, cfg);
     }
 }

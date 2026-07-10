@@ -49,11 +49,18 @@ pub fn cmd_render(
     print: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
-    // Resolve the engine first, before touching the vault: `--to`/`--engine`
-    // are validated by the registry alone (the single authority), so a bad
-    // value reports what exists without a wasted scan. The extension comes from
-    // the same lookup, so the default output name is known up front.
-    let registry = Registry::new();
+    // The vault's render options shape the engines, so the config loads before
+    // the registry is built; a broken config (or an unknown paper name) fails
+    // here, before any scan.
+    let config = ntropy::config::PerVaultConfig::load(&vault.layout().config_file())
+        .context("while loading the vault config")?;
+
+    // Resolve the engine next, still before touching the vault's notes:
+    // `--to`/`--engine` are validated by the registry alone (the single
+    // authority), so a bad value reports what exists without a wasted scan. The
+    // extension comes from the same lookup, so the default output name is known
+    // up front.
+    let registry = Registry::new(config.render);
     let renderer = registry
         .resolve(&to, engine.as_deref())
         .context("while selecting the render engine")?;

@@ -1058,6 +1058,92 @@ fn render_kitchen_sink_compiles_with_real_typst() {
 }
 
 #[test]
+fn render_paper_config_reaches_the_artifact() {
+    // A `[render] paper` setting in the vault config shapes the emitted
+    // document: the template application carries the configured paper.
+    let dir = setup_vault();
+    fs::write(
+        dir.path().join(".ntropy/config.toml"),
+        "[render]\npaper = \"us-letter\"\n",
+    )
+    .expect("write config");
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    assert!(cmd.status().expect("run render").success());
+
+    let artifact = fs::read_to_string(dir.path().join("wanted.typ")).expect("typ artifact exists");
+    assert!(
+        artifact.contains(r#"paper: "us-letter","#),
+        "configured paper missing: {artifact}"
+    );
+}
+
+#[test]
+fn render_without_paper_config_defaults_to_a4() {
+    // The default vault config has no `[render]` section; the artifact still
+    // carries an explicit paper so it compiles identically anywhere.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    assert!(cmd.status().expect("run render").success());
+
+    let artifact = fs::read_to_string(dir.path().join("wanted.typ")).expect("typ artifact exists");
+    assert!(
+        artifact.contains(r#"paper: "a4","#),
+        "default paper missing: {artifact}"
+    );
+}
+
+#[test]
+fn render_unknown_paper_config_errors_naming_the_value() {
+    // An unknown paper name is a config parse error surfaced before any scan
+    // or render, naming the offending value.
+    let dir = setup_vault();
+    fs::write(
+        dir.path().join(".ntropy/config.toml"),
+        "[render]\npaper = \"no-such-paper\"\n",
+    )
+    .expect("write config");
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success(), "a broken config must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no-such-paper") || stderr.contains("unknown variant"),
+        "the error names the bad paper: {stderr}"
+    );
+    assert!(
+        !dir.path().join("wanted.typ").exists(),
+        "no artifact on a config error"
+    );
+}
+
+#[test]
 fn render_to_typ_alias_behaves_like_typst() {
     // `typ` is an unlisted alias of `typst`: it produces the identical artifact
     // even though it appears in no help text.

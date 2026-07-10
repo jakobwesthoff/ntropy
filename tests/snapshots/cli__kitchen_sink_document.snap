@@ -200,7 +200,7 @@ expression: artifact
   body
 }
 
-#show: note.with(title: "Kitchen Sink", frontmatter: ("title": "Kitchen Sink", "tags": ("area/work", "demo"), "priority": 2, "ratio": 1.5, "draft": false, "reviewer": none, "review": ("due": "[DATE....]", "by": "jakob"), "aliases": (), "angle": "!degrees 90"),)
+#show: note.with(title: "Kitchen Sink", frontmatter: ("title": "Kitchen Sink", "tags": ("area/work", "demo"), "priority": 2, "ratio": 1.5, "draft": false, "reviewer": none, "review": ("due": "[DATE....]", "by": "jakob"), "aliases": (), "angle": "!degrees 90"), paper: "a4",)
 
 Intro with #emph[emphasis], #strong[strong], #strike[struck], #raw("let x = \"a\\\\b\";"), and a bare URL #link("https://example.com/path")[https\:\/\/example\.com\/path] plus #link("https://www.example.org")[www\.example\.org] and mail to #link("mailto:jaw@ekko.io")[jaw\@ekko\.io] too\. Literal math \$x^2\$ stays text\. Unicode\: Über Größe 日本語\.
 

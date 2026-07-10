@@ -200,7 +200,7 @@ expression: document
   body
 }
 
-#show: note.with(title: "Example Note", frontmatter: ("title": "Example Note", "tags": ("area/work", "programming/rust"), "created": "2026-07-10", "meta": ("draft": true, "revision": 3)),)
+#show: note.with(title: "Example Note", frontmatter: ("title": "Example Note", "tags": ("area/work", "programming/rust"), "created": "2026-07-10", "meta": ("draft": true, "revision": 3)), paper: "a4",)
 
 = A heading
 

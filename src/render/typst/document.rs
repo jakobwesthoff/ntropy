@@ -18,27 +18,31 @@ use serde_yaml_ng::{Mapping, Value};
 use super::prelude::PRELUDE;
 use super::value::value_literal;
 use super::writer::TypstWriter;
+use crate::render::Paper;
 
-/// Assemble the complete emitted document from a note's title, frontmatter, and
-/// already-converted body.
+/// Assemble the complete emitted document from a note's title, frontmatter,
+/// paper format, and already-converted body.
 ///
 /// The layout is fixed: the embedded prelude, a blank line, the template
 /// application, a blank line, then the body spliced in verbatim (it is already
 /// Typst markup produced by the emitter). The title is emitted through the
-/// writer's string-literal channel, and the frontmatter through
-/// [`value_literal`] on the whole mapping, so both reach the template as inert
-/// data.
-pub fn assemble(title: &str, frontmatter: &Mapping, body: &str) -> String {
+/// writer's string-literal channel, the frontmatter through [`value_literal`]
+/// on the whole mapping, and the paper as its canonical name — the paper names
+/// are Typst's own identifiers, which the template's `set page` accepts
+/// directly.
+pub fn assemble(title: &str, frontmatter: &Mapping, paper: Paper, body: &str) -> String {
     let mut writer = TypstWriter::new();
     writer.syntax(PRELUDE);
 
-    // The template application. The trailing comma after `frontmatter:` keeps
-    // the argument list well-formed however the literal ends.
+    // The template application. The trailing comma after the last argument
+    // keeps the list well-formed however the literal ends.
     writer.syntax("\n#show: note.with(title: \"");
     writer.string_literal(title);
     writer.syntax("\", frontmatter: ");
     writer.syntax(&value_literal(&Value::Mapping(frontmatter.clone())));
-    writer.syntax(",)\n\n");
+    writer.syntax(", paper: \"");
+    writer.syntax(paper.as_str());
+    writer.syntax("\",)\n\n");
 
     writer.raw(body);
     writer.finish()
@@ -81,14 +85,14 @@ mod tests {
             "#,
         );
         let body = "= A heading\n\nSome body text.\n";
-        let document = assemble("Example Note", &fm, body);
+        let document = assemble("Example Note", &fm, Paper::A4, body);
         insta::assert_snapshot!(document);
         assert_parses(&document);
     }
 
     #[test]
     fn title_with_quotes_and_backslashes_is_escaped() {
-        let document = assemble(r#"a "quoted" \ title"#, &Mapping::new(), "body");
+        let document = assemble(r#"a "quoted" \ title"#, &Mapping::new(), Paper::A4, "body");
         assert!(
             document.contains(r#"note.with(title: "a \"quoted\" \\ title""#),
             "title not string-literal escaped: {document}"
@@ -98,10 +102,20 @@ mod tests {
 
     #[test]
     fn empty_frontmatter_is_the_colon_dictionary() {
-        let document = assemble("Title", &Mapping::new(), "body");
+        let document = assemble("Title", &Mapping::new(), Paper::A4, "body");
         assert!(
-            document.contains("frontmatter: (:),)"),
+            document.contains("frontmatter: (:),"),
             "empty frontmatter not emitted as `(:)`: {document}"
+        );
+        assert_parses(&document);
+    }
+
+    #[test]
+    fn the_paper_name_reaches_the_template() {
+        let document = assemble("Title", &Mapping::new(), Paper::UsLetter, "body");
+        assert!(
+            document.contains(r#"paper: "us-letter",)"#),
+            "configured paper not applied: {document}"
         );
         assert_parses(&document);
     }
@@ -116,7 +130,7 @@ mod tests {
                 - 2
             "#,
         );
-        let document = assemble("Title", &fm, "body");
+        let document = assemble("Title", &fm, Paper::A4, "body");
         assert!(
             document.contains(r#"frontmatter: ("outer": ("inner": (1, 2)))"#),
             "nested frontmatter not translated: {document}"
@@ -128,7 +142,7 @@ mod tests {
     fn body_is_spliced_verbatim() {
         // The body is already emitter output; assembly must not touch it.
         let body = "#emph[unchanged] and a `raw` run with \\backslashes\n";
-        let document = assemble("Title", &Mapping::new(), body);
+        let document = assemble("Title", &Mapping::new(), Paper::A4, body);
         assert!(
             document.ends_with(body),
             "body was not spliced verbatim at the end: {document}"
