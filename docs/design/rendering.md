@@ -188,8 +188,17 @@ tools installed:
   [typst-engine.md](typst-engine.md)).
 - CLI contract tests exercise the command end-to-end through a test-owned
   stub `typst` binary placed on `PATH`; the real typst is never executed by
-  tests, so the real-toolchain output stays validated manually. Contract
-  tests pass `-n` or `--print` per ADR 0036.
+  the standard suite. Contract tests pass `-n` or `--print` per ADR 0036.
+- The kitchen-sink fixture (`tests/fixtures/kitchen-sink.md`) exercises
+  every supported construct through the whole pipeline; the complete
+  emitted document is pinned as one snapshot, so any emitter or prelude
+  change surfaces as a single reviewable kitchen-sink diff.
+- The roundtrip's final leg is a deliberate, opt-in exception to the
+  no-external-tools rule: an `#[ignore]`d test runs the real `typst`
+  binary over the kitchen-sink fixture via `just verify-render`, asserts
+  the pdf compiles, and drops pdf/png/typ artifacts under
+  `target/verify-render/` for optical inspection. It is not part of
+  `just check`.
 
 ## Module layout
 

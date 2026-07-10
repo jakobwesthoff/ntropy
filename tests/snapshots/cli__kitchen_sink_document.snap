@@ -1,0 +1,177 @@
+---
+source: tests/cli.rs
+expression: artifact
+---
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+// Engine-owned definitions inlined ahead of every emitted document. They are
+// the seam a theme replaces: a theme is a different prelude defining `note`
+// and `callout`, while the converted body below stays identical. Inlining
+// (rather than importing) keeps the emitted `typst` artifact a single
+// self-contained file that compiles next to the note.
+
+// Render a frontmatter value as legible inline text. Strings pass through as
+// themselves; arrays and dictionaries recurse so nested metadata stays
+// readable rather than collapsing to a Typst repr; every other scalar (int,
+// float, bool, none, datetime) falls back to its repr, which is faithful and
+// short for leaf values.
+#let fmt-value(value) = {
+  if type(value) == str {
+    value
+  } else if type(value) == array {
+    value.map(fmt-value).join(", ")
+  } else if type(value) == dictionary {
+    value.pairs().map(((k, v)) => k + ": " + fmt-value(v)).join("; ")
+  } else {
+    repr(value)
+  }
+}
+
+// A callout is a GFM admonition (note, tip, important, warning, caution). The
+// default look is deliberately plain: a block set off by a left rule and inset
+// with a bold, capitalized lead-in naming the kind. Every kind renders through
+// this one form, so an unrecognized kind is handled by the same code path and
+// simply shows its own capitalized name as the lead-in.
+#let callout(kind: "note", body) = {
+  let lead = upper(kind.slice(0, 1)) + kind.slice(1)
+  block(
+    width: 100%,
+    stroke: (left: 2pt + luma(160)),
+    inset: (left: 1em, top: 0.6em, bottom: 0.6em, right: 0.6em),
+    {
+      strong(lead)
+      linebreak()
+      body
+    },
+  )
+}
+
+// The document template. It receives the note title and the complete
+// frontmatter mapping, and lays them out as the plain default: the title
+// prominent and centered, then every other frontmatter field as a key-value
+// line, then the converted body. The title is the one field with a featured
+// place of its own, so it is excluded from the key-value lines; which further
+// fields to feature or hide is a presentation decision that belongs to a
+// theme, so the default hides nothing else.
+#let note(title: none, frontmatter: (:), body) = {
+  // A conditional set rule: a `set` inside an `if` block would be scoped to
+  // that block and never reach the document. The guard also avoids
+  // `set document(title: none)`, which would be a type error.
+  set document(title: title) if title != none
+
+  if title != none {
+    align(center, text(size: 1.6em, weight: "bold", title))
+    v(0.4em)
+  }
+
+  let fields = frontmatter.pairs().filter(((key, _)) => key != "title")
+  for (key, value) in fields {
+    [#strong(key + ":") #fmt-value(value)]
+    linebreak()
+  }
+
+  if fields.len() > 0 {
+    v(0.8em)
+  }
+
+  body
+}
+
+#show: note.with(title: "Kitchen Sink", frontmatter: ("title": "Kitchen Sink", "tags": ("area/work", "demo"), "priority": 2, "ratio": 1.5, "draft": false, "reviewer": none, "review": ("due": "[DATE....]", "by": "jakob"), "aliases": (), "angle": "!degrees 90"),)
+
+Intro with #emph[emphasis], #strong[strong], #strike[struck], #raw("let x = \"a\\\\b\";"), and a bare URL #link("https://example.com/path")[https\:\/\/example\.com\/path] plus #link("https://www.example.org")[www\.example\.org] and mail to #link("mailto:jaw@ekko.io")[jaw\@ekko\.io] too\. Literal math \$x^2\$ stays text\. Unicode\: Über Größe 日本語\.
+
+A resolved note link to #emph[Current Linked Title] and a dangling one to #strong[bold] ghost\.
+
+An #link("https://example.org/docs")[external link], a #link("notes/other.md")[relative file], an #link("#table")[anchor], and a #link("mailto:jaw@ekko.io")[mail link]\.
+
+#callout(kind: "note")[
+A note callout with a #raw("code chip") inside\.
+]
+
+#callout(kind: "tip")[
+Tips look encouraging\.
+]
+
+#callout(kind: "important")[
+Important stands out\.
+]
+
+#callout(kind: "warning")[
+Careful#footnote[A footnote with #raw("code") inside and a list\:
+
+- one
+- two] with content\.
+]
+
+#callout(kind: "caution")[
+Caution is loud\.
+]
+
+#quote(block: true)[
+A plain block quote with a second paragraph\.
+
+The second paragraph\.
+]
+
+Another reference to the same footnote#footnote[A footnote with #raw("code") inside and a list\:
+
+- one
+- two], one used before its definition#footnote[Defined after use\.], and an undefined one\[^ghost\]\.
+
+== Table
+
+#table(
+columns: 3,
+align: (left, center, right,),
+table.header([Left], [Center], [Right],),
+[a], [#emph[b]], [c],
+[short row], [], [],
+)
+
+== Lists
+
+- bullet
+- nested parent
+  - child level two
+    - child level three
+
+6. sixth
+7. seventh
+
+- ☒ done task
+- □ open task
+
+A loose list\:
+
+- first item
+
+  with a continuation paragraph
+
+- second item
+
+== Code
+
+````rust
+fn demo() {
+    println!("a ``` fence inside");
+}
+````
+
+```
+indented code block
+```
+
+== Media and HTML
+
+#image("diagram.png")
+
+#link("https://example.com/remote.png")[A remote image]
+
+Inline  HTML too\.
+
+#line(length: 100%)
+
+The end\.

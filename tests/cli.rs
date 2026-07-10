@@ -937,6 +937,126 @@ fn render_to_typst_writes_a_real_artifact_without_any_tool() {
     );
 }
 
+/// The kitchen-sink fixture: one note exercising every supported construct
+/// (frontmatter value shapes, all callout kinds, footnote orders, task lists,
+/// explicit ordered-list numbers, fence collisions, table alignments, note
+/// links resolved and dangling, autolinks, images, raw HTML).
+const KITCHEN_SINK: &str = include_str!("fixtures/kitchen-sink.md");
+
+/// The target the kitchen-sink fixture's resolved note link points at.
+fn write_kitchen_sink_vault(vault: &Path) {
+    write_note(vault, ULID_A, "kitchen-sink", KITCHEN_SINK);
+    write_note(
+        vault,
+        ULID_B,
+        "linked",
+        "---\ntitle: Current Linked Title\n---\nTarget body.\n",
+    );
+}
+
+#[test]
+fn render_kitchen_sink_pins_the_full_typst_document() {
+    // The whole pipeline over the kitchen-sink fixture — prepare, emit,
+    // assemble — pinned as one reviewable snapshot: any emitter or prelude
+    // change surfaces here as a single kitchen-sink diff. The document also
+    // parses error-free through typst-syntax at the unit level (see
+    // `src/render/typst/`); this contract test pins the exact bytes.
+    let dir = setup_vault();
+    write_kitchen_sink_vault(dir.path());
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-p", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(
+        output.status.success(),
+        "render failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let artifact =
+        fs::read_to_string(dir.path().join("kitchen-sink.typ")).expect("typ artifact exists");
+    redacted(dir.path()).bind(|| {
+        insta::assert_snapshot!("kitchen_sink_document", artifact);
+    });
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn render_kitchen_sink_compiles_with_real_typst() {
+    // The full roundtrip's final leg: the kitchen-sink note rendered to pdf by
+    // the real `typst` binary, plus a png of the same document for optical
+    // inspection. Deliberately opt-in (ADR 0021 keeps external tools out of
+    // the standard suite); the artifacts land under `target/verify-render/`.
+    let dir = setup_vault();
+    write_kitchen_sink_vault(dir.path());
+
+    // The fixture references `diagram.png` next to the note; a minimal valid
+    // 1x1 PNG satisfies both the pdf compile and the png render.
+    const TINY_PNG: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+    fs::write(dir.path().join("all-notes/diagram.png"), TINY_PNG).expect("write diagram");
+
+    // The pdf leg: ntropy drives the real compiler end to end. Warnings on
+    // stderr (raw HTML, remote image) are the fixture working as designed.
+    let mut pdf = ntropy(dir.path());
+    pdf.args(["render", ULID_A, "-o", "kitchen-sink.pdf", "-n"]);
+    pdf.current_dir(dir.path());
+    let output = pdf.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // The typst artifact compiles to a png from beside the note (where its
+    // relative asset paths resolve), giving the inspectable image.
+    let mut typ = ntropy(dir.path());
+    typ.args([
+        "render",
+        ULID_A,
+        "--to",
+        "typst",
+        "-o",
+        "all-notes/kitchen-sink.typ",
+        "-n",
+    ]);
+    typ.current_dir(dir.path());
+    assert!(typ.status().expect("run render to typst").success());
+
+    let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/verify-render");
+    fs::create_dir_all(&out_dir).expect("create verify-render dir");
+    let png_status = Command::new("typst")
+        .args(["compile", "--format", "png", "kitchen-sink.typ"])
+        .arg(out_dir.join("kitchen-sink-{p}.png"))
+        .current_dir(dir.path().join("all-notes"))
+        .status()
+        .expect("run typst compile to png");
+    assert!(png_status.success(), "png compile failed");
+
+    fs::copy(
+        dir.path().join("kitchen-sink.pdf"),
+        out_dir.join("kitchen-sink.pdf"),
+    )
+    .expect("copy pdf");
+    fs::copy(
+        dir.path().join("all-notes/kitchen-sink.typ"),
+        out_dir.join("kitchen-sink.typ"),
+    )
+    .expect("copy typ");
+
+    println!("verify-render artifacts:");
+    println!("  {}", out_dir.join("kitchen-sink.pdf").display());
+    println!("  {}", out_dir.join("kitchen-sink.typ").display());
+    println!("  {}", out_dir.join("kitchen-sink-1.png").display());
+}
+
 #[test]
 fn render_to_typ_alias_behaves_like_typst() {
     // `typ` is an unlisted alias of `typst`: it produces the identical artifact
