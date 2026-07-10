@@ -2,5 +2,5 @@
 source: src/render/typst/emitter.rs
 expression: "body(\"- [ ] todo\\n- [x] done\")"
 ---
-- □ todo
-- ☒ done
+- #task(done: false) todo
+- #task(done: true) done

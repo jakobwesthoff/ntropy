@@ -191,7 +191,9 @@ enum InlineStyle {
 enum LinkEmit {
     /// Not a note link: `#link("dest")[inner]`, `dest` string-literal escaped.
     Ordinary { dest: String },
-    /// A note link whose target resolves: `#emph[Title]`, inner events dropped.
+    /// A note link whose target resolves: `#notelink[Title]`, inner events
+    /// dropped. `notelink` is defined by the prelude, so a theme can style
+    /// note links distinctly from ordinary emphasis.
     ResolvedNote { title: String },
     /// A note link whose target is dangling: the wrapper is dropped and the
     /// inner markup re-emitted, so formatting in the display text survives.
@@ -379,12 +381,15 @@ impl<'a> Emitter<'a> {
             Event::SoftBreak => self.inline_break(" "),
             Event::HardBreak => self.inline_break("#linebreak()"),
             Event::Rule => self.append_block("#line(length: 100%)\n"),
-            // The marker glyphs are U+2612 (ballot box with x) and U+25A1
-            // (white square): both are covered by typst's default fonts as
-            // matching monochrome forms, where the ballot boxes U+2610/U+2611
-            // render as a missing glyph and an emoji respectively.
+            // The prelude defines `task`, which draws one identical checkbox
+            // for both states, so checked and unchecked always match optically
+            // regardless of font glyph coverage.
             Event::TaskListMarker(checked) => {
-                self.inline_syntax(if checked { "☒ " } else { "□ " });
+                self.inline_syntax(if checked {
+                    "#task(done: true) "
+                } else {
+                    "#task(done: false) "
+                });
             }
             Event::FootnoteReference(label) => self.footnote_reference(&label),
             // A raw HTML block's text arrives as `Html` events between its
@@ -765,7 +770,7 @@ impl<'a> Emitter<'a> {
                     LinkEmit::Ordinary { dest } => wrap_link(&dest, &inner),
                     // The inner events were collected but a resolved note link
                     // shows the target's title instead, so `inner` is dropped.
-                    LinkEmit::ResolvedNote { title } => wrap_emph_text(&title),
+                    LinkEmit::ResolvedNote { title } => wrap_notelink(&title),
                     LinkEmit::UnresolvedNote => inner,
                 };
                 self.append_inline(&out);
@@ -991,11 +996,11 @@ fn wrap_link(dest: &str, inner: &str) -> String {
     writer.finish()
 }
 
-/// An `#emph[Title]` call with `title` escaped as markup text, used for a
-/// resolved note link.
-fn wrap_emph_text(title: &str) -> String {
+/// A `#notelink[Title]` call with `title` escaped as markup text, used for a
+/// resolved note link. The prelude defines `notelink`.
+fn wrap_notelink(title: &str) -> String {
     let mut writer = TypstWriter::new();
-    writer.syntax("#emph[");
+    writer.syntax("#notelink[");
     writer.markup_text(title);
     writer.syntax("]");
     writer.finish()
@@ -1490,12 +1495,16 @@ mod tests {
     // =====================================================================
 
     #[test]
-    fn resolved_note_link_becomes_emphasized_title() {
+    fn resolved_note_link_becomes_the_notelink_title() {
         // `[my note](abc123)` spans bytes 4..21; a matching resolved entry
-        // replaces the whole link with its target's current title.
+        // replaces the whole link with its target's current title through the
+        // prelude-defined `notelink` function.
         let input = "See [my note](abc123) end.";
         let links = [note_link(4..21, Some("Target Title"))];
-        assert_eq!(emit(input, &links).0, "See #emph[Target Title] end\\.\n");
+        assert_eq!(
+            emit(input, &links).0,
+            "See #notelink[Target Title] end\\.\n"
+        );
     }
 
     #[test]
@@ -1504,14 +1513,14 @@ mod tests {
         // target's title instead, so the inner `#strong` never appears.
         let input = "[**bold** display](id)";
         let links = [note_link(0..22, Some("The Title"))];
-        assert_eq!(emit(input, &links).0, "#emph[The Title]\n");
+        assert_eq!(emit(input, &links).0, "#notelink[The Title]\n");
     }
 
     #[test]
     fn resolved_note_link_title_escapes_markup_active_characters() {
         let input = "[x](id)";
         let links = [note_link(0..7, Some("a*b [c] #d"))];
-        assert_eq!(emit(input, &links).0, "#emph[a\\*b \\[c\\] \\#d]\n");
+        assert_eq!(emit(input, &links).0, "#notelink[a\\*b \\[c\\] \\#d]\n");
     }
 
     #[test]

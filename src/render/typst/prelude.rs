@@ -37,13 +37,15 @@ mod tests {
         assert!(errors.is_empty(), "prelude parse errors: {errors:?}");
     }
 
-    /// The two definitions the document skeleton depends on must be present.
-    /// A string check is enough: assembly and the emitter both reference these
-    /// names by hand, so their absence is a contract break regardless of the
-    /// prelude's internals.
+    /// The definitions the document skeleton and the emitter depend on must be
+    /// present. A string check is enough: assembly and the emitter reference
+    /// these names by hand, so their absence is a contract break regardless of
+    /// the prelude's internals.
     #[test]
-    fn prelude_defines_note_and_callout() {
+    fn prelude_defines_the_engine_facing_functions() {
         assert!(PRELUDE.contains("#let callout("));
         assert!(PRELUDE.contains("#let note("));
+        assert!(PRELUDE.contains("#let notelink("));
+        assert!(PRELUDE.contains("#let task("));
     }
 }

@@ -18,6 +18,11 @@ and this project adheres to
 - `render` to `pdf` now uses ntropy's own typst engine, which converts the
   note and compiles it with the external `typst` binary, so only `typst`
   must be installed and on `PATH`.
+- Rendered notes have a redesigned default look: a4 paper, tags as chips in
+  a subdued metadata block (fields with empty values are skipped), colored
+  callouts per kind, code chips and panels, drawn task-list checkboxes,
+  colored links with note links visually distinct, and lighter tables,
+  quotes, and rules.
 
 ### Removed
 

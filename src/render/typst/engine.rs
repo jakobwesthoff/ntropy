@@ -309,8 +309,8 @@ mod tests {
 
         let written = ctx.document();
         assert!(
-            written.contains("#emph[Current Title]"),
-            "resolved title not emphasized: {written}"
+            written.contains("#notelink[Current Title]"),
+            "resolved title not routed through notelink: {written}"
         );
     }
 

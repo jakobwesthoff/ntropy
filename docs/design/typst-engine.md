@@ -166,7 +166,7 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Email autolink (`<user@host>` or bare in text) | `#link("mailto:user@host")[user@host]`; the `mailto:` scheme is added so the link is actionable |
 | Note link, resolved | `#notelink[Title]`, the target note's current title through a prelude-defined function, so a theme can style note links distinctly from ordinary emphasis |
 | Note link, unresolved | the wrapper is dropped and the display text's inner inline events are re-emitted, so markup inside the display text survives |
-| Task list item | bullet item with a `□ ` / `☒ ` lead-in — plain Unicode chosen for coverage in typst's default fonts (U+2610/U+2611 render as a missing glyph and an emoji there) |
+| Task list item | bullet item with a `#task(done: ...)` lead-in — the prelude-defined function draws one identical checkbox for both states, so checked and unchecked match optically regardless of font glyph coverage |
 | Footnote | `#footnote[...]` inlined at the reference site; definitions are buffered because pulldown-cmark delivers them separately from references |
 | Thematic break | `#line(length: 100%)` |
 | Soft / hard break | single space / `#linebreak()` |
@@ -255,8 +255,8 @@ identical file.
   feature or hide is a presentation decision and thus a theme's.
 - **`#show: note.with(...)` is the single seam** between content and
   presentation. A theme is a different prelude defining `note`,
-  `callout`, and `notelink`; the document part never changes. The
-  prelude is inlined, not imported, so the artifact stays a single
+  `callout`, `notelink`, and `task`; the document part never changes.
+  The prelude is inlined, not imported, so the artifact stays a single
   self-contained file that compiles next to the note.
 - `set document(title: ...)` inside `note` supplies the PDF metadata.
 - The two formats never diverge: the pdf pipeline compiles the `typst`
