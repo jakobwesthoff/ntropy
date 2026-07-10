@@ -13,7 +13,7 @@ exit_code: 0
 ----- stdout -----
 Render a note to a document artifact.
 
-`--to` selects the output format: `pdf` (the default) or `typst`, the emitted Typst document. `pdf` is produced by ntropy's own typst engine, which compiles the note with the external `typst` binary, so only `typst` need be on `PATH`. `--engine pandoc` selects the legacy engine instead, which needs both pandoc and typst. The `typst` format needs no external tool.
+`--to` selects the output format: `pdf` (the default) or `typst`, the emitted Typst document. `pdf` is produced by ntropy's own typst engine, which compiles the note with the external `typst` binary, so only `typst` need be on `PATH`. The `typst` format needs no external tool.
 
 Usage: ntropy render [OPTIONS] [ID|QUERY]...
 
@@ -31,7 +31,7 @@ Options:
           Operate on the vault at this path (overrides all other resolution)
 
       --engine <NAME>
-          Override the format's default engine (`pdf`'s default is `typst`; `pandoc` is also available)
+          Override the format's default engine
 
   -n, --non-interactive
           Force non-interactive (plain) behavior even on a TTY

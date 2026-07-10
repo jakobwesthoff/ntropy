@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use super::{Pandoc, RenderError, Renderer, Typst};
+use super::{RenderError, Renderer, Typst};
 
 /// The format selected when the user names none.
 pub const DEFAULT_FORMAT: &str = "pdf";
@@ -50,18 +50,13 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// The registry ntropy ships with: `pdf` produced by the ntropy-owned typst
-    /// engine by default, with the pandoc engine still registered and selectable
-    /// via `--engine pandoc`; and `typst` produced by the typst engine.
-    ///
-    /// The typst engine registers for `pdf` before pandoc, so it wins the format
-    /// default (the first engine registered for a format becomes its default).
+    /// The registry ntropy ships with: `pdf` and `typst`, both produced by the
+    /// ntropy-owned typst engine.
     pub fn new() -> Self {
         let mut registry = Registry {
             formats: HashMap::new(),
         };
         registry.register("pdf", "pdf", "typst", Box::new(Typst::for_pdf_format()));
-        registry.register("pdf", "pdf", "pandoc", Box::new(Pandoc));
         registry.register("typst", "typ", "typst", Box::new(Typst::for_typst_format()));
         registry
     }
@@ -255,11 +250,10 @@ mod tests {
         insta::assert_snapshot!(err, @"unknown output format `docx`");
     }
 
-    /// The shipping registry serves `pdf` through the typst engine by default:
-    /// the default format resolves with no engine named to `typst`, the pandoc
-    /// engine stays selectable via an explicit override, `typst` names it
+    /// The shipping registry serves `pdf` through the typst engine: the default
+    /// format resolves with no engine named to `typst`, `typst` names it
     /// explicitly too, and its extension is `pdf`. An unknown engine for `pdf`
-    /// is still an error.
+    /// is an error.
     #[test]
     fn shipped_registry_resolves_pdf_through_typst_by_default() {
         let registry = Registry::new();
@@ -271,7 +265,6 @@ mod tests {
         );
         assert!(registry.resolve(DEFAULT_FORMAT, None).is_ok());
         assert!(registry.resolve(DEFAULT_FORMAT, Some("typst")).is_ok());
-        assert!(registry.resolve(DEFAULT_FORMAT, Some("pandoc")).is_ok());
         assert_eq!(
             registry
                 .extension(DEFAULT_FORMAT)
@@ -306,16 +299,16 @@ mod tests {
         );
     }
 
-    /// The pandoc engine produces `pdf`, not `typst`, so requesting it under
-    /// `typst` is `UnknownEngine`: the registry never crosses format boundaries.
+    /// An engine name that is not registered for the requested format is
+    /// `UnknownEngine`: the registry never crosses format boundaries.
     #[test]
-    fn typst_format_rejects_the_pandoc_engine() {
+    fn typst_format_rejects_an_unregistered_engine() {
         let registry = Registry::new();
         let err = registry
-            .resolve("typst", Some("pandoc"))
+            .resolve("typst", Some("wkhtml"))
             .err()
-            .expect("a foreign-format engine does not resolve");
-        insta::assert_snapshot!(err, @"unknown engine `pandoc` for format `typst`");
+            .expect("an unregistered engine does not resolve");
+        insta::assert_snapshot!(err, @"unknown engine `wkhtml` for format `typst`");
     }
 
     /// `typ` is an unlisted alias of `typst`: it resolves the same engine, the
@@ -334,7 +327,8 @@ mod tests {
                 .expect("the alias has a default engine"),
             "typst"
         );
-        // The alias only reaches the canonical format, never a foreign engine.
-        assert!(registry.resolve("typ", Some("pandoc")).is_err());
+        // The alias only reaches the canonical format, never an unregistered
+        // engine.
+        assert!(registry.resolve("typ", Some("wkhtml")).is_err());
     }
 }

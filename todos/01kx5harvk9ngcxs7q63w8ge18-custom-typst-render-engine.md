@@ -32,12 +32,6 @@ paths"). A contained extension is an opt-in `--root`-plus-path-rewriting
 variant that widens the sandbox while keeping the note-relative resolution the
 `typst` format's identical-bytes contract depends on.
 
-## Pandoc engine removal
-
-The pandoc engine stays registered and selectable via `--engine pandoc`. Once
-the typst engine's PDF output is judged complete and nice, the pandoc engine
-will most likely be removed entirely (user, 2026-07-10).
-
 ## Math
 
 Math is deferred with its own decision trail and build path (mitex

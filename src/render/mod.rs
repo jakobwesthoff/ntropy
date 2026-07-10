@@ -22,12 +22,10 @@ use std::path::{Path, PathBuf};
 
 use crate::id::Id;
 
-pub mod pandoc;
 pub mod prepare;
 pub mod registry;
 pub mod typst;
 
-pub use pandoc::Pandoc;
 pub use prepare::prepare;
 pub use registry::{DEFAULT_FORMAT, Registry};
 pub use typst::Typst;
@@ -41,11 +39,12 @@ pub use typst::Typst;
 /// The library defines the capability; the binary supplies the one production
 /// implementation (temporary-directory staging plus `std::process::Command`),
 /// and tests hand in a recording fake. The context grows a primitive only when
-/// a real engine needs it (ADR 0038): the pandoc engine drives an external tool
-/// via [`stage_file`](RenderContext::stage_file) and
-/// [`run`](RenderContext::run), while the typst engine emits the artifact
-/// itself through [`write_output`](RenderContext::write_output) and reports
-/// degraded content through [`warn`](RenderContext::warn).
+/// a real engine needs it (ADR 0038): the typst engine emits its `typst`-format
+/// artifact itself through [`write_output`](RenderContext::write_output),
+/// drives the external compiler for `pdf` via [`run`](RenderContext::run), and
+/// reports degraded content through [`warn`](RenderContext::warn);
+/// [`stage_file`](RenderContext::stage_file) serves engines whose external tool
+/// reads an intermediate file from disk.
 pub trait RenderContext {
     /// Materialize an intermediate file in a render-scoped workspace and return
     /// its path, so a later step can hand that path to an external tool.
@@ -227,10 +226,10 @@ mod tests {
     #[test]
     fn renderer_unavailable_message() {
         let err = RenderError::RendererUnavailable {
-            tool: "pandoc".to_string(),
-            hint: "install pandoc; it must be on PATH".to_string(),
+            tool: "typst".to_string(),
+            hint: "install typst; it must be on PATH".to_string(),
         };
-        insta::assert_snapshot!(err, @"required tool `pandoc` is not available: install pandoc; it must be on PATH");
+        insta::assert_snapshot!(err, @"required tool `typst` is not available: install typst; it must be on PATH");
     }
 
     #[test]
@@ -253,21 +252,21 @@ mod tests {
     #[test]
     fn spawn_message() {
         let err = RenderError::Spawn {
-            program: "pandoc".to_string(),
+            program: "typst".to_string(),
             source: io::Error::new(io::ErrorKind::NotFound, "missing"),
         };
-        insta::assert_snapshot!(err, @"while spawning `pandoc`");
+        insta::assert_snapshot!(err, @"while spawning `typst`");
     }
 
     #[test]
     fn tool_failed_message() {
         let err = RenderError::ToolFailed {
-            program: "pandoc".to_string(),
-            stderr: "typst: page overflow".to_string(),
+            program: "typst".to_string(),
+            stderr: "error: page overflow".to_string(),
         };
         insta::assert_snapshot!(err, @r"
-        `pandoc` failed:
-        typst: page overflow
+        `typst` failed:
+        error: page overflow
         ");
     }
 

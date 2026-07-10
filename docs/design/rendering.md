@@ -12,10 +12,9 @@ command surface in [cli.md](cli.md).
 `pdf`, the default, and `typst`, the emitted Typst document. Both come from
 ntropy's own engine, which converts the note to Typst markup; the `typst` format
 hands that markup out directly, while the `pdf` format compiles it with the
-external `typst` binary. The pandoc engine stays selectable for `pdf` via
-`--engine pandoc`. The typst engine's full model lives in
+external `typst` binary. The typst engine's full model lives in
 [typst-engine.md](typst-engine.md); this document covers the shared command
-surface, preparation, execution model, and the pandoc engine.
+surface, preparation, and execution model.
 
 ## CLI surface
 
@@ -34,9 +33,10 @@ surface, preparation, execution model, and the pandoc engine.
   correctly, and is a successful no-op without it, like `delete`.
 - `--to <format>` selects the output format, `pdf` (the default) or
   `typst`.
-- `--engine <name>` overrides the format's default engine. The `pdf`
-  format is produced by the typst engine by default, with `pandoc` also
-  available; the `typst` format has only the typst engine.
+- `--engine <name>` overrides the format's default engine. Both shipped
+  formats are produced by the typst engine; the flag exists so that
+  invocations written today keep working when alternative engines
+  arrive.
 - `--output <path>` / `-o` names the artifact. The default is
   `./<slug>.<ext>` in the current working directory, where `<slug>` is the
   slug component of the note's filename and `<ext>` is the format's
@@ -155,55 +155,22 @@ contains no spawn call and no ambient effect; it requests effects through a
 context handed in by its host. Tests hand in a fake context instead (see
 Testing).
 
-The context grows a primitive only when a real engine needs it: the pandoc
-engine drives an external tool through `stage_file` and `run`, while the typst
-engine emits its artifact through `write_output` and reports degraded content
-through `warn`. A `warn` message prints to stderr and, under `--strict`, counts
-toward a failing exit like a scan warning.
+The context grows a primitive only when a real engine needs it: the typst
+engine emits its `typst`-format artifact through `write_output`, drives the
+external compiler for `pdf` through `run`, and reports degraded content
+through `warn`; `stage_file` serves engines whose external tool reads an
+intermediate file from disk. A `warn` message prints to stderr and, under
+`--strict`, counts toward a failing exit like a scan warning.
 
 ## The typst engine
 
-The default `pdf` engine and the `typst` format are produced by ntropy's own
-engine, which converts the note body to Typst markup with its own emitter and
-delegates only typesetting to the `typst` binary. Its escaping model, element
-mapping, document assembly, and asset resolution are documented in
-[typst-engine.md](typst-engine.md).
-
-## The pandoc engine
-
-The pandoc engine, selectable for `pdf` via `--engine pandoc`, converts the
-note with pandoc and delegates PDF typesetting to typst: pandoc's typst PDF
-engine runs the `typst` binary itself, so both tools must be installed. Both
-are found via `PATH` (pandoc by ntropy, typst by pandoc); there are no
-configurable tool paths. A missing tool fails the render with an error naming
-what to install.
-
-Materialization, the lossy half owned by this engine:
-
-- The body is staged as a Markdown file with the frontmatter stripped.
-  Each resolved link is replaced by the target note's current title as
-  emphasized text (`*Title*`); an unresolved link keeps its display text.
-- Metadata travels as `--metadata` arguments: `title` (the note title),
-  `date` (the prepared creation date), and `subtitle` (the tags, each
-  `#`-prefixed, joined with ` · `). Title, date, and tags are typeset by
-  pandoc's stock typst template. The `keywords` metadata is deliberately
-  not set: the stock template splices its value verbatim into typst code,
-  where any plain string fails to compile, so tags travel only as the
-  subtitle.
-
-The invocation:
-
-    pandoc <staged.md> --from gfm --pdf-engine=typst \
-        --metadata title=... --metadata date=... \
-        --metadata subtitle=... \
-        --output <artifact.pdf>
-
-`--from gfm` pins the reading of note bodies to GitHub-flavored Markdown
-rather than pandoc's own dialect, whose extensions (such as citation
-syntax) would give plain note text special meaning.
-
-Appearance is pandoc's stock typst output; this engine has no template or
-styling configuration.
+Both formats are produced by ntropy's own engine, which converts the note
+body to Typst markup with its own emitter and delegates only typesetting to
+the `typst` binary. `typst` is the one external tool rendering needs, found
+via `PATH`; there are no configurable tool paths, and a missing tool fails
+the render with an error naming what to install. The engine's escaping
+model, element mapping, document assembly, and asset resolution are
+documented in [typst-engine.md](typst-engine.md).
 
 ## Testing
 
@@ -219,17 +186,16 @@ tools installed:
   any tool. The typst engine's own escaping and emitter correctness is
   verified in-process against the `typst-syntax` parser (see
   [typst-engine.md](typst-engine.md)).
-- CLI contract tests exercise the command end-to-end through test-owned stub
-  `pandoc` and `typst` binaries placed on `PATH`; the real pandoc and typst
-  are never executed by tests, so the real-toolchain output stays validated
-  manually. Contract tests pass `-n` or `--print` per ADR 0036.
+- CLI contract tests exercise the command end-to-end through a test-owned
+  stub `typst` binary placed on `PATH`; the real typst is never executed by
+  tests, so the real-toolchain output stays validated manually. Contract
+  tests pass `-n` or `--print` per ADR 0036.
 
 ## Module layout
 
 - `src/render/` (library): the document model and shared preparation, the
-  format/engine registry, `Renderer`, `RenderContext`, `RenderError`, the
-  pandoc engine's chain logic, and the typst engine under
-  `src/render/typst/`.
+  format/engine registry, `Renderer`, `RenderContext`, `RenderError`, and
+  the typst engine under `src/render/typst/`.
 - `src/bin/ntropy/run/render.rs` (binary): `cmd_render` (selector
   resolution, picker on ambiguity, output-path defaulting) and the
   production `RenderContext`.

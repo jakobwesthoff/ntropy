@@ -579,7 +579,7 @@ fn search_empty_vault_exits_nonzero() {
     });
 }
 
-/// The relative `PATH` entry the stub-pandoc tests set. It is a directory
+/// The relative `PATH` entry the stub-typst tests set. It is a directory
 /// inside the vault, so the entry is a fixed relative name rather than a
 /// host-specific temp path: insta-cmd records set env vars verbatim in the
 /// snapshot's `info` block (filters do not reach it), so a relative value keeps
@@ -587,40 +587,12 @@ fn search_empty_vault_exits_nonzero() {
 /// process's working directory, which the tests set to the vault.
 const STUB_BIN: &str = "stub-bin";
 
-/// Write a fake `pandoc` into `<vault>/stub-bin/`. It scans its args for
-/// `--output`, writes a fixed string to that path, and exits 0, so the success
-/// path is exercised deterministically without the toolchain (resolved
-/// decision 2); the real pandoc/typst are never executed. `stub-bin` lives in
-/// the vault root, which the scanner never walks, so it is invisible to
-/// selection.
-fn write_stub_pandoc(vault: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-
-    let bin = vault.join(STUB_BIN);
-    fs::create_dir_all(&bin).expect("stub-bin dir");
-    let script = r#"#!/bin/sh
-out=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --output) shift; out="$1" ;;
-  esac
-  shift
-done
-if [ -n "$out" ]; then
-  printf 'stub pdf\n' > "$out"
-fi
-exit 0
-"#;
-    let path = bin.join("pandoc");
-    fs::write(&path, script).expect("write stub pandoc");
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub pandoc");
-}
-
 /// Write a fake `typst` into `<vault>/stub-bin/`. It drains stdin (the emitted
 /// document ntropy pipes in on `typst compile -`), takes its last argument as
 /// the output path, writes a fixed marker there, and exits 0, so the default
-/// pdf pipeline's success path is exercised without the real compiler. Like the
-/// pandoc stub it lives in the vault root, invisible to selection.
+/// pdf pipeline's success path is exercised without the real compiler.
+/// `stub-bin` lives in the vault root, which the scanner never walks, so it is
+/// invisible to selection.
 fn write_stub_typst(vault: &Path) {
     use std::os::unix::fs::PermissionsExt;
 
@@ -783,26 +755,6 @@ fn render_missing_typst_reports_unavailable() {
 }
 
 #[test]
-fn render_missing_pandoc_reports_unavailable() {
-    // With `--engine pandoc` the legacy engine runs; `PATH` points at a
-    // directory that does not exist so pandoc is not found. The error names
-    // pandoc as the tool to install.
-    let dir = setup_vault();
-    write_note(
-        dir.path(),
-        ULID_A,
-        "wanted",
-        "---\ntitle: Wanted\n---\nbody\n",
-    );
-    redacted(dir.path()).bind(|| {
-        let mut cmd = ntropy(dir.path());
-        cmd.args(["render", ULID_A, "--engine", "pandoc", "-n"]);
-        cmd.env("PATH", "no-such-bin");
-        assert_cmd_snapshot!(cmd);
-    });
-}
-
-#[test]
 fn render_scan_warnings_print_and_strict_fails() {
     // A malformed sibling note warns on stderr while the good note still
     // renders (stub typst, the default engine); `--strict` promotes the warning
@@ -914,31 +866,6 @@ fn render_overwrites_an_existing_artifact() {
     assert_eq!(
         fs::read_to_string(&target).expect("read artifact"),
         "stub pdf via typst\n"
-    );
-}
-
-#[test]
-fn render_engine_pandoc_still_renders() {
-    // The legacy pandoc engine stays selectable via `--engine pandoc`: it runs
-    // the pandoc stub and the completion report names it, alongside the new
-    // typst default.
-    let dir = setup_vault();
-    write_note(
-        dir.path(),
-        ULID_A,
-        "wanted",
-        "---\ntitle: Wanted\n---\nbody\n",
-    );
-    write_stub_pandoc(dir.path());
-    redacted(dir.path()).bind(|| {
-        let mut cmd = ntropy(dir.path());
-        cmd.args(["render", ULID_A, "--engine", "pandoc", "-n"]);
-        cmd.env("PATH", STUB_BIN);
-        assert_cmd_snapshot!(cmd);
-    });
-    assert_eq!(
-        fs::read_to_string(dir.path().join("wanted.pdf")).expect("read artifact"),
-        "stub pdf\n"
     );
 }
 

@@ -142,10 +142,11 @@ is required, since there is no prompt.
 
 ### `render [id|query]`
 
-Turn one note into a document artifact. v1 produces a PDF through pandoc with
-typst as the PDF engine, so both tools must be installed and on `PATH`; an
-engine whose tools are missing is an error naming what to install, never a
-silent fall-back. The selector follows the same id-or-query rule as `search`
+Turn one note into a document artifact: `pdf` (the default, compiled by the
+external `typst` binary, the one tool that must be on `PATH`) or `typst`, the
+emitted Typst document, which needs no external tool. An engine whose tool is
+missing is an error naming what to install, never a silent fall-back. The
+selector follows the same id-or-query rule as `search`
 and, like `search`, is optional: omitted, every note feeds the picker for
 fuzzy selection. Like `delete`, `render` must resolve to exactly one note:
 several matches open the picker pre-filtered interactively; under `-n` an
@@ -155,16 +156,17 @@ exits non-zero under `-p`, so `open "$(ntropy render -p ...)"` branches
 correctly, and is a successful no-op without it, like `delete`.
 
 - `--to <format>` names the output format and defaults to `pdf`.
-- `--engine <name>` overrides the format's default engine; v1 has only the
-  `pandoc` engine, so the flag accepts that single value and exists so
+- `--engine <name>` overrides the format's default engine; both shipped
+  formats are produced by the typst engine, and the flag exists so
   invocations written today keep working when other engines arrive.
-- `--output <path>` / `-o` names the artifact; the default is `./<slug>.pdf` in
-  the current directory, from the slug component of the note's filename. An
-  existing file at the target is overwritten.
+- `--output <path>` / `-o` names the artifact; the default is
+  `./<slug>.<ext>` in the current directory, from the slug component of the
+  note's filename and the format's extension. An existing file at the target
+  is overwritten.
 - `--print` / `-p` prints the artifact's path to stdout as one line on success
   (ADR 0036); without it a `Rendering <reference>...` line announces the work
   and a completion report follows:
-  `Rendered quarterly-review.pdf (pdf via pandoc, 12.4 KiB)`.
+  `Rendered quarterly-review.pdf (pdf via typst, 12.4 KiB)`.
 - Scan warnings print to stderr and fail the command under `--strict`, matching
   `search`.
 

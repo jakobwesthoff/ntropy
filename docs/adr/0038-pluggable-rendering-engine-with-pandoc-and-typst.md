@@ -4,7 +4,10 @@ Date: 2026-07-09
 
 ## Status
 
-Accepted
+Superseded by
+[ADR 0040](0040-custom-typst-engine-with-own-markdown-emitter.md): the
+pandoc engine is removed; the engine abstraction, registry, and
+capability model this ADR introduced live on.
 
 Implements the engine behind the `render` command of
 [ADR 0037](0037-render-command-surface.md). Interprets the headless-library
