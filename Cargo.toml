@@ -8,13 +8,29 @@ homepage = "http://westhoffswelt.de"
 repository = "https://github.com/jakobwesthoff/ntropy"
 license = "MPL-2.0"
 
+[features]
+default = ["encryption"]
+# Vault encryption at rest (ADR 0041). Building without it drops the `age` and
+# `keyring` trees; the command surface stays compiled either way and reports
+# the missing support at runtime, so `--help` is identical in both builds.
+encryption = ["dep:age", "dep:keyring"]
+
 [dependencies]
+# `armor` is the only feature needed: the ASCII-armored wrap of the vault
+# identity. X25519 and the scrypt passphrase recipient are in age's core, and
+# leaving the rest off keeps the ssh, plugin and CLI machinery out of the tree.
+age = { version = "0.12.1", default-features = false, features = ["armor"], optional = true }
 anyhow = "1.0.103"
 clap = { version = "4.6.1", features = ["derive"] }
 crossterm = "0.29.0"
 directories = "6.0.0"
 ignore = "0.4.28"
 jiff = "0.2.32"
+# Default features cover the macOS Keychain and the pure-Rust zbus Secret
+# Service client; the kernel keyring is added for headless Linux. The `cli`
+# feature is deliberately absent: it pulls `dbus-secret-service`, which builds
+# a vendored libdbus from C source.
+keyring = { version = "4.1.6", features = ["linux-keyutils-keyring-store"], optional = true }
 linkify = "0.11.0"
 lsp-server = "0.8.0"
 lsp-types = "0.97.0"

@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- The `encryption` cargo feature, enabled by default, carries the `age` and
+  `keyring` dependencies for at-rest vault encryption. Building with
+  `--no-default-features` drops both trees; neither links a C library, so
+  distribution is unchanged either way.
+
 ## v1.8.0 - 2026-08-05
 
 ### Added
