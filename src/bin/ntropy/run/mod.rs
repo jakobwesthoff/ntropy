@@ -293,7 +293,23 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
             file_name(&rewrite.note)
         );
     }
+    for adopted in &report.adopted {
+        println!(
+            "encrypted {} -> {}",
+            file_name(&adopted.from),
+            file_name(&adopted.to)
+        );
+    }
     report_gitignore_changes(&report.gitignore_added, &report.gitignore_removed);
+    if session.is_encrypted() && !session.is_unlocked() {
+        // Only adoption ran, so saying "scanned 0 notes" would misdescribe it.
+        println!(
+            "Encrypted {} into the vault. Link rewriting and view syncing need \
+             `ntropy unlock`.",
+            plural(report.adopted.len(), "note", "notes"),
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
     // A summary always prints, so even a no-op run confirms what happened.
     println!(
         "Scanned {}, renamed {}, relinked {}, synced {}, ignored {}, unignored {}, {}.",
@@ -436,7 +452,7 @@ fn cmd_tags(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode> {
 /// or tag change made during the edit.
 fn open_and_refresh(session: &VaultSession, path: &Path) -> Result<()> {
     editor::open(path)?;
-    reconcile::realign(path).context("while realigning the edited note")?;
+    reconcile::realign(session, path).context("while realigning the edited note")?;
     reconcile::refresh_views(session).context("while refreshing views")?;
     Ok(())
 }

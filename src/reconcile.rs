@@ -54,6 +54,8 @@ pub struct ReconcileReport {
     pub renamed: Vec<Rename>,
     /// Link targets refreshed to point at their notes' current filenames.
     pub links_rewritten: Vec<LinkRewrite>,
+    /// Plaintext notes encrypted in place in an encrypted vault.
+    pub adopted: Vec<Adopted>,
     /// `.gitignore` entries added to match the configured views.
     pub gitignore_added: Vec<String>,
     /// `.gitignore` entries pruned because their view is no longer configured.
@@ -65,7 +67,15 @@ pub struct ReconcileReport {
 /// Sync all configured views to the current note set (no realignment).
 ///
 /// Returns the scan warnings so a caller can honor `--strict`.
+///
+/// An encrypted vault has no views to sync, and returning before the scan is
+/// what makes that fact load-bearing rather than cosmetic: `new` calls this
+/// after creating a note, so a scan here would need the identity and creation
+/// would stop working on a locked vault (ADR 0041).
 pub fn refresh_views(session: &VaultSession) -> Result<Vec<ScanWarning>> {
+    if session.is_encrypted() {
+        return Ok(Vec::new());
+    }
     let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
     let views = load_views(session)?;
     sync_views_and_gitignore(session, &views, &scan.notes)?;
@@ -88,8 +98,21 @@ fn sync_views_and_gitignore(
     gitignore::sync(vault, &names)
 }
 
-/// Realign drifted filenames, then sync all views.
+/// Realign drifted filenames, adopt stray plaintext notes, then sync views.
+///
+/// On a locked encrypted vault only adoption runs: encrypting a note needs the
+/// public recipient alone, so a machine that can create notes can also fold in
+/// one that was dropped in by hand — which is exactly the machine most likely
+/// to have one lying around.
 pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
+    if session.is_encrypted() && !session.is_unlocked() {
+        let adopted = adopt_plaintext_notes(session)?;
+        return Ok(ReconcileReport {
+            adopted,
+            ..Default::default()
+        });
+    }
+
     let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
     let mut notes = scan.notes;
     let mut renamed = Vec::new();
@@ -110,20 +133,98 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
 
     // With every filename settled, refresh stale link targets so links keep
     // resolving and stay clickable in plain Markdown viewers (ADR 0028).
-    let links_rewritten = rewrite_links(&notes)?;
+    //
+    // An encrypted vault's link targets cannot drift: they are derived from
+    // each note's current title, and rewriting one would mean re-encrypting
+    // the whole note — a fresh ciphertext and a new mtime for a body that did
+    // not change, which a sync provider would dutifully upload.
+    let links_rewritten = if session.is_encrypted() {
+        Vec::new()
+    } else {
+        rewrite_links(&notes)?
+    };
+
+    // A note dropped into an encrypted vault as plaintext is the one thing the
+    // vault exists to prevent, so `reconcile` folds it in rather than leaving
+    // it to be warned about forever.
+    let adopted = adopt_plaintext_notes(session)?;
+    let mut warnings = scan.warnings;
+    if !adopted.is_empty() {
+        // The warnings were produced before adoption ran, so the ones it just
+        // resolved would otherwise fail a `--strict` run that had, in the same
+        // breath, fixed the problem.
+        let fixed: Vec<&Path> = adopted.iter().map(|a| a.from.as_path()).collect();
+        warnings.retain(|warning| !fixed.contains(&warning.path.as_path()));
+    }
 
     let views = load_views(session)?;
-    let gitignore = sync_views_and_gitignore(session, &views, &notes)?;
+    let (views_synced, gitignore) = if session.is_encrypted() {
+        // Views are disabled here, and `.gitignore` is left alone: pruning its
+        // managed entries would report "stopped ignoring /by-tag/" about a
+        // directory that does not exist.
+        (0, gitignore::SyncReport::default())
+    } else {
+        (
+            views.len(),
+            sync_views_and_gitignore(session, &views, &notes)?,
+        )
+    };
 
     Ok(ReconcileReport {
         notes_scanned: notes.len(),
-        views_synced: views.len(),
+        views_synced,
         renamed,
         links_rewritten,
+        adopted,
         gitignore_added: gitignore.added,
         gitignore_removed: gitignore.removed,
-        warnings: scan.warnings,
+        warnings,
     })
+}
+
+/// A plaintext note folded into an encrypted vault.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Adopted {
+    /// The plaintext file that was taken in and removed.
+    pub from: PathBuf,
+    /// The encrypted note it became.
+    pub to: PathBuf,
+}
+
+/// Encrypt any well-formed plaintext note sitting in an encrypted vault.
+///
+/// Only files that already parse as notes are taken: a valid `<ulid>-<slug>.md`
+/// name and frontmatter carrying a title. Anything else is left byte-for-byte
+/// alone and stays a scan warning, exactly as it would in a plaintext vault,
+/// which never renames or rewrites a file it cannot parse. Adoption fixes where
+/// a note is stored, never what it says or what it is called.
+fn adopt_plaintext_notes(session: &VaultSession) -> Result<Vec<Adopted>> {
+    if !session.is_encrypted() {
+        return Ok(Vec::new());
+    }
+
+    let all_notes = session.layout().all_notes();
+    let plaintext = scan::scan_notes_dir(&all_notes, &crate::cipher::PlaintextCipher)?;
+
+    let mut adopted = Vec::new();
+    for note in plaintext.notes {
+        let target = all_notes.join(crate::note::filename::build_encrypted(&note.id));
+        if target.exists() {
+            // Two files claiming one identity. Overwriting either would lose a
+            // note, so both are left in place and the scan keeps warning.
+            continue;
+        }
+
+        let content = format!("{}{}", note.raw_header, note.body);
+        session.cipher().write(&target, &content)?;
+        fsutil::remove_file(&note.path)?;
+        adopted.push(Adopted {
+            from: note.path,
+            to: target,
+        });
+    }
+    adopted.sort_by(|a, b| a.from.cmp(&b.from));
+    Ok(adopted)
 }
 
 /// Rewrite stale link targets in every note body to the current filenames.
@@ -160,7 +261,13 @@ fn rewrite_links(notes: &[Note]) -> Result<Vec<LinkRewrite>> {
 ///
 /// Best-effort and forgiving: a file that no longer parses is left untouched
 /// (there is no title to realign to). Used by the editor flow on exit.
-pub fn realign(path: &Path) -> Result<Option<Rename>> {
+///
+/// Inert in an encrypted vault, where a filename is derived from the identity
+/// alone and has nothing that can drift.
+pub fn realign(session: &VaultSession, path: &Path) -> Result<Option<Rename>> {
+    if session.is_encrypted() {
+        return Ok(None);
+    }
     let Ok(content) = std::fs::read_to_string(path) else {
         return Ok(None);
     };
@@ -292,14 +399,16 @@ mod tests {
             &format!("{ULID}-aligned.md"),
             "---\ntitle: Aligned\n---\nbody\n",
         );
-        assert!(realign(&aligned).expect("realign").is_none());
+        assert!(realign(&session, &aligned).expect("realign").is_none());
 
         let drifted = write_note(
             &session,
             &format!("{ULID}-stale.md"),
             "---\ntitle: Fresh Title\n---\nbody\n",
         );
-        let rename = realign(&drifted).expect("realign").expect("renamed");
+        let rename = realign(&session, &drifted)
+            .expect("realign")
+            .expect("renamed");
         assert!(rename.to.ends_with(format!("{ULID}-fresh-title.md")));
         assert!(!drifted.exists());
     }
@@ -502,5 +611,222 @@ mod tests {
         let report = reconcile(&session).expect("second");
         assert!(report.gitignore_added.is_empty());
         assert!(report.gitignore_removed.is_empty());
+    }
+
+    /// Reconcile against a vault whose notes are encrypted.
+    #[cfg(feature = "encryption")]
+    mod encrypted {
+        use super::*;
+        use crate::test_support::encrypted::{encrypted_vault, write_encrypted_note};
+
+        const ULID_B: &str = "01BX5ZZKBKACTAV9WEVGEMMVRZ";
+
+        #[test]
+        fn nothing_is_renamed_rewritten_or_touched() {
+            // The combined guard against reconcile shredding an encrypted
+            // vault: no rename (every name is already canonical), no link
+            // rewrite, and no re-encryption — which would give an unchanged
+            // note fresh ciphertext and a new mtime for a sync provider to
+            // upload.
+            let fixture = encrypted_vault();
+            let session = &fixture.session;
+
+            let body = format!("---\ntitle: Renamed Note\n---\nsee [T]({ULID_B}-stale.md)\n");
+            let a = write_encrypted_note(session, ULID, &body);
+            write_encrypted_note(session, ULID_B, "---\ntitle: Target\n---\nbody\n");
+
+            let before = std::fs::read(&a).expect("read");
+            let mtime = std::fs::metadata(&a).expect("meta").modified().ok();
+
+            let report = reconcile(session).expect("reconcile");
+            assert!(report.renamed.is_empty());
+            assert!(report.links_rewritten.is_empty());
+            assert_eq!(report.views_synced, 0);
+            assert_eq!(std::fs::read(&a).expect("read"), before);
+            assert_eq!(std::fs::metadata(&a).expect("meta").modified().ok(), mtime);
+        }
+
+        #[test]
+        fn a_stray_plaintext_note_is_adopted() {
+            let fixture = encrypted_vault();
+            let session = &fixture.session;
+            let stray = write_note(
+                session,
+                &format!("{ULID}-hand-added.md"),
+                "---\ntitle: Hand Added\n---\nbody\n",
+            );
+
+            let report = reconcile(session).expect("reconcile");
+            assert_eq!(report.adopted.len(), 1);
+            assert_eq!(report.adopted[0].from, stray);
+            assert!(!stray.exists(), "the plaintext file must be removed");
+
+            let encrypted = session.layout().all_notes().join(format!("{ULID}.age"));
+            assert!(encrypted.is_file());
+            assert_eq!(
+                session.cipher().read(&encrypted).expect("read"),
+                "---\ntitle: Hand Added\n---\nbody\n",
+                "adoption must preserve the note byte-for-byte"
+            );
+        }
+
+        #[test]
+        fn adoption_clears_the_warning_it_resolved() {
+            // Fix-and-still-fail in one run would be a poor experience for
+            // anyone using `--strict`.
+            let fixture = encrypted_vault();
+            let session = &fixture.session;
+            write_note(
+                session,
+                &format!("{ULID}-hand-added.md"),
+                "---\ntitle: Hand Added\n---\nbody\n",
+            );
+
+            let report = reconcile(session).expect("reconcile");
+            assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        }
+
+        #[test]
+        fn adoption_is_idempotent() {
+            let fixture = encrypted_vault();
+            let session = &fixture.session;
+            write_note(
+                session,
+                &format!("{ULID}-hand-added.md"),
+                "---\ntitle: Hand Added\n---\nbody\n",
+            );
+
+            assert_eq!(reconcile(session).expect("first").adopted.len(), 1);
+            assert!(reconcile(session).expect("second").adopted.is_empty());
+        }
+
+        #[test]
+        fn adoption_works_on_a_locked_vault() {
+            // Encrypting needs only the public recipient, and the machine most
+            // likely to have a stray plaintext note is the one without the key.
+            let fixture = encrypted_vault();
+            write_note(
+                &fixture.session,
+                &format!("{ULID}-hand-added.md"),
+                "---\ntitle: Hand Added\n---\nbody\n",
+            );
+
+            let locked = fixture.locked();
+            let report = reconcile(&locked).expect("reconcile while locked");
+            assert_eq!(report.adopted.len(), 1);
+
+            // The result is readable once a key is available.
+            let encrypted = fixture
+                .session
+                .layout()
+                .all_notes()
+                .join(format!("{ULID}.age"));
+            assert_eq!(
+                fixture.session.cipher().read(&encrypted).expect("read"),
+                "---\ntitle: Hand Added\n---\nbody\n"
+            );
+        }
+
+        #[test]
+        fn adoption_refuses_when_the_identity_is_already_taken() {
+            // Two files claiming one identity: overwriting either loses a note,
+            // so both stay put and the scan keeps warning.
+            let fixture = encrypted_vault();
+            let session = &fixture.session;
+            let encrypted =
+                write_encrypted_note(session, ULID, "---\ntitle: Original\n---\nkeep\n");
+            let stray = write_note(
+                session,
+                &format!("{ULID}-collision.md"),
+                "---\ntitle: Collision\n---\nother\n",
+            );
+
+            let report = reconcile(session).expect("reconcile");
+            assert!(report.adopted.is_empty());
+            assert!(stray.exists(), "the stray file must be left alone");
+            assert_eq!(
+                session.cipher().read(&encrypted).expect("read"),
+                "---\ntitle: Original\n---\nkeep\n",
+                "the existing note must not be overwritten"
+            );
+            assert_eq!(report.warnings.len(), 1);
+        }
+
+        #[test]
+        fn a_file_without_a_ulid_prefix_is_left_alone() {
+            // Identical to what a plaintext vault does: reconcile never renames
+            // or rewrites a file it cannot parse, and never invents an identity.
+            let fixture = encrypted_vault();
+            let session = &fixture.session;
+            let stray = write_note(
+                session,
+                "meeting-notes.md",
+                "---\ntitle: Meeting\n---\nbody\n",
+            );
+            let before = std::fs::read(&stray).expect("read");
+
+            let report = reconcile(session).expect("reconcile");
+            assert!(report.adopted.is_empty());
+            assert_eq!(std::fs::read(&stray).expect("read"), before);
+        }
+
+        #[test]
+        fn a_plaintext_vault_leaves_the_same_file_alone() {
+            // The pairing that pins "identical to a plaintext vault".
+            let (_guard, session) = vault_with_view();
+            let stray = write_note(
+                &session,
+                "meeting-notes.md",
+                "---\ntitle: Meeting\n---\nbody\n",
+            );
+            let before = std::fs::read(&stray).expect("read");
+
+            let report = reconcile(&session).expect("reconcile");
+            assert!(report.adopted.is_empty());
+            assert!(report.renamed.is_empty());
+            assert_eq!(std::fs::read(&stray).expect("read"), before);
+        }
+
+        #[test]
+        fn a_file_without_a_title_is_left_alone() {
+            let fixture = encrypted_vault();
+            let session = &fixture.session;
+            let stray = write_note(session, &format!("{ULID}-no-title.md"), "no frontmatter\n");
+            let before = std::fs::read(&stray).expect("read");
+
+            let report = reconcile(session).expect("reconcile");
+            assert!(report.adopted.is_empty());
+            assert_eq!(std::fs::read(&stray).expect("read"), before);
+            assert_eq!(report.warnings.len(), 1, "it stays warned about");
+        }
+
+        #[test]
+        fn refresh_views_does_nothing_and_needs_no_key() {
+            // What makes `ntropy new` work on a locked vault: this must return
+            // before it would otherwise scan.
+            let fixture = encrypted_vault();
+            let warnings = refresh_views(&fixture.locked()).expect("refresh while locked");
+            assert!(warnings.is_empty());
+        }
+
+        #[test]
+        fn realign_is_inert() {
+            let fixture = encrypted_vault();
+            let session = &fixture.session;
+            let path = write_encrypted_note(session, ULID, "---\ntitle: Whatever\n---\nbody\n");
+            assert!(realign(session, &path).expect("realign").is_none());
+            assert!(path.exists());
+        }
+
+        #[test]
+        fn gitignore_is_left_untouched() {
+            // Pruning the managed entries would announce that ntropy stopped
+            // ignoring a directory that does not exist.
+            let fixture = encrypted_vault();
+            let report = reconcile(&fixture.session).expect("reconcile");
+            assert!(report.gitignore_added.is_empty());
+            assert!(report.gitignore_removed.is_empty());
+            assert!(!fixture.session.layout().gitignore_file().exists());
+        }
     }
 }

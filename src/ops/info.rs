@@ -37,6 +37,14 @@ pub struct VaultStats {
     pub newest_date: Option<String>,
     /// The most-used tags, highest count first (up to the requested limit).
     pub top_tags: Vec<TagCount>,
+    /// Whether the vault stores its notes encrypted.
+    pub encrypted: bool,
+    /// Whether the notes could be read.
+    ///
+    /// Always true for a plaintext vault. False means the note statistics
+    /// above are absent rather than zero, which is a distinction the report has
+    /// to make so an empty vault and a locked one do not look alike.
+    pub unlocked: bool,
 }
 
 /// Collect statistics for `vault`, keeping at most `top_n` most-used tags.
@@ -45,8 +53,13 @@ pub fn vault_stats(session: &VaultSession, top_n: usize) -> Result<VaultStats> {
 
     // Notes and warnings come from a single scan; a vault without an
     // `all-notes/` directory yet simply has none.
+    //
+    // A locked vault reports what it can rather than demanding a passphrase:
+    // asking someone to unlock their vault so they can be told where its
+    // templates live would be a poor trade. The note statistics are then
+    // absent, which `unlocked` tells the reader.
     let all_notes = layout.all_notes();
-    let (notes, warnings) = if all_notes.is_dir() {
+    let (notes, warnings) = if all_notes.is_dir() && session.is_unlocked() {
         let scan = scan::scan_notes_dir(&all_notes, session.cipher())?;
         (scan.notes, scan.warnings)
     } else {
@@ -86,6 +99,8 @@ pub fn vault_stats(session: &VaultSession, top_n: usize) -> Result<VaultStats> {
         oldest_date,
         newest_date,
         top_tags,
+        encrypted: session.is_encrypted(),
+        unlocked: session.is_unlocked(),
     })
 }
 
@@ -190,5 +205,64 @@ mod tests {
         let stats = vault_stats(&session, 5).expect("stats");
         assert_eq!(stats.notes, 1);
         assert_eq!(stats.warnings, 1);
+    }
+
+    /// Reporting on a vault whose notes are encrypted.
+    #[cfg(feature = "encryption")]
+    mod encrypted {
+        use crate::ops::info::vault_stats;
+        use crate::test_support::encrypted::{encrypted_vault, write_encrypted_note};
+
+        const ULID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+
+        #[test]
+        fn an_unlocked_vault_reports_its_notes() {
+            let fixture = encrypted_vault();
+            write_encrypted_note(
+                &fixture.session,
+                ULID,
+                "---\ntitle: N\ntags: [work]\n---\nbody\n",
+            );
+
+            let stats = vault_stats(&fixture.session, 5).expect("stats");
+            assert!(stats.encrypted);
+            assert!(stats.unlocked);
+            assert_eq!(stats.notes, 1);
+            assert_eq!(stats.distinct_tags, 1);
+        }
+
+        #[test]
+        fn a_locked_vault_reports_state_without_asking_for_a_key() {
+            // Demanding a passphrase so someone can be told where their
+            // templates live would be a poor trade.
+            let fixture = encrypted_vault();
+            write_encrypted_note(&fixture.session, ULID, "---\ntitle: N\n---\nbody\n");
+
+            let stats = vault_stats(&fixture.locked(), 5).expect("stats");
+            assert!(stats.encrypted);
+            assert!(!stats.unlocked);
+            // Absent, not zero — which `unlocked` is what tells the reader.
+            assert_eq!(stats.notes, 0);
+        }
+
+        #[test]
+        fn a_locked_vault_still_reports_the_key_free_facts() {
+            let fixture = encrypted_vault();
+            let templates = fixture.session.layout().templates_dir();
+            std::fs::create_dir_all(&templates).expect("templates dir");
+            std::fs::write(templates.join("meeting.md"), "---\ntitle: {{title}}\n---\n")
+                .expect("write template");
+
+            let stats = vault_stats(&fixture.locked(), 5).expect("stats");
+            assert_eq!(stats.templates, vec!["meeting"]);
+        }
+
+        #[test]
+        fn a_plaintext_vault_reports_neither_encrypted_nor_locked() {
+            let (_guard, session) = crate::test_support::vault_with_view();
+            let stats = vault_stats(&session, 5).expect("stats");
+            assert!(!stats.encrypted);
+            assert!(stats.unlocked);
+        }
     }
 }

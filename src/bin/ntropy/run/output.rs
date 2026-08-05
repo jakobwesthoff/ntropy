@@ -117,15 +117,29 @@ pub fn print_info(
         None => println!("Default vault: (not set)"),
     }
 
+    if stats.encrypted {
+        let state = if stats.unlocked { "unlocked" } else { "locked" };
+        println!("Encryption:    on ({state})");
+    }
+
     println!();
-    println!("Notes:     {}", stats.notes);
-    println!("Tags:      {}", stats.distinct_tags);
-    println!("Views:     {}", stats.views);
-    println!("Templates: {}", stats.templates.len());
-    println!("Warnings:  {}", stats.warnings);
-    match (&stats.oldest_date, &stats.newest_date) {
-        (Some(oldest), Some(newest)) => println!("Span:      {oldest} .. {newest}"),
-        _ => println!("Span:      (no notes)"),
+    // A locked vault has no note statistics to report, and printing zeroes
+    // would make it indistinguishable from an empty vault. The rest of the
+    // report needs no key, so it still prints.
+    if stats.encrypted && !stats.unlocked {
+        println!("Notes:     (locked; run `ntropy unlock` for note statistics)");
+        println!("Views:     {}", stats.views);
+        println!("Templates: {}", stats.templates.len());
+    } else {
+        println!("Notes:     {}", stats.notes);
+        println!("Tags:      {}", stats.distinct_tags);
+        println!("Views:     {}", stats.views);
+        println!("Templates: {}", stats.templates.len());
+        println!("Warnings:  {}", stats.warnings);
+        match (&stats.oldest_date, &stats.newest_date) {
+            (Some(oldest), Some(newest)) => println!("Span:      {oldest} .. {newest}"),
+            _ => println!("Span:      (no notes)"),
+        }
     }
 
     if !stats.top_tags.is_empty() {

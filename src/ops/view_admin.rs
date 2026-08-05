@@ -30,6 +30,12 @@ pub enum ViewAdminError {
     Duplicate(String),
     #[error("no view named `{0}`")]
     NotFound(String),
+    #[error(
+        "materialized views are disabled in an encrypted vault: a symlink tree \
+         would spell out the taxonomy in plaintext names inside the synced \
+         directory"
+    )]
+    ViewsDisabledWhenEncrypted,
 }
 
 /// List the configured views.
@@ -40,6 +46,14 @@ pub fn list_views(vault: &Vault) -> Result<Vec<ViewConfig>> {
 
 /// Add a view named `name` grouping by `field`, then materialize it.
 pub fn add_view(session: &VaultSession, name: &str, field: &str) -> Result<()> {
+    // Refused rather than accepted-and-inert: a command that reports success
+    // and produces no directory is the worst outcome for a user's mental
+    // model, and erroring leaves room for views to return later if they are
+    // ever relocated outside the vault. `list` and `remove` keep working, so a
+    // vault encrypted after the fact can still be inspected and cleaned up.
+    if session.is_encrypted() {
+        return Err(ViewAdminError::ViewsDisabledWhenEncrypted.into());
+    }
     if layout::is_reserved_name(name) {
         return Err(ViewAdminError::ReservedName(name.to_string()).into());
     }
@@ -186,5 +200,58 @@ mod tests {
         let (_g, v) = temp_vault();
         let err = remove_view(&v, "ghost").expect_err("missing");
         assert!(matches!(err, Error::ViewAdmin(ViewAdminError::NotFound(_))));
+    }
+
+    /// View administration against a vault whose notes are encrypted.
+    #[cfg(feature = "encryption")]
+    mod encrypted {
+        use super::*;
+        use crate::test_support::encrypted::encrypted_vault;
+
+        #[test]
+        fn add_is_refused() {
+            // Accepting it would write a definition that produces nothing
+            // observable, which is worse for a user than a clear refusal.
+            let fixture = encrypted_vault();
+            let err = add_view(&fixture.session, "by-tag", "tags").expect_err("refused");
+            assert!(matches!(
+                err,
+                Error::ViewAdmin(ViewAdminError::ViewsDisabledWhenEncrypted)
+            ));
+        }
+
+        #[test]
+        fn a_refused_add_writes_no_config_and_no_directory() {
+            let fixture = encrypted_vault();
+            add_view(&fixture.session, "by-tag", "tags").expect_err("refused");
+            assert!(list_views(&fixture.session).expect("list").is_empty());
+            assert!(!fixture.session.layout().view_dir("by-tag").exists());
+            assert!(!fixture.session.layout().gitignore_file().exists());
+        }
+
+        #[test]
+        fn the_refusal_explains_why() {
+            let message = ViewAdminError::ViewsDisabledWhenEncrypted.to_string();
+            assert!(message.contains("encrypted vault"), "{message}");
+            assert!(message.contains("plaintext"), "{message}");
+        }
+
+        #[test]
+        fn list_and_remove_keep_working() {
+            // A vault encrypted after the fact still carries definitions, so
+            // they must remain inspectable and removable.
+            let fixture = encrypted_vault();
+            let config_path = fixture.session.layout().config_file();
+            let mut config = PerVaultConfig::default();
+            config.add(ViewConfig {
+                name: "by-tag".into(),
+                field: "tags".into(),
+            });
+            std::fs::write(&config_path, config.to_toml().expect("toml")).expect("write config");
+
+            assert_eq!(list_views(&fixture.session).expect("list").len(), 1);
+            remove_view(&fixture.session, "by-tag").expect("remove");
+            assert!(list_views(&fixture.session).expect("list").is_empty());
+        }
     }
 }

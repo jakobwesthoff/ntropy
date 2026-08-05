@@ -52,8 +52,91 @@ pub(crate) fn vault_with_view() -> (TempDir, VaultSession) {
 }
 
 /// Write `content` to `all-notes/<name>` and return the note's path.
+///
+/// Writes the bytes verbatim, so in an encrypted vault this is how a test
+/// plants a stray plaintext file for `reconcile` to adopt. Use
+/// [`write_encrypted_note`] to plant a proper one.
 pub(crate) fn write_note(session: &VaultSession, name: &str, content: &str) -> PathBuf {
     let path = session.layout().all_notes().join(name);
     std::fs::write(&path, content).expect("write note");
     path
+}
+
+/// Fixtures for vaults whose notes are encrypted.
+///
+/// Every encrypted fixture is built at test setup from a freshly generated
+/// keypair rather than committed: age ciphertext is randomized per file, so it
+/// is never snapshot-stable and a checked-in fixture would be unreadable to a
+/// reviewer (ADR 0041).
+#[cfg(feature = "encryption")]
+pub(crate) mod encrypted {
+    use std::path::PathBuf;
+    use std::sync::Arc;
+
+    use tempfile::TempDir;
+
+    use crate::cipher::AgeCipher;
+    use crate::crypto::{Identity, age_io};
+    use crate::session::VaultSession;
+    use crate::vault::Vault;
+
+    /// An encrypted vault plus the identity that opens it.
+    pub(crate) struct EncryptedVault {
+        /// Guards the vault's lifetime; keep it bound for the test's duration.
+        pub(crate) _dir: TempDir,
+        /// An unlocked session over the vault.
+        pub(crate) session: VaultSession,
+        /// The vault's identity, for building a second session by hand.
+        pub(crate) identity: Identity,
+    }
+
+    impl EncryptedVault {
+        /// A session over the same vault with no identity, standing for a
+        /// machine where `ntropy unlock` has not run.
+        pub(crate) fn locked(&self) -> VaultSession {
+            let recipient = self.identity.to_public();
+            VaultSession::with_cipher(
+                Vault::new(self.session.root()),
+                Arc::new(AgeCipher::new(recipient, None)),
+            )
+        }
+    }
+
+    /// Build an encrypted vault: `all-notes/`, `.ntropy/` and a recipient file.
+    pub(crate) fn encrypted_vault() -> EncryptedVault {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = dir.path();
+        std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
+        std::fs::create_dir_all(root.join(".ntropy")).expect(".ntropy");
+
+        let (identity, recipient) = age_io::generate_keypair();
+        // The recipient file is what marks the vault encrypted, so detection
+        // works exactly as it does for a real vault.
+        std::fs::write(
+            root.join(".ntropy/identity.pub"),
+            format!("{}\n", recipient.as_str()),
+        )
+        .expect("write recipient");
+
+        let session = VaultSession::with_cipher(
+            Vault::new(root),
+            Arc::new(AgeCipher::new(recipient, Some(identity.clone()))),
+        );
+        EncryptedVault {
+            _dir: dir,
+            session,
+            identity,
+        }
+    }
+
+    /// Encrypt `content` into `all-notes/<ulid>.age` and return its path.
+    pub(crate) fn write_encrypted_note(
+        session: &VaultSession,
+        ulid: &str,
+        content: &str,
+    ) -> PathBuf {
+        let path = session.layout().all_notes().join(format!("{ulid}.age"));
+        session.cipher().write(&path, content).expect("write note");
+        path
+    }
 }

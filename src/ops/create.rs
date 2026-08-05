@@ -50,13 +50,21 @@ pub fn create_note(session: &VaultSession, title: &str, template: Option<&str>) 
     // unknown for content that only exists in memory, so it is filled in
     // below once the file has actually been stat'd.
     let all_notes = session.layout().all_notes();
-    let path = all_notes.join(filename::build(&id, &slug));
+    let path = all_notes.join(filename::build_for(
+        &id,
+        title,
+        session.cipher().extension(),
+    ));
     let mut note = Note::parse(path.clone(), &content, None)?;
 
     // The canonical store must exist before the atomic write places a temp file
     // beside the destination; creating it is idempotent on an initialized vault.
+    //
+    // Writing through the cipher is what lets this work on a locked vault:
+    // encrypting needs only the public recipient, and nothing above has read a
+    // note (ADR 0041).
     fsutil::create_dir_all(&all_notes)?;
-    fsutil::atomic_write(&path, content.as_bytes())?;
+    session.cipher().write(&path, &content)?;
 
     note.modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
     Ok(note)
@@ -299,5 +307,82 @@ mod tests {
                 .to_string_lossy()
                 .ends_with("-untitled.md")
         );
+    }
+
+    /// Creating notes in a vault whose notes are encrypted.
+    #[cfg(feature = "encryption")]
+    mod encrypted {
+        use crate::ops::create::create_note;
+        use crate::test_support::encrypted::encrypted_vault;
+
+        #[test]
+        fn a_new_note_is_named_by_its_identity_alone() {
+            let fixture = encrypted_vault();
+            let note = create_note(&fixture.session, "Quarterly Review", None).expect("create");
+            let name = note
+                .path
+                .file_name()
+                .expect("name")
+                .to_string_lossy()
+                .into_owned();
+            assert_eq!(name, format!("{}.age", note.id));
+            assert!(
+                !name.contains("quarterly"),
+                "nothing title-derived may reach the filename: {name}"
+            );
+        }
+
+        #[test]
+        fn creation_works_on_a_locked_vault() {
+            // The headline property of the asymmetric key model: encrypting a
+            // new note needs only the public recipient.
+            let fixture = encrypted_vault();
+            let locked = fixture.locked();
+            assert!(!locked.is_unlocked());
+
+            let note = create_note(&locked, "Written While Locked", None).expect("create");
+            assert!(note.path.is_file());
+
+            // And it really is the note, once a key shows up.
+            let content = fixture.session.cipher().read(&note.path).expect("read");
+            assert!(content.contains("Written While Locked"), "got: {content}");
+        }
+
+        #[test]
+        fn the_file_on_disk_is_not_readable_as_the_note() {
+            let fixture = encrypted_vault();
+            let note = create_note(&fixture.session, "Secret Plans", None).expect("create");
+            let raw = std::fs::read(&note.path).expect("read bytes");
+            assert!(
+                !raw.windows(12).any(|w| w == b"Secret Plans"),
+                "the title reached the file in the clear"
+            );
+        }
+
+        #[test]
+        fn a_created_note_reads_back_through_a_scan() {
+            let fixture = encrypted_vault();
+            create_note(&fixture.session, "Round Trip", None).expect("create");
+            let matches = crate::ops::search(&fixture.session, None).expect("search");
+            assert_eq!(matches.notes.len(), 1);
+            assert_eq!(matches.notes[0].title, "Round Trip");
+        }
+
+        #[test]
+        fn a_malformed_template_leaves_no_stray_file() {
+            // The ADR 0034 safety net, in an encrypted vault: parsing happens
+            // before anything touches disk either way.
+            let fixture = encrypted_vault();
+            let templates = fixture.session.layout().templates_dir();
+            std::fs::create_dir_all(&templates).expect("templates dir");
+            std::fs::write(templates.join("broken.md"), "no frontmatter at all\n")
+                .expect("write template");
+
+            assert!(create_note(&fixture.session, "Doomed", Some("broken")).is_err());
+            let entries: Vec<_> = std::fs::read_dir(fixture.session.layout().all_notes())
+                .expect("read dir")
+                .collect();
+            assert!(entries.is_empty(), "a failed create left a file behind");
+        }
     }
 }
