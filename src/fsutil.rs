@@ -99,6 +99,39 @@ pub fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
     })
 }
 
+/// Write `contents` to `path` atomically, readable only by its owner.
+///
+/// Same temp-then-rename shape as [`atomic_write`], with `0600` set on the
+/// temp file *before* the rename. Setting it afterwards would leave a window
+/// in which the finished file is world-readable, which for a wrapped vault
+/// identity is the whole point of the mode (ADR 0041).
+///
+/// The wrapped vault identity is the only file that needs it, so it is
+/// compiled only where that file can exist.
+#[cfg(feature = "encryption")]
+pub fn atomic_write_private(path: &Path, contents: &[u8]) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let tmp_name = match path.file_name() {
+        Some(name) => format!("{}.{}.tmp", name.to_string_lossy(), Ulid::new()),
+        None => format!("{}.tmp", Ulid::new()),
+    };
+    let tmp_path = parent.join(tmp_name);
+
+    std::fs::write(&tmp_path, contents).map_err(|e| FsError::new("writing", &tmp_path, e))?;
+
+    if let Err(e) = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600)) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(FsError::new("setting permissions on", &tmp_path, e));
+    }
+
+    std::fs::rename(&tmp_path, path).map_err(|e| {
+        let _ = std::fs::remove_file(&tmp_path);
+        FsError::new("renaming into place", path, e)
+    })
+}
+
 /// Rename `from` to `to`.
 pub fn rename(from: &Path, to: &Path) -> Result<()> {
     std::fs::rename(from, to).map_err(|e| FsError::new("renaming", from, e))

@@ -79,9 +79,9 @@ was written but not durable is produced again.
 
 ### Encryption is a build-time option
 
-The `encryption` cargo feature, enabled by default, gates the `age` and
-`keyring` dependencies. The command surface is compiled unconditionally and
-reports the missing support at runtime, so a stripped build and a full one
+The `encryption` cargo feature, enabled by default, gates the cryptography and
+credential-store dependencies. The command surface is compiled unconditionally
+and reports the missing support at runtime, so a stripped build and a full one
 present the same interface.
 
 ### Testing
@@ -135,11 +135,13 @@ terminal.
 
 ## Consequences
 
-- Two dependency trees join the runtime, both pure Rust. `age` links no C
-  library, and `keyring` is configured to use the macOS Keychain, the
-  pure-Rust zbus Secret Service client and the Linux kernel keyring, avoiding
-  the vendored libdbus build its `cli` feature would pull in. Distribution is
-  unchanged.
+- New dependency trees join the runtime, none of them linking a C library.
+  `age` is pure Rust throughout. Credential stores are named individually
+  against `keyring-core` — the macOS Keychain, the pure-Rust zbus Secret
+  Service client, and the Linux kernel keyring — rather than through the
+  `keyring` facade, which binds one store per platform with no fallback and
+  whose `cli` feature would build a vendored libdbus from C source.
+  Distribution is unchanged.
 - Behaviour becomes vault-shape-dependent in ways that are not about
   ciphertext: materialized views do not exist in an encrypted vault, filename
   realignment has nothing to realign, and editing round-trips through a

@@ -10,9 +10,9 @@ and this project adheres to
 
 ### Added
 
-- The `encryption` cargo feature, enabled by default, carries the `age` and
-  `keyring` dependencies for at-rest vault encryption. Building with
-  `--no-default-features` drops both trees; neither links a C library, so
+- The `encryption` cargo feature, enabled by default, carries the cryptography
+  and OS credential-store dependencies for at-rest vault encryption. Building
+  with `--no-default-features` drops them; none links a C library, so
   distribution is unchanged either way.
 
 ## v1.8.0 - 2026-08-05

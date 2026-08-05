@@ -21,6 +21,9 @@
 //! modules that know encryption exists; [`crypto`] is compiled only with the
 //! `encryption` feature.
 //!
+//! [`keys`] sits beside them and answers a different question: not how a note
+//! is encrypted, but where this machine keeps the key that opens it.
+//!
 //! [`error`] sits to the side, used by every layer. The library is headless:
 //! it performs no terminal I/O, spawns no editor, and runs no picker. Those
 //! concerns live in the binary (`src/bin/ntropy/`).
@@ -35,6 +38,7 @@ pub mod text;
 pub mod cipher;
 #[cfg(feature = "encryption")]
 pub mod crypto;
+pub mod keys;
 
 pub mod note;
 pub mod vault;
