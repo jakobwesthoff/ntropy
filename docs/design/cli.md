@@ -235,6 +235,10 @@ view and template counts, the number of notes skipped with warnings, the
 creation-date span, the most-used tags, and the template names. Unlike the data
 commands this is a human report, printed the same way piped or on a TTY.
 
+`--print`/`-p` replaces the report with the active vault's path alone and skips
+the scan behind the statistics. Resolution canonicalizes the root, so the path
+is absolute whichever rule matched.
+
 ### `lsp`
 
 Run the ntropy language server over stdin/stdout, for an editor's LSP client to

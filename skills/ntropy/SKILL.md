@@ -70,7 +70,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy reconcile` | Realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
 | `ntropy tags -n` | Every tag with its note count — check this before inventing new tags. |
-| `ntropy info` | Active vault + how it resolved, global default, vault statistics. |
+| `ntropy info` | Active vault + how it resolved, global default, vault statistics. `-p`/`--print` prints the vault's absolute path alone, for scripts. |
 | `ntropy lsp` | Language server for editors (link/tag completion, go-to-definition); not used from scripts. Editor setup lives in the ntropy README. |
 
 Global flags on every command: `--vault <path>`, `-n`/`--non-interactive`,

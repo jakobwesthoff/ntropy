@@ -47,8 +47,8 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     }
 
     // `info` resolves the vault itself so it can report which rule matched.
-    if let Command::Info = command {
-        return cmd_info(&cli.global);
+    if let Command::Info { print } = command {
+        return cmd_info(&cli.global, print);
     }
 
     // The language server resolves a vault per document, so it starts without
@@ -95,7 +95,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Command::View(sub) => cmd_view(&vault, sub),
         Command::Tags => cmd_tags(&cli.global, &vault),
         // Handled above, before vault resolution.
-        Command::Info => unreachable!("info is dispatched before vault resolution"),
+        Command::Info { .. } => unreachable!("info is dispatched before vault resolution"),
         Command::Lsp => unreachable!("lsp is dispatched before vault resolution"),
     }
 }
@@ -374,10 +374,19 @@ fn cmd_view(vault: &Vault, sub: ViewCommand) -> Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-fn cmd_info(global: &GlobalArgs) -> Result<ExitCode> {
+fn cmd_info(global: &GlobalArgs, print: bool) -> Result<ExitCode> {
     let opts = resolve_options(global)?;
     let (root, source) =
         resolve::resolve_with_source(&opts).context("while resolving the vault")?;
+
+    // `--print` exists for shells to consume, so it emits the path alone and
+    // skips the vault scan the report would otherwise run. Resolution
+    // canonicalizes the root, so the path is absolute whichever rule matched.
+    if print {
+        println!("{}", root.display());
+        return Ok(ExitCode::SUCCESS);
+    }
+
     let vault = Vault::new(root);
     let stats = ops::vault_stats(&vault, TOP_TAGS).context("while gathering vault info")?;
     output::print_info(&vault, &source, opts.global_default.as_deref(), &stats);

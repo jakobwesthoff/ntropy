@@ -1281,6 +1281,108 @@ fn info_reports_vault_and_stats() {
     });
 }
 
+/// `--print` backs the `ncd` shell function (`contrib/shell/ntropy.sh`), which
+/// substitutes this output straight into `cd`. Stdout therefore carries the
+/// path and nothing else, with none of the report's statistics.
+#[test]
+fn info_print_emits_only_the_vault_path() {
+    let dir = setup_vault();
+    // A note and a template both appear in the full report, so their absence
+    // from the snapshot shows `--print` skipped the vault scan.
+    write_note(
+        dir.path(),
+        ULID_A,
+        "a",
+        "---\ntitle: A\ntags: [area/work]\n---\n",
+    );
+    let templates = dir.path().join(".ntropy/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(templates.join("default.md"), "x").expect("default template");
+
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["info", "--print"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+/// `-p` is the same flag as `--print`, spelled as on `new`, `today`, `search`
+/// and `render` (ADR 0035).
+#[test]
+fn info_print_short_flag_matches_long() {
+    let dir = setup_vault();
+
+    let run = |flag: &str| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["info", flag]);
+        let output = cmd.output().expect("run ntropy");
+        assert!(output.status.success(), "`info {flag}` failed");
+        String::from_utf8(output.stdout).expect("utf-8 stdout")
+    };
+
+    let printed = run("--print");
+    assert_eq!(printed, run("-p"));
+
+    // Every resolution rule canonicalizes, so a shell can `cd` to the result
+    // from any working directory.
+    let path = Path::new(printed.trim());
+    assert!(
+        path.is_absolute(),
+        "expected an absolute path, got {printed:?}"
+    );
+}
+
+/// `ncd` forwards its arguments to `ntropy`, so the global flags must select
+/// the printed vault just as they do for every other command.
+#[test]
+fn info_print_honors_the_vault_flag() {
+    let vault = setup_vault();
+    let elsewhere = tempfile::tempdir().expect("temp dir");
+
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
+    cmd.current_dir(elsewhere.path());
+    cmd.env_remove("NTROPY_VAULT");
+    cmd.arg("--vault").arg(vault.path());
+    cmd.args(["info", "--print"]);
+    let output = cmd.output().expect("run ntropy");
+
+    assert!(output.status.success(), "`info --print` failed");
+    let printed = String::from_utf8(output.stdout).expect("utf-8 stdout");
+    let expected = fs::canonicalize(vault.path()).expect("canonicalize vault");
+    assert_eq!(Path::new(printed.trim()), expected);
+}
+
+/// With no vault to resolve, the command must fail and write nothing to
+/// stdout. `ncd` keys off the exit status, and a successful empty run would
+/// leave it substituting an empty string into `cd`.
+#[test]
+fn info_print_fails_without_a_vault() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    // The global default vault comes from the user's config directory, which
+    // `directories` derives from `HOME`, or from `XDG_CONFIG_HOME` where that
+    // applies. Pointing both at an empty directory takes the host's own
+    // default out of play so no resolution rule can match.
+    let home = tempfile::tempdir().expect("home dir");
+
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
+    cmd.current_dir(dir.path());
+    cmd.env_remove("NTROPY_VAULT");
+    cmd.env("HOME", home.path());
+    cmd.env("XDG_CONFIG_HOME", home.path().join("config"));
+    cmd.args(["info", "--print"]);
+    let output = cmd.output().expect("run ntropy");
+
+    assert!(
+        !output.status.success(),
+        "expected a failing exit status without a vault"
+    );
+    assert!(
+        output.stdout.is_empty(),
+        "expected empty stdout, got: {:?}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+}
+
 #[test]
 fn tags_lists_counts() {
     let dir = setup_vault();

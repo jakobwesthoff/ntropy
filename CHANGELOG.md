@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `info --print`/`-p` reports the active vault's path alone instead of the
+  full report, skipping the scan behind the statistics. The path is absolute
+  whichever resolution rule matched, and an unresolvable vault exits non-zero
+  with nothing on stdout.
+
 ## v1.7.1 - 2026-07-10
 
 ### Changed

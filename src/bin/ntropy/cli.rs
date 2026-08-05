@@ -151,7 +151,11 @@ pub enum Command {
     Tags,
 
     /// Show the active vault, its resolution, and vault statistics.
-    Info,
+    Info {
+        /// Print the active vault's path alone, for shell use.
+        #[arg(short = 'p', long)]
+        print: bool,
+    },
 
     /// Run the language server over stdin/stdout.
     // ADR 0029 governs the language-server surface.

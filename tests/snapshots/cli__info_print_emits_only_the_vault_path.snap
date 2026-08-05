@@ -1,0 +1,16 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - info
+    - "--print"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[VAULT]
+
+----- stderr -----

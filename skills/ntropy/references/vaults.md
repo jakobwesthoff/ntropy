@@ -56,6 +56,14 @@ Default vault: /Users/you/notes
 Run `ntropy info` FIRST whenever it is unclear which vault a command will hit.
 Creating notes into the wrong vault is the main failure mode this prevents.
 
+When a script needs the path rather than the report, `ntropy info --print`
+prints the active vault's absolute path alone and exits non-zero if none
+resolves:
+
+```bash
+vault=$(ntropy info --print) || exit 1
+```
+
 ## Creating vaults
 
 ### Global default vault
