@@ -12,6 +12,7 @@
 //! through a single crate `Result` while still being able to match on the
 //! specific variant.
 
+use crate::cipher::CipherError;
 use crate::config::ConfigError;
 use crate::datetime::DateError;
 use crate::fsutil::FsError;
@@ -70,6 +71,15 @@ pub enum Error {
     /// A note could not be rendered to an output artifact.
     #[error(transparent)]
     Render(#[from] RenderError),
+
+    /// A note could not be read from or written to its storage form.
+    #[error(transparent)]
+    Cipher(#[from] CipherError),
+
+    /// A cryptographic operation failed.
+    #[error(transparent)]
+    #[cfg(feature = "encryption")]
+    Crypto(#[from] crate::crypto::CryptoError),
 }
 
 /// Convenience alias for results carrying the crate [`Error`].

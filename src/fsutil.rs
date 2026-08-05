@@ -45,6 +45,15 @@ type Result<T> = std::result::Result<T, FsError>;
 // File reads
 // =============================================================================
 
+/// Read `path` as raw bytes.
+///
+/// Bytes rather than a string because a note file is not necessarily text: in
+/// an encrypted vault it is age ciphertext, and decoding is the cipher's job
+/// (ADR 0041).
+pub fn read(path: &Path) -> Result<Vec<u8>> {
+    std::fs::read(path).map_err(|e| FsError::new("reading", path, e))
+}
+
 /// Read `path` to a string, returning `None` when it does not exist.
 ///
 /// A missing file is a routine "nothing there yet" rather than an error, mirroring

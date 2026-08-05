@@ -9,11 +9,17 @@
 //!
 //! ```text
 //! ops → {query, view, reconcile, config, scan, template, link, gitignore, render}
-//!     → {note, vault} → {fsutil, id, datetime, text}
+//!     → {note, vault, cipher} → {crypto, fsutil, id, datetime, text}
 //! ```
 //!
 //! [`render`] sits alongside [`query`] and [`link`], depending on [`note`],
 //! [`link`], [`datetime`], and [`id`].
+//!
+//! [`cipher`] is the seam every note read and write passes through, so vaults
+//! that store their notes encrypted and vaults that store them as Markdown
+//! share one code path (ADR 0041). It and [`crypto`] behind it are the only
+//! modules that know encryption exists; [`crypto`] is compiled only with the
+//! `encryption` feature.
 //!
 //! [`error`] sits to the side, used by every layer. The library is headless:
 //! it performs no terminal I/O, spawns no editor, and runs no picker. Those
@@ -25,6 +31,10 @@ pub(crate) mod fsutil;
 pub mod datetime;
 pub mod id;
 pub mod text;
+
+pub mod cipher;
+#[cfg(feature = "encryption")]
+pub mod crypto;
 
 pub mod note;
 pub mod vault;
