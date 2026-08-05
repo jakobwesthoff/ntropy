@@ -1,0 +1,21 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - "--passphrase-file"
+    - test-passphrase.txt
+    - vault
+    - encrypt
+    - "-y"
+  env:
+    EDITOR: "true"
+    NTROPY_MIGRATION_FAIL_AFTER: produce
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while encrypting the vault: interrupted after the produce phase

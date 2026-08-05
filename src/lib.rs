@@ -46,6 +46,9 @@ pub mod vault;
 
 pub mod config;
 pub mod gitignore;
+#[cfg(feature = "encryption")]
+pub mod migrate;
+
 pub mod link;
 pub mod query;
 pub mod reconcile;

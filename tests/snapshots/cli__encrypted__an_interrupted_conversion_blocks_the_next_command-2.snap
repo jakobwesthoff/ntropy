@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - "--passphrase-file"
+    - test-passphrase.txt
+    - search
+    - "-p"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: this vault has an interrupted `encrypt`; finish it with `ntropy vault encrypt --resume`

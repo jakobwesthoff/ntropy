@@ -19,6 +19,8 @@ mod picker;
 #[cfg(feature = "encryption")]
 mod prompt;
 mod render;
+#[cfg(feature = "encryption")]
+mod vault_cmd;
 
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -67,6 +69,18 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         return lsp::run();
     }
 
+    // The key and conversion commands resolve the vault themselves. A
+    // conversion in particular must not go through the session build below,
+    // whose marker guard exists to stop every *other* command from touching a
+    // half-converted vault — including, if it ran here, the `--resume` that
+    // finishes one.
+    match command {
+        Command::Unlock => return cmd_unlock(&cli.global),
+        Command::Lock => return cmd_lock(&cli.global),
+        Command::Vault { command } => return cmd_vault(&cli.global, command),
+        _ => {}
+    }
+
     let session = open_session(&cli.global)?;
     let interactive = interact::is_interactive(cli.global.non_interactive);
 
@@ -103,9 +117,10 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             interactive,
         ),
         Command::View(sub) => cmd_view(&session, sub),
-        Command::Unlock => cmd_unlock(&cli.global),
-        Command::Lock => cmd_lock(&cli.global),
-        Command::Vault { command } => cmd_vault(&cli.global, command),
+        // Handled above, before vault resolution.
+        Command::Unlock | Command::Lock | Command::Vault { .. } => {
+            unreachable!("key and conversion commands dispatch before vault resolution")
+        }
         Command::Tags => cmd_tags(&cli.global, &session),
         // Handled above, before vault resolution.
         Command::Info { .. } => unreachable!("info is dispatched before vault resolution"),
@@ -132,7 +147,7 @@ fn resolve_options(global: &GlobalArgs) -> Result<ResolveOptions> {
     })
 }
 
-fn resolve_vault(global: &GlobalArgs) -> Result<Vault> {
+pub(super) fn resolve_vault(global: &GlobalArgs) -> Result<Vault> {
     let opts = resolve_options(global)?;
     Vault::resolve(&opts).context("while resolving the vault")
 }
@@ -146,6 +161,20 @@ fn open_session(global: &GlobalArgs) -> Result<VaultSession> {
 /// Open a session over an already-resolved vault.
 #[cfg(feature = "encryption")]
 fn session_for(global: &GlobalArgs, vault: Vault) -> Result<VaultSession> {
+    // A vault mid-conversion holds two copies of every note, so scanning or
+    // syncing it would produce nonsense and editing it could lose work. Every
+    // ordinary command reaches this, which is why the guard lives here rather
+    // than in each of them; the conversions build their sessions directly and
+    // deliberately bypass it.
+    if let Some(marker) = ntropy::migrate::marker::read_at(&vault.layout().migration_file())
+        .context("while checking for an interrupted conversion")?
+    {
+        bail!(
+            "this vault has an interrupted `{}`; finish it with `{}`",
+            marker.operation,
+            marker.operation.resume_command()
+        );
+    }
     keys::KeyContext::from_args(global).open(vault)
 }
 
@@ -278,9 +307,17 @@ fn cmd_lock(_global: &GlobalArgs) -> Result<ExitCode> {
     Err(encryption_unsupported())
 }
 
+#[cfg(feature = "encryption")]
+fn cmd_vault(global: &GlobalArgs, command: VaultCommand) -> Result<ExitCode> {
+    let interactive = interact::is_interactive(global.non_interactive);
+    vault_cmd::run(global, command, interactive)?;
+    Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(not(feature = "encryption"))]
 fn cmd_vault(_global: &GlobalArgs, command: VaultCommand) -> Result<ExitCode> {
-    // The conversions land with the migration machinery; until then every
-    // variant is named so this match stays exhaustive and the flags stay read.
+    // Every variant is named so the flags count as read and the stripped build
+    // stays warning-free.
     match command {
         VaultCommand::Encrypt { resume, yes }
         | VaultCommand::Decrypt { resume, yes }
@@ -293,7 +330,7 @@ fn cmd_vault(_global: &GlobalArgs, command: VaultCommand) -> Result<ExitCode> {
             let _ = new_passphrase_file;
         }
     }
-    bail!("this command is not implemented yet")
+    Err(encryption_unsupported())
 }
 
 fn cmd_search(
@@ -606,7 +643,7 @@ fn report_ambiguous(selector: &str, notes: &[ntropy::note::Note]) -> Result<()> 
 /// neither swallow the prompt nor feed the answer (ADR 0036). Confirmation is
 /// only ever requested in interactive mode, which guarantees the terminal
 /// exists.
-fn confirm(prompt: &str) -> Result<bool> {
+pub(super) fn confirm(prompt: &str) -> Result<bool> {
     let tty = interact::open_tty().context("while opening the controlling terminal")?;
     write!(&tty, "{prompt}").context("while writing the confirmation prompt")?;
     (&tty).flush()?;
@@ -642,7 +679,7 @@ fn exit_for_warnings(strict: bool, warnings: &[ScanWarning], extra: usize) -> Ex
 }
 
 /// Format a count with its unit, choosing the singular or plural form.
-fn plural(count: usize, singular: &str, plural: &str) -> String {
+pub(super) fn plural(count: usize, singular: &str, plural: &str) -> String {
     let unit = if count == 1 { singular } else { plural };
     format!("{count} {unit}")
 }

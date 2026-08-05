@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - "--passphrase-file"
+    - test-passphrase.txt
+    - vault
+    - encrypt
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: this rewrites every note in the vault; pass `-y` to confirm

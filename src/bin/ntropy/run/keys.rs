@@ -9,7 +9,7 @@
 //! `$NTROPY_IDENTITY`, a passphrase file, the OS credential store, and — only
 //! when a terminal is there to ask on — a prompt.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
@@ -149,6 +149,72 @@ impl KeyContext {
         };
         keys::unlock(&request).context("while unlocking the vault")?;
         Ok(recipient.as_str())
+    }
+
+    /// A passphrase from `file` when given, otherwise from the terminal.
+    pub fn passphrase_from(&self, file: Option<&Path>, label: &str) -> Result<Passphrase> {
+        use ntropy::keys::PassphrasePrompt;
+        if let Some(path) = file {
+            return keys::read_passphrase_file(path).with_context(|| {
+                format!("while reading the passphrase file `{}`", path.display())
+            });
+        }
+        if !self.may_prompt {
+            anyhow::bail!(
+                "no passphrase available for {label}: pass a passphrase file or run \
+                 without `-n` so one can be typed"
+            );
+        }
+        TtyPassphrasePrompt
+            .new_passphrase(label)
+            .context("while reading a passphrase")
+    }
+
+    /// The vault's *current* passphrase, from the global file or a prompt.
+    pub fn existing_passphrase(&self, label: &str) -> Result<Passphrase> {
+        use ntropy::keys::PassphrasePrompt;
+        if let Some(passphrase) = self.passphrase_from_file()? {
+            return Ok(passphrase);
+        }
+        if !self.may_prompt {
+            anyhow::bail!(
+                "no passphrase available: pass `--passphrase-file <PATH>` or run \
+                 without `-n` so one can be typed"
+            );
+        }
+        TtyPassphrasePrompt
+            .existing(label)
+            .context("while reading the passphrase")
+    }
+
+    /// The vault's identity, refusing to proceed without it.
+    ///
+    /// A conversion reads every note, so a locked vault cannot be converted;
+    /// there is no useful partial answer here.
+    pub fn identity_for(
+        &self,
+        vault: &Vault,
+        recipient: &ntropy::crypto::Recipient,
+    ) -> Result<ntropy::crypto::Identity> {
+        let store = self.store()?;
+        let prompt = TtyPassphrasePrompt;
+        let request = Acquisition {
+            recipient,
+            wrapped_identity: &vault.layout().identity_file(),
+            identity_file: self.identity_file.as_deref(),
+            passphrase_file: self.passphrase_file.as_deref(),
+            store: store.as_ref(),
+            prompt: self.may_prompt.then_some(&prompt),
+        };
+        keys::acquire(&request)
+            .context("while obtaining the vault's identity")?
+            .ok_or_else(|| anyhow::anyhow!("this vault is locked; run `ntropy unlock`"))
+    }
+
+    /// Forget a stored identity by recipient, ignoring whether one was there.
+    pub fn lock_recipient(&self, recipient: &ntropy::crypto::Recipient) -> Result<bool> {
+        let store = KeyringStore::open().context("while opening the OS credential store")?;
+        keys::lock(&store, recipient).context("while clearing the stored identity")
     }
 
     /// Forget the stored identity, reporting whether there was one.

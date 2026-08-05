@@ -1,0 +1,22 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - "--passphrase-file"
+    - test-passphrase.txt
+    - vault
+    - encrypt
+    - "--resume"
+    - "-y"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Encrypted 0 notes (1 already done).
+
+----- stderr -----
+note: plaintext revisions recorded before this conversion remain readable in git history or a sync provider's version history; cleaning those is up to you

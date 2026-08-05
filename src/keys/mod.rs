@@ -301,6 +301,19 @@ mod acquire {
         Ok(age_io::unwrap_identity(&armored, passphrase)?)
     }
 
+    /// Remove a vault's key files.
+    ///
+    /// Used by `vault decrypt` once no note needs them. Missing files are not
+    /// an error: the point is that they are gone afterwards.
+    pub fn remove_keypair_at(recipient_path: &Path, wrapped_path: &Path) -> Result<(), KeyError> {
+        for path in [wrapped_path, recipient_path] {
+            if path.exists() {
+                fsutil::remove_file(path)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Re-wrap the identity at `path` under a new passphrase.
     ///
     /// Only this one file changes; notes are untouched, because the key inside
@@ -320,7 +333,7 @@ mod acquire {
 #[cfg(feature = "encryption")]
 pub use acquire::{
     Acquisition, acquire, change_passphrase_at, lock, read_identity_file, read_recipient_at,
-    unlock, unwrap_identity_at, write_keypair_at,
+    remove_keypair_at, unlock, unwrap_identity_at, write_keypair_at,
 };
 
 #[cfg(test)]

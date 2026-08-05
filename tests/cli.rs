@@ -1908,6 +1908,238 @@ mod encrypted {
         });
     }
 
+    // -------------------------------------------------------------------------
+    // Whole-vault conversions
+    // -------------------------------------------------------------------------
+
+    /// A plaintext vault plus a passphrase file, ready to be converted.
+    fn convertible_vault() -> tempfile::TempDir {
+        let dir = setup_vault();
+        fs::write(
+            dir.path().join(TEST_PASSPHRASE_FILE),
+            format!("{TEST_PASSPHRASE}\n"),
+        )
+        .expect("passphrase file");
+        dir
+    }
+
+    /// `ntropy` against a vault being converted: non-interactive, with a
+    /// passphrase file so nothing prompts.
+    fn ntropy_convert(vault: &Path) -> Command {
+        let mut cmd = ntropy(vault);
+        cmd.args(["-n", "--passphrase-file", TEST_PASSPHRASE_FILE]);
+        cmd
+    }
+
+    #[test]
+    fn vault_encrypt_converts_the_whole_vault() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "encrypt", "-y"]));
+        });
+
+        assert!(vault.join(".ntropy/identity.pub").is_file());
+        assert!(
+            !vault
+                .join("all-notes")
+                .join(format!("{ULID_A}-alpha.md"))
+                .exists()
+        );
+        assert!(
+            vault
+                .join("all-notes")
+                .join(format!("{ULID_A}.age"))
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn an_encrypted_vault_is_searchable_afterwards() {
+        // The end-to-end proof: convert, then read it back through the CLI.
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+        ntropy_convert(vault)
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("encrypt");
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["search", "-p"]));
+        });
+    }
+
+    #[test]
+    fn vault_encrypt_refuses_without_confirmation_when_headless() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "encrypt"]));
+        });
+    }
+
+    #[test]
+    fn vault_encrypt_refuses_an_already_encrypted_vault() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        ntropy_convert(vault)
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("encrypt");
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "encrypt", "-y"]));
+        });
+    }
+
+    #[test]
+    fn an_interrupted_conversion_blocks_the_next_command() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+
+        let mut cmd = ntropy_convert(vault);
+        cmd.env("NTROPY_MIGRATION_FAIL_AFTER", "produce");
+        cmd.args(["vault", "encrypt", "-y"]);
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(cmd);
+        });
+
+        // Both forms survive, and the marker is there.
+        assert!(
+            vault
+                .join("all-notes")
+                .join(format!("{ULID_A}-alpha.md"))
+                .is_file()
+        );
+        assert!(
+            vault
+                .join("all-notes")
+                .join(format!("{ULID_A}.age"))
+                .is_file()
+        );
+        assert!(vault.join(".ntropy/migration.toml").is_file());
+
+        // And every ordinary command now refuses rather than scanning it.
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["search", "-p"]));
+        });
+    }
+
+    #[test]
+    fn resume_finishes_an_interrupted_conversion() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+
+        let mut cmd = ntropy_convert(vault);
+        cmd.env("NTROPY_MIGRATION_FAIL_AFTER", "produce");
+        cmd.args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("interrupt");
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(
+                ntropy_convert(vault).args(["vault", "encrypt", "--resume", "-y"])
+            );
+        });
+
+        assert!(!vault.join(".ntropy/migration.toml").exists());
+        assert!(
+            !vault
+                .join("all-notes")
+                .join(format!("{ULID_A}-alpha.md"))
+                .exists()
+        );
+        assert!(
+            vault
+                .join("all-notes")
+                .join(format!("{ULID_A}.age"))
+                .is_file()
+        );
+    }
+
+    #[test]
+    fn vault_decrypt_restores_the_notes() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+        ntropy_convert(vault)
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("encrypt");
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "decrypt", "-y"]));
+        });
+
+        assert!(
+            vault
+                .join("all-notes")
+                .join(format!("{ULID_A}-alpha.md"))
+                .is_file()
+        );
+        assert_eq!(
+            fs::read_to_string(vault.join("all-notes").join(format!("{ULID_A}-alpha.md")))
+                .expect("read"),
+            "---\ntitle: Alpha\n---\nbody\n"
+        );
+        // The key files go with the ciphertext.
+        assert!(!vault.join(".ntropy/identity.pub").exists());
+        assert!(!vault.join(".ntropy/identity.age").exists());
+    }
+
+    #[test]
+    fn vault_decrypt_refuses_a_plaintext_vault() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "decrypt", "-y"]));
+        });
+    }
+
+    #[test]
+    fn vault_passphrase_changes_the_wrapper_and_leaves_notes_alone() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+        ntropy_convert(vault)
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("encrypt");
+
+        let note = vault.join("all-notes").join(format!("{ULID_A}.age"));
+        let before = fs::read(&note).expect("read note");
+        fs::write(vault.join("new-pw.txt"), "a different passphrase\n").expect("write");
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args([
+                "vault",
+                "passphrase",
+                "--new-passphrase-file",
+                "new-pw.txt",
+            ]));
+        });
+
+        assert_eq!(
+            fs::read(&note).expect("read note"),
+            before,
+            "notes must be untouched"
+        );
+    }
+
+    #[test]
+    fn vault_passphrase_refuses_a_plaintext_vault() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "passphrase"]));
+        });
+    }
+
     #[test]
     fn reconcile_adopts_a_hand_added_plaintext_note() {
         let dir = setup_encrypted_vault();

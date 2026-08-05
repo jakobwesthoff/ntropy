@@ -132,6 +132,66 @@ pub fn atomic_write_private(path: &Path, contents: &[u8]) -> Result<()> {
     })
 }
 
+/// Flush `path`'s contents all the way to stable storage.
+///
+/// [`atomic_write`] guarantees a reader sees either the old file or the whole
+/// new one, which holds against a process dying. It does not hold against power
+/// loss: `rename(2)` can reach the disk before the data it points at, leaving a
+/// present but empty or truncated file. Only an explicit flush closes that gap.
+///
+/// On macOS `fsync` merely hands the data to the drive's write cache, so
+/// `F_FULLFSYNC` is used instead — slower, and the only thing that actually
+/// survives losing power.
+///
+/// Reserved for the whole-vault conversions, which delete the only other copy
+/// of a note once they believe the new one is safe. Ordinary note writes keep
+/// the cheaper guarantee.
+#[cfg(feature = "encryption")]
+pub fn sync_file(path: &Path) -> Result<()> {
+    let file = std::fs::File::open(path).map_err(|e| FsError::new("opening to flush", path, e))?;
+
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::fd::AsRawFd;
+        // SAFETY: `F_FULLFSYNC` takes no argument beyond the descriptor, and
+        // the file is open for the duration of the call.
+        if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_FULLFSYNC) } == -1 {
+            return Err(FsError::new(
+                "flushing to disk",
+                path,
+                std::io::Error::last_os_error(),
+            ));
+        }
+        Ok(())
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    file.sync_all()
+        .map_err(|e| FsError::new("flushing to disk", path, e))
+}
+
+/// Flush a directory entry so the names inside it are durable.
+///
+/// Flushing a file makes its *contents* durable; the directory entry that
+/// names it is separate metadata and needs its own flush, or a crash can lose
+/// the fact that the file exists at all.
+#[cfg(feature = "encryption")]
+pub fn sync_dir(path: &Path) -> Result<()> {
+    let dir = std::fs::File::open(path).map_err(|e| FsError::new("opening to flush", path, e))?;
+    dir.sync_all()
+        .map_err(|e| FsError::new("flushing directory to disk", path, e))
+}
+
+/// Remove `dir` and everything under it.
+///
+/// The one place ntropy deletes a directory tree: a conversion to encrypted
+/// storage removes the materialized views, which an encrypted vault cannot
+/// have. Every other path leaves directories for the user (ADR 0018).
+#[cfg(feature = "encryption")]
+pub fn remove_dir_all(dir: &Path) -> Result<()> {
+    std::fs::remove_dir_all(dir).map_err(|e| FsError::new("removing directory tree", dir, e))
+}
+
 /// Rename `from` to `to`.
 pub fn rename(from: &Path, to: &Path) -> Result<()> {
     std::fs::rename(from, to).map_err(|e| FsError::new("renaming", from, e))
