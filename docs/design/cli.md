@@ -237,7 +237,8 @@ commands this is a human report, printed the same way piped or on a TTY.
 
 `--print`/`-p` replaces the report with the active vault's path alone and skips
 the scan behind the statistics. Resolution canonicalizes the root, so the path
-is absolute whichever rule matched.
+is absolute whichever rule matched. This is what
+[shell integration](shell-integration.md) substitutes into `cd`.
 
 ### `lsp`
 

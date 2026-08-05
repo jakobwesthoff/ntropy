@@ -14,6 +14,10 @@ and this project adheres to
   full report, skipping the scan behind the statistics. The path is absolute
   whichever resolution rule matched, and an unresolvable vault exits non-zero
   with nothing on stdout.
+- Shell integration under `contrib/shell/`, sourced from your rc file rather
+  than installed: `ntropy.sh` (bash and zsh) defines `ncd`, which changes
+  directory to the active vault and forwards its arguments to `ntropy`, so
+  `ncd --vault ~/notes` works like any other command.
 
 ## v1.7.1 - 2026-07-10
 

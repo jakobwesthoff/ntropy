@@ -213,7 +213,7 @@ sync.
 | `reconcile` | Realign filenames whose slug drifted from the title and re-sync every view (catches up after edits made outside ntropy). |
 | `view list\|add\|remove` | Manage [materialized views](#materialized-views), e.g. `ntropy view add by-status --field status`. |
 | `tags` | List every tag with its note count. |
-| `info` | Show the active vault and how it was resolved, the global default, and stats: note/tag/view/template counts, skipped-note warnings, the creation-date span, the top tags, and the template names. |
+| `info` | Show the active vault and how it was resolved, the global default, and stats: note/tag/view/template counts, skipped-note warnings, the creation-date span, the top tags, and the template names. `--print`/`-p` prints the vault's path alone, for [shell integration](#shell-integration). |
 | `lsp` | Run the [language server](#language-server) over stdin/stdout for your editor. |
 
 Global flags (any command): `--vault <path>`, `-n`/`--non-interactive`,
@@ -566,6 +566,28 @@ Exit codes are scriptable: a `search` that matches nothing exits non-zero, so
 `if ntropy search -n tag:urgent; then …` branches on "did anything match" without
 parsing a single line. Where a note has to be named back to you (a delete prompt,
 an ambiguous match) it's shown as `date  title  [tags]  (id)`.
+
+## Shell integration
+
+`ntropy info --print` prints the active vault's path and nothing else, resolved
+by the [usual rules](#finding-the-vault) and always absolute. That's the hook
+for shell functions, and the repo ships one:
+[`contrib/shell/ntropy.sh`](https://github.com/jakobwesthoff/ntropy/blob/main/contrib/shell/ntropy.sh)
+defines `ncd`, which drops you into the active vault.
+
+```bash
+# In ~/.bashrc or ~/.zshrc
+source /path/to/ntropy/contrib/shell/ntropy.sh
+```
+
+```bash
+ncd              # cd to whichever vault is active here
+ncd --vault ~/notes   # or name one; every global flag is forwarded
+```
+
+It has to be a shell function rather than an `ntropy cd` subcommand, because a
+process can't change its parent shell's working directory. Nothing is installed
+for you; source the file yourself.
 
 ## Agent skill
 
