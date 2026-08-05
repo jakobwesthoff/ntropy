@@ -36,6 +36,13 @@ and the query DSL in [query-and-search.md](query-and-search.md).
 - **Bare `ntropy`:** with no subcommand, prints help.
 - **Free-text args:** `search` and `new` join their trailing arguments into one
   string (the query / the title).
+- **Encryption:** `--identity <path>` / `-i` (or `$NTROPY_IDENTITY`) names an
+  age identity file to use instead of the OS credential store, and
+  `--passphrase-file <path>` supplies a vault passphrase from a file's first
+  line instead of a prompt. Both are global. `-n` implies never prompting, so a
+  headless run on a locked vault fails with a message naming `ntropy unlock`
+  rather than blocking on a terminal that is not there. The full model is in
+  [encryption.md](encryption.md).
 
 ## Commands
 
@@ -56,6 +63,15 @@ by a `# {{title}}` body heading.
 pieces untouched, and succeeds either way. It does **not** touch the global
 config unless `--set-default` is passed, which records this vault as the global
 `default_vault`.
+
+`--encrypted` stores the vault's notes encrypted at rest. It generates an age
+keypair, writes the recipient to `.ntropy/identity.pub` and the
+passphrase-wrapped identity to `.ntropy/identity.age`, and seeds no view: views
+are disabled in an encrypted vault, so there is no `by-tag/` directory and no
+`.gitignore`. The passphrase comes from `--passphrase-file` or a prompt.
+
+Re-running `init --encrypted` on a vault that already has a keypair keeps it.
+Regenerating one would leave every note already written unreadable.
 
 ### `new <title>`
 
@@ -239,6 +255,23 @@ commands this is a human report, printed the same way piped or on a TTY.
 the scan behind the statistics. Resolution canonicalizes the root, so the path
 is absolute whichever rule matched. This is what
 [shell integration](shell-integration.md) substitutes into `cd`.
+
+### `unlock` / `lock`
+
+`unlock` obtains the vault's identity and stores it in the OS credential store,
+so later commands need no passphrase. `lock` removes that entry. Neither has a
+timeout: unlocked means unlocked until `lock`.
+
+The identity is stored keyed by the vault's recipient rather than its path, so
+moving a vault directory does not orphan its entry. Both commands error on a
+vault that is not encrypted.
+
+### `vault encrypt|decrypt|rekey|passphrase`
+
+The rare, whole-vault operations, grouped under a namespace because they
+rewrite everything and are nothing like daily use. `encrypt` and `decrypt`
+convert a vault's storage; `rekey` re-encrypts every note to a fresh keypair;
+`passphrase` re-wraps the identity, leaving the notes untouched.
 
 ### `lsp`
 

@@ -22,15 +22,20 @@ Commands:
   view       Manage materialized view definitions
   tags       List all tags with note counts
   info       Show the active vault, its resolution, and vault statistics
+  unlock     Store the vault's identity so later commands need no passphrase
+  lock       Forget the stored identity, so reading requires the passphrase again
+  vault      Whole-vault operations: converting storage and managing the key
   lsp        Run the language server over stdin/stdout
   help       Print this message or the help of the given subcommand(s)
 
 Options:
-      --vault <PATH>     Operate on the vault at this path (overrides all other resolution)
-  -n, --non-interactive  Force non-interactive (plain) behavior even on a TTY
-      --strict           Treat malformed/badly-named notes as errors instead of warnings
-  -h, --help             Print help
-  -V, --version          Print version
+      --vault <PATH>            Operate on the vault at this path (overrides all other resolution)
+  -n, --non-interactive         Force non-interactive (plain) behavior even on a TTY
+      --strict                  Treat malformed/badly-named notes as errors instead of warnings
+  -i, --identity <PATH>         Use this age identity file instead of the OS credential store
+      --passphrase-file <PATH>  Read the vault passphrase from the first line of this file
+  -h, --help                    Print help (see more with '--help')
+  -V, --version                 Print version
 
 
 ----- stderr -----

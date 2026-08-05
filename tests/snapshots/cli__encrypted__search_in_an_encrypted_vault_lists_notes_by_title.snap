@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - search
+    - "-p"
+  env:
+    EDITOR: "true"
+    NTROPY_IDENTITY: test-identity.txt
+---
+success: true
+exit_code: 0
+----- stdout -----
+[VAULT]/all-notes/[ULID....................].age
+[VAULT]/all-notes/[ULID....................].age
+
+----- stderr -----

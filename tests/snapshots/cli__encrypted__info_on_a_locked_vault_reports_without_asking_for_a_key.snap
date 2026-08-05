@@ -1,0 +1,25 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - info
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Active vault:  [VAULT] (via current directory)
+Default vault: [DEFAULT]
+Encryption:    on (locked)
+
+Notes:     (locked; run `ntropy unlock` for note statistics)
+Views:     0
+Templates: 1
+
+Templates:
+  default
+
+----- stderr -----

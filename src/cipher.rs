@@ -58,11 +58,14 @@ pub trait NoteCipher: Send + Sync + std::fmt::Debug {
     /// The note file extension, without the leading dot.
     fn extension(&self) -> &'static str;
 
-    /// Whether reads are possible right now.
+    /// Whether reads are possible right now, and if not, why.
     ///
-    /// False on an encrypted vault with no identity. Writes do not consult
-    /// this: encrypting needs only the public recipient.
-    fn can_read(&self) -> bool;
+    /// A cipher that cannot read fails the same way for every path, so callers
+    /// ask once rather than per file. Returning the reason rather than a bare
+    /// `false` is what lets a locked vault and a build without encryption
+    /// support give different answers. Writes do not consult this: encrypting
+    /// needs only the public recipient.
+    fn readable(&self) -> Result<(), CipherError>;
 
     /// Read and decode the note at `path`.
     fn read(&self, path: &Path) -> Result<String, CipherError>;
@@ -85,8 +88,8 @@ impl NoteCipher for PlaintextCipher {
         "md"
     }
 
-    fn can_read(&self) -> bool {
-        true
+    fn readable(&self) -> Result<(), CipherError> {
+        Ok(())
     }
 
     fn read(&self, path: &Path) -> Result<String, CipherError> {
@@ -117,8 +120,8 @@ impl NoteCipher for UnsupportedCipher {
         "age"
     }
 
-    fn can_read(&self) -> bool {
-        false
+    fn readable(&self) -> Result<(), CipherError> {
+        Err(CipherError::Unsupported)
     }
 
     fn read(&self, _path: &Path) -> Result<String, CipherError> {
@@ -172,8 +175,11 @@ mod age_cipher {
             "age"
         }
 
-        fn can_read(&self) -> bool {
-            self.identity.is_some()
+        fn readable(&self) -> Result<(), CipherError> {
+            match self.identity {
+                Some(_) => Ok(()),
+                None => Err(CipherError::Locked),
+            }
         }
 
         fn read(&self, path: &Path) -> Result<String, CipherError> {
@@ -271,7 +277,7 @@ mod tests {
     fn plaintext_cipher_reports_markdown_and_is_always_readable() {
         let cipher = PlaintextCipher;
         assert_eq!(cipher.extension(), "md");
-        assert!(cipher.can_read());
+        assert!(cipher.readable().is_ok());
     }
 
     #[test]
@@ -335,7 +341,7 @@ mod tests {
         // about every file in the vault.
         let cipher = UnsupportedCipher;
         assert_eq!(cipher.extension(), "age");
-        assert!(!cipher.can_read());
+        assert!(cipher.readable().is_err());
     }
 
     #[test]
@@ -413,7 +419,7 @@ mod tests {
             let (identity, recipient) = age_io::generate_keypair();
 
             let locked = AgeCipher::new(recipient, None);
-            assert!(!locked.can_read());
+            assert!(locked.readable().is_err());
             locked
                 .write(&path, "created while locked\n")
                 .expect("write");

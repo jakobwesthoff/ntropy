@@ -1,0 +1,29 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - info
+  env:
+    EDITOR: "true"
+    NTROPY_IDENTITY: test-identity.txt
+---
+success: true
+exit_code: 0
+----- stdout -----
+Active vault:  [VAULT] (via current directory)
+Default vault: [DEFAULT]
+Encryption:    on (unlocked)
+
+Notes:     0
+Tags:      0
+Views:     0
+Templates: 1
+Warnings:  0
+Span:      (no notes)
+
+Templates:
+  default
+
+----- stderr -----

@@ -53,13 +53,13 @@ pub enum ScanError {
     #[error("the notes directory `{}` does not exist", .0.display())]
     NotesDirMissing(PathBuf),
 
-    /// The vault is encrypted and no identity is available.
+    /// The vault's notes cannot be read at all: it is locked, or this build
+    /// has no encryption support.
     ///
-    /// A whole-scan failure rather than a warning per note: every file would
-    /// fail for the same reason, and burying one actionable message under a
-    /// thousand identical ones helps nobody.
-    #[error("this vault is locked; run `ntropy unlock`")]
-    Locked,
+    /// A whole-scan failure rather than a warning per note, carrying the
+    /// cipher's own reason so the two cases stay distinguishable.
+    #[error(transparent)]
+    Unreadable(#[from] crate::cipher::CipherError),
 }
 
 impl Scan {
@@ -74,9 +74,10 @@ pub fn scan_notes_dir(all_notes_dir: &Path, cipher: &dyn NoteCipher) -> Result<S
     if !all_notes_dir.is_dir() {
         return Err(ScanError::NotesDirMissing(all_notes_dir.to_path_buf()));
     }
-    if !cipher.can_read() {
-        return Err(ScanError::Locked);
-    }
+    // Asked once rather than per file: a cipher that cannot read fails the
+    // same way for every note, and one actionable message beats a thousand
+    // identical ones.
+    cipher.readable().map_err(ScanError::Unreadable)?;
 
     let note_ext = cipher.extension();
     // Only an encrypted vault has a reason to complain about stray Markdown:
@@ -243,7 +244,7 @@ mod tests {
 
             assert!(matches!(
                 scan_notes_dir(&notes, &locked),
-                Err(ScanError::Locked)
+                Err(ScanError::Unreadable(_))
             ));
         }
 
@@ -254,7 +255,7 @@ mod tests {
             let (_guard, notes, _, locked) = setup();
             assert!(matches!(
                 scan_notes_dir(&notes, &locked),
-                Err(ScanError::Locked)
+                Err(ScanError::Unreadable(_))
             ));
         }
 

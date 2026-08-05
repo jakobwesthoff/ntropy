@@ -42,8 +42,18 @@ Options:
       --strict
           Treat malformed/badly-named notes as errors instead of warnings
 
+  -i, --identity <PATH>
+          Use this age identity file instead of the OS credential store.
+          
+          `$NTROPY_IDENTITY` is consulted when the flag is absent.
+
   -p, --print
           Print the artifact's path to stdout on success
+
+      --passphrase-file <PATH>
+          Read the vault passphrase from the first line of this file.
+          
+          Supplies the passphrase wherever one would otherwise be typed: creating an encrypted vault, unlocking one, or converting one. On `vault passphrase` it is the *current* passphrase.
 
   -h, --help
           Print help (see a summary with '-h')

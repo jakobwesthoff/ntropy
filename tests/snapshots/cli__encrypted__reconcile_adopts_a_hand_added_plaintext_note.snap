@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - reconcile
+  env:
+    EDITOR: "true"
+    NTROPY_IDENTITY: test-identity.txt
+---
+success: true
+exit_code: 0
+----- stdout -----
+Reconciling vault at [VAULT]...
+encrypted [ULID....................]-dropped-in.md -> [ULID....................].age
+Scanned 0 notes, renamed 0 files, relinked 0 links, synced 0 views, ignored 0 entries, unignored 0 entries, 0 warnings.
+
+----- stderr -----

@@ -44,6 +44,20 @@ pub struct GlobalArgs {
     /// Treat malformed/badly-named notes as errors instead of warnings.
     #[arg(long, global = true)]
     pub strict: bool,
+
+    /// Use this age identity file instead of the OS credential store.
+    ///
+    /// `$NTROPY_IDENTITY` is consulted when the flag is absent.
+    #[arg(short = 'i', long, global = true, value_name = "PATH")]
+    pub identity: Option<PathBuf>,
+
+    /// Read the vault passphrase from the first line of this file.
+    ///
+    /// Supplies the passphrase wherever one would otherwise be typed: creating
+    /// an encrypted vault, unlocking one, or converting one. On
+    /// `vault passphrase` it is the *current* passphrase.
+    #[arg(long, global = true, value_name = "PATH")]
+    pub passphrase_file: Option<PathBuf>,
 }
 
 #[derive(Subcommand, Debug)]
@@ -55,6 +69,9 @@ pub enum Command {
         /// Also record this vault as the global default.
         #[arg(long)]
         set_default: bool,
+        /// Store the vault's notes encrypted at rest (ADR 0041).
+        #[arg(long)]
+        encrypted: bool,
     },
 
     /// Create a note from a template and open it.
@@ -157,9 +174,65 @@ pub enum Command {
         print: bool,
     },
 
+    /// Store the vault's identity so later commands need no passphrase.
+    Unlock,
+
+    /// Forget the stored identity, so reading requires the passphrase again.
+    Lock,
+
+    /// Whole-vault operations: converting storage and managing the key.
+    // Grouped rather than top-level because these are rare and destructive,
+    // unlike `lock`/`unlock`, which are part of daily use (ADR 0041).
+    Vault {
+        #[command(subcommand)]
+        command: VaultCommand,
+    },
+
     /// Run the language server over stdin/stdout.
     // ADR 0029 governs the language-server surface.
     Lsp,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum VaultCommand {
+    /// Convert a plaintext vault to encrypted storage.
+    Encrypt {
+        /// Finish a conversion that was interrupted.
+        #[arg(long)]
+        resume: bool,
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+    /// Convert an encrypted vault back to plaintext storage.
+    Decrypt {
+        /// Finish a conversion that was interrupted.
+        #[arg(long)]
+        resume: bool,
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+    /// Generate a fresh keypair and re-encrypt every note to it.
+    Rekey {
+        /// Finish a rekey that was interrupted.
+        #[arg(long)]
+        resume: bool,
+        /// Skip the confirmation prompt.
+        #[arg(short = 'y', long)]
+        yes: bool,
+    },
+    /// Change the passphrase protecting the vault's identity.
+    ///
+    /// Only the wrapped identity is rewritten; the notes are untouched,
+    /// because the key inside the wrapper does not change.
+    Passphrase {
+        /// Read the new passphrase from the first line of this file.
+        ///
+        /// The current passphrase comes from the global `--passphrase-file`.
+        #[arg(long, value_name = "PATH")]
+        new_passphrase_file: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Debug)]

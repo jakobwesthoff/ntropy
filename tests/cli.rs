@@ -1643,3 +1643,334 @@ fn broken_stdout_pipe_exits_via_sigpipe_not_panic() {
         "stderr must not contain a panic message, got: {stderr}"
     );
 }
+
+/// Encrypted-vault behaviour, compiled only where encryption exists.
+#[cfg(feature = "encryption")]
+mod encrypted {
+    use super::*;
+
+    // =============================================================================
+    // Encrypted vaults
+    // =============================================================================
+    //
+    // The key material below is a Rust const rather than a committed key file, so
+    // nothing in the repository ever looks like a leaked credential to a scanner.
+    // Every encrypted test passes `--identity` (via `$NTROPY_IDENTITY`) and `-n`,
+    // so no test can reach the OS credential store or block on a prompt.
+
+    /// A throwaway age keypair used only by this test suite.
+    const TEST_IDENTITY: &str =
+        "AGE-SECRET-KEY-1MHMUUFG33KU5Y3EFYUS0FNWK98ZTAVCX5ENHD3Y63RGCHN2SZGKQ7KHJNM";
+    const TEST_RECIPIENT: &str = "age1k4f8hw3lfpcnq2hxm9w323s8f44ta06y0k59pnmqmgkh8qxfpfpq4cqyfh";
+
+    /// The passphrase used wherever a fixture needs one.
+    const TEST_PASSPHRASE: &str = "correct horse battery staple";
+
+    /// Where the fixtures put their key material, relative to the vault root.
+    const TEST_IDENTITY_FILE: &str = "test-identity.txt";
+    const TEST_PASSPHRASE_FILE: &str = "test-passphrase.txt";
+
+    /// Build an encrypted vault directly on disk, plus the identity file that
+    /// opens it.
+    fn setup_encrypted_vault() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = dir.path();
+        fs::create_dir_all(root.join("all-notes")).expect("all-notes");
+        fs::create_dir_all(root.join(".ntropy/templates")).expect(".ntropy");
+        fs::write(
+            root.join(".ntropy/identity.pub"),
+            format!("{TEST_RECIPIENT}\n"),
+        )
+        .expect("recipient");
+        fs::write(
+            root.join(".ntropy/templates/default.md"),
+            "---\ntitle: {{title}}\n---\n\n# {{title}}\n",
+        )
+        .expect("template");
+        // Kept beside the vault rather than inside it, so it never looks like part
+        // of the vault's own contents.
+        fs::write(root.join(TEST_IDENTITY_FILE), format!("{TEST_IDENTITY}\n"))
+            .expect("identity file");
+        fs::write(
+            root.join(TEST_PASSPHRASE_FILE),
+            format!("{TEST_PASSPHRASE}\n"),
+        )
+        .expect("passphrase file");
+        dir
+    }
+
+    /// A `ntropy` command against an encrypted vault, wired so it can neither
+    /// prompt nor consult a keychain.
+    fn ntropy_encrypted(vault: &Path) -> Command {
+        let mut cmd = ntropy(vault);
+        // Relative to the command's working directory, which is the vault. An
+        // absolute temp path would land in the snapshot's metadata block and churn
+        // on every run.
+        cmd.env("NTROPY_IDENTITY", TEST_IDENTITY_FILE);
+        cmd.arg("-n");
+        cmd
+    }
+
+    #[test]
+    fn new_in_an_encrypted_vault_writes_an_age_file() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_encrypted(vault).args(["new", "-p", "Quarterly Review"]));
+        });
+    }
+
+    #[test]
+    fn a_created_note_is_not_readable_as_plaintext() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        ntropy_encrypted(vault)
+            .args(["new", "-p", "Secret Plans"])
+            .output()
+            .expect("run new");
+
+        let notes: Vec<_> = fs::read_dir(vault.join("all-notes"))
+            .expect("read dir")
+            .map(|e| e.expect("entry").path())
+            .collect();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].extension().and_then(|e| e.to_str()), Some("age"));
+
+        let raw = fs::read(&notes[0]).expect("read note");
+        assert!(
+            !raw.windows(12).any(|w| w == b"Secret Plans"),
+            "the title reached the file in the clear"
+        );
+    }
+
+    #[test]
+    fn search_in_an_encrypted_vault_lists_notes_by_title() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        for title in ["Alpha", "Beta"] {
+            ntropy_encrypted(vault)
+                .args(["new", "-p", title])
+                .output()
+                .expect("run new");
+        }
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_encrypted(vault).args(["search", "-p"]));
+        });
+    }
+
+    #[test]
+    fn a_locked_encrypted_vault_errors_naming_unlock() {
+        // No identity and no way to ask for one: the message has to say what to do.
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let mut cmd = ntropy(vault);
+        cmd.env_remove("NTROPY_IDENTITY");
+        cmd.args(["search", "-n", "-p"]);
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(cmd);
+        });
+    }
+
+    #[test]
+    fn the_identity_flag_and_env_var_agree() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        ntropy_encrypted(vault)
+            .args(["new", "-p", "Same Either Way"])
+            .output()
+            .expect("run new");
+
+        let via_env = ntropy_encrypted(vault)
+            .args(["search", "-p"])
+            .output()
+            .expect("run search");
+
+        let mut cmd = ntropy(vault);
+        cmd.env_remove("NTROPY_IDENTITY");
+        let via_flag = cmd
+            .args(["-n", "-i", TEST_IDENTITY_FILE, "search", "-p"])
+            .output()
+            .expect("run search");
+
+        assert_eq!(via_env.stdout, via_flag.stdout);
+        assert!(via_env.status.success());
+    }
+
+    #[test]
+    fn an_identity_file_that_does_not_exist_errors() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let mut cmd = ntropy(vault);
+        cmd.env("NTROPY_IDENTITY", "no-such-identity.txt");
+        cmd.args(["search", "-n", "-p"]);
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(cmd);
+        });
+    }
+
+    #[test]
+    fn view_add_in_an_encrypted_vault_is_rejected() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(
+                ntropy_encrypted(vault).args(["view", "add", "by-tag", "--field", "tags"])
+            );
+        });
+    }
+
+    #[test]
+    fn info_reports_encryption_state() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let mut settings = redacted(vault);
+        // The global default vault is host-specific, so redact that whole line.
+        settings.add_filter(r"(?m)^Default vault: .*$", "Default vault: [DEFAULT]");
+        settings.bind(|| {
+            assert_cmd_snapshot!(ntropy_encrypted(vault).arg("info"));
+        });
+    }
+
+    #[test]
+    fn info_on_a_locked_vault_reports_without_asking_for_a_key() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let mut cmd = ntropy(vault);
+        cmd.env_remove("NTROPY_IDENTITY");
+        cmd.args(["-n", "info"]);
+        let mut settings = redacted(vault);
+        settings.add_filter(r"(?m)^Default vault: .*$", "Default vault: [DEFAULT]");
+        settings.bind(|| {
+            assert_cmd_snapshot!(cmd);
+        });
+    }
+
+    #[test]
+    fn init_encrypted_reports_the_new_vault() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let vault = dir.path();
+        fs::write(vault.join("pw.txt"), "correct horse\n").expect("write passphrase");
+
+        let mut cmd = ntropy(vault);
+        cmd.args(["-n", "init", "--encrypted", "--passphrase-file", "pw.txt"]);
+
+        let mut settings = redacted(vault);
+        // The recipient is derived from a keypair generated at run time.
+        settings.add_filter(r"age1[0-9a-z]+", "[RECIPIENT]");
+        settings.bind(|| {
+            assert_cmd_snapshot!(cmd);
+        });
+    }
+
+    #[test]
+    fn init_encrypted_without_a_passphrase_source_errors() {
+        // `-n` means no prompt, so there is nowhere for a passphrase to come from.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy(vault).args(["-n", "init", "--encrypted"]));
+        });
+    }
+
+    #[test]
+    fn an_encrypted_init_seeds_no_view_and_no_gitignore() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let vault = dir.path();
+        fs::write(vault.join("pw.txt"), "correct horse\n").expect("write passphrase");
+
+        ntropy(vault)
+            .args(["-n", "init", "--encrypted", "--passphrase-file", "pw.txt"])
+            .output()
+            .expect("run init");
+
+        assert!(!vault.join("by-tag").exists());
+        assert!(!vault.join(".gitignore").exists());
+        assert!(vault.join(".ntropy/identity.pub").is_file());
+        assert!(vault.join(".ntropy/identity.age").is_file());
+    }
+
+    #[test]
+    fn unlock_on_a_plaintext_vault_errors() {
+        // Needs no keychain to verify: the vault is refused before any store opens.
+        let dir = setup_vault();
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy(vault).args(["-n", "unlock"]));
+        });
+    }
+
+    #[test]
+    fn lock_on_a_plaintext_vault_errors() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy(vault).args(["-n", "lock"]));
+        });
+    }
+
+    #[test]
+    fn reconcile_adopts_a_hand_added_plaintext_note() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        fs::write(
+            vault
+                .join("all-notes")
+                .join(format!("{ULID_A}-dropped-in.md")),
+            "---\ntitle: Dropped In\n---\nbody\n",
+        )
+        .expect("write stray note");
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_encrypted(vault).arg("reconcile"));
+        });
+        assert!(
+            !vault
+                .join("all-notes")
+                .join(format!("{ULID_A}-dropped-in.md"))
+                .exists()
+        );
+        assert!(
+            vault
+                .join("all-notes")
+                .join(format!("{ULID_A}.age"))
+                .is_file()
+        );
+    }
+}
+
+/// What a build compiled without encryption support says when asked.
+#[cfg(not(feature = "encryption"))]
+mod without_encryption {
+    use super::*;
+
+    #[test]
+    fn unlock_reports_the_missing_feature() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy(vault).args(["-n", "unlock"]));
+        });
+    }
+
+    #[test]
+    fn init_encrypted_reports_the_missing_feature() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let vault = dir.path();
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy(vault).args(["-n", "init", "--encrypted"]));
+        });
+    }
+
+    #[test]
+    fn an_encrypted_vault_is_recognized_and_refused() {
+        // The point of keeping detection compiled in: the vault is named
+        // as encrypted rather than reported as a directory full of
+        // corrupt notes.
+        let dir = setup_vault();
+        let vault = dir.path();
+        fs::write(vault.join(".ntropy/identity.pub"), "age1example\n").expect("write recipient");
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy(vault).args(["-n", "search", "-p"]));
+        });
+    }
+}

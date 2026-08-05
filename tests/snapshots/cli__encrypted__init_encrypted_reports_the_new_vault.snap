@@ -1,0 +1,21 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - init
+    - "--encrypted"
+    - "--passphrase-file"
+    - pw.txt
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Initialized vault at [VAULT]
+Encryption:    on
+Recipient:     [RECIPIENT]
+
+----- stderr -----

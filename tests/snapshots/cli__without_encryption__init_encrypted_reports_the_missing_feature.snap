@@ -1,0 +1,17 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - init
+    - "--encrypted"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: this build of ntropy was compiled without encryption support (rebuild with `--features encryption`)

@@ -1,0 +1,18 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - search
+    - "-n"
+    - "-p"
+  env:
+    EDITOR: "true"
+    NTROPY_IDENTITY: no-such-identity.txt
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while obtaining the vault's identity: no identity file at `no-such-identity.txt`

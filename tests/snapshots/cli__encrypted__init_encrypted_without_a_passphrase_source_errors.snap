@@ -1,0 +1,17 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - init
+    - "--encrypted"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: no passphrase available: pass `--passphrase-file <PATH>` or run without `-n` so one can be typed

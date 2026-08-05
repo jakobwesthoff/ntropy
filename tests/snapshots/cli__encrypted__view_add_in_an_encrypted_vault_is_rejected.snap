@@ -1,0 +1,21 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - view
+    - add
+    - by-tag
+    - "--field"
+    - tags
+  env:
+    EDITOR: "true"
+    NTROPY_IDENTITY: test-identity.txt
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while adding the view: materialized views are disabled in an encrypted vault: a symlink tree would spell out the taxonomy in plaintext names inside the synced directory

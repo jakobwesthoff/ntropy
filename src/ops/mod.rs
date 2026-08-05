@@ -19,7 +19,7 @@ pub mod view_admin;
 pub use create::{TodayOutcome, create_note, today_note};
 pub use delete::delete_note;
 pub use info::{VaultStats, vault_stats};
-pub use init::init_vault;
+pub use init::{InitOptions, InitReport, init_vault, init_vault_with};
 pub use select::{Candidate, Matches, resolve_selection, search, to_candidates};
 pub use tags::{TagCount, list_tags};
 pub use view_admin::{ViewAdminError, add_view, list_views, remove_view};

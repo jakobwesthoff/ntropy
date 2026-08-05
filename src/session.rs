@@ -76,7 +76,7 @@ impl VaultSession {
     /// this: encrypting a new note needs only the public recipient, which is
     /// what lets `ntropy new` work on a locked vault.
     pub fn is_unlocked(&self) -> bool {
-        self.cipher.can_read()
+        self.cipher.readable().is_ok()
     }
 }
 

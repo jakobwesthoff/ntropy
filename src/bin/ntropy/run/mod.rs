@@ -11,9 +11,13 @@
 
 mod editor;
 mod interact;
+#[cfg(feature = "encryption")]
+mod keys;
 mod lsp;
 mod output;
 mod picker;
+#[cfg(feature = "encryption")]
+mod prompt;
 mod render;
 
 use std::io::{BufRead, Write};
@@ -30,7 +34,7 @@ use ntropy::scan::ScanWarning;
 use ntropy::session::VaultSession;
 use ntropy::vault::{ResolveOptions, Vault, layout, resolve};
 
-use crate::cli::{Cli, Command, GlobalArgs, ViewCommand, join};
+use crate::cli::{Cli, Command, GlobalArgs, VaultCommand, ViewCommand, join};
 
 /// Run the parsed CLI to completion, returning the process exit code.
 pub fn run(cli: Cli) -> Result<ExitCode> {
@@ -43,8 +47,13 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
 
     // `init` is the one command that does not operate on an already-resolved
     // vault, so it is handled before resolution.
-    if let Command::Init { path, set_default } = command {
-        return cmd_init(path, cli.global.vault.clone(), set_default);
+    if let Command::Init {
+        path,
+        set_default,
+        encrypted,
+    } = command
+    {
+        return cmd_init(&cli.global, path, set_default, encrypted);
     }
 
     // `info` resolves the vault itself so it can report which rule matched.
@@ -94,6 +103,9 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             interactive,
         ),
         Command::View(sub) => cmd_view(&session, sub),
+        Command::Unlock => cmd_unlock(&cli.global),
+        Command::Lock => cmd_lock(&cli.global),
+        Command::Vault { command } => cmd_vault(&cli.global, command),
         Command::Tags => cmd_tags(&cli.global, &session),
         // Handled above, before vault resolution.
         Command::Info { .. } => unreachable!("info is dispatched before vault resolution"),
@@ -128,24 +140,50 @@ fn resolve_vault(global: &GlobalArgs) -> Result<Vault> {
 /// Resolve the vault and open a session for reading and writing its notes.
 fn open_session(global: &GlobalArgs) -> Result<VaultSession> {
     let vault = resolve_vault(global)?;
+    session_for(global, vault)
+}
+
+/// Open a session over an already-resolved vault.
+#[cfg(feature = "encryption")]
+fn session_for(global: &GlobalArgs, vault: Vault) -> Result<VaultSession> {
+    keys::KeyContext::from_args(global).open(vault)
+}
+
+/// Open a session with no way to read an encrypted vault.
+///
+/// The session still recognizes which files are notes, so an encrypted vault
+/// reports the missing support once instead of warning about every file.
+#[cfg(not(feature = "encryption"))]
+fn session_for(_global: &GlobalArgs, vault: Vault) -> Result<VaultSession> {
     if layout::is_encrypted(vault.root()) {
-        // Key acquisition arrives with the encryption commands. Until then an
-        // encrypted vault opens into a session that says it cannot be read,
-        // rather than one that would hand ciphertext to the Markdown parser.
         return Ok(VaultSession::unsupported(vault));
     }
     Ok(VaultSession::plaintext(vault))
+}
+
+/// The error a build compiled without encryption support reports.
+#[cfg(not(feature = "encryption"))]
+fn encryption_unsupported() -> anyhow::Error {
+    anyhow!(
+        "this build of ntropy was compiled without encryption support \
+         (rebuild with `--features encryption`)"
+    )
 }
 
 // =============================================================================
 // Commands
 // =============================================================================
 
-fn cmd_init(path: Option<PathBuf>, vault: Option<PathBuf>, set_default: bool) -> Result<ExitCode> {
+fn cmd_init(
+    global: &GlobalArgs,
+    path: Option<PathBuf>,
+    set_default: bool,
+    encrypted: bool,
+) -> Result<ExitCode> {
     // The positional path and the global `--vault` are two ways to name the same
     // target, so requiring exactly one keeps the destination unambiguous. With
     // neither, `init` scaffolds the current directory.
-    let target = match (path, vault) {
+    let target = match (path, global.vault.clone()) {
         (Some(_), Some(_)) => {
             bail!("pass the target as either `--vault` or the positional path, not both")
         }
@@ -153,7 +191,8 @@ fn cmd_init(path: Option<PathBuf>, vault: Option<PathBuf>, set_default: bool) ->
         (None, Some(v)) => v,
         (None, None) => std::env::current_dir().context("while reading the current directory")?,
     };
-    let report = ops::init_vault(&target).context("while initializing the vault")?;
+    let options = init_options(global, encrypted, &target)?;
+    let report = ops::init_vault_with(&target, &options).context("while initializing the vault")?;
 
     let touched_gitignore =
         !report.gitignore_added.is_empty() || !report.gitignore_removed.is_empty();
@@ -163,6 +202,10 @@ fn cmd_init(path: Option<PathBuf>, vault: Option<PathBuf>, set_default: bool) ->
         println!("Initialized vault at {}", report.root.display());
     }
     report_gitignore_changes(&report.gitignore_added, &report.gitignore_removed);
+    if let Some(recipient) = &report.recipient {
+        println!("Encryption:    on");
+        println!("Recipient:     {recipient}");
+    }
 
     if set_default {
         let canonical = std::fs::canonicalize(&report.root).unwrap_or_else(|_| report.root.clone());
@@ -170,6 +213,87 @@ fn cmd_init(path: Option<PathBuf>, vault: Option<PathBuf>, set_default: bool) ->
         println!("Set as default vault.");
     }
     Ok(ExitCode::SUCCESS)
+}
+
+// =============================================================================
+// Encryption commands
+// =============================================================================
+//
+// These are compiled into both feature configurations so `--help` is identical
+// whichever way ntropy was built, and a stripped binary answers with a clear
+// message rather than "unrecognized subcommand" (ADR 0041).
+
+/// Build the init options, obtaining a passphrase when one is called for.
+#[cfg(feature = "encryption")]
+fn init_options(global: &GlobalArgs, encrypted: bool, target: &Path) -> Result<ops::InitOptions> {
+    if !encrypted {
+        return Ok(ops::InitOptions::default());
+    }
+    // Re-running `init --encrypted` on a vault that already has a keypair must
+    // not ask for a passphrase it would then discard: the existing key is kept.
+    if layout::is_encrypted(target) {
+        return Ok(ops::InitOptions::default());
+    }
+    let label = target.display().to_string();
+    Ok(ops::InitOptions {
+        encrypt_with: Some(keys::KeyContext::from_args(global).new_passphrase(&label)?),
+    })
+}
+
+#[cfg(not(feature = "encryption"))]
+fn init_options(_global: &GlobalArgs, encrypted: bool, _target: &Path) -> Result<ops::InitOptions> {
+    if encrypted {
+        return Err(encryption_unsupported());
+    }
+    Ok(ops::InitOptions::default())
+}
+
+#[cfg(feature = "encryption")]
+fn cmd_unlock(global: &GlobalArgs) -> Result<ExitCode> {
+    let vault = resolve_vault(global)?;
+    let recipient = keys::KeyContext::from_args(global).unlock(&vault)?;
+    println!("Unlocked {} ({recipient}).", vault.root().display());
+    Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(feature = "encryption")]
+fn cmd_lock(global: &GlobalArgs) -> Result<ExitCode> {
+    let vault = resolve_vault(global)?;
+    let (recipient, removed) = keys::KeyContext::from_args(global).lock(&vault)?;
+    if removed {
+        println!("Locked {} ({recipient}).", vault.root().display());
+    } else {
+        println!("{} was already locked.", vault.root().display());
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+#[cfg(not(feature = "encryption"))]
+fn cmd_unlock(_global: &GlobalArgs) -> Result<ExitCode> {
+    Err(encryption_unsupported())
+}
+
+#[cfg(not(feature = "encryption"))]
+fn cmd_lock(_global: &GlobalArgs) -> Result<ExitCode> {
+    Err(encryption_unsupported())
+}
+
+fn cmd_vault(_global: &GlobalArgs, command: VaultCommand) -> Result<ExitCode> {
+    // The conversions land with the migration machinery; until then every
+    // variant is named so this match stays exhaustive and the flags stay read.
+    match command {
+        VaultCommand::Encrypt { resume, yes }
+        | VaultCommand::Decrypt { resume, yes }
+        | VaultCommand::Rekey { resume, yes } => {
+            let _ = (resume, yes);
+        }
+        VaultCommand::Passphrase {
+            new_passphrase_file,
+        } => {
+            let _ = new_passphrase_file;
+        }
+    }
+    bail!("this command is not implemented yet")
 }
 
 fn cmd_search(
@@ -423,12 +547,7 @@ fn cmd_info(global: &GlobalArgs, print: bool) -> Result<ExitCode> {
 
     // `info` resolves the vault itself (to report which rule matched), so it
     // opens its own session rather than taking the one dispatch built.
-    let vault = Vault::new(root);
-    let session = if layout::is_encrypted(vault.root()) {
-        VaultSession::unsupported(vault)
-    } else {
-        VaultSession::plaintext(vault)
-    };
+    let session = session_for(global, Vault::new(root))?;
     let stats = ops::vault_stats(&session, TOP_TAGS).context("while gathering vault info")?;
     output::print_info(&session, &source, opts.global_default.as_deref(), &stats);
     Ok(ExitCode::SUCCESS)

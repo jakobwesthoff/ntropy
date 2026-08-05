@@ -80,6 +80,11 @@ pub enum Error {
     #[error(transparent)]
     #[cfg(feature = "encryption")]
     Crypto(#[from] crate::crypto::CryptoError),
+
+    /// A vault's identity could not be obtained or stored.
+    #[error(transparent)]
+    #[cfg(feature = "encryption")]
+    Key(#[from] crate::keys::KeyError),
 }
 
 /// Convenience alias for results carrying the crate [`Error`].
