@@ -165,6 +165,18 @@ pub fn cmd_render(
     let cwd = std::env::current_dir().context("while resolving the current directory")?;
     let absolute_output = absolutize(&output_path, &cwd);
 
+    // A rendered artifact is plaintext by nature. The common accident is a
+    // shell whose working directory happens to be the vault, where the default
+    // `./<name>.pdf` would drop a readable copy of the note straight into the
+    // synced directory.
+    if lands_inside_vault(session.root(), &absolute_output) && session.is_encrypted() {
+        eprintln!(
+            "warning: `{}` is inside an encrypted vault; the artifact is not \
+             encrypted and will sync as plaintext",
+            output_path.display()
+        );
+    }
+
     let mut ctx =
         ProcessContext::new(absolute_output).context("while creating the render workspace")?;
     renderer
@@ -239,6 +251,15 @@ impl Drop for SigpipeIgnoredScope {
 ///
 /// The engine receives the absolute form so its tool's working directory cannot
 /// change where the artifact lands; the user still sees the path as given.
+/// Whether `output` would be written inside `vault_root`.
+///
+/// Component-wise, which `Path::starts_with` already is: a sibling directory
+/// whose name merely begins with the vault's — `/v/vault-notes` beside
+/// `/v/vault` — is not inside it.
+fn lands_inside_vault(vault_root: &Path, output: &Path) -> bool {
+    output.starts_with(vault_root)
+}
+
 fn absolutize(path: &Path, cwd: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -310,7 +331,10 @@ struct ProcessContext {
 
 impl ProcessContext {
     fn new(output: PathBuf) -> std::io::Result<Self> {
-        let staging = tempfile::TempDir::new()?;
+        // Staged in the runtime directory rather than wherever `TempDir`
+        // defaults to, so an encrypted note's body never lands somewhere the
+        // rest of the system can read while an engine works on it (ADR 0041).
+        let staging = tempfile::TempDir::new_in(super::securetemp::runtime_dir())?;
         Ok(Self {
             staging,
             output,
@@ -452,6 +476,45 @@ impl RenderContext for ProcessContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_output_inside_the_vault_is_detected() {
+        assert!(lands_inside_vault(
+            Path::new("/v/vault"),
+            Path::new("/v/vault/report.pdf")
+        ));
+        assert!(lands_inside_vault(
+            Path::new("/v/vault"),
+            Path::new("/v/vault/sub/report.pdf")
+        ));
+    }
+
+    #[test]
+    fn an_output_outside_the_vault_is_not() {
+        assert!(!lands_inside_vault(
+            Path::new("/v/vault"),
+            Path::new("/tmp/report.pdf")
+        ));
+    }
+
+    #[test]
+    fn a_sibling_sharing_a_name_prefix_is_not_inside() {
+        // `Path::starts_with` compares components, not characters. A string
+        // comparison would call this a hit and warn about a directory that has
+        // nothing to do with the vault.
+        assert!(!lands_inside_vault(
+            Path::new("/v/vault"),
+            Path::new("/v/vault-notes/report.pdf")
+        ));
+    }
+
+    #[test]
+    fn the_vault_root_itself_counts_as_inside() {
+        assert!(lands_inside_vault(
+            Path::new("/v/vault"),
+            Path::new("/v/vault")
+        ));
+    }
 
     #[test]
     fn default_output_path_joins_slug_and_extension() {

@@ -53,6 +53,29 @@ surface, preparation, and execution model.
 - `render` is read-only with respect to the vault: nothing was edited, so
   there is no filename realignment and no view refresh.
 
+### Encrypted vaults
+
+A note in an encrypted vault is decrypted in memory like any other read, so the
+engines see the same `PreparedDocument` either way and know nothing about
+encryption ([encryption.md](encryption.md)). Two things do differ.
+
+The render workspace is staged in the runtime directory — `$XDG_RUNTIME_DIR`
+where one exists, otherwise the system temp directory — rather than wherever a
+temporary directory would otherwise land. Nothing an engine works on is written
+inside the vault, so a sync provider never sees a note's body in the clear.
+
+The artifact itself is plaintext by nature. When the resolved output path lies
+inside an encrypted vault the render proceeds and prints a one-line warning to
+stderr. The common accident is a shell whose working directory happens to be
+the vault, where the default `./<name>.pdf` would drop a readable copy of the
+note straight into the synced directory. The warning is advisory and does not
+affect the exit code: it concerns where the user chose to put the artifact, not
+anything the engine failed to carry.
+
+The default artifact name comes from the note's slug, which in an encrypted
+vault is derived from the decrypted title rather than read from the filename.
+The result is the name a plaintext vault would have produced.
+
 ## Formats and engines
 
 A **format** is the artifact kind the user asks for (`pdf`, `typst`). An

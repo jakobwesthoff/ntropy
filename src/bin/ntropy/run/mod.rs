@@ -9,6 +9,7 @@
 //! picker and editor, confirmation prompts, and translating outcomes into exit
 //! codes. Each command resolves to one or more `ops::` calls plus presentation.
 
+mod edit;
 mod editor;
 mod interact;
 #[cfg(feature = "encryption")]
@@ -19,6 +20,7 @@ mod picker;
 #[cfg(feature = "encryption")]
 mod prompt;
 mod render;
+mod securetemp;
 #[cfg(feature = "encryption")]
 mod vault_cmd;
 
@@ -411,9 +413,13 @@ fn cmd_new(
         .context("while creating the note")?;
 
     // Open the editor only when interactive and not explicitly suppressed;
-    // otherwise create-and-print for scripting (ADR 0015).
+    // otherwise create-and-print for scripting (ADR 0015). The note was just
+    // rendered, so its content is handed straight to the editor rather than
+    // read back — which in an encrypted vault would mean decrypting something
+    // written moments earlier.
     if !print && interactive {
-        open_and_refresh(session, &note.path)?;
+        let initial = format!("{}{}", note.raw_header, note.body);
+        open_and_refresh_from(session, &note.path, Some(&initial))?;
     } else {
         reconcile::refresh_views(session).context("while refreshing views")?;
         println!("{}", note.path.display());
@@ -427,7 +433,12 @@ fn cmd_today(session: &VaultSession, print: bool, interactive: bool) -> Result<E
     // Mirror `new`: open interactively unless suppressed, otherwise refresh views
     // and print the path for scripting (ADR 0015).
     if !print && interactive {
-        open_and_refresh(session, &outcome.note.path)?;
+        // A freshly created note is handed its own content; an existing one is
+        // read through the vault's cipher like any other edit.
+        let initial = outcome
+            .created
+            .then(|| format!("{}{}", outcome.note.raw_header, outcome.note.body));
+        open_and_refresh_from(session, &outcome.note.path, initial.as_deref())?;
     } else {
         reconcile::refresh_views(session).context("while refreshing views")?;
         println!("{}", outcome.note.path.display());
@@ -607,9 +618,27 @@ fn cmd_tags(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode> {
 /// never renamed silently (ADR 0004); the view sync then reflects any title
 /// or tag change made during the edit.
 fn open_and_refresh(session: &VaultSession, path: &Path) -> Result<()> {
-    editor::open(path)?;
+    open_and_refresh_from(session, path, None)
+}
+
+/// Open a note in the editor, then realign its filename and sync views.
+///
+/// `initial` is the content the caller already holds, letting `new` and `today`
+/// skip decrypting a note they just wrote.
+///
+/// A failed edit still runs the post-processing when the note was written: the
+/// error is reported afterwards, so a `:cq` that saved first behaves as it does
+/// in a plaintext vault (ADR 0041).
+fn open_and_refresh_from(session: &VaultSession, path: &Path, initial: Option<&str>) -> Result<()> {
+    let hint = session.is_encrypted().then(|| session.root().to_path_buf());
+    let launcher = |target: &Path| editor::open(target, hint.as_deref());
+
+    let outcome = edit::edit_note(session, path, initial, &launcher);
+    // Realign and refresh regardless of how the edit ended, so a note that was
+    // written still gets its filename and views brought into step.
     reconcile::realign(session, path).context("while realigning the edited note")?;
     reconcile::refresh_views(session).context("while refreshing views")?;
+    outcome?;
     Ok(())
 }
 
