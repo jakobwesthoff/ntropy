@@ -97,6 +97,41 @@ hand.
   at its file. With `nucleo` ranking the query, this is a command-palette jump to
   any note by title across the vault.
 
+## Encrypted vaults
+
+The server works the same way against an encrypted vault
+([encryption.md](encryption.md)), with four adaptations.
+
+**Finding the vault.** An encrypted note is edited through a decrypted file
+outside the vault, which resolves to no vault on its own. ntropy sets
+`$NTROPY_VAULT_HINT` when it launches an editor, and the server that editor
+starts inherits it and uses it as the fallback. The hint only ever fills a gap:
+a document that resolves to its own vault keeps it, so an editor started in one
+vault still behaves correctly on a document from another.
+
+**Reading the notes.** The cache decrypts in memory, taking the identity from
+the same retrieval chain every command uses, minus the prompt — the server has
+no controlling terminal and must never block an editor waiting for a
+passphrase. On a locked vault it stays inert until an unlock happens elsewhere.
+The identity is fetched fresh on every rebuild rather than held, so `ntropy
+lock` in another terminal takes effect here too, and a locked vault is never
+cached as an empty one: an empty cache entry would be indistinguishable from a
+legitimately empty vault and nothing would ever invalidate it.
+
+**Watching.** The server registers `**/*.age` alongside `**/*.md`, so
+ciphertext changes trigger the usual rescan.
+
+**Opening a note.** Goto-definition, document links and workspace symbols all
+name a file for the editor to open, and in an encrypted vault that file is
+ciphertext. Each target is instead materialized as a decrypted copy in the
+runtime directory, mode `0400`, reused per note across jumps and removed when
+the server exits. Following a link therefore works for reading; editing still
+goes through `ntropy search`. The read-only mode is what makes an editor refuse
+the save rather than silently discard it.
+
+Completion inserts the link-target form, `<ulid>-<slug>.md`, which in an
+encrypted vault is deliberately not the note's filename.
+
 ## Trying it in Neovim
 
 A minimal smoke test on a recent Neovim attaches the server to Markdown buffers

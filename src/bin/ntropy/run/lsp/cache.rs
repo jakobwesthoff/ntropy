@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use ntropy::id::Id;
 use ntropy::scan;
 use ntropy::session::VaultSession;
-use ntropy::vault::{Vault, layout};
+use ntropy::vault::Vault;
 
 /// A note's cached metadata: everything completion and navigation need without
 /// re-reading the file.
@@ -27,7 +27,15 @@ pub struct CacheEntry {
     pub id: Id,
     pub title: String,
     pub tags: Vec<String>,
+    /// Where the note lives on disk: `<ulid>-<slug>.md`, or `<ulid>.age` in an
+    /// encrypted vault.
     pub path: PathBuf,
+    /// What other notes write when linking to this one.
+    ///
+    /// Always the `<ulid>-<slug>.md` form (ADR 0028), which in an encrypted
+    /// vault is *not* the filename. Completion inserts this; anything that
+    /// opens the note uses `path`.
+    pub link_target: String,
 }
 
 /// Lazily-populated note metadata, one bucket per vault root.
@@ -48,9 +56,19 @@ impl Cache {
     /// them.
     pub fn entries(&mut self, vault: &Vault) -> &[CacheEntry] {
         let root = vault.root().to_path_buf();
-        self.by_root
-            .entry(root)
-            .or_insert_with(|| scan_entries(vault))
+        if !self.by_root.contains_key(&root) {
+            match scan_entries(vault) {
+                // A locked vault is not cached. Storing its empty result would
+                // mean an `ntropy unlock` in another terminal never took
+                // effect here, because nothing would ever invalidate an entry
+                // that looks like a legitimately empty vault.
+                Scanned::Locked => return &[],
+                Scanned::Entries(entries) => {
+                    self.by_root.insert(root.clone(), entries);
+                }
+            }
+        }
+        self.by_root.get(&root).map(Vec::as_slice).unwrap_or(&[])
     }
 
     /// Every cached entry across all populated vault roots.
@@ -73,29 +91,85 @@ impl Cache {
     }
 }
 
-/// Scan a vault's `all-notes/` into cache entries, or an empty set on error.
+/// What a scan produced, keeping "locked" distinct from "empty".
+enum Scanned {
+    Entries(Vec<CacheEntry>),
+    /// The vault is encrypted and no identity was available.
+    Locked,
+}
+
+/// Scan a vault's `all-notes/` into cache entries.
 ///
-/// Key acquisition for the server arrives with the language-server work; until
-/// then an encrypted vault opens into a session that refuses to read, which
-/// yields an empty entry set rather than ciphertext parsed as Markdown.
-fn scan_entries(vault: &Vault) -> Vec<CacheEntry> {
-    let session = if layout::is_encrypted(vault.root()) {
-        VaultSession::unsupported(vault.clone())
-    } else {
-        VaultSession::plaintext(vault.clone())
+/// The identity is fetched fresh every time rather than held: the cache is
+/// rebuilt on every watched-file change anyway, a credential-store read is
+/// negligible beside a full rescan, and caching the key would mean an
+/// `ntropy lock` elsewhere never took effect here (ADR 0041).
+fn scan_entries(vault: &Vault) -> Scanned {
+    let session = match open_session(vault) {
+        Some(session) => session,
+        None => return Scanned::Locked,
     };
     let Ok(scan) = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher()) else {
-        return Vec::new();
+        return Scanned::Entries(Vec::new());
     };
-    scan.notes
-        .into_iter()
-        .map(|note| CacheEntry {
-            id: note.id,
-            title: note.title,
-            tags: note.tags,
-            path: note.path,
-        })
-        .collect()
+    Scanned::Entries(
+        scan.notes
+            .into_iter()
+            .map(|note| CacheEntry {
+                id: note.id,
+                link_target: note.link_target(),
+                title: note.title,
+                tags: note.tags,
+                path: note.path,
+            })
+            .collect(),
+    )
+}
+
+/// Open a readable session over `vault`, or `None` when it is locked.
+///
+/// The server never prompts: it has no controlling terminal, and a language
+/// server that blocked an editor waiting for a passphrase would be worse than
+/// one that stays quiet until an unlock happens elsewhere.
+#[cfg(feature = "encryption")]
+pub(super) fn open_session(vault: &Vault) -> Option<VaultSession> {
+    use std::sync::Arc;
+
+    use ntropy::cipher::AgeCipher;
+    use ntropy::keys::{self, Acquisition, store::KeyringStore};
+
+    let layout = vault.layout();
+    let Ok(Some(recipient)) = keys::read_recipient_at(&layout.identity_pub()) else {
+        return Some(VaultSession::plaintext(vault.clone()));
+    };
+
+    let Ok(store) = KeyringStore::open() else {
+        return None;
+    };
+    let identity_file = std::env::var_os("NTROPY_IDENTITY").map(std::path::PathBuf::from);
+    let wrapped = layout.identity_file();
+    let request = Acquisition {
+        recipient: &recipient,
+        wrapped_identity: &wrapped,
+        identity_file: identity_file.as_deref(),
+        passphrase_file: None,
+        store: &store,
+        prompt: None,
+    };
+    let identity = keys::acquire(&request).ok()??;
+    Some(VaultSession::with_cipher(
+        vault.clone(),
+        Arc::new(AgeCipher::new(recipient, Some(identity))),
+    ))
+}
+
+/// Without encryption support an encrypted vault cannot be opened at all.
+#[cfg(not(feature = "encryption"))]
+pub(super) fn open_session(vault: &Vault) -> Option<VaultSession> {
+    if ntropy::vault::layout::is_encrypted(vault.root()) {
+        return None;
+    }
+    Some(VaultSession::plaintext(vault.clone()))
 }
 
 #[cfg(test)]
@@ -189,5 +263,122 @@ mod tests {
         cache.entries(&vault_a);
         cache.entries(&vault_b);
         assert_eq!(cache.all_entries().len(), 2);
+    }
+
+    /// Caching an encrypted vault.
+    #[cfg(feature = "encryption")]
+    mod encrypted {
+        use super::*;
+        use ntropy::cipher::AgeCipher;
+        use ntropy::crypto::age_io;
+        use ntropy::session::VaultSession;
+        use std::sync::{Arc, Mutex, MutexGuard};
+
+        /// Serializes the tests that set `$NTROPY_IDENTITY`.
+        ///
+        /// The environment is process-wide, so two of these running at once
+        /// would see each other's value. Rust marks `set_var` unsafe for
+        /// exactly this reason.
+        static ENV: Mutex<()> = Mutex::new(());
+
+        /// Point the server's key lookup at `identity` for as long as the
+        /// guard is held.
+        struct EnvGuard(#[allow(dead_code)] MutexGuard<'static, ()>);
+
+        impl EnvGuard {
+            fn set(identity: Option<&std::path::Path>) -> Self {
+                let guard = ENV.lock().unwrap_or_else(|e| e.into_inner());
+                // SAFETY: the mutex makes this the only thread touching the
+                // environment for the duration of the test.
+                unsafe {
+                    match identity {
+                        Some(path) => std::env::set_var("NTROPY_IDENTITY", path),
+                        None => std::env::remove_var("NTROPY_IDENTITY"),
+                    }
+                }
+                Self(guard)
+            }
+        }
+
+        impl Drop for EnvGuard {
+            fn drop(&mut self) {
+                // SAFETY: still holding the mutex.
+                unsafe { std::env::remove_var("NTROPY_IDENTITY") };
+            }
+        }
+
+        /// An encrypted vault holding one note, plus the key that opens it.
+        fn encrypted_vault_with_note() -> (tempfile::TempDir, Vault, PathBuf) {
+            let dir = tempfile::tempdir().expect("temp dir");
+            let root = dir.path();
+            std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
+            std::fs::create_dir_all(root.join(".ntropy")).expect(".ntropy");
+
+            let (identity, recipient) = age_io::generate_keypair();
+            std::fs::write(
+                root.join(".ntropy/identity.pub"),
+                format!("{}\n", recipient.as_str()),
+            )
+            .expect("recipient");
+
+            let session = VaultSession::with_cipher(
+                Vault::new(root),
+                Arc::new(AgeCipher::new(recipient, Some(identity.clone()))),
+            );
+            let note = session.layout().all_notes().join(format!("{ULID_A}.age"));
+            session
+                .cipher()
+                .write(&note, "---\ntitle: Alpha\n---\nbody\n")
+                .expect("write note");
+
+            // The identity file lets the cache open the vault without a
+            // keychain, which is also how a headless test avoids one.
+            let identity_path = root.join("identity.txt");
+            std::fs::write(&identity_path, format!("{}\n", identity.expose_secret()))
+                .expect("identity file");
+
+            let vault = Vault::new(std::fs::canonicalize(root).expect("canonicalize"));
+            (dir, vault, identity_path)
+        }
+
+        #[test]
+        fn a_locked_vault_is_not_cached_as_empty() {
+            // Caching the empty result would mean an `ntropy unlock` in another
+            // terminal never took effect, because nothing would invalidate an
+            // entry indistinguishable from a legitimately empty vault.
+            let (_guard, vault, identity) = encrypted_vault_with_note();
+            let mut cache = Cache::new();
+
+            // Locked: no identity anywhere the server can reach.
+            let env = EnvGuard::set(None);
+            assert!(cache.entries(&vault).is_empty());
+            assert!(
+                !cache.is_populated(vault.root()),
+                "a locked vault must leave the cache untouched"
+            );
+            drop(env);
+
+            // Unlocked elsewhere: the very next access sees the notes.
+            let _env = EnvGuard::set(Some(&identity));
+            assert_eq!(cache.entries(&vault).len(), 1);
+        }
+
+        #[test]
+        fn an_unlocked_vault_yields_its_notes() {
+            let (_guard, vault, identity) = encrypted_vault_with_note();
+            let _env = EnvGuard::set(Some(&identity));
+
+            let mut cache = Cache::new();
+            let entries = cache.entries(&vault);
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].title, "Alpha");
+            // The on-disk name is the ULID alone; the link target carries the
+            // slug, and completion inserts the latter.
+            assert_eq!(
+                entries[0].path.file_name().expect("name"),
+                format!("{ULID_A}.age").as_str()
+            );
+            assert_eq!(entries[0].link_target, format!("{ULID_A}-alpha.md"));
+        }
     }
 }

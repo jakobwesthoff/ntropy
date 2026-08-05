@@ -29,7 +29,38 @@ pub enum Lookup {
 }
 
 /// Resolve the vault for a document URI.
+///
+/// `$NTROPY_VAULT_HINT` is the fallback for a document that resolves to no
+/// vault, which is what an encrypted vault's decrypted temp file always does:
+/// it lives outside the vault by design. ntropy sets the variable when it
+/// launches an editor, and the language server that editor starts inherits it
+/// (ADR 0041).
 pub fn for_document(uri: &Uri) -> Lookup {
+    for_document_with_hint(
+        uri,
+        std::env::var_os("NTROPY_VAULT_HINT")
+            .map(std::path::PathBuf::from)
+            .as_deref(),
+    )
+}
+
+/// The injectable core of [`for_document`], so the fallback is testable
+/// without mutating the process environment.
+pub fn for_document_with_hint(uri: &Uri, hint: Option<&std::path::Path>) -> Lookup {
+    match resolve_from_document(uri) {
+        // The hint only ever fills a gap. A document that resolves to its own
+        // vault keeps it, so an editor started by ntropy in one vault still
+        // works correctly on a document from another.
+        Lookup::None => match hint {
+            Some(root) if ntropy::vault::layout::is_vault(root) => Lookup::Found(Vault::new(root)),
+            _ => Lookup::None,
+        },
+        found => found,
+    }
+}
+
+/// Resolve strictly from the document's own location.
+fn resolve_from_document(uri: &Uri) -> Lookup {
     let Some(path) = uri::to_path(uri) else {
         return Lookup::None;
     };
@@ -115,5 +146,82 @@ mod tests {
             other => panic!("expected Found, got {other:?}"),
         };
         assert_eq!(root(file_uri(&a)), root(file_uri(&b)));
+    }
+
+    #[test]
+    fn a_hint_resolves_a_document_outside_any_vault() {
+        // The case that matters: an encrypted vault's decrypted note is edited
+        // through a file outside the vault, which resolves to nothing on its
+        // own.
+        let vault_dir = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(vault_dir.path().join(".ntropy")).expect(".ntropy");
+        let elsewhere = tempfile::tempdir().expect("temp dir");
+        let document = elsewhere.path().join("01ARZ.md");
+        std::fs::write(&document, "body").expect("write");
+
+        let uri = uri::from_path(&document).expect("uri");
+        match for_document_with_hint(&uri, Some(vault_dir.path())) {
+            Lookup::Found(vault) => assert_eq!(vault.root(), vault_dir.path()),
+            other => panic!("expected the hint to resolve, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_hint_never_overrides_a_document_that_resolves() {
+        // An editor started by ntropy in one vault must still behave correctly
+        // on a document belonging to another.
+        let own = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(own.path().join(".ntropy")).expect(".ntropy");
+        let hinted = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(hinted.path().join(".ntropy")).expect(".ntropy");
+
+        let document = own.path().join("note.md");
+        std::fs::write(&document, "body").expect("write");
+        let uri = uri::from_path(&document).expect("uri");
+
+        match for_document_with_hint(&uri, Some(hinted.path())) {
+            Lookup::Found(vault) => assert_eq!(
+                std::fs::canonicalize(vault.root()).expect("canonical"),
+                std::fs::canonicalize(own.path()).expect("canonical")
+            ),
+            other => panic!("expected the document's own vault, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_hint_that_is_not_a_vault_is_ignored() {
+        let not_a_vault = tempfile::tempdir().expect("temp dir");
+        let elsewhere = tempfile::tempdir().expect("temp dir");
+        let document = elsewhere.path().join("note.md");
+        std::fs::write(&document, "body").expect("write");
+
+        let uri = uri::from_path(&document).expect("uri");
+        assert!(matches!(
+            for_document_with_hint(&uri, Some(not_a_vault.path())),
+            Lookup::None
+        ));
+    }
+
+    #[test]
+    fn a_hint_pointing_nowhere_is_ignored() {
+        let elsewhere = tempfile::tempdir().expect("temp dir");
+        let document = elsewhere.path().join("note.md");
+        std::fs::write(&document, "body").expect("write");
+
+        let uri = uri::from_path(&document).expect("uri");
+        assert!(matches!(
+            for_document_with_hint(&uri, Some(Path::new("/no/such/vault"))),
+            Lookup::None
+        ));
+    }
+
+    #[test]
+    fn no_hint_leaves_an_unresolvable_document_unresolved() {
+        let elsewhere = tempfile::tempdir().expect("temp dir");
+        let document = elsewhere.path().join("note.md");
+        std::fs::write(&document, "body").expect("write");
+
+        let uri = uri::from_path(&document).expect("uri");
+        assert!(matches!(for_document_with_hint(&uri, None), Lookup::None));
     }
 }

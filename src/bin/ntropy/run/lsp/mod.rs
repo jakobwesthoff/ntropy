@@ -12,6 +12,7 @@
 
 mod cache;
 mod completion;
+mod decrypted;
 mod documents;
 mod fuzzy;
 mod navigation;
@@ -174,6 +175,8 @@ struct Server<'c> {
     snippet_support: bool,
     documents: Documents,
     cache: Cache,
+    /// Readable copies of encrypted notes, for anything that opens one.
+    decrypted: decrypted::DecryptedTargets,
 }
 
 impl<'c> Server<'c> {
@@ -190,6 +193,8 @@ impl<'c> Server<'c> {
             snippet_support,
             documents: Documents::new(),
             cache: Cache::new(),
+            decrypted: decrypted::DecryptedTargets::new()
+                .expect("a staging directory for decrypted notes"),
         }
     }
 
@@ -257,37 +262,89 @@ impl<'c> Server<'c> {
     /// Answer a `textDocument/definition` request.
     fn on_definition(&mut self, request: Request) -> Result<()> {
         let id = request.id.clone();
-        let result = serde_json::from_value::<GotoDefinitionParams>(request.params)
-            .ok()
-            .and_then(|params| {
-                let position = params.text_document_position_params;
-                let uri = &position.text_document.uri;
-                let text = self.documents.get(uri)?.to_owned();
-                let vault::Lookup::Found(vault) = vault::for_document(uri) else {
-                    return None;
-                };
-                let entries = self.cache.entries(&vault);
-                let offset = offset::position_to_offset(&text, position.position, self.encoding);
-                navigation::definition(&text, offset, entries)
+        let result = self
+            .definition_target(request.params)
+            .and_then(|(vault, note_id, path)| {
+                // The entry names the file on disk, which in an encrypted vault is
+                // ciphertext. What the editor opens is a decrypted copy instead.
+                let readable = self.readable(&vault, note_id, &path);
+                navigation::definition_response(&readable)
             });
         self.respond_with(id, result)
+    }
+
+    /// Find the note a goto-definition request points at.
+    ///
+    /// Separated so the cache borrow ends before the decrypted-target store is
+    /// touched, both being fields of this server.
+    fn definition_target(
+        &mut self,
+        params: serde_json::Value,
+    ) -> Option<(ntropy::vault::Vault, ntropy::id::Id, std::path::PathBuf)> {
+        let params = serde_json::from_value::<GotoDefinitionParams>(params).ok()?;
+        let position = params.text_document_position_params;
+        let uri = &position.text_document.uri;
+        let text = self.documents.get(uri)?.to_owned();
+        let vault::Lookup::Found(vault) = vault::for_document(uri) else {
+            return None;
+        };
+        let offset = offset::position_to_offset(&text, position.position, self.encoding);
+        let entries = self.cache.entries(&vault);
+        let (note_id, path) = navigation::definition(&text, offset, entries)?;
+        Some((vault, note_id, path))
+    }
+
+    /// A path the editor can actually open for the note at `path`.
+    fn readable(
+        &mut self,
+        vault: &ntropy::vault::Vault,
+        note_id: ntropy::id::Id,
+        path: &std::path::Path,
+    ) -> std::path::PathBuf {
+        match cache::open_session(vault) {
+            Some(session) => self.decrypted.readable_path(&session, note_id, path),
+            // A locked vault cannot be decrypted, so the ciphertext path is
+            // all there is to report.
+            None => path.to_path_buf(),
+        }
     }
 
     /// Answer a `textDocument/documentLink` request.
     fn on_document_link(&mut self, request: Request) -> Result<()> {
         let id = request.id.clone();
-        let result = serde_json::from_value::<DocumentLinkParams>(request.params)
-            .ok()
-            .and_then(|params| {
-                let uri = &params.text_document.uri;
-                let text = self.documents.get(uri)?.to_owned();
-                let vault::Lookup::Found(vault) = vault::for_document(uri) else {
-                    return None;
-                };
-                let entries = self.cache.entries(&vault);
-                Some(navigation::document_links(&text, self.encoding, entries))
+        let result = self
+            .document_link_targets(request.params)
+            .map(|(vault, targets)| {
+                targets
+                    .into_iter()
+                    .filter_map(|(range, note_id, path)| {
+                        let readable = self.readable(&vault, note_id, &path);
+                        navigation::document_link(range, &readable)
+                    })
+                    .collect::<Vec<_>>()
             });
         self.respond_with(id, result)
+    }
+
+    /// The links in a document, before their targets are made openable.
+    #[allow(clippy::type_complexity)]
+    fn document_link_targets(
+        &mut self,
+        params: serde_json::Value,
+    ) -> Option<(
+        ntropy::vault::Vault,
+        Vec<(lsp_types::Range, ntropy::id::Id, std::path::PathBuf)>,
+    )> {
+        let params = serde_json::from_value::<DocumentLinkParams>(params).ok()?;
+        let uri = &params.text_document.uri;
+        let text = self.documents.get(uri)?.to_owned();
+        let vault::Lookup::Found(vault) = vault::for_document(uri) else {
+            return None;
+        };
+        let encoding = self.encoding;
+        let entries = self.cache.entries(&vault);
+        let targets = navigation::document_links(&text, encoding, entries);
+        Some((vault, targets))
     }
 
     /// Answer a `workspace/symbol` request over every touched vault.
@@ -296,11 +353,25 @@ impl<'c> Server<'c> {
         let result = serde_json::from_value::<WorkspaceSymbolParams>(request.params)
             .ok()
             .map(|params| {
-                let entries = self.cache.all_entries();
-                WorkspaceSymbolResponse::Nested(navigation::workspace_symbols(
-                    &params.query,
-                    &entries,
-                ))
+                let ranked = {
+                    let entries = self.cache.all_entries();
+                    navigation::workspace_symbols(&params.query, &entries)
+                };
+                // Symbols span every vault the session has touched, so each
+                // target is resolved against the vault it came from.
+                let symbols = ranked
+                    .into_iter()
+                    .filter_map(|(note_id, path, title)| {
+                        // `all-notes/<file>` sits two levels below the root.
+                        let vault = path
+                            .parent()
+                            .and_then(|dir| dir.parent())
+                            .map(ntropy::vault::Vault::new)?;
+                        let readable = self.readable(&vault, note_id, &path);
+                        navigation::symbol(&title, &readable)
+                    })
+                    .collect();
+                WorkspaceSymbolResponse::Nested(symbols)
             });
         self.respond_with(id, result)
     }
@@ -390,14 +461,30 @@ impl<'c> Server<'c> {
     /// Drop the cached entries for a document's vault so the next read rescans.
     fn refresh_vault(&mut self, uri: &Uri) -> Result<()> {
         match vault::for_document(uri) {
-            vault::Lookup::Found(found) => self.cache.invalidate(found.root()),
+            vault::Lookup::Found(found) => {
+                // A build without encryption support cannot read an encrypted
+                // vault at all, and silently serving nothing would look like an
+                // empty vault. Saying so once, when the document is opened, is
+                // the only chance to explain it.
+                #[cfg(not(feature = "encryption"))]
+                if ntropy::vault::layout::is_encrypted(found.root()) {
+                    self.show_error(
+                        "this vault is encrypted, but this build of ntropy was compiled \
+                         without encryption support",
+                    )?;
+                }
+                self.cache.invalidate(found.root());
+            }
             vault::Lookup::Broken(message) => self.show_error(&message)?,
             vault::Lookup::None => {}
         }
         Ok(())
     }
 
-    /// Ask the client to watch `**/*.md` so on-disk changes refresh the cache.
+    /// Ask the client to watch note files so on-disk changes refresh the cache.
+    ///
+    /// Both storage forms, because an encrypted vault's notes are `*.age` and
+    /// would otherwise change without the server ever hearing about it.
     fn register_watchers(&self) -> Result<()> {
         if !self.dynamic_watchers {
             return Ok(());
@@ -406,7 +493,12 @@ impl<'c> Server<'c> {
             "registrations": [{
                 "id": "ntropy-watched-files",
                 "method": "workspace/didChangeWatchedFiles",
-                "registerOptions": { "watchers": [{ "globPattern": "**/*.md" }] },
+                "registerOptions": {
+                    "watchers": [
+                        { "globPattern": "**/*.md" },
+                        { "globPattern": "**/*.age" },
+                    ],
+                },
             }],
         });
         let request = Request {
@@ -608,10 +700,11 @@ mod tests {
         assert_eq!(register.method, "client/registerCapability");
         let registration = &register.params["registrations"][0];
         assert_eq!(registration["method"], "workspace/didChangeWatchedFiles");
-        assert_eq!(
-            registration["registerOptions"]["watchers"][0]["globPattern"],
-            "**/*.md"
-        );
+        let watchers = &registration["registerOptions"]["watchers"];
+        assert_eq!(watchers[0]["globPattern"], "**/*.md");
+        // An encrypted vault's notes are `*.age`; without this the server
+        // would never hear about them changing.
+        assert_eq!(watchers[1]["globPattern"], "**/*.age");
         shutdown(&client, handle);
     }
 

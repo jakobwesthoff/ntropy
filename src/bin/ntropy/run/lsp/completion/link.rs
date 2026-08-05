@@ -123,7 +123,11 @@ fn detect(text: &str, offset: usize) -> Option<Context> {
     None
 }
 
-/// The fuzzy haystack for an entry: its title, tags and filename.
+/// The fuzzy haystack for an entry: its title, tags and link target.
+///
+/// The link target rather than the on-disk filename, so that in an encrypted
+/// vault — where the filename is a bare ULID — the slug is still something the
+/// user can match against.
 fn haystack(entry: &CacheEntry) -> String {
     format!(
         "{} {} {}",
@@ -133,13 +137,14 @@ fn haystack(entry: &CacheEntry) -> String {
     )
 }
 
-/// The entry's on-disk filename, which is the link target within `all-notes/`.
+/// What gets inserted as the link target.
+///
+/// The `<ulid>-<slug>.md` form of ADR 0028, which in an encrypted vault is not
+/// the note's filename. Inserting the filename there would write `.age` into
+/// note bodies and strip every link of the slug that makes it clickable once
+/// the vault is decrypted again.
 fn filename(entry: &CacheEntry) -> String {
-    entry
-        .path
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default()
+    entry.link_target.clone()
 }
 
 /// Build the completion item for one entry.
@@ -207,6 +212,7 @@ mod tests {
             title: title.to_owned(),
             tags: tags.iter().map(|t| (*t).to_owned()).collect(),
             path: PathBuf::from(format!("/v/all-notes/{ulid}-{slug}.md")),
+            link_target: format!("{ulid}-{slug}.md"),
         }
     }
 

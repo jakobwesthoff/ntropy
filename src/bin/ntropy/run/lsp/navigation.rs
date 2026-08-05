@@ -15,6 +15,9 @@ use lsp_types::{
     WorkspaceSymbol,
 };
 
+use std::path::{Path, PathBuf};
+
+use ntropy::id::Id;
 use ntropy::link;
 use ntropy::note::frontmatter;
 
@@ -29,11 +32,7 @@ fn file_start() -> Range {
 }
 
 /// Resolve the link under the cursor to its target note's location.
-pub fn definition(
-    text: &str,
-    offset: usize,
-    entries: &[CacheEntry],
-) -> Option<GotoDefinitionResponse> {
+pub fn definition(text: &str, offset: usize, entries: &[CacheEntry]) -> Option<(Id, PathBuf)> {
     let body = frontmatter::split(text).body;
     let body_start = text.len() - body.len();
     if offset < body_start {
@@ -42,7 +41,16 @@ pub fn definition(
     let links = link::extract(body);
     let link = link::at_offset(&links, offset - body_start)?;
     let entry = entries.iter().find(|entry| entry.id == link.id)?;
-    let location = Location::new(uri::from_path(&entry.path)?, file_start());
+    Some((entry.id, entry.path.clone()))
+}
+
+/// Build the goto-definition response for an already-resolved target.
+///
+/// Split from the lookup so the caller can decide *which file* to open: in an
+/// encrypted vault that is a decrypted copy, not the ciphertext the entry
+/// names (ADR 0041).
+pub fn definition_response(path: &Path) -> Option<GotoDefinitionResponse> {
+    let location = Location::new(uri::from_path(path)?, file_start());
     Some(GotoDefinitionResponse::Scalar(location))
 }
 
@@ -50,42 +58,50 @@ pub fn definition(
 ///
 /// Dangling links (whose ULID resolves to no note) are omitted so no broken
 /// target is offered; links in code are never extracted.
-pub fn document_links(text: &str, encoding: Encoding, entries: &[CacheEntry]) -> Vec<DocumentLink> {
+pub fn document_links(
+    text: &str,
+    encoding: Encoding,
+    entries: &[CacheEntry],
+) -> Vec<(Range, Id, PathBuf)> {
     let body = frontmatter::split(text).body;
     let body_start = text.len() - body.len();
     link::extract(body)
         .into_iter()
         .filter_map(|link| {
             let entry = entries.iter().find(|entry| entry.id == link.id)?;
-            let target = uri::from_path(&entry.path)?;
             let range = Range::new(
                 offset::offset_to_position(text, body_start + link.range.start, encoding),
                 offset::offset_to_position(text, body_start + link.range.end, encoding),
             );
-            Some(DocumentLink {
-                range,
-                target: Some(target),
-                tooltip: None,
-                data: None,
-            })
+            Some((range, entry.id, entry.path.clone()))
         })
         .collect()
 }
 
+/// Turn a resolved link target into a clickable document link.
+pub fn document_link(range: Range, path: &Path) -> Option<DocumentLink> {
+    Some(DocumentLink {
+        range,
+        target: Some(uri::from_path(path)?),
+        tooltip: None,
+        data: None,
+    })
+}
+
 /// Every note as a workspace symbol, fuzzy-ranked by title for a non-empty
 /// query and newest-first (cache order) for an empty one.
-pub fn workspace_symbols(query: &str, entries: &[&CacheEntry]) -> Vec<WorkspaceSymbol> {
+pub fn workspace_symbols(query: &str, entries: &[&CacheEntry]) -> Vec<(Id, PathBuf, String)> {
     fuzzy::rank(query, entries, |entry| entry.title.clone())
         .into_iter()
-        .filter_map(|entry| symbol(entry))
+        .map(|entry| (entry.id, entry.path.clone(), entry.title.clone()))
         .collect()
 }
 
 /// Build a workspace symbol for a note, or `None` if its path has no URI.
-fn symbol(entry: &CacheEntry) -> Option<WorkspaceSymbol> {
-    let location = Location::new(uri::from_path(&entry.path)?, file_start());
+pub fn symbol(title: &str, path: &Path) -> Option<WorkspaceSymbol> {
+    let location = Location::new(uri::from_path(path)?, file_start());
     Some(WorkspaceSymbol {
-        name: entry.title.clone(),
+        name: title.to_owned(),
         kind: SymbolKind::FILE,
         tags: None,
         container_name: None,
@@ -109,6 +125,7 @@ mod tests {
             title: title.to_owned(),
             tags: Vec::new(),
             path: PathBuf::from(format!("/v/all-notes/{ulid}-{slug}.md")),
+            link_target: format!("{ulid}-{slug}.md"),
         }
     }
 
@@ -119,9 +136,9 @@ mod tests {
         ]
     }
 
-    fn target(response: &GotoDefinitionResponse) -> &str {
+    fn target(response: &GotoDefinitionResponse) -> String {
         match response {
-            GotoDefinitionResponse::Scalar(location) => location.uri.as_str(),
+            GotoDefinitionResponse::Scalar(location) => location.uri.as_str().to_owned(),
             other => panic!("expected a scalar location, got {other:?}"),
         }
     }
@@ -130,7 +147,13 @@ mod tests {
     fn definition_jumps_to_the_linked_note() {
         let text = format!("see [Quarterly]({ULID_A}-quarterly.md) here");
         let offset = text.find("Quarterly]").expect("inside the link");
-        let response = definition(&text, offset, &entries()).expect("definition");
+        let (id, path) = definition(&text, offset, &entries()).expect("definition");
+        assert_eq!(id.to_string(), ULID_A);
+        assert!(path.ends_with(format!("{ULID_A}-quarterly.md")));
+
+        // The response is built from whatever path the caller decided to open,
+        // which in an encrypted vault is a decrypted copy rather than the note.
+        let response = definition_response(&path).expect("response");
         assert!(target(&response).ends_with(&format!("{ULID_A}-quarterly.md")));
     }
 
@@ -163,9 +186,11 @@ mod tests {
         let links = document_links(&text, Encoding::Utf8, &entries());
         // Only the first link resolves; the dangling one and the in-code one drop.
         assert_eq!(links.len(), 1);
+        assert!(links[0].2.ends_with(format!("{ULID_A}-quarterly.md")));
+
+        let link = document_link(links[0].0, &links[0].2).expect("link");
         assert!(
-            links[0]
-                .target
+            link.target
                 .as_ref()
                 .unwrap()
                 .as_str()
@@ -177,7 +202,7 @@ mod tests {
     fn document_link_range_is_document_relative() {
         let text = format!("xy [a]({ULID_A}-quarterly.md)");
         let links = document_links(&text, Encoding::Utf8, &entries());
-        assert_eq!(links[0].range.start, Position::new(0, 3));
+        assert_eq!(links[0].0.start, Position::new(0, 3));
     }
 
     #[test]
@@ -197,10 +222,13 @@ mod tests {
     fn workspace_symbols_filters_by_title() {
         let entries = entries();
         let refs: Vec<&CacheEntry> = entries.iter().collect();
-        let symbols = workspace_symbols("rust", &refs);
-        assert_eq!(symbols.len(), 1);
-        assert_eq!(symbols[0].name, "Rust Notes");
-        assert_eq!(symbols[0].kind, SymbolKind::FILE);
+        let ranked = workspace_symbols("rust", &refs);
+        assert_eq!(ranked.len(), 1);
+        assert_eq!(ranked[0].2, "Rust Notes");
+
+        let symbol = symbol(&ranked[0].2, &ranked[0].1).expect("symbol");
+        assert_eq!(symbol.name, "Rust Notes");
+        assert_eq!(symbol.kind, SymbolKind::FILE);
     }
 
     #[test]

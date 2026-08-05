@@ -55,6 +55,7 @@ mod tests {
             title: "T".to_owned(),
             tags: tags.iter().map(|t| (*t).to_owned()).collect(),
             path: PathBuf::from(format!("/v/all-notes/{ulid}-t.md")),
+            link_target: format!("{ulid}-t.md"),
         }
     }
 
