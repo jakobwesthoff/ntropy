@@ -6,10 +6,16 @@
 //!
 //! The scan is stateless: it walks the canonical directory on every query and
 //! parses frontmatter on demand (ADR 0002), with no index to keep in sync. Only
-//! top-level `*.md` files are notes; non-`.md` files and any subdirectory are
-//! resources and ignored silently. A malformed or badly-named top-level `.md`
-//! is skipped with a warning so one bad file never breaks a query; `--strict`
-//! (enforced by callers) promotes the warning set to an error.
+//! top-level files whose extension matches the vault's storage form are notes;
+//! everything else, including any subdirectory, is a resource and ignored
+//! silently. A malformed or badly-named top-level note file is skipped with a
+//! warning so one bad file never breaks a query; `--strict` (enforced by
+//! callers) promotes the warning set to an error.
+//!
+//! Reading goes through the vault's [`NoteCipher`], so an encrypted vault is
+//! scanned by the same code as a plaintext one and the decryption happens
+//! inside the walker's per-entry closures, in parallel with everything else
+//! (ADR 0041).
 //!
 //! Traversal uses `ignore`'s parallel walker with its standard filters disabled
 //! and depth pinned to the top level, so no separate parallelism crate is
@@ -20,6 +26,7 @@ use std::sync::{Arc, Mutex};
 
 use ignore::{WalkBuilder, WalkState};
 
+use crate::cipher::NoteCipher;
 use crate::note::Note;
 
 /// The outcome of scanning a vault's `all-notes/` directory.
@@ -45,6 +52,14 @@ pub struct ScanWarning {
 pub enum ScanError {
     #[error("the notes directory `{}` does not exist", .0.display())]
     NotesDirMissing(PathBuf),
+
+    /// The vault is encrypted and no identity is available.
+    ///
+    /// A whole-scan failure rather than a warning per note: every file would
+    /// fail for the same reason, and burying one actionable message under a
+    /// thousand identical ones helps nobody.
+    #[error("this vault is locked; run `ntropy unlock`")]
+    Locked,
 }
 
 impl Scan {
@@ -54,11 +69,22 @@ impl Scan {
     }
 }
 
-/// Scan the given `all-notes/` directory.
-pub fn scan_notes_dir(all_notes_dir: &Path) -> Result<Scan, ScanError> {
+/// Scan the given `all-notes/` directory, reading notes through `cipher`.
+pub fn scan_notes_dir(all_notes_dir: &Path, cipher: &dyn NoteCipher) -> Result<Scan, ScanError> {
     if !all_notes_dir.is_dir() {
         return Err(ScanError::NotesDirMissing(all_notes_dir.to_path_buf()));
     }
+    if !cipher.can_read() {
+        return Err(ScanError::Locked);
+    }
+
+    let note_ext = cipher.extension();
+    // Only an encrypted vault has a reason to complain about stray Markdown:
+    // there, a plaintext note in the synced directory is the very thing the
+    // vault exists to prevent. In a plaintext vault a stray `.age` file is
+    // just a resource, and warning about it would fire spuriously all through
+    // a crashed conversion.
+    let warn_about_markdown = note_ext != "md";
 
     // The parallel walker hands files to per-thread closures, so collection
     // goes through shared, locked vectors. Contention is negligible: the lock
@@ -92,12 +118,21 @@ pub fn scan_notes_dir(all_notes_dir: &Path) -> Result<Scan, ScanError> {
                 }
 
                 let path = entry.path();
-                if !is_markdown(path) {
-                    // Non-`.md` resources are ignored silently.
+                if !has_extension(path, note_ext) {
+                    if warn_about_markdown && has_extension(path, "md") {
+                        warnings.lock().expect("warnings lock").push(ScanWarning {
+                            path: path.to_path_buf(),
+                            message:
+                                "plaintext Markdown in an encrypted vault; run `ntropy reconcile` \
+                                 to encrypt it in place"
+                                    .to_string(),
+                        });
+                    }
+                    // Everything else is a resource and ignored silently.
                     return WalkState::Continue;
                 }
 
-                match load_note(path) {
+                match load_note(path, cipher) {
                     Ok(note) => notes.lock().expect("notes lock").push(note),
                     Err(message) => warnings.lock().expect("warnings lock").push(ScanWarning {
                         path: path.to_path_buf(),
@@ -125,14 +160,19 @@ pub fn scan_notes_dir(all_notes_dir: &Path) -> Result<Scan, ScanError> {
     Ok(Scan { notes, warnings })
 }
 
-/// Whether a path has a `.md` extension (case-sensitive, as on disk).
-fn is_markdown(path: &Path) -> bool {
-    path.extension().and_then(|e| e.to_str()) == Some("md")
+/// Whether a path carries `extension` (case-sensitive, as on disk).
+fn has_extension(path: &Path, extension: &str) -> bool {
+    path.extension().and_then(|e| e.to_str()) == Some(extension)
 }
 
 /// Read and parse one note file, returning a warning message on any failure.
-fn load_note(path: &Path) -> Result<Note, String> {
-    let content = std::fs::read_to_string(path).map_err(|e| format!("could not read file: {e}"))?;
+///
+/// Reading goes through the cipher rather than `std::fs` so an encrypted note
+/// is decrypted here, in a walker thread, and never reaches the parser as
+/// ciphertext. A file that fails to decrypt becomes one warning and leaves the
+/// rest of the vault usable (ADR 0019).
+fn load_note(path: &Path, cipher: &dyn NoteCipher) -> Result<Note, String> {
+    let content = cipher.read(path).map_err(|e| e.to_string())?;
     let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok();
     Note::parse(path.to_path_buf(), &content, modified).map_err(|e| e.to_string())
 }
@@ -156,10 +196,194 @@ mod tests {
         std::fs::write(dir.join(name), content).expect("write file");
     }
 
+    /// The encrypted-vault counterparts of the plaintext cases above.
+    #[cfg(feature = "encryption")]
+    mod encrypted {
+        use super::*;
+        use crate::cipher::{AgeCipher, NoteCipher};
+        use crate::crypto::age_io;
+
+        /// An unlocked cipher, a locked one for the same vault, and somewhere
+        /// to put notes.
+        fn setup() -> (tempfile::TempDir, PathBuf, AgeCipher, AgeCipher) {
+            let (guard, notes) = temp_notes_dir();
+            let (identity, recipient) = age_io::generate_keypair();
+            let locked = AgeCipher::new(identity.to_public(), None);
+            let unlocked = AgeCipher::new(recipient, Some(identity));
+            (guard, notes, unlocked, locked)
+        }
+
+        fn write_note(dir: &Path, cipher: &AgeCipher, ulid: &str, content: &str) {
+            cipher
+                .write(&dir.join(format!("{ulid}.age")), content)
+                .expect("write encrypted note");
+        }
+
+        #[test]
+        fn scans_encrypted_notes_newest_first() {
+            let (_guard, notes, cipher, _) = setup();
+            write_note(&notes, &cipher, ULID_A, "---\ntitle: Older\n---\nbody\n");
+            write_note(&notes, &cipher, ULID_B, "---\ntitle: Newer\n---\nbody\n");
+
+            let scan = scan_notes_dir(&notes, &cipher).expect("scan");
+            assert_eq!(scan.notes.len(), 2);
+            assert_eq!(scan.notes[0].title, "Newer");
+            assert_eq!(scan.notes[1].title, "Older");
+            assert!(scan.warnings.is_empty());
+        }
+
+        #[test]
+        fn a_locked_vault_fails_once_rather_than_warning_per_note() {
+            // Three notes, one message: the actionable instruction must not be
+            // buried under a warning for every file in the vault.
+            let (_guard, notes, cipher, locked) = setup();
+            for ulid in [ULID_A, ULID_B] {
+                write_note(&notes, &cipher, ulid, "---\ntitle: T\n---\nbody\n");
+            }
+
+            assert!(matches!(
+                scan_notes_dir(&notes, &locked),
+                Err(ScanError::Locked)
+            ));
+        }
+
+        #[test]
+        fn a_locked_empty_vault_still_reports_locked() {
+            // The lock is a property of the vault, not of what happens to be
+            // in it, so the message does not depend on note count.
+            let (_guard, notes, _, locked) = setup();
+            assert!(matches!(
+                scan_notes_dir(&notes, &locked),
+                Err(ScanError::Locked)
+            ));
+        }
+
+        #[test]
+        fn plaintext_markdown_in_an_encrypted_vault_is_warned_about() {
+            // A threat-model violation sitting in a synced directory, so it is
+            // surfaced rather than silently treated as a resource file.
+            let (_guard, notes, cipher, _) = setup();
+            write_note(&notes, &cipher, ULID_A, "---\ntitle: Proper\n---\nbody\n");
+            write(
+                &notes,
+                &format!("{ULID_B}-dropped-in.md"),
+                "---\ntitle: Dropped In\n---\nbody\n",
+            );
+
+            let scan = scan_notes_dir(&notes, &cipher).expect("scan");
+            assert_eq!(scan.notes.len(), 1);
+            assert_eq!(scan.warnings.len(), 1);
+            assert!(
+                scan.warnings[0].message.contains("ntropy reconcile"),
+                "the warning must name the fix: {}",
+                scan.warnings[0].message
+            );
+        }
+
+        #[test]
+        fn an_undecryptable_note_is_one_warning_and_the_rest_still_load() {
+            // ADR 0019's robustness posture: one bad file never breaks a query.
+            let (_guard, notes, cipher, _) = setup();
+            write_note(&notes, &cipher, ULID_A, "---\ntitle: Fine\n---\nbody\n");
+            std::fs::write(notes.join(format!("{ULID_B}.age")), b"not age ciphertext")
+                .expect("write junk");
+
+            let scan = scan_notes_dir(&notes, &cipher).expect("scan");
+            assert_eq!(scan.notes.len(), 1);
+            assert_eq!(scan.notes[0].title, "Fine");
+            assert_eq!(scan.warnings.len(), 1);
+        }
+
+        #[test]
+        fn a_note_encrypted_to_another_key_is_one_warning() {
+            let (_guard, notes, cipher, _) = setup();
+            let (other_identity, other_recipient) = age_io::generate_keypair();
+            let other = AgeCipher::new(other_recipient, Some(other_identity));
+            write_note(&notes, &other, ULID_A, "---\ntitle: Foreign\n---\nbody\n");
+
+            let scan = scan_notes_dir(&notes, &cipher).expect("scan");
+            assert!(scan.notes.is_empty());
+            assert_eq!(scan.warnings.len(), 1);
+        }
+
+        #[test]
+        fn an_encrypted_note_without_frontmatter_is_a_warning() {
+            let (_guard, notes, cipher, _) = setup();
+            write_note(&notes, &cipher, ULID_A, "no frontmatter here\n");
+
+            let scan = scan_notes_dir(&notes, &cipher).expect("scan");
+            assert!(scan.notes.is_empty());
+            assert_eq!(scan.warnings.len(), 1);
+        }
+
+        #[test]
+        fn resources_and_subdirectories_are_still_ignored_silently() {
+            let (_guard, notes, cipher, _) = setup();
+            write_note(&notes, &cipher, ULID_A, "---\ntitle: Note\n---\nbody\n");
+            write(&notes, "diagram.png", "not a note");
+            std::fs::create_dir_all(notes.join("attachments")).expect("mkdir");
+            write(
+                &notes.join("attachments"),
+                "nested.md",
+                "---\ntitle: X\n---\n",
+            );
+
+            let scan = scan_notes_dir(&notes, &cipher).expect("scan");
+            assert_eq!(scan.notes.len(), 1);
+            assert!(scan.warnings.is_empty(), "{:?}", scan.warnings);
+        }
+
+        #[test]
+        fn an_empty_encrypted_vault_yields_nothing() {
+            let (_guard, notes, cipher, _) = setup();
+            let scan = scan_notes_dir(&notes, &cipher).expect("scan");
+            assert!(scan.notes.is_empty());
+            assert!(scan.warnings.is_empty());
+        }
+
+        #[test]
+        fn warnings_are_ordered_by_path() {
+            // Parallel collection arrives unordered; snapshots depend on this.
+            let (_guard, notes, cipher, _) = setup();
+            for ulid in [ULID_B, ULID_A] {
+                write(
+                    &notes,
+                    &format!("{ulid}-stray.md"),
+                    "---\ntitle: Stray\n---\n",
+                );
+            }
+
+            let scan = scan_notes_dir(&notes, &cipher).expect("scan");
+            let paths: Vec<_> = scan.warnings.iter().map(|w| &w.path).collect();
+            let mut sorted = paths.clone();
+            sorted.sort();
+            assert_eq!(paths, sorted);
+        }
+    }
+
+    #[test]
+    fn a_stray_age_file_in_a_plaintext_vault_is_ignored_silently() {
+        // The inverse warning was considered and left out: it would fire on
+        // every note all through a crashed `vault decrypt`, where the
+        // migration marker already blocks commands and says something useful.
+        let (_guard, notes) = temp_notes_dir();
+        write(
+            &notes,
+            &format!("{ULID_A}-real.md"),
+            "---\ntitle: Real\n---\nbody\n",
+        );
+        write(&notes, &format!("{ULID_B}.age"), "ciphertext-ish");
+
+        let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
+        assert_eq!(scan.notes.len(), 1);
+        assert!(scan.warnings.is_empty());
+    }
+
     #[test]
     fn missing_notes_dir_is_error() {
         let dir = tempfile::tempdir().expect("temp dir");
-        let err = scan_notes_dir(&dir.path().join("nope")).expect_err("missing");
+        let err = scan_notes_dir(&dir.path().join("nope"), &crate::cipher::PlaintextCipher)
+            .expect_err("missing");
         assert!(matches!(err, ScanError::NotesDirMissing(_)));
     }
 
@@ -177,7 +401,7 @@ mod tests {
             "---\ntitle: Newer\n---\nbody\n",
         );
 
-        let scan = scan_notes_dir(&notes).expect("scan");
+        let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
         assert_eq!(scan.notes.len(), 2);
         // ULID_B sorts after ULID_A, so it comes first (newest-first).
         assert_eq!(scan.notes[0].title, "Newer");
@@ -202,7 +426,7 @@ mod tests {
             "---\ntitle: Nested\n---\n",
         );
 
-        let scan = scan_notes_dir(&notes).expect("scan");
+        let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
         assert_eq!(scan.notes.len(), 1);
         assert_eq!(scan.notes[0].title, "Note");
         // The nested `.md` is never traversed, and resources raise no warnings.
@@ -222,7 +446,7 @@ mod tests {
         // Badly named (no ULID prefix).
         write(&notes, "totally-wrong.md", "---\ntitle: Wrong\n---\n");
 
-        let scan = scan_notes_dir(&notes).expect("scan");
+        let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
         assert_eq!(scan.notes.len(), 1);
         assert_eq!(scan.notes[0].title, "Good");
         assert_eq!(scan.warnings.len(), 2);
@@ -234,7 +458,7 @@ mod tests {
     #[test]
     fn empty_notes_dir_yields_nothing() {
         let (_guard, notes) = temp_notes_dir();
-        let scan = scan_notes_dir(&notes).expect("scan");
+        let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
         assert!(scan.notes.is_empty());
         assert!(!scan.has_warnings());
     }

@@ -23,6 +23,11 @@ at the note set:
       .ntropy/          configuration / templates (exact use to be decided)
       .gitignore        auto-managed ignore list for the view directories
 
+An encrypted vault ([encryption.md](encryption.md)) has the same shape with two
+differences: `.ntropy/` additionally holds `identity.pub` and `identity.age`,
+and there are no view directories, because a symlink tree would spell out the
+tag taxonomy in plaintext names inside the synced directory.
+
 `all-notes/` is the one special directory: it holds the real Markdown files.
 Every `by-<field>/` directory holds only symlinks pointing back into
 `all-notes/`. Naming the canonical store `all-notes` makes it a sibling of the
@@ -34,12 +39,17 @@ every query walks `all-notes/` and parses frontmatter on demand. There is
 nothing to invalidate and no staleness in the data itself; only the derived
 views can lag, and only until they are rebuilt.
 
-Only top-level `*.md` files in `all-notes/` are notes. `all-notes/` may also
-hold resources (images, attachments) as non-`.md` files or inside
-subdirectories; ntropy ignores all of these silently and never traverses
-subdirectories for notes. Malformed or badly named top-level `.md` files are
-skipped with a stderr warning (`--strict` makes that fatal); see
+Only top-level files carrying the vault's note extension are notes: `*.md` in a
+plaintext vault, `*.age` in an encrypted one. `all-notes/` may also hold
+resources (images, attachments) as other files or inside subdirectories; ntropy
+ignores all of these silently and never traverses subdirectories for notes.
+Malformed or badly named top-level note files are skipped with a stderr warning
+(`--strict` makes that fatal); see
 [ADR 0019](../adr/0019-scan-robustness-and-resource-tolerance.md).
+
+The one file an encrypted vault does not ignore is a plaintext `.md`: it warns,
+naming `reconcile`, which encrypts such a file in place. A stray `.age` file in
+a plaintext vault stays a silent resource.
 
 ## Canonical note files
 
@@ -58,6 +68,24 @@ Because the ULID leads the filename and is millisecond-precise, a plain lexical
 sort of `all-notes/` is chronological. The readable creation date is not stored
 in the canonical filename; it is derived from the ULID and rendered only at
 display time.
+
+An encrypted vault names each note:
+
+    <ulid>.age
+
+The slug is absent, because it is derived from the title and the filename is
+what a sync provider reads. Identity is unchanged: the ULID still leads the
+name and is still the only place a note's id is recorded. A note's slug still
+exists in memory, derived from the decrypted title, so everything built on it
+(render artifact names, view leaf names) works the same way. Because the name
+depends on nothing but the identity, an encrypted note's filename can never
+drift out of alignment and there is nothing for `reconcile` to rename.
+
+Links between notes keep the `<ulid>-<slug>.md` form in both kinds of vault
+([ADR 0028](../adr/0028-note-to-note-links-as-standard-markdown-links.md)).
+Resolution goes through the ULID, not the filesystem, so a link finds its
+target either way, and keeping one form means converting a vault rewrites no
+note bodies at all.
 
 ### Frontmatter
 

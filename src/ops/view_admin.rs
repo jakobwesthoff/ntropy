@@ -56,7 +56,7 @@ pub fn add_view(vault: &Vault, name: &str, field: &str) -> Result<()> {
 
     // Materialize the new view immediately so its directory reflects the
     // current notes.
-    let scan = scan::scan_notes_dir(&vault.layout().all_notes())?;
+    let scan = scan::scan_notes_dir(&vault.layout().all_notes(), &crate::cipher::PlaintextCipher)?;
     view::sync_view(vault, &ViewDef::new(name, field), &scan.notes)?;
 
     // Keep `.gitignore` in step with the now-larger view set.

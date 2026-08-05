@@ -31,7 +31,7 @@ pub struct TagList {
 
 /// List all tags with their note counts, sorted alphabetically.
 pub fn list_tags(vault: &Vault) -> Result<TagList> {
-    let scan = scan::scan_notes_dir(&vault.layout().all_notes())?;
+    let scan = scan::scan_notes_dir(&vault.layout().all_notes(), &crate::cipher::PlaintextCipher)?;
 
     // A `BTreeMap` gives alphabetical order for free.
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();

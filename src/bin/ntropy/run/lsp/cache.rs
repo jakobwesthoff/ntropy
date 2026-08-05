@@ -74,7 +74,10 @@ impl Cache {
 
 /// Scan a vault's `all-notes/` into cache entries, or an empty set on error.
 fn scan_entries(vault: &Vault) -> Vec<CacheEntry> {
-    let Ok(scan) = scan::scan_notes_dir(&vault.layout().all_notes()) else {
+    let Ok(scan) = scan::scan_notes_dir(
+        &vault.layout().all_notes(),
+        &ntropy::cipher::PlaintextCipher,
+    ) else {
         return Vec::new();
     };
     scan.notes

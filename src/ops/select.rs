@@ -108,7 +108,10 @@ pub fn to_candidates(notes: &[Note]) -> Result<Vec<Candidate>> {
 }
 
 fn scan_vault(vault: &Vault) -> Result<Scan> {
-    Ok(scan::scan_notes_dir(&vault.layout().all_notes())?)
+    Ok(scan::scan_notes_dir(
+        &vault.layout().all_notes(),
+        &crate::cipher::PlaintextCipher,
+    )?)
 }
 
 #[cfg(test)]

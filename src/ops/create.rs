@@ -84,7 +84,7 @@ pub fn today_note(vault: &Vault) -> Result<TodayOutcome> {
     // as "no match" rather than scanning a missing directory.
     let all_notes = vault.layout().all_notes();
     if all_notes.is_dir() {
-        let scan = scan::scan_notes_dir(&all_notes)?;
+        let scan = scan::scan_notes_dir(&all_notes, &crate::cipher::PlaintextCipher)?;
         if let Some(existing) = scan.notes.into_iter().find(|n| n.title == date) {
             return Ok(TodayOutcome {
                 note: existing,

@@ -47,7 +47,7 @@ pub fn vault_stats(vault: &Vault, top_n: usize) -> Result<VaultStats> {
     // `all-notes/` directory yet simply has none.
     let all_notes = layout.all_notes();
     let (notes, warnings) = if all_notes.is_dir() {
-        let scan = scan::scan_notes_dir(&all_notes)?;
+        let scan = scan::scan_notes_dir(&all_notes, &crate::cipher::PlaintextCipher)?;
         (scan.notes, scan.warnings)
     } else {
         (Vec::new(), Vec::new())

@@ -65,7 +65,7 @@ pub struct ReconcileReport {
 ///
 /// Returns the scan warnings so a caller can honor `--strict`.
 pub fn refresh_views(vault: &Vault) -> Result<Vec<ScanWarning>> {
-    let scan = scan::scan_notes_dir(&vault.layout().all_notes())?;
+    let scan = scan::scan_notes_dir(&vault.layout().all_notes(), &crate::cipher::PlaintextCipher)?;
     let views = load_views(vault)?;
     sync_views_and_gitignore(vault, &views, &scan.notes)?;
     Ok(scan.warnings)
@@ -89,7 +89,7 @@ fn sync_views_and_gitignore(
 
 /// Realign drifted filenames, then sync all views.
 pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
-    let scan = scan::scan_notes_dir(&vault.layout().all_notes())?;
+    let scan = scan::scan_notes_dir(&vault.layout().all_notes(), &crate::cipher::PlaintextCipher)?;
     let mut notes = scan.notes;
     let mut renamed = Vec::new();
 

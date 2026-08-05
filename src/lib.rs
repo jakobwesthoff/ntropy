@@ -41,6 +41,7 @@ pub mod crypto;
 pub mod keys;
 
 pub mod note;
+pub mod session;
 pub mod vault;
 
 pub mod config;

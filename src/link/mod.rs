@@ -144,7 +144,11 @@ pub fn rewrite_body(body: &str, notes: &NoteIndex<'_>) -> Option<BodyRewrite> {
         let Some(note) = notes.get(&link.id).copied() else {
             continue;
         };
-        let desired = note.canonical_filename();
+        // The link-target form, not the on-disk filename: in an encrypted
+        // vault those differ, and writing the on-disk `<ulid>.age` into bodies
+        // would strip every link of the slug that makes it clickable once the
+        // vault is decrypted again (ADR 0041).
+        let desired = note.link_target();
         if link.target == desired {
             continue;
         }
@@ -202,6 +206,71 @@ mod tests {
             None,
         )
         .expect("note parses")
+    }
+
+    /// An encrypted note: `<ulid>.age` on disk, `title` giving its slug.
+    fn encrypted_note(id: &str, title: &str) -> Note {
+        let content = format!("---\ntitle: {title}\n---\nbody\n");
+        Note::parse(
+            PathBuf::from(format!("/v/all-notes/{id}.age")),
+            &content,
+            None,
+        )
+        .expect("note parses")
+    }
+
+    #[test]
+    fn a_markdown_shaped_link_resolves_to_an_encrypted_note() {
+        // Bodies keep the `<ulid>-<slug>.md` form in an encrypted vault, and
+        // resolution goes through the ULID index rather than the filesystem,
+        // so the link finds its target even though no such file exists.
+        let notes = vec![encrypted_note(ULID, "Quarterly Review")];
+        let body = format!("see [Quarterly]({ULID}-quarterly-review.md)");
+        let link = only(&body);
+        assert_eq!(
+            resolve(link.id, &notes).map(|n| &n.title),
+            Some(&"Quarterly Review".to_string())
+        );
+    }
+
+    #[test]
+    fn a_stale_slug_still_resolves_to_an_encrypted_note() {
+        // Only the leading 26 characters carry identity (ADR 0028), so a link
+        // written before a retitle keeps working.
+        let notes = vec![encrypted_note(ULID, "Renamed Later")];
+        let body = format!("see [Old]({ULID}-whatever-it-used-to-be.md)");
+        assert!(resolve(only(&body).id, &notes).is_some());
+    }
+
+    #[test]
+    fn rewriting_targets_an_encrypted_note_by_its_markdown_name() {
+        // The regression guard for the naming split: rewriting must never put
+        // the on-disk `<ulid>.age` into a body.
+        let notes = vec![encrypted_note(ULID, "Quarterly Review")];
+        let index = index(&notes);
+        let body = format!("see [Quarterly]({ULID}-stale-slug.md)");
+
+        let rewrite = rewrite_body(&body, &index).expect("a stale slug should rewrite");
+        assert!(
+            rewrite
+                .body
+                .contains(&format!("{ULID}-quarterly-review.md"))
+        );
+        assert!(
+            !rewrite.body.contains(".age"),
+            "an on-disk name leaked into a body: {}",
+            rewrite.body
+        );
+    }
+
+    #[test]
+    fn an_aligned_link_to_an_encrypted_note_is_not_rewritten() {
+        // Nothing to chase means no write, which is what keeps `reconcile`
+        // from re-encrypting every note in the vault on every run.
+        let notes = vec![encrypted_note(ULID, "Quarterly Review")];
+        let index = index(&notes);
+        let body = format!("see [Quarterly]({ULID}-quarterly-review.md)");
+        assert!(rewrite_body(&body, &index).is_none());
     }
 
     #[test]
