@@ -268,22 +268,25 @@ mod sync_tests {
 
     use super::*;
     use crate::scan;
+    use crate::session::VaultSession;
     use crate::test_support::{vault_with_views, write_note};
 
     const ULID_A: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
     const ULID_B: &str = "01BX5ZZKBKACTAV9WEVGEMMVRZ";
 
     /// Scan the vault and sync the single `by-tag` view (grouping by `tags`).
-    fn sync(vault: &Vault) {
+    fn sync(session: &VaultSession) {
         let view = ViewDef::new("by-tag", "tags");
-        let scan =
-            scan::scan_notes_dir(&vault.layout().all_notes(), &crate::cipher::PlaintextCipher)
-                .expect("scan");
-        sync_view(vault, &view, &scan.notes).expect("sync view");
+        let scan = scan::scan_notes_dir(
+            &session.layout().all_notes(),
+            &crate::cipher::PlaintextCipher,
+        )
+        .expect("scan");
+        sync_view(session, &view, &scan.notes).expect("sync view");
     }
 
-    fn group_dir(vault: &Vault, group: &str) -> PathBuf {
-        vault.root().join("by-tag").join(group)
+    fn group_dir(session: &VaultSession, group: &str) -> PathBuf {
+        session.root().join("by-tag").join(group)
     }
 
     /// The single entry inside `dir` (panics unless there is exactly one).
@@ -317,16 +320,16 @@ mod sync_tests {
 
     #[test]
     fn first_sync_materializes_a_link_that_resolves_to_the_note() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Note\ntags: [area/work]\n---\nbody\n",
         );
 
-        sync(&vault);
+        sync(&session);
 
-        let leaf = only_entry(&group_dir(&vault, "area/work"));
+        let leaf = only_entry(&group_dir(&session, "area/work"));
         assert!(leaf.exists(), "symlink resolves");
         assert!(
             std::fs::read_to_string(&leaf)
@@ -337,27 +340,27 @@ mod sync_tests {
 
     #[test]
     fn unchanged_leaf_keeps_its_inode_while_a_changed_sibling_is_relinked() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-a.md"),
             "---\ntitle: Alpha\ntags: [keep]\n---\nx\n",
         );
         let beta = write_note(
-            &vault,
+            &session,
             &format!("{ULID_B}-b.md"),
             "---\ntitle: Beta\ntags: [keep]\n---\nx\n",
         );
-        sync(&vault);
+        sync(&session);
 
-        let group = group_dir(&vault, "keep");
+        let group = group_dir(&session, "keep");
         let alpha = leaf_containing(&group, "alpha");
         let alpha_ino = link_ino(&alpha);
         let beta_old = leaf_containing(&group, "beta");
 
         // Retitle Beta out of band, then re-sync.
         std::fs::write(&beta, "---\ntitle: Renamed\ntags: [keep]\n---\nx\n").expect("rewrite");
-        sync(&vault);
+        sync(&session);
 
         // Alpha's leaf was never recreated: same path, same inode.
         assert!(alpha.exists());
@@ -373,14 +376,14 @@ mod sync_tests {
 
     #[test]
     fn retitling_a_note_replaces_its_leaf() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         let path = write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Old Title\ntags: [t]\n---\nx\n",
         );
-        sync(&vault);
-        let old = only_entry(&group_dir(&vault, "t"));
+        sync(&session);
+        let old = only_entry(&group_dir(&session, "t"));
         assert!(
             old.file_name()
                 .expect("name")
@@ -389,10 +392,10 @@ mod sync_tests {
         );
 
         std::fs::write(&path, "---\ntitle: New Title\ntags: [t]\n---\nx\n").expect("rewrite");
-        sync(&vault);
+        sync(&session);
 
         assert!(!old.exists(), "old leaf removed");
-        let new = only_entry(&group_dir(&vault, "t"));
+        let new = only_entry(&group_dir(&session, "t"));
         assert!(
             new.file_name()
                 .expect("name")
@@ -403,20 +406,20 @@ mod sync_tests {
 
     #[test]
     fn a_leaf_with_a_drifted_target_is_relinked() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Note\ntags: [t]\n---\nx\n",
         );
-        sync(&vault);
-        let leaf = only_entry(&group_dir(&vault, "t"));
+        sync(&session);
+        let leaf = only_entry(&group_dir(&session, "t"));
 
         // Point the leaf at the wrong target, out of band.
         std::fs::remove_file(&leaf).expect("rm");
         std::os::unix::fs::symlink("../../all-notes/bogus.md", &leaf).expect("bad symlink");
 
-        sync(&vault);
+        sync(&session);
 
         let target = std::fs::read_link(&leaf).expect("readlink");
         assert!(
@@ -430,83 +433,86 @@ mod sync_tests {
 
     #[test]
     fn deleting_a_note_prunes_its_leaf_and_the_emptied_group() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         let path = write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Note\ntags: [solo]\n---\nx\n",
         );
-        sync(&vault);
-        assert!(group_dir(&vault, "solo").is_dir());
+        sync(&session);
+        assert!(group_dir(&session, "solo").is_dir());
 
         std::fs::remove_file(&path).expect("rm note");
-        sync(&vault);
+        sync(&session);
 
-        assert!(!group_dir(&vault, "solo").exists(), "emptied group pruned");
-        assert!(vault.root().join("by-tag").is_dir(), "view root kept");
+        assert!(
+            !group_dir(&session, "solo").exists(),
+            "emptied group pruned"
+        );
+        assert!(session.root().join("by-tag").is_dir(), "view root kept");
     }
 
     #[test]
     fn emptying_a_nested_group_prunes_the_chain_but_keeps_the_view_root() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         let path = write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Note\ntags: [area/work/deep]\n---\nx\n",
         );
-        sync(&vault);
-        assert!(vault.root().join("by-tag/area/work/deep").is_dir());
+        sync(&session);
+        assert!(session.root().join("by-tag/area/work/deep").is_dir());
 
         std::fs::remove_file(&path).expect("rm");
-        sync(&vault);
+        sync(&session);
 
         assert!(
-            !vault.root().join("by-tag/area").exists(),
+            !session.root().join("by-tag/area").exists(),
             "the whole empty chain is pruned"
         );
         assert!(
-            vault.root().join("by-tag").is_dir(),
+            session.root().join("by-tag").is_dir(),
             "the view root is kept even when empty"
         );
     }
 
     #[test]
     fn a_pre_existing_stray_empty_subdir_is_pruned() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Note\ntags: [real]\n---\nx\n",
         );
-        sync(&vault);
+        sync(&session);
         // A stray empty group directory left out of band.
-        std::fs::create_dir_all(vault.root().join("by-tag/ghost")).expect("mkdir ghost");
+        std::fs::create_dir_all(session.root().join("by-tag/ghost")).expect("mkdir ghost");
 
-        sync(&vault);
+        sync(&session);
 
         assert!(
-            !vault.root().join("by-tag/ghost").exists(),
+            !session.root().join("by-tag/ghost").exists(),
             "stray empty directory pruned"
         );
-        assert!(group_dir(&vault, "real").is_dir(), "real group kept");
+        assert!(group_dir(&session, "real").is_dir(), "real group kept");
     }
 
     #[test]
     fn a_stray_file_at_a_leaf_path_is_replaced_with_the_symlink() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Note\ntags: [t]\n---\nx\n",
         );
-        sync(&vault);
-        let leaf = only_entry(&group_dir(&vault, "t"));
+        sync(&session);
+        let leaf = only_entry(&group_dir(&session, "t"));
 
         // Replace the symlink with a regular file at the same path.
         std::fs::remove_file(&leaf).expect("rm");
         std::fs::write(&leaf, b"not a symlink").expect("write file");
 
-        sync(&vault);
+        sync(&session);
 
         assert!(
             std::fs::symlink_metadata(&leaf)
@@ -524,21 +530,21 @@ mod sync_tests {
 
     #[test]
     fn a_stray_non_leaf_file_inside_a_group_is_removed() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Note\ntags: [t]\n---\nx\n",
         );
-        sync(&vault);
-        let stray = group_dir(&vault, "t").join("README.txt");
+        sync(&session);
+        let stray = group_dir(&session, "t").join("README.txt");
         std::fs::write(&stray, b"junk").expect("write stray");
 
-        sync(&vault);
+        sync(&session);
 
         assert!(!stray.exists(), "stray non-leaf file removed");
         assert_eq!(
-            std::fs::read_dir(group_dir(&vault, "t"))
+            std::fs::read_dir(group_dir(&session, "t"))
                 .expect("read")
                 .count(),
             1,
@@ -548,15 +554,15 @@ mod sync_tests {
 
     #[test]
     fn list_valued_tags_place_the_note_under_each_value() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Note\ntags: [home, work]\n---\nx\n",
         );
-        sync(&vault);
-        assert!(only_entry(&group_dir(&vault, "home")).exists());
-        assert!(only_entry(&group_dir(&vault, "work")).exists());
+        sync(&session);
+        assert!(only_entry(&group_dir(&session, "home")).exists());
+        assert!(only_entry(&group_dir(&session, "work")).exists());
     }
 
     #[test]
@@ -565,27 +571,27 @@ mod sync_tests {
         // titles collide on `<date>-<slug>` and each gains a ULID tail.
         const C1: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
         const C2: &str = "01ARZ3NDEKTSV4RRFFQ69G5FBW";
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         write_note(
-            &vault,
+            &session,
             &format!("{C1}-a.md"),
             "---\ntitle: Review\ntags: [dup]\n---\nx\n",
         );
         let second = write_note(
-            &vault,
+            &session,
             &format!("{C2}-b.md"),
             "---\ntitle: Review\ntags: [dup]\n---\nx\n",
         );
-        sync(&vault);
+        sync(&session);
 
-        let group = group_dir(&vault, "dup");
+        let group = group_dir(&session, "dup");
         assert_eq!(std::fs::read_dir(&group).expect("read").count(), 2);
         assert!(leaf_containing(&group, "review-FAV").exists());
         assert!(leaf_containing(&group, "review-FBW").exists());
 
         // Remove one collider: the survivor reverts to the undisambiguated name.
         std::fs::remove_file(&second).expect("rm");
-        sync(&vault);
+        sync(&session);
         let leaf = only_entry(&group);
         let name = leaf
             .file_name()
@@ -600,16 +606,16 @@ mod sync_tests {
 
     #[test]
     fn a_view_with_no_matching_notes_keeps_an_empty_root() {
-        let (_g, vault) = vault_with_views(&[("by-tag", "tags")]);
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         // A note with no tags contributes nothing to the view.
         write_note(
-            &vault,
+            &session,
             &format!("{ULID_A}-n.md"),
             "---\ntitle: Note\n---\nx\n",
         );
-        sync(&vault);
+        sync(&session);
 
-        let root = vault.root().join("by-tag");
+        let root = session.root().join("by-tag");
         assert!(root.is_dir(), "view root exists");
         assert_eq!(
             std::fs::read_dir(&root).expect("read").count(),

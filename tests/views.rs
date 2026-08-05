@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 
 use ntropy::config::{PerVaultConfig, ViewConfig};
 use ntropy::reconcile;
+use ntropy::session::VaultSession;
 use ntropy::vault::Vault;
 
 /// Two ULIDs sharing a timestamp prefix (so they render the same date) but
@@ -23,7 +24,7 @@ const ULID_B: &str = "01ARZ3NDEKTSV4RRFFQ69G5FBW";
 const ULID_C: &str = "01BRZ3NDEKTSV4RRFFQ69G5FCX";
 
 /// Create a vault with `all-notes/` and the given views configured.
-fn vault_with_views(views: &[(&str, &str)]) -> (tempfile::TempDir, Vault) {
+fn vault_with_views(views: &[(&str, &str)]) -> (tempfile::TempDir, VaultSession) {
     let dir = tempfile::tempdir().expect("temp dir");
     let root = dir.path();
     std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
@@ -42,12 +43,15 @@ fn vault_with_views(views: &[(&str, &str)]) -> (tempfile::TempDir, Vault) {
     )
     .expect("write config");
 
-    let vault = Vault::new(root);
-    (dir, vault)
+    let session = VaultSession::plaintext(Vault::new(root));
+    (dir, session)
 }
 
-fn write_note(vault: &Vault, ulid: &str, slug: &str, content: &str) {
-    let path = vault.layout().all_notes().join(format!("{ulid}-{slug}.md"));
+fn write_note(session: &VaultSession, ulid: &str, slug: &str, content: &str) {
+    let path = session
+        .layout()
+        .all_notes()
+        .join(format!("{ulid}-{slug}.md"));
     std::fs::write(path, content).expect("write note");
 }
 

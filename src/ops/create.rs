@@ -16,23 +16,23 @@ use crate::fsutil;
 use crate::id::Id;
 use crate::note::{Note, filename};
 use crate::scan;
+use crate::session::VaultSession;
 use crate::template::{self, TemplateVars};
 use crate::text::slug;
-use crate::vault::Vault;
 
 /// Create a note titled `title` in `vault` from a template.
 ///
 /// `template` selects `<name>.md` from the vault's templates directory; `None`
 /// uses `default.md` (falling back to the embedded default when absent). Returns
 /// the parsed [`Note`], whose `path` is the file just written.
-pub fn create_note(vault: &Vault, title: &str, template: Option<&str>) -> Result<Note> {
+pub fn create_note(session: &VaultSession, title: &str, template: Option<&str>) -> Result<Note> {
     let id = Id::generate();
     let slug = slug::slugify(title);
     let date = datetime::render_local_date(id.timestamp_ms())?;
 
     let template = match template {
-        None => template::load_or_default(&vault.layout().default_template())?,
-        Some(name) => template::load_named(&vault.layout().templates_dir(), name)?,
+        None => template::load_or_default(&session.layout().default_template())?,
+        Some(name) => template::load_named(&session.layout().templates_dir(), name)?,
     };
     let vars = TemplateVars {
         title: title.to_string(),
@@ -49,7 +49,7 @@ pub fn create_note(vault: &Vault, title: &str, template: Option<&str>) -> Result
     // rest of the CLI to warn about on every later scan. `modified` is
     // unknown for content that only exists in memory, so it is filled in
     // below once the file has actually been stat'd.
-    let all_notes = vault.layout().all_notes();
+    let all_notes = session.layout().all_notes();
     let path = all_notes.join(filename::build(&id, &slug));
     let mut note = Note::parse(path.clone(), &content, None)?;
 
@@ -77,14 +77,14 @@ pub struct TodayOutcome {
 /// match (an unlikely manual duplicate), the newest is returned, since the scan
 /// is newest-first. When none exists it is created from `today.md`, which must be
 /// present (`init` seeds it).
-pub fn today_note(vault: &Vault) -> Result<TodayOutcome> {
+pub fn today_note(session: &VaultSession) -> Result<TodayOutcome> {
     let date = datetime::today_local_date();
 
     // A vault that has not created any note yet has no `all-notes/`; treat that
     // as "no match" rather than scanning a missing directory.
-    let all_notes = vault.layout().all_notes();
+    let all_notes = session.layout().all_notes();
     if all_notes.is_dir() {
-        let scan = scan::scan_notes_dir(&all_notes, &crate::cipher::PlaintextCipher)?;
+        let scan = scan::scan_notes_dir(&all_notes, session.cipher())?;
         if let Some(existing) = scan.notes.into_iter().find(|n| n.title == date) {
             return Ok(TodayOutcome {
                 note: existing,
@@ -93,7 +93,7 @@ pub fn today_note(vault: &Vault) -> Result<TodayOutcome> {
         }
     }
 
-    let note = create_note(vault, &date, Some("today"))?;
+    let note = create_note(session, &date, Some("today"))?;
     Ok(TodayOutcome {
         note,
         created: true,
@@ -103,19 +103,20 @@ pub fn today_note(vault: &Vault) -> Result<TodayOutcome> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vault::Vault;
 
     /// Initialize just enough of a vault for `create_note` to run.
-    fn temp_vault() -> (tempfile::TempDir, Vault) {
+    fn temp_vault() -> (tempfile::TempDir, VaultSession) {
         let dir = tempfile::tempdir().expect("temp dir");
         std::fs::create_dir_all(dir.path().join(".ntropy")).expect("mkdir .ntropy");
-        let vault = Vault::new(dir.path());
-        (dir, vault)
+        let session = VaultSession::plaintext(Vault::new(dir.path()));
+        (dir, session)
     }
 
     #[test]
     fn creates_file_with_canonical_name() {
-        let (_guard, vault) = temp_vault();
-        let note = create_note(&vault, "My First Note", None).expect("create");
+        let (_guard, session) = temp_vault();
+        let note = create_note(&session, "My First Note", None).expect("create");
 
         let name = note.path.file_name().unwrap().to_string_lossy();
         assert!(name.ends_with("-my-first-note.md"));
@@ -125,8 +126,8 @@ mod tests {
 
     #[test]
     fn rendered_content_round_trips_into_note() {
-        let (_guard, vault) = temp_vault();
-        let note = create_note(&vault, "My First Note", None).expect("create");
+        let (_guard, session) = temp_vault();
+        let note = create_note(&session, "My First Note", None).expect("create");
         assert_eq!(note.title, "My First Note");
         assert_eq!(note.tags, Vec::<String>::new());
 
@@ -142,8 +143,8 @@ mod tests {
         // a title containing `: ` used to break the default template's
         // `title: {{title}}` line. `create_note` now succeeds and the file it
         // writes is a well-formed note (ADR 0034).
-        let (_guard, vault) = temp_vault();
-        let note = create_note(&vault, "Q3: Planning kickoff", None).expect("create");
+        let (_guard, session) = temp_vault();
+        let note = create_note(&session, "Q3: Planning kickoff", None).expect("create");
         assert_eq!(note.title, "Q3: Planning kickoff");
 
         let on_disk = std::fs::read_to_string(&note.path).expect("read");
@@ -152,24 +153,24 @@ mod tests {
 
     #[test]
     fn uses_custom_template_when_present() {
-        let (_guard, vault) = temp_vault();
-        let templates = vault.layout().templates_dir();
+        let (_guard, session) = temp_vault();
+        let templates = session.layout().templates_dir();
         std::fs::create_dir_all(&templates).expect("mkdir templates");
         std::fs::write(
-            vault.layout().default_template(),
+            session.layout().default_template(),
             "---\ntitle: {{title}}\n---\nCustom body for {{slug}}\n",
         )
         .expect("write template");
 
-        let note = create_note(&vault, "Hello World", None).expect("create");
+        let note = create_note(&session, "Hello World", None).expect("create");
         let on_disk = std::fs::read_to_string(&note.path).expect("read");
         assert!(on_disk.contains("Custom body for hello-world"));
     }
 
     #[test]
     fn uses_named_template_when_selected() {
-        let (_guard, vault) = temp_vault();
-        let templates = vault.layout().templates_dir();
+        let (_guard, session) = temp_vault();
+        let templates = session.layout().templates_dir();
         std::fs::create_dir_all(&templates).expect("mkdir templates");
         std::fs::write(
             templates.join("meeting.md"),
@@ -177,7 +178,7 @@ mod tests {
         )
         .expect("write template");
 
-        let note = create_note(&vault, "Standup", Some("meeting")).expect("create");
+        let note = create_note(&session, "Standup", Some("meeting")).expect("create");
         assert_eq!(note.tags, vec!["meeting"]);
         let on_disk = std::fs::read_to_string(&note.path).expect("read");
         assert!(on_disk.contains("Agenda for Standup"));
@@ -190,22 +191,22 @@ mod tests {
         // a custom template whose frontmatter has no `title` field renders to a
         // file `Note::parse` rejects. `create_note` must fail without writing
         // anything to `all-notes/`.
-        let (_guard, vault) = temp_vault();
-        let templates = vault.layout().templates_dir();
+        let (_guard, session) = temp_vault();
+        let templates = session.layout().templates_dir();
         std::fs::create_dir_all(&templates).expect("mkdir templates");
         std::fs::write(
-            vault.layout().default_template(),
+            session.layout().default_template(),
             "---\ntags: []\n---\nBody with no title field.\n",
         )
         .expect("write template");
 
-        let err = create_note(&vault, "Hello World", None).expect_err("invalid note");
+        let err = create_note(&session, "Hello World", None).expect_err("invalid note");
         assert!(matches!(
             err,
             crate::error::Error::Note(crate::note::NoteError::Frontmatter(_))
         ));
 
-        let all_notes = vault.layout().all_notes();
+        let all_notes = session.layout().all_notes();
         let stray = if all_notes.is_dir() {
             std::fs::read_dir(&all_notes)
                 .expect("read all-notes")
@@ -224,19 +225,20 @@ mod tests {
         // entire value. A title containing `: ` still breaks the YAML in that
         // case, so this pins the validate-before-write safety net that catches
         // exactly that row.
-        let (_guard, vault) = temp_vault();
-        let templates = vault.layout().templates_dir();
+        let (_guard, session) = temp_vault();
+        let templates = session.layout().templates_dir();
         std::fs::create_dir_all(&templates).expect("mkdir templates");
         std::fs::write(
-            vault.layout().default_template(),
+            session.layout().default_template(),
             "---\ntitle: Meeting {{title}} notes\ntags: []\n---\nBody.\n",
         )
         .expect("write template");
 
-        let err = create_note(&vault, "Q3: Planning kickoff", None).expect_err("invalid yaml note");
+        let err =
+            create_note(&session, "Q3: Planning kickoff", None).expect_err("invalid yaml note");
         assert!(matches!(err, crate::error::Error::Note(_)));
 
-        let all_notes = vault.layout().all_notes();
+        let all_notes = session.layout().all_notes();
         let stray = if all_notes.is_dir() {
             std::fs::read_dir(&all_notes)
                 .expect("read all-notes")
@@ -249,9 +251,9 @@ mod tests {
 
     #[test]
     fn named_template_missing_is_an_error() {
-        let (_guard, vault) = temp_vault();
-        std::fs::create_dir_all(vault.layout().templates_dir()).expect("mkdir templates");
-        let err = create_note(&vault, "X", Some("absent")).expect_err("missing template");
+        let (_guard, session) = temp_vault();
+        std::fs::create_dir_all(session.layout().templates_dir()).expect("mkdir templates");
+        let err = create_note(&session, "X", Some("absent")).expect_err("missing template");
         assert!(matches!(
             err,
             crate::error::Error::Template(template::TemplateError::NotFound { .. })
@@ -260,36 +262,36 @@ mod tests {
 
     #[test]
     fn today_note_creates_then_reuses() {
-        let (_guard, vault) = temp_vault();
-        std::fs::create_dir_all(vault.layout().templates_dir()).expect("templates");
+        let (_guard, session) = temp_vault();
+        std::fs::create_dir_all(session.layout().templates_dir()).expect("templates");
         std::fs::write(
-            vault.layout().today_template(),
+            session.layout().today_template(),
             crate::vault::seed::TODAY_TEMPLATE,
         )
         .expect("seed today");
 
-        let first = today_note(&vault).expect("first");
+        let first = today_note(&session).expect("first");
         assert!(first.created);
         assert_eq!(first.note.title, datetime::today_local_date());
         assert_eq!(first.note.tags, vec!["daily"]);
 
         // A second call reuses the same note rather than creating another.
-        let second = today_note(&vault).expect("second");
+        let second = today_note(&session).expect("second");
         assert!(!second.created);
         assert_eq!(second.note.path, first.note.path);
     }
 
     #[test]
     fn today_note_requires_today_template() {
-        let (_guard, vault) = temp_vault();
-        let err = today_note(&vault).expect_err("missing today template");
+        let (_guard, session) = temp_vault();
+        let err = today_note(&session).expect_err("missing today template");
         assert!(matches!(err, crate::error::Error::Template(_)));
     }
 
     #[test]
     fn untitled_fallback_for_empty_title() {
-        let (_guard, vault) = temp_vault();
-        let note = create_note(&vault, "???", None).expect("create");
+        let (_guard, session) = temp_vault();
+        let note = create_note(&session, "???", None).expect("create");
         assert!(
             note.path
                 .file_name()

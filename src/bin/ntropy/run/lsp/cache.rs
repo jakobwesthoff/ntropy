@@ -17,7 +17,8 @@ use std::path::{Path, PathBuf};
 
 use ntropy::id::Id;
 use ntropy::scan;
-use ntropy::vault::Vault;
+use ntropy::session::VaultSession;
+use ntropy::vault::{Vault, layout};
 
 /// A note's cached metadata: everything completion and navigation need without
 /// re-reading the file.
@@ -73,11 +74,17 @@ impl Cache {
 }
 
 /// Scan a vault's `all-notes/` into cache entries, or an empty set on error.
+///
+/// Key acquisition for the server arrives with the language-server work; until
+/// then an encrypted vault opens into a session that refuses to read, which
+/// yields an empty entry set rather than ciphertext parsed as Markdown.
 fn scan_entries(vault: &Vault) -> Vec<CacheEntry> {
-    let Ok(scan) = scan::scan_notes_dir(
-        &vault.layout().all_notes(),
-        &ntropy::cipher::PlaintextCipher,
-    ) else {
+    let session = if layout::is_encrypted(vault.root()) {
+        VaultSession::unsupported(vault.clone())
+    } else {
+        VaultSession::plaintext(vault.clone())
+    };
+    let Ok(scan) = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher()) else {
         return Vec::new();
     };
     scan.notes

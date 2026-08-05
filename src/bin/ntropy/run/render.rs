@@ -20,7 +20,7 @@ use anyhow::{Context, Result};
 use ntropy::link;
 use ntropy::ops;
 use ntropy::render::{Invocation, Registry, RenderContext, RenderError, ToolOutput, prepare};
-use ntropy::vault::Vault;
+use ntropy::session::VaultSession;
 
 use crate::cli::GlobalArgs;
 
@@ -41,7 +41,7 @@ use super::{exit_for_warnings, output, picker, report_ambiguous};
 #[allow(clippy::too_many_arguments)]
 pub fn cmd_render(
     global: &GlobalArgs,
-    vault: &Vault,
+    session: &VaultSession,
     selector: String,
     to: String,
     engine: Option<String>,
@@ -52,7 +52,7 @@ pub fn cmd_render(
     // The vault's render options shape the engines, so the config loads before
     // the registry is built; a broken config (or an unknown paper name) fails
     // here, before any scan.
-    let config = ntropy::config::PerVaultConfig::load(&vault.layout().config_file())
+    let config = ntropy::config::PerVaultConfig::load(&session.layout().config_file())
         .context("while loading the vault config")?;
 
     // Resolve the engine next, still before touching the vault's notes:
@@ -84,9 +84,9 @@ pub fn cmd_render(
     let selector = super::optional(&selector).map(str::to_string);
     let matches = match selector.as_deref() {
         Some(selector) => {
-            ops::resolve_selection(vault, selector).context("while resolving the selector")?
+            ops::resolve_selection(session, selector).context("while resolving the selector")?
         }
-        None => ops::search(vault, None).context("while listing notes")?,
+        None => ops::search(session, None).context("while listing notes")?,
     };
     output::print_warnings(&matches.warnings);
 
@@ -152,7 +152,7 @@ pub fn cmd_render(
     // the preparation reads (resolved decision 5). Its warnings repeat the
     // resolution scan's on the same vault, so they are discarded here to avoid
     // printing each twice.
-    let indexed = ops::search(vault, None).context("while indexing the vault for links")?;
+    let indexed = ops::search(session, None).context("while indexing the vault for links")?;
     let index = link::index(&indexed.notes);
     let doc = prepare(&note, &index).context("while preparing the document")?;
 

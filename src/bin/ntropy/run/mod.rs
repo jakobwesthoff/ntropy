@@ -27,7 +27,8 @@ use ntropy::config::global;
 use ntropy::ops;
 use ntropy::reconcile;
 use ntropy::scan::ScanWarning;
-use ntropy::vault::{ResolveOptions, Vault, resolve};
+use ntropy::session::VaultSession;
+use ntropy::vault::{ResolveOptions, Vault, layout, resolve};
 
 use crate::cli::{Cli, Command, GlobalArgs, ViewCommand, join};
 
@@ -57,24 +58,24 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         return lsp::run();
     }
 
-    let vault = resolve_vault(&cli.global)?;
+    let session = open_session(&cli.global)?;
     let interactive = interact::is_interactive(cli.global.non_interactive);
 
     match command {
         // Handled above, before vault resolution.
         Command::Init { .. } => unreachable!("init is dispatched before vault resolution"),
         Command::Search { query, print } => {
-            cmd_search(&cli.global, &vault, join(&query), print, interactive)
+            cmd_search(&cli.global, &session, join(&query), print, interactive)
         }
         Command::New {
             title,
             template,
             print,
-        } => cmd_new(&vault, join(&title), template, print, interactive),
-        Command::Today { print } => cmd_today(&vault, print, interactive),
-        Command::Reconcile => cmd_reconcile(&cli.global, &vault),
+        } => cmd_new(&session, join(&title), template, print, interactive),
+        Command::Today { print } => cmd_today(&session, print, interactive),
+        Command::Reconcile => cmd_reconcile(&cli.global, &session),
         Command::Delete { selector, force } => {
-            cmd_delete(&vault, join(&selector), force, interactive)
+            cmd_delete(&session, join(&selector), force, interactive)
         }
         Command::Render {
             selector,
@@ -84,7 +85,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             print,
         } => render::cmd_render(
             &cli.global,
-            &vault,
+            &session,
             join(&selector),
             to,
             engine,
@@ -92,8 +93,8 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             print,
             interactive,
         ),
-        Command::View(sub) => cmd_view(&vault, sub),
-        Command::Tags => cmd_tags(&cli.global, &vault),
+        Command::View(sub) => cmd_view(&session, sub),
+        Command::Tags => cmd_tags(&cli.global, &session),
         // Handled above, before vault resolution.
         Command::Info { .. } => unreachable!("info is dispatched before vault resolution"),
         Command::Lsp => unreachable!("lsp is dispatched before vault resolution"),
@@ -122,6 +123,18 @@ fn resolve_options(global: &GlobalArgs) -> Result<ResolveOptions> {
 fn resolve_vault(global: &GlobalArgs) -> Result<Vault> {
     let opts = resolve_options(global)?;
     Vault::resolve(&opts).context("while resolving the vault")
+}
+
+/// Resolve the vault and open a session for reading and writing its notes.
+fn open_session(global: &GlobalArgs) -> Result<VaultSession> {
+    let vault = resolve_vault(global)?;
+    if layout::is_encrypted(vault.root()) {
+        // Key acquisition arrives with the encryption commands. Until then an
+        // encrypted vault opens into a session that says it cannot be read,
+        // rather than one that would hand ciphertext to the Markdown parser.
+        return Ok(VaultSession::unsupported(vault));
+    }
+    Ok(VaultSession::plaintext(vault))
 }
 
 // =============================================================================
@@ -161,7 +174,7 @@ fn cmd_init(path: Option<PathBuf>, vault: Option<PathBuf>, set_default: bool) ->
 
 fn cmd_search(
     global: &GlobalArgs,
-    vault: &Vault,
+    session: &VaultSession,
     selector: String,
     print: bool,
     interactive: bool,
@@ -172,9 +185,9 @@ fn cmd_search(
     // hidden alias (ADR 0031).
     let matches = match optional(&selector) {
         Some(selector) => {
-            ops::resolve_selection(vault, selector).context("while resolving the selector")?
+            ops::resolve_selection(session, selector).context("while resolving the selector")?
         }
-        None => ops::search(vault, None).context("while listing notes")?,
+        None => ops::search(session, None).context("while listing notes")?,
     };
     output::print_warnings(&matches.warnings);
 
@@ -201,7 +214,7 @@ fn cmd_search(
                     // of opening the editor (ADR 0035). Nothing was edited, so
                     // no realign or view refresh is needed.
                     Some(path) if print => println!("{}", path.display()),
-                    Some(path) => open_and_refresh(vault, &path)?,
+                    Some(path) => open_and_refresh(session, &path)?,
                     // A cancelled picker produced no path, so under `--print`
                     // the command fails and `p=$(ntropy search -p ...)`
                     // branches correctly; without `--print` a cancel stays a
@@ -227,43 +240,43 @@ fn cmd_search(
 }
 
 fn cmd_new(
-    vault: &Vault,
+    session: &VaultSession,
     title: String,
     template: Option<String>,
     print: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
-    let note =
-        ops::create_note(vault, &title, template.as_deref()).context("while creating the note")?;
+    let note = ops::create_note(session, &title, template.as_deref())
+        .context("while creating the note")?;
 
     // Open the editor only when interactive and not explicitly suppressed;
     // otherwise create-and-print for scripting (ADR 0015).
     if !print && interactive {
-        open_and_refresh(vault, &note.path)?;
+        open_and_refresh(session, &note.path)?;
     } else {
-        reconcile::refresh_views(vault).context("while refreshing views")?;
+        reconcile::refresh_views(session).context("while refreshing views")?;
         println!("{}", note.path.display());
     }
     Ok(ExitCode::SUCCESS)
 }
 
-fn cmd_today(vault: &Vault, print: bool, interactive: bool) -> Result<ExitCode> {
-    let outcome = ops::today_note(vault).context("while preparing today's note")?;
+fn cmd_today(session: &VaultSession, print: bool, interactive: bool) -> Result<ExitCode> {
+    let outcome = ops::today_note(session).context("while preparing today's note")?;
 
     // Mirror `new`: open interactively unless suppressed, otherwise refresh views
     // and print the path for scripting (ADR 0015).
     if !print && interactive {
-        open_and_refresh(vault, &outcome.note.path)?;
+        open_and_refresh(session, &outcome.note.path)?;
     } else {
-        reconcile::refresh_views(vault).context("while refreshing views")?;
+        reconcile::refresh_views(session).context("while refreshing views")?;
         println!("{}", outcome.note.path.display());
     }
     Ok(ExitCode::SUCCESS)
 }
 
-fn cmd_reconcile(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
-    println!("Reconciling vault at {}...", vault.root().display());
-    let report = reconcile::reconcile(vault).context("while reconciling")?;
+fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode> {
+    println!("Reconciling vault at {}...", session.root().display());
+    let report = reconcile::reconcile(session).context("while reconciling")?;
     output::print_warnings(&report.warnings);
     for rename in &report.renamed {
         println!(
@@ -295,9 +308,14 @@ fn cmd_reconcile(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
     Ok(exit_for_warnings(global.strict, &report.warnings, 0))
 }
 
-fn cmd_delete(vault: &Vault, selector: String, force: bool, interactive: bool) -> Result<ExitCode> {
+fn cmd_delete(
+    session: &VaultSession,
+    selector: String,
+    force: bool,
+    interactive: bool,
+) -> Result<ExitCode> {
     let matches =
-        ops::resolve_selection(vault, &selector).context("while resolving the selector")?;
+        ops::resolve_selection(session, &selector).context("while resolving the selector")?;
     output::print_warnings(&matches.warnings);
 
     // Determine the single target note (path + human reference), honoring the
@@ -344,27 +362,27 @@ fn cmd_delete(vault: &Vault, selector: String, force: bool, interactive: bool) -
     // The resolution scan above already surfaced any warnings; the view sync
     // scans the same vault, so its warnings are discarded to avoid printing
     // each one twice.
-    ops::delete_note(vault, &path).context("while deleting the note")?;
+    ops::delete_note(session, &path).context("while deleting the note")?;
     println!("Deleted {reference}");
     Ok(ExitCode::SUCCESS)
 }
 
-fn cmd_view(vault: &Vault, sub: ViewCommand) -> Result<ExitCode> {
+fn cmd_view(session: &VaultSession, sub: ViewCommand) -> Result<ExitCode> {
     match sub {
         ViewCommand::List => {
-            let views = ops::list_views(vault).context("while listing views")?;
+            let views = ops::list_views(session).context("while listing views")?;
             output::print_views(&views)?;
         }
         ViewCommand::Add { name, field } => {
-            ops::add_view(vault, &name, &field).context("while adding the view")?;
+            ops::add_view(session, &name, &field).context("while adding the view")?;
             println!("Added view `{name}` (field `{field}`).");
         }
         ViewCommand::Remove { name } => {
-            ops::remove_view(vault, &name).context("while removing the view")?;
+            ops::remove_view(session, &name).context("while removing the view")?;
             println!("Removed view `{name}`.");
             // ntropy never deletes the directory; tell the user it remains so
             // they can clean up the now-stale (and no longer ignored) tree.
-            if vault.layout().view_dir(&name).exists() {
+            if session.layout().view_dir(&name).exists() {
                 println!(
                     "left directory `{name}/` in place, delete it manually if you no longer need it"
                 );
@@ -387,14 +405,21 @@ fn cmd_info(global: &GlobalArgs, print: bool) -> Result<ExitCode> {
         return Ok(ExitCode::SUCCESS);
     }
 
+    // `info` resolves the vault itself (to report which rule matched), so it
+    // opens its own session rather than taking the one dispatch built.
     let vault = Vault::new(root);
-    let stats = ops::vault_stats(&vault, TOP_TAGS).context("while gathering vault info")?;
-    output::print_info(&vault, &source, opts.global_default.as_deref(), &stats);
+    let session = if layout::is_encrypted(vault.root()) {
+        VaultSession::unsupported(vault)
+    } else {
+        VaultSession::plaintext(vault)
+    };
+    let stats = ops::vault_stats(&session, TOP_TAGS).context("while gathering vault info")?;
+    output::print_info(&session, &source, opts.global_default.as_deref(), &stats);
     Ok(ExitCode::SUCCESS)
 }
 
-fn cmd_tags(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
-    let list = ops::list_tags(vault).context("while listing tags")?;
+fn cmd_tags(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode> {
+    let list = ops::list_tags(session).context("while listing tags")?;
     output::print_warnings(&list.warnings);
     output::print_tags(&list.tags)?;
     Ok(exit_for_warnings(global.strict, &list.warnings, 0))
@@ -409,10 +434,10 @@ fn cmd_tags(global: &GlobalArgs, vault: &Vault) -> Result<ExitCode> {
 /// Only the touched note is realigned, so an out-of-band drift elsewhere is
 /// never renamed silently (ADR 0004); the view sync then reflects any title
 /// or tag change made during the edit.
-fn open_and_refresh(vault: &Vault, path: &Path) -> Result<()> {
+fn open_and_refresh(session: &VaultSession, path: &Path) -> Result<()> {
     editor::open(path)?;
     reconcile::realign(path).context("while realigning the edited note")?;
-    reconcile::refresh_views(vault).context("while refreshing views")?;
+    reconcile::refresh_views(session).context("while refreshing views")?;
     Ok(())
 }
 

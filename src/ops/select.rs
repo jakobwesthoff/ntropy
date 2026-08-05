@@ -18,7 +18,7 @@ use crate::id::{Id, ULID_LEN};
 use crate::note::Note;
 use crate::query;
 use crate::scan::{self, Scan, ScanWarning};
-use crate::vault::Vault;
+use crate::session::VaultSession;
 
 /// The result of a search or selection: matching notes plus scan warnings.
 #[derive(Debug, Default)]
@@ -45,8 +45,8 @@ pub struct Candidate {
 /// Run an optional query over the vault, returning matches newest-first.
 ///
 /// `None` (or a blank query) means all notes.
-pub fn search(vault: &Vault, query: Option<&str>) -> Result<Matches> {
-    let scan = scan_vault(vault)?;
+pub fn search(session: &VaultSession, query: Option<&str>) -> Result<Matches> {
+    let scan = scan_vault(session)?;
     let notes = match query.map(str::trim).filter(|q| !q.is_empty()) {
         None => scan.notes,
         Some(q) => {
@@ -67,17 +67,17 @@ pub fn search(vault: &Vault, query: Option<&str>) -> Result<Matches> {
 ///
 /// A selector that is a full 26-character ULID resolves to the single note with
 /// that identity (zero or one result); anything else is treated as a query.
-pub fn resolve_selection(vault: &Vault, selector: &str) -> Result<Matches> {
+pub fn resolve_selection(session: &VaultSession, selector: &str) -> Result<Matches> {
     match as_ulid(selector) {
         Some(id) => {
-            let scan = scan_vault(vault)?;
+            let scan = scan_vault(session)?;
             let notes = scan.notes.into_iter().filter(|n| n.id == id).collect();
             Ok(Matches {
                 notes,
                 warnings: scan.warnings,
             })
         }
-        None => search(vault, Some(selector)),
+        None => search(session, Some(selector)),
     }
 }
 
@@ -107,31 +107,35 @@ pub fn to_candidates(notes: &[Note]) -> Result<Vec<Candidate>> {
         .collect()
 }
 
-fn scan_vault(vault: &Vault) -> Result<Scan> {
+fn scan_vault(session: &VaultSession) -> Result<Scan> {
     Ok(scan::scan_notes_dir(
-        &vault.layout().all_notes(),
-        &crate::cipher::PlaintextCipher,
+        &session.layout().all_notes(),
+        session.cipher(),
     )?)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vault::Vault;
 
     const ULID_A: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
     const ULID_B: &str = "01BRZ3NDEKTSV4RRFFQ69G5FAV";
 
-    fn temp_vault() -> (tempfile::TempDir, Vault) {
+    fn temp_vault() -> (tempfile::TempDir, VaultSession) {
         let dir = tempfile::tempdir().expect("temp dir");
         std::fs::create_dir_all(dir.path().join("all-notes")).expect("all-notes");
         std::fs::create_dir_all(dir.path().join(".ntropy")).expect(".ntropy");
-        let vault = Vault::new(dir.path());
-        (dir, vault)
+        let session = VaultSession::plaintext(Vault::new(dir.path()));
+        (dir, session)
     }
 
-    fn write(vault: &Vault, ulid: &str, slug: &str, content: &str) {
+    fn write(session: &VaultSession, ulid: &str, slug: &str, content: &str) {
         std::fs::write(
-            vault.layout().all_notes().join(format!("{ulid}-{slug}.md")),
+            session
+                .layout()
+                .all_notes()
+                .join(format!("{ulid}-{slug}.md")),
             content,
         )
         .expect("write note");

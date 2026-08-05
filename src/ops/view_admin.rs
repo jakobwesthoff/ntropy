@@ -16,6 +16,7 @@ use crate::error::Result;
 use crate::fsutil;
 use crate::gitignore;
 use crate::scan;
+use crate::session::VaultSession;
 use crate::vault::Vault;
 use crate::vault::layout;
 use crate::view::{self, ViewDef};
@@ -38,12 +39,12 @@ pub fn list_views(vault: &Vault) -> Result<Vec<ViewConfig>> {
 }
 
 /// Add a view named `name` grouping by `field`, then materialize it.
-pub fn add_view(vault: &Vault, name: &str, field: &str) -> Result<()> {
+pub fn add_view(session: &VaultSession, name: &str, field: &str) -> Result<()> {
     if layout::is_reserved_name(name) {
         return Err(ViewAdminError::ReservedName(name.to_string()).into());
     }
 
-    let config_path = vault.layout().config_file();
+    let config_path = session.layout().config_file();
     let mut config = PerVaultConfig::load(&config_path)?;
     let added = config.add(ViewConfig {
         name: name.to_string(),
@@ -56,11 +57,11 @@ pub fn add_view(vault: &Vault, name: &str, field: &str) -> Result<()> {
 
     // Materialize the new view immediately so its directory reflects the
     // current notes.
-    let scan = scan::scan_notes_dir(&vault.layout().all_notes(), &crate::cipher::PlaintextCipher)?;
-    view::sync_view(vault, &ViewDef::new(name, field), &scan.notes)?;
+    let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
+    view::sync_view(session, &ViewDef::new(name, field), &scan.notes)?;
 
     // Keep `.gitignore` in step with the now-larger view set.
-    sync_gitignore(vault, &config)?;
+    sync_gitignore(session, &config)?;
     Ok(())
 }
 
@@ -92,12 +93,12 @@ mod tests {
 
     const ULID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
-    fn temp_vault() -> (tempfile::TempDir, Vault) {
+    fn temp_vault() -> (tempfile::TempDir, VaultSession) {
         let dir = tempfile::tempdir().expect("temp dir");
         std::fs::create_dir_all(dir.path().join("all-notes")).expect("all-notes");
         std::fs::create_dir_all(dir.path().join(".ntropy")).expect(".ntropy");
-        let vault = Vault::new(dir.path());
-        (dir, vault)
+        let session = VaultSession::plaintext(Vault::new(dir.path()));
+        (dir, session)
     }
 
     #[test]

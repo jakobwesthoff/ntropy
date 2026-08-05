@@ -21,6 +21,7 @@ use crate::gitignore;
 use crate::link;
 use crate::note::Note;
 use crate::scan::{self, ScanWarning};
+use crate::session::VaultSession;
 use crate::vault::Vault;
 use crate::view::{self, ViewDef};
 
@@ -64,10 +65,10 @@ pub struct ReconcileReport {
 /// Sync all configured views to the current note set (no realignment).
 ///
 /// Returns the scan warnings so a caller can honor `--strict`.
-pub fn refresh_views(vault: &Vault) -> Result<Vec<ScanWarning>> {
-    let scan = scan::scan_notes_dir(&vault.layout().all_notes(), &crate::cipher::PlaintextCipher)?;
-    let views = load_views(vault)?;
-    sync_views_and_gitignore(vault, &views, &scan.notes)?;
+pub fn refresh_views(session: &VaultSession) -> Result<Vec<ScanWarning>> {
+    let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
+    let views = load_views(session)?;
+    sync_views_and_gitignore(session, &views, &scan.notes)?;
     Ok(scan.warnings)
 }
 
@@ -88,8 +89,8 @@ fn sync_views_and_gitignore(
 }
 
 /// Realign drifted filenames, then sync all views.
-pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
-    let scan = scan::scan_notes_dir(&vault.layout().all_notes(), &crate::cipher::PlaintextCipher)?;
+pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
+    let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
     let mut notes = scan.notes;
     let mut renamed = Vec::new();
 
@@ -111,8 +112,8 @@ pub fn reconcile(vault: &Vault) -> Result<ReconcileReport> {
     // resolving and stay clickable in plain Markdown viewers (ADR 0028).
     let links_rewritten = rewrite_links(&notes)?;
 
-    let views = load_views(vault)?;
-    let gitignore = sync_views_and_gitignore(vault, &views, &notes)?;
+    let views = load_views(session)?;
+    let gitignore = sync_views_and_gitignore(session, &views, &notes)?;
 
     Ok(ReconcileReport {
         notes_scanned: notes.len(),
@@ -205,18 +206,18 @@ mod tests {
 
     #[test]
     fn refresh_builds_view_links() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         write_note(
-            &vault,
+            &session,
             &format!("{ULID}-note.md"),
             "---\ntitle: Note\ntags: [area/work]\n---\nbody\n",
         );
 
-        let warnings = refresh_views(&vault).expect("refresh");
+        let warnings = refresh_views(&session).expect("refresh");
         assert!(warnings.is_empty());
 
         // The link exists and resolves back to the canonical file.
-        let link = vault.root().join("by-tag/area/work");
+        let link = session.root().join("by-tag/area/work");
         let entries: Vec<_> = std::fs::read_dir(&link)
             .expect("read group dir")
             .map(|e| e.expect("entry").path())
@@ -232,18 +233,18 @@ mod tests {
 
     #[test]
     fn reconcile_renames_drifted_file() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         // On-disk slug `old` no longer matches the title `Brand New`.
         let old = write_note(
-            &vault,
+            &session,
             &format!("{ULID}-old.md"),
             "---\ntitle: Brand New\ntags: [x]\n---\nbody\n",
         );
 
-        let report = reconcile(&vault).expect("reconcile");
+        let report = reconcile(&session).expect("reconcile");
         assert_eq!(report.renamed.len(), 1);
         assert!(!old.exists());
-        let new = vault
+        let new = session
             .layout()
             .all_notes()
             .join(format!("{ULID}-brand-new.md"));
@@ -252,31 +253,31 @@ mod tests {
 
     #[test]
     fn reconcile_leaves_aligned_files() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         write_note(
-            &vault,
+            &session,
             &format!("{ULID}-aligned.md"),
             "---\ntitle: Aligned\n---\nbody\n",
         );
-        let report = reconcile(&vault).expect("reconcile");
+        let report = reconcile(&session).expect("reconcile");
         assert!(report.renamed.is_empty());
     }
 
     #[test]
     fn reconcile_reports_scan_and_view_counts() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         write_note(
-            &vault,
+            &session,
             &format!("{ULID}-aligned.md"),
             "---\ntitle: Aligned\n---\nbody\n",
         );
         // A second note with a missing title is skipped with a warning.
         write_note(
-            &vault,
+            &session,
             "01BRZ3NDEKTSV4RRFFQ69G5FAV-bad.md",
             "---\ntags: [x]\n---\nbody\n",
         );
-        let report = reconcile(&vault).expect("reconcile");
+        let report = reconcile(&session).expect("reconcile");
         assert_eq!(report.notes_scanned, 1);
         assert_eq!(report.views_synced, 1);
         assert_eq!(report.warnings.len(), 1);
@@ -285,16 +286,16 @@ mod tests {
 
     #[test]
     fn realign_only_touches_drifted_note() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         let aligned = write_note(
-            &vault,
+            &session,
             &format!("{ULID}-aligned.md"),
             "---\ntitle: Aligned\n---\nbody\n",
         );
         assert!(realign(&aligned).expect("realign").is_none());
 
         let drifted = write_note(
-            &vault,
+            &session,
             &format!("{ULID}-stale.md"),
             "---\ntitle: Fresh Title\n---\nbody\n",
         );
@@ -307,19 +308,19 @@ mod tests {
 
     #[test]
     fn reconcile_rewrites_a_stale_link_target() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         write_note(
-            &vault,
+            &session,
             &format!("{ULID}-target.md"),
             "---\ntitle: Target\n---\nbody\n",
         );
         let source = write_note(
-            &vault,
+            &session,
             &format!("{ULID_B}-source.md"),
             &format!("---\ntitle: Source\n---\nsee [Target]({ULID}-old.md)\n"),
         );
 
-        let report = reconcile(&vault).expect("reconcile");
+        let report = reconcile(&session).expect("reconcile");
         assert_eq!(report.links_rewritten.len(), 1);
         let content = std::fs::read_to_string(&source).expect("read source");
         assert!(content.contains(&format!("[Target]({ULID}-target.md)")));
@@ -327,9 +328,9 @@ mod tests {
 
     #[test]
     fn reconcile_preserves_frontmatter_bytes_when_rewriting() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         write_note(
-            &vault,
+            &session,
             &format!("{ULID}-target.md"),
             "---\ntitle: Target\n---\nbody\n",
         );
@@ -338,12 +339,12 @@ mod tests {
         let header =
             "---\ntitle: Source\ntags: [area/work]\nstatus: in progress\npriority: 3\n---\n";
         let source = write_note(
-            &vault,
+            &session,
             &format!("{ULID_B}-source.md"),
             &format!("{header}see [Target]({ULID}-old.md)\n"),
         );
 
-        let report = reconcile(&vault).expect("reconcile");
+        let report = reconcile(&session).expect("reconcile");
         assert_eq!(report.links_rewritten.len(), 1);
         assert_eq!(
             std::fs::read_to_string(&source).expect("read source"),
@@ -353,45 +354,45 @@ mod tests {
 
     #[test]
     fn reconcile_leaves_aligned_links_untouched() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         write_note(
-            &vault,
+            &session,
             &format!("{ULID}-target.md"),
             "---\ntitle: Target\n---\nx\n",
         );
         let original = format!("---\ntitle: Source\n---\n[T]({ULID}-target.md)\n");
-        let source = write_note(&vault, &format!("{ULID_B}-source.md"), &original);
+        let source = write_note(&session, &format!("{ULID_B}-source.md"), &original);
 
-        let report = reconcile(&vault).expect("reconcile");
+        let report = reconcile(&session).expect("reconcile");
         assert!(report.links_rewritten.is_empty());
         assert_eq!(std::fs::read_to_string(&source).expect("read"), original);
     }
 
     #[test]
     fn reconcile_leaves_dangling_links_untouched() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         let original = format!("---\ntitle: Source\n---\n[gone]({ULID}-missing.md)\n");
-        let source = write_note(&vault, &format!("{ULID_B}-source.md"), &original);
+        let source = write_note(&session, &format!("{ULID_B}-source.md"), &original);
 
-        let report = reconcile(&vault).expect("reconcile");
+        let report = reconcile(&session).expect("reconcile");
         assert!(report.links_rewritten.is_empty());
         assert_eq!(std::fs::read_to_string(&source).expect("read"), original);
     }
 
     #[test]
     fn reconcile_renames_then_rewrites_a_self_link() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         let drifted = write_note(
-            &vault,
+            &session,
             &format!("{ULID}-old.md"),
             &format!("---\ntitle: New Title\n---\n[self]({ULID}-old.md)\n"),
         );
 
-        let report = reconcile(&vault).expect("reconcile");
+        let report = reconcile(&session).expect("reconcile");
         assert_eq!(report.renamed.len(), 1);
         assert_eq!(report.links_rewritten.len(), 1);
         assert!(!drifted.exists());
-        let new = vault
+        let new = session
             .layout()
             .all_notes()
             .join(format!("{ULID}-new-title.md"));
@@ -401,41 +402,41 @@ mod tests {
 
     #[test]
     fn reconcile_updates_links_to_a_renamed_note() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         // The target's slug `old` has drifted from its title `Alpha One`.
         write_note(
-            &vault,
+            &session,
             &format!("{ULID}-old.md"),
             "---\ntitle: Alpha One\n---\nx\n",
         );
         let linker = write_note(
-            &vault,
+            &session,
             &format!("{ULID_B}-linker.md"),
             &format!("---\ntitle: Linker\n---\n[a]({ULID}-old.md)\n"),
         );
 
-        reconcile(&vault).expect("reconcile");
+        reconcile(&session).expect("reconcile");
         let content = std::fs::read_to_string(&linker).expect("read linker");
         assert!(content.contains(&format!("[a]({ULID}-alpha-one.md)")));
     }
 
     #[test]
     fn reconcile_link_rewrite_is_idempotent() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         write_note(
-            &vault,
+            &session,
             &format!("{ULID}-target.md"),
             "---\ntitle: Target\n---\nx\n",
         );
         write_note(
-            &vault,
+            &session,
             &format!("{ULID_B}-source.md"),
             &format!("---\ntitle: Source\n---\n[T]({ULID}-old.md)\n"),
         );
 
-        assert_eq!(reconcile(&vault).expect("first").links_rewritten.len(), 1);
+        assert_eq!(reconcile(&session).expect("first").links_rewritten.len(), 1);
         assert!(
-            reconcile(&vault)
+            reconcile(&session)
                 .expect("second")
                 .links_rewritten
                 .is_empty()
@@ -444,49 +445,49 @@ mod tests {
 
     #[test]
     fn refresh_prunes_stale_links() {
-        let (_guard, vault) = vault_with_view();
+        let (_guard, session) = vault_with_view();
         let path = write_note(
-            &vault,
+            &session,
             &format!("{ULID}-note.md"),
             "---\ntitle: Note\ntags: [area/work]\n---\nbody\n",
         );
-        refresh_views(&vault).expect("first refresh");
-        assert!(vault.root().join("by-tag/area/work").is_dir());
+        refresh_views(&session).expect("first refresh");
+        assert!(session.root().join("by-tag/area/work").is_dir());
 
         // Remove the note out of band, then refresh: the stale group is gone.
         std::fs::remove_file(&path).expect("remove");
-        refresh_views(&vault).expect("second refresh");
-        assert!(!vault.root().join("by-tag/area").exists());
+        refresh_views(&session).expect("second refresh");
+        assert!(!session.root().join("by-tag/area").exists());
     }
 
     #[test]
     fn reconcile_adds_gitignore_entry_for_configured_view() {
-        let (_guard, vault) = vault_with_view();
-        let report = reconcile(&vault).expect("reconcile");
+        let (_guard, session) = vault_with_view();
+        let report = reconcile(&session).expect("reconcile");
         assert_eq!(report.gitignore_added, ["/by-tag/"]);
 
         let gitignore =
-            std::fs::read_to_string(vault.layout().gitignore_file()).expect("read .gitignore");
+            std::fs::read_to_string(session.layout().gitignore_file()).expect("read .gitignore");
         assert!(gitignore.contains("/by-tag/"), "got: {gitignore}");
     }
 
     #[test]
     fn reconcile_prunes_orphan_entry_but_leaves_directory() {
-        let (_guard, vault) = vault_with_view();
-        reconcile(&vault).expect("first reconcile");
+        let (_guard, session) = vault_with_view();
+        reconcile(&session).expect("first reconcile");
 
         // Simulate a view removed from config out of band: a managed entry and a
         // directory remain for `old`, which is no longer configured.
-        let gitignore = vault.layout().gitignore_file();
+        let gitignore = session.layout().gitignore_file();
         let mut content = std::fs::read_to_string(&gitignore).expect("read");
         content.push_str(&format!("{}\n/old/\n", crate::gitignore::MARKER));
         std::fs::write(&gitignore, content).expect("write");
-        std::fs::create_dir_all(vault.layout().view_dir("old")).expect("orphan dir");
+        std::fs::create_dir_all(session.layout().view_dir("old")).expect("orphan dir");
 
-        let report = reconcile(&vault).expect("second reconcile");
+        let report = reconcile(&session).expect("second reconcile");
         assert_eq!(report.gitignore_removed, ["/old/"]);
         assert!(
-            vault.layout().view_dir("old").exists(),
+            session.layout().view_dir("old").exists(),
             "the directory must be left in place"
         );
         let after = std::fs::read_to_string(&gitignore).expect("read");
@@ -496,9 +497,9 @@ mod tests {
 
     #[test]
     fn reconcile_gitignore_is_idempotent() {
-        let (_guard, vault) = vault_with_view();
-        reconcile(&vault).expect("first");
-        let report = reconcile(&vault).expect("second");
+        let (_guard, session) = vault_with_view();
+        reconcile(&session).expect("first");
+        let report = reconcile(&session).expect("second");
         assert!(report.gitignore_added.is_empty());
         assert!(report.gitignore_removed.is_empty());
     }

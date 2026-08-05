@@ -16,7 +16,7 @@ use super::tags::TagCount;
 use crate::config::PerVaultConfig;
 use crate::error::Result;
 use crate::scan;
-use crate::vault::Vault;
+use crate::session::VaultSession;
 
 /// A summary of a vault's contents.
 #[derive(Debug, Default)]
@@ -40,14 +40,14 @@ pub struct VaultStats {
 }
 
 /// Collect statistics for `vault`, keeping at most `top_n` most-used tags.
-pub fn vault_stats(vault: &Vault, top_n: usize) -> Result<VaultStats> {
-    let layout = vault.layout();
+pub fn vault_stats(session: &VaultSession, top_n: usize) -> Result<VaultStats> {
+    let layout = session.layout();
 
     // Notes and warnings come from a single scan; a vault without an
     // `all-notes/` directory yet simply has none.
     let all_notes = layout.all_notes();
     let (notes, warnings) = if all_notes.is_dir() {
-        let scan = scan::scan_notes_dir(&all_notes, &crate::cipher::PlaintextCipher)?;
+        let scan = scan::scan_notes_dir(&all_notes, session.cipher())?;
         (scan.notes, scan.warnings)
     } else {
         (Vec::new(), Vec::new())
@@ -114,28 +114,28 @@ mod tests {
     use crate::test_support::{vault_with_view, write_note};
 
     /// Write a note named `<ulid>-n.md` (the slug is irrelevant to these stats).
-    fn write(vault: &Vault, ulid: &str, content: &str) {
-        write_note(vault, &format!("{ulid}-n.md"), content);
+    fn write(session: &VaultSession, ulid: &str, content: &str) {
+        write_note(session, &format!("{ulid}-n.md"), content);
     }
 
     #[test]
     fn counts_and_ranks() {
-        let (_g, vault) = vault_with_view();
-        std::fs::create_dir_all(vault.layout().templates_dir()).expect("templates dir");
-        std::fs::write(vault.layout().default_template(), "x").expect("default template");
-        std::fs::write(vault.layout().today_template(), "x").expect("today template");
+        let (_g, session) = vault_with_view();
+        std::fs::create_dir_all(session.layout().templates_dir()).expect("templates dir");
+        std::fs::write(session.layout().default_template(), "x").expect("default template");
+        std::fs::write(session.layout().today_template(), "x").expect("today template");
         write(
-            &vault,
+            &session,
             "01ARZ3NDEKTSV4RRFFQ69G5FAV",
             "---\ntitle: A\ntags: [area/work, daily]\n---\n",
         );
         write(
-            &vault,
+            &session,
             "01BRZ3NDEKTSV4RRFFQ69G5FAV",
             "---\ntitle: B\ntags: [area/work]\n---\n",
         );
 
-        let stats = vault_stats(&vault, 5).expect("stats");
+        let stats = vault_stats(&session, 5).expect("stats");
         assert_eq!(stats.notes, 2);
         assert_eq!(stats.distinct_tags, 2);
         assert_eq!(stats.views, 1);
@@ -151,21 +151,21 @@ mod tests {
 
     #[test]
     fn top_tags_is_capped() {
-        let (_g, vault) = vault_with_view();
+        let (_g, session) = vault_with_view();
         write(
-            &vault,
+            &session,
             "01ARZ3NDEKTSV4RRFFQ69G5FAV",
             "---\ntitle: A\ntags: [a, b, c, d]\n---\n",
         );
-        let stats = vault_stats(&vault, 2).expect("stats");
+        let stats = vault_stats(&session, 2).expect("stats");
         assert_eq!(stats.distinct_tags, 4);
         assert_eq!(stats.top_tags.len(), 2);
     }
 
     #[test]
     fn empty_vault_has_no_dates_or_tags() {
-        let (_g, vault) = vault_with_view();
-        let stats = vault_stats(&vault, 5).expect("stats");
+        let (_g, session) = vault_with_view();
+        let stats = vault_stats(&session, 5).expect("stats");
         assert_eq!(stats.notes, 0);
         assert_eq!(stats.distinct_tags, 0);
         assert!(stats.top_tags.is_empty());
@@ -175,19 +175,19 @@ mod tests {
 
     #[test]
     fn counts_malformed_as_warnings() {
-        let (_g, vault) = vault_with_view();
+        let (_g, session) = vault_with_view();
         write(
-            &vault,
+            &session,
             "01ARZ3NDEKTSV4RRFFQ69G5FAV",
             "---\ntitle: Ok\n---\n",
         );
         // Missing title: skipped with a warning.
         write(
-            &vault,
+            &session,
             "01BRZ3NDEKTSV4RRFFQ69G5FAV",
             "---\ntags: [x]\n---\n",
         );
-        let stats = vault_stats(&vault, 5).expect("stats");
+        let stats = vault_stats(&session, 5).expect("stats");
         assert_eq!(stats.notes, 1);
         assert_eq!(stats.warnings, 1);
     }

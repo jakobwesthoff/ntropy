@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 
 use crate::error::Result;
 use crate::scan::{self, ScanWarning};
-use crate::vault::Vault;
+use crate::session::VaultSession;
 
 /// One tag and the number of notes carrying it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,8 +30,8 @@ pub struct TagList {
 }
 
 /// List all tags with their note counts, sorted alphabetically.
-pub fn list_tags(vault: &Vault) -> Result<TagList> {
-    let scan = scan::scan_notes_dir(&vault.layout().all_notes(), &crate::cipher::PlaintextCipher)?;
+pub fn list_tags(session: &VaultSession) -> Result<TagList> {
+    let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
 
     // A `BTreeMap` gives alphabetical order for free.
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
@@ -55,18 +55,19 @@ pub fn list_tags(vault: &Vault) -> Result<TagList> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vault::Vault;
 
-    fn temp_vault() -> (tempfile::TempDir, Vault) {
+    fn temp_vault() -> (tempfile::TempDir, VaultSession) {
         let dir = tempfile::tempdir().expect("temp dir");
         std::fs::create_dir_all(dir.path().join("all-notes")).expect("all-notes");
         std::fs::create_dir_all(dir.path().join(".ntropy")).expect(".ntropy");
-        let vault = Vault::new(dir.path());
-        (dir, vault)
+        let session = VaultSession::plaintext(Vault::new(dir.path()));
+        (dir, session)
     }
 
-    fn write(vault: &Vault, ulid: &str, content: &str) {
+    fn write(session: &VaultSession, ulid: &str, content: &str) {
         std::fs::write(
-            vault.layout().all_notes().join(format!("{ulid}-n.md")),
+            session.layout().all_notes().join(format!("{ulid}-n.md")),
             content,
         )
         .expect("write note");

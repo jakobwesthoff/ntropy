@@ -15,6 +15,7 @@ use std::path::PathBuf;
 use tempfile::TempDir;
 
 use crate::config::{PerVaultConfig, ViewConfig};
+use crate::session::VaultSession;
 use crate::vault::Vault;
 
 /// Build a temporary vault with `all-notes/` and the given `(name, field)`
@@ -22,7 +23,7 @@ use crate::vault::Vault;
 ///
 /// The returned [`TempDir`] guards the vault's lifetime: keep it bound for the
 /// duration of the test, as dropping it removes the directory tree.
-pub(crate) fn vault_with_views(views: &[(&str, &str)]) -> (TempDir, Vault) {
+pub(crate) fn vault_with_views(views: &[(&str, &str)]) -> (TempDir, VaultSession) {
     let dir = tempfile::tempdir().expect("temp dir");
     let root = dir.path();
     std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
@@ -41,18 +42,18 @@ pub(crate) fn vault_with_views(views: &[(&str, &str)]) -> (TempDir, Vault) {
     )
     .expect("write config");
 
-    let vault = Vault::new(root);
-    (dir, vault)
+    let session = VaultSession::plaintext(Vault::new(root));
+    (dir, session)
 }
 
 /// Build a temporary vault with a single `by-tag` view grouping by `tags`.
-pub(crate) fn vault_with_view() -> (TempDir, Vault) {
+pub(crate) fn vault_with_view() -> (TempDir, VaultSession) {
     vault_with_views(&[("by-tag", "tags")])
 }
 
 /// Write `content` to `all-notes/<name>` and return the note's path.
-pub(crate) fn write_note(vault: &Vault, name: &str, content: &str) -> PathBuf {
-    let path = vault.layout().all_notes().join(name);
+pub(crate) fn write_note(session: &VaultSession, name: &str, content: &str) -> PathBuf {
+    let path = session.layout().all_notes().join(name);
     std::fs::write(&path, content).expect("write note");
     path
 }

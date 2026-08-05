@@ -14,15 +14,15 @@ use crate::error::Result;
 use crate::fsutil;
 use crate::reconcile;
 use crate::scan::ScanWarning;
-use crate::vault::Vault;
+use crate::session::VaultSession;
 
 /// Delete the note file at `path` and sync the views.
 ///
 /// Returns the scan warnings produced while syncing (so a caller can honor
 /// `--strict`).
-pub fn delete_note(vault: &Vault, path: &Path) -> Result<Vec<ScanWarning>> {
+pub fn delete_note(session: &VaultSession, path: &Path) -> Result<Vec<ScanWarning>> {
     fsutil::remove_file(path)?;
-    reconcile::refresh_views(vault)
+    reconcile::refresh_views(session)
 }
 
 #[cfg(test)]
@@ -34,20 +34,20 @@ mod tests {
 
     #[test]
     fn removes_file_and_prunes_links() {
-        let (_g, vault) = vault_with_view();
+        let (_g, session) = vault_with_view();
         let path = write_note(
-            &vault,
+            &session,
             &format!("{ULID}-note.md"),
             "---\ntitle: Note\ntags: [work]\n---\n",
         );
 
         // Build the view first so there is a link to prune.
-        reconcile::refresh_views(&vault).expect("refresh");
-        assert!(vault.root().join("by-tag/work").is_dir());
+        reconcile::refresh_views(&session).expect("refresh");
+        assert!(session.root().join("by-tag/work").is_dir());
 
-        delete_note(&vault, &path).expect("delete");
+        delete_note(&session, &path).expect("delete");
         assert!(!path.exists());
         // The note's group is gone after the sync.
-        assert!(!vault.root().join("by-tag/work").exists());
+        assert!(!session.root().join("by-tag/work").exists());
     }
 }
