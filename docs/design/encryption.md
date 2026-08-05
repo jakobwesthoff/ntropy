@@ -70,13 +70,25 @@ definitions. This is what preserves key-free note creation, because `new` and
 `today` must read a template before they can encrypt anything. The leak is
 template boilerplate and configuration structure, not note content.
 
-Seed content is encrypted during `init --encrypted` like any other note.
+`init --encrypted` seeds no notes, so there is nothing for it to encrypt. The
+root `README.md` and the templates it writes are the same boilerplate in every
+vault, are not notes, and stay plaintext and readable. It also seeds no view,
+since views are disabled here, and therefore writes no `.gitignore`.
 
 A plaintext `.md` file appearing inside an encrypted vault's `all-notes/`
 (for example dropped in by hand) is skipped by the scanner with a warning,
 consistent with the scanner's robustness posture. `reconcile` adopts such a
 file: it encrypts it in place, giving hand-added files a sanctioned path into
-the vault.
+the vault, and clears the warning it resolved so a `--strict` run that fixed
+the problem does not also fail on it.
+
+Adoption takes only files that already parse as notes — a `<ulid>-<slug>.md`
+name and frontmatter carrying a title. Anything else is left byte-for-byte
+alone and stays a warning, exactly as it would in a plaintext vault, which
+never renames or rewrites a file it cannot parse. A file whose identity is
+already taken by an existing note is refused rather than overwriting it.
+Because encrypting needs only the public recipient, adoption runs on a locked
+vault too, which is where a stray plaintext note is most likely to appear.
 
 ## Locking model
 
@@ -187,9 +199,15 @@ on exit:
   copies) wherever the user configured them. That is outside ntropy's
   control and is a documented residual risk.
 
-`new` and `today` compose the same round-trip with creation: the note is
-materialized from the template into the temp file, edited, and encrypted on
-exit. No step needs the identity, so creation works on a locked vault.
+`new` composes the same round-trip with creation: the note is written from the
+template, then handed to the editor as the content the command already holds
+rather than read back. No step needs the identity, so creation works on a
+locked vault. What makes that true beyond the write itself is that view syncing
+returns before its scan in an encrypted vault; a scan there would need the key.
+
+`today` is the exception. It finds today's note by matching a title, which is
+irreducibly a read, so on a locked vault it fails with an error naming
+`ntropy unlock`.
 
 ## Rendering
 
@@ -210,8 +228,14 @@ never stage plaintext inside the vault. Two encrypted-vault specifics:
 
 Materialized views are disabled in encrypted vaults: a symlink tree like
 `by-tag/` would spell out the tag taxonomy in plaintext names inside the
-synced directory. View definitions in `.ntropy/` are inert there, and
-`vault encrypt` removes existing view trees at the point of no return.
+synced directory. `vault encrypt` removes existing view trees at the point of
+no return, and `ntropy view add` is refused rather than accepted-and-inert: a
+command that reports success and produces no directory is worse for a user's
+mental model than one that explains itself. `view list` and `view remove` keep
+working, so a vault encrypted after the fact can still be inspected and
+cleaned up. The root `.gitignore` is left alone, since pruning its managed
+entries would announce that ntropy stopped ignoring a directory that no longer
+exists.
 
 ## Language server
 
@@ -255,14 +279,73 @@ style:
   assert that `--resume` converges to the same result as an uninterrupted
   run.
 
+## Migration marker
+
+`.ntropy/migration.toml` exists only while a conversion is under way:
+
+```toml
+version = 1
+operation = "encrypt"          # encrypt | decrypt | rekey
+recipient = "age1..."          # the target key; absent for decrypt
+source_recipient = "age1..."   # rekey only: the key the sources still use
+started = "2026-08-06T12:00:00Z"
+```
+
+`version` lets a future change to the file's shape be told apart from one this
+version wrote. `source_recipient` is what makes a rekey resumable: both ends of
+a rekey are encrypted, so a resume has to know which key still opens the
+untouched sources. For the same reason a rekey writes the new keypair only
+after every note has been converted and verified — recording it earlier would
+leave an interrupted rekey holding sources its own vault no longer names the
+key for.
+
+A malformed marker is an error rather than a silent "no conversion": a
+half-written file means one *was* running, and treating it as absent would let
+the next command scan a vault holding two copies of every note.
+
+## Module layout
+
+The library owns everything that is not an ambient effect:
+
+- `src/crypto/` — the age binding. `age_io` is the only module in the crate
+  that names `age::` types, so what everything above it sees are the `Identity`
+  and `Recipient` newtypes.
+- `src/cipher.rs` — the `NoteCipher` seam every note read and write passes
+  through, its plaintext and age implementations, and the `Passphrase` type.
+- `src/keys/` — where this machine keeps the key: the credential-store trait,
+  the retrieval chain, and the passphrase-file reader. Shaped after
+  `config::global`, so all the logic sits in functions taking what they need
+  explicitly.
+- `src/session.rs` — a vault plus the cipher its notes are stored under. Derefs
+  to the vault, so path lookups read unchanged.
+- `src/migrate/` — the marker, the source-to-target planner, and the
+  produce/verify/commit machine.
+
+The binary contributes only what the library must not do: the `/dev/tty`
+passphrase prompt (`run/prompt.rs`), the flag-to-session wiring
+(`run/keys.rs`), the conversions' confirmation and reporting
+(`run/vault_cmd.rs`), the secure temp location (`run/securetemp.rs`), and the
+edit round trip (`run/edit.rs`).
+
 ## Implementation
 
-Both cryptography and keychain access are pure-Rust dependencies; no linked
-C libraries, distribution unchanged:
+Both cryptography and credential-store access are pure-Rust dependencies; no
+linked C libraries, distribution unchanged:
 
 - The `age` crate (the library under the `rage` CLI) provides X25519
   recipients and identities, the scrypt passphrase recipient, streaming
   encryption and decryption, and ASCII armor. Everything ntropy writes is a
   standard age file readable by stock tooling.
-- The `keyring` crate abstracts the macOS Keychain and the Linux Secret
-  Service and kernel keyring behind one entry API.
+- Credential stores are named individually against the `keyring-core` crate —
+  the macOS Keychain, the pure-Rust zbus Secret Service client, and the Linux
+  kernel keyring — rather than through the `keyring` facade, which binds one
+  store per platform and offers no fallback. The kernel keyring is what makes
+  an unlocked session possible on a headless box with no Secret Service
+  daemon; its entries do not survive a reboot, which is the trade for needing
+  no daemon.
+
+Encryption sits behind a cargo feature, `encryption`, enabled by default.
+`--no-default-features` drops both dependency trees. The command surface is
+compiled either way and reports the missing support at runtime, so `--help` is
+identical in both builds and an encrypted vault is recognized and named rather
+than mistaken for a directory of corrupt notes.

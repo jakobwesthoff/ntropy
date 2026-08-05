@@ -10,10 +10,27 @@ and this project adheres to
 
 ### Added
 
+- At-rest vault encryption. `ntropy init --encrypted` produces a vault whose
+  notes are age ciphertext on disk, so whatever syncs the directory cannot read
+  them; after a one-time `ntropy unlock` every command behaves as before.
+  `ntropy lock` forgets the key again.
+- `ntropy vault encrypt|decrypt|rekey|passphrase` convert an existing vault's
+  storage, re-encrypt it to a fresh key, or change its passphrase. Each rewrites
+  the whole vault and is safe to interrupt: every note is written and verified
+  before anything is deleted, and `--resume` finishes a run that was.
+- `--identity <path>` (or `$NTROPY_IDENTITY`) and `--passphrase-file <path>`
+  supply a key and a passphrase without the OS credential store or a prompt,
+  which is what makes an encrypted vault usable from a script.
 - The `encryption` cargo feature, enabled by default, carries the cryptography
-  and OS credential-store dependencies for at-rest vault encryption. Building
-  with `--no-default-features` drops them; none links a C library, so
-  distribution is unchanged either way.
+  and OS credential-store dependencies. Building with `--no-default-features`
+  drops them; none links a C library, so distribution is unchanged either way.
+  The command surface is compiled either way and reports the missing support at
+  runtime.
+
+### Changed
+
+- Materialized views are unavailable in an encrypted vault, where a symlink tree
+  would spell out the tag taxonomy in plaintext directory names.
 
 ## v1.8.0 - 2026-08-05
 

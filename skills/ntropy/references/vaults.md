@@ -108,6 +108,31 @@ export NTROPY_VAULT=/path/to/vault                  # a whole session
 A pointer file can also target an external vault (`echo "~/team-vault" >
 .ntropy-vault`), sharing one vault across several projects.
 
+## Encrypted vaults
+
+`ntropy init <path> --encrypted` stores the vault's notes encrypted at rest.
+The vault gains two files and loses its views:
+
+```
+.ntropy/identity.pub    the public recipient; its presence marks the vault encrypted
+.ntropy/identity.age    the identity, wrapped under a passphrase
+all-notes/<ulid>.age    notes, with no slug in the filename
+```
+
+There is no `by-tag/` and no `.gitignore`, because materialized views are
+disabled: a symlink tree would spell out the tag taxonomy in plaintext names
+inside the synced directory. Both key files belong in version control — they
+*are* the vault, and the identity is useless without the passphrase.
+
+Reading requires the key; `ntropy unlock` puts it in the OS credential store
+and `ntropy lock` removes it. Writing does not, so `ntropy new` works on a
+locked vault. For scripts, `--identity <path>` (or `$NTROPY_IDENTITY`) and
+`--passphrase-file <path>` replace the credential store and the prompt.
+
+Converting an existing vault is `ntropy vault encrypt` (and `vault decrypt`
+back). Both rewrite every note, ask first unless given `-y`, and are safe to
+interrupt: `--resume` finishes one that was.
+
 ## Configuration files
 
 - **Global** `config.toml`: only `default_vault`. Written by

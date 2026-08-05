@@ -126,6 +126,10 @@ Only top-level `*.md` files in `all-notes/` are notes. Subdirectories and
 non-`.md` files are left alone, so you can keep images and attachments right next
 to your notes without ntropy adopting them as notes.
 
+A vault can also store its notes [encrypted at rest](#encrypted-vaults), in
+which case `all-notes/` holds `<ulid>.age` files instead and there are no view
+directories.
+
 Because all of this is just files, the whole vault is yours to version: `git
 init` in it and commit your notes like any other text. The derived `by-*/` view
 directories don't belong in git, and ntropy keeps them out for you: it maintains
@@ -214,10 +218,14 @@ sync.
 | `view list\|add\|remove` | Manage [materialized views](#materialized-views), e.g. `ntropy view add by-status --field status`. |
 | `tags` | List every tag with its note count. |
 | `info` | Show the active vault and how it was resolved, the global default, and stats: note/tag/view/template counts, skipped-note warnings, the creation-date span, the top tags, and the template names. `--print`/`-p` prints the vault's path alone, for [shell integration](#shell-integration). |
+| `unlock` / `lock` | Store or forget an [encrypted vault](#encrypted-vaults)'s key, so ordinary commands need no passphrase. |
+| `vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault's storage, re-encrypt it to a fresh key, or change the passphrase. Each rewrites the whole vault, so each asks first (`-y` skips) and each is safe to interrupt (`--resume` finishes). |
 | `lsp` | Run the [language server](#language-server) over stdin/stdout for your editor. |
 
 Global flags (any command): `--vault <path>`, `-n`/`--non-interactive`,
-`--strict` (treat malformed or badly-named notes as errors instead of warnings).
+`--strict` (treat malformed or badly-named notes as errors instead of warnings),
+`-i`/`--identity <path>` and `--passphrase-file <path>` (see
+[encrypted vaults](#encrypted-vaults)).
 
 ## Query language
 
@@ -297,6 +305,11 @@ ntropy stores notes flat, with no folders to file them into. So how do you
 my notes by status", "by tag", "by project" — and then get to answer with plain
 filesystem navigation forever after.
 
+> [!NOTE]
+> Views are unavailable in an [encrypted vault](#encrypted-vaults): a symlink
+> tree would spell out your tag taxonomy in plaintext directory names inside
+> the synced folder.
+
 A view materializes that grouping as a real directory of symlinks pointing back
 into `all-notes/`:
 
@@ -335,6 +348,74 @@ you want, not the only way to slice your notes. Every field a view can group by,
 the [query language](#query-language) can filter by too — `ntropy search
 status:done` needs no view at all. Make a view when you'll browse a dimension
 often; reach for `search` for everything else.
+
+## Encrypted vaults
+
+A vault can store its notes encrypted at rest, so the thing that syncs your
+notes cannot read them:
+
+```bash
+ntropy init ~/private --encrypted     # asks for a passphrase
+```
+
+Everything else works as it always did. After a one-time `ntropy unlock` the
+key lives in your OS credential store and `new`, `search`, `render` and the rest
+behave exactly as in a plaintext vault. `ntropy lock` forgets it again.
+
+**What this protects, and what it doesn't.** Encryption defends the *content* of
+your notes against whoever stores or syncs the vault directory — Dropbox,
+iCloud, a git host, anyone who ends up with a copy. They see ciphertext. It does
+not hide metadata: filenames still reveal each note's id and therefore its
+creation time, along with how many notes you have and how big each one is, and
+`.ntropy/` stays readable. Nor does it reach backwards: if the vault was
+plaintext and synced before you encrypted it, those old revisions are still
+readable in your provider's version history, and cleaning that up is your job.
+
+```bash
+ntropy vault encrypt      # convert an existing vault
+ntropy vault decrypt      # and back again
+ntropy vault rekey        # re-encrypt everything to a fresh key
+ntropy vault passphrase   # change the passphrase; notes are untouched
+```
+
+Each of those rewrites the whole vault, so each asks first (`-y` skips) and each
+is safe to interrupt: every note is written in its new form and verified against
+the old one *before* anything is deleted, so a conversion killed halfway leaves
+both copies on disk. The next command refuses to touch the vault and tells you
+to finish with `--resume`.
+
+**Writing needs no key.** The vault has one keypair, and only the public half is
+needed to encrypt. `ntropy new` therefore works on a locked vault — you can jot
+something down without unlocking anything. Reading, searching and editing need
+the key, so `ntropy today` (which finds today's note by title) does not.
+
+**For scripts and headless machines**, `--identity <path>` or `$NTROPY_IDENTITY`
+names an age identity file to use instead of the credential store, and
+`--passphrase-file <path>` supplies a passphrase from a file's first line rather
+than a prompt. With `-n`, ntropy never prompts at all: it fails with a message
+naming `ntropy unlock` rather than blocking on a terminal that isn't there.
+
+> [!NOTE]
+> `--print`/`-p` reports the real path, which in an encrypted vault is the
+> ciphertext file. It's there for scripting against the file itself; opening it
+> in an editor shows binary. Edit through `ntropy search` instead.
+
+Two things behave differently in an encrypted vault. [Materialized
+views](#materialized-views) are disabled, because a `by-tag/` symlink tree would
+spell out your whole tag taxonomy in plaintext directory names inside the synced
+folder. And a rendered PDF is plaintext by nature, so if you write one *into*
+the vault ntropy warns you that it will sync unencrypted.
+
+It's all standard [age](https://age-encryption.org) underneath — every file
+ntropy writes is a plain age file. With the stock `age` CLI and your passphrase
+you can recover a vault without ntropy at all.
+
+> [!NOTE]
+> Encryption is a default-on cargo feature. `cargo install ntropy
+> --no-default-features` builds without the cryptography dependencies; such a
+> build recognizes an encrypted vault and says it cannot open it.
+
+Full details: [docs/design/encryption.md](https://github.com/jakobwesthoff/ntropy/blob/main/docs/design/encryption.md).
 
 ## Templates
 
@@ -483,6 +564,12 @@ config error naming the bad name, reported before anything renders.
 > ntropy's rendering infrastructure is built around interchangeable rendering
 > engines. Styling and theming control is planned for future releases.
 
+> [!NOTE]
+> A rendered artifact is plaintext by nature. Writing one into an
+> [encrypted vault](#encrypted-vaults) means it syncs unencrypted, and ntropy
+> warns when the output path lands there — most often when your shell happens
+> to be sitting in the vault and the default `./<slug>.pdf` applies.
+
 ## Language server
 
 `ntropy lsp` runs a [Language Server](https://microsoft.github.io/language-server-protocol/)
@@ -561,6 +648,13 @@ positional contract. ID and DATE can never contain spaces and are always safe.
 File paths need no parsing at all: `search -n -p` prints every match as one
 path per line (`ntropy search -n -p tag:work | xargs grep -l deadline`), and
 `new -p`/`today -p` print the created note's path.
+
+Against an [encrypted vault](#encrypted-vaults), `--identity <path>` or
+`$NTROPY_IDENTITY` supplies the key without the OS credential store, and
+`--passphrase-file <path>` supplies a passphrase without a prompt — which is
+what makes an encrypted vault usable from cron or CI. Note that `-p` there
+prints the ciphertext file's path: fine for `stat` or `xargs rm`, not for
+handing to an editor.
 
 Exit codes are scriptable: a `search` that matches nothing exits non-zero, so
 `if ntropy search -n tag:urgent; then …` branches on "did anything match" without

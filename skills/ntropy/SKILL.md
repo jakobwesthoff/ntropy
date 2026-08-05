@@ -71,10 +71,29 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
 | `ntropy tags -n` | Every tag with its note count — check this before inventing new tags. |
 | `ntropy info` | Active vault + how it resolved, global default, vault statistics. `-p`/`--print` prints the vault's absolute path alone, for scripts. |
+| `ntropy unlock` / `ntropy lock` | Store or forget an encrypted vault's key. |
+| `ntropy vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault's storage or manage its key. Rewrites every note, so pass `-y` to skip the confirmation; `--resume` finishes an interrupted run. |
 | `ntropy lsp` | Language server for editors (link/tag completion, go-to-definition); not used from scripts. Editor setup lives in the ntropy README. |
 
 Global flags on every command: `--vault <path>`, `-n`/`--non-interactive`,
-`--strict` (malformed notes become errors instead of skip-warnings).
+`--strict` (malformed notes become errors instead of skip-warnings),
+`-i`/`--identity <path>` and `--passphrase-file <path>` for encrypted vaults.
+
+## Encrypted vaults
+
+A vault whose `.ntropy/identity.pub` exists stores its notes encrypted as
+`all-notes/<ulid>.age`. Everything above works there unchanged once the vault
+is unlocked; what differs for an agent:
+
+- **Never open a `-p` path in an editor.** In an encrypted vault it is the
+  ciphertext file. Read a note with `ntropy search`, not by opening the path.
+- **Reading needs the key**, so a locked vault fails with a message naming
+  `ntropy unlock`. Creating does not: `ntropy new` works locked. `ntropy today`
+  does not, because it finds today's note by title.
+- **Headless use** wants `--identity <path>` (or `$NTROPY_IDENTITY`) and
+  `--passphrase-file <path>`; with `-n` ntropy never prompts.
+- **Views do not exist** there, so `ntropy view add` is refused.
+- **A rendered PDF is plaintext.** Write it outside the vault.
 
 ## Vault resolution (which vault will I hit?)
 

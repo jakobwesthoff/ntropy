@@ -20,9 +20,13 @@
 #
 # Usage:
 #   scripts/benchmark.sh [--notes N] [--seed S] [--runs R] [--warmup W]
+#                        [--encrypted]
 #                        [--vault DIR] [--keep] [--export DIR]
 #
 #   --notes N     Number of notes to generate (default 3000).
+#   --encrypted   Convert the corpus to an encrypted vault first and benchmark
+#                 against that, so the per-note decryption cost shows up in
+#                 every row. The conversion itself is timed too.
 #   --seed S      PRNG seed for the corpus (default 305419896). Same seed and
 #                 note count reproduce a byte-identical vault.
 #   --runs R      Force exactly R timed runs per command (default: hyperfine
@@ -39,6 +43,7 @@ set -euo pipefail
 # =========================================================
 
 NOTES=3000
+ENCRYPTED=0
 SEED=305419896
 RUNS=""
 WARMUP=3
@@ -54,6 +59,7 @@ die() {
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --notes) NOTES="${2:?--notes requires a value}"; shift 2 ;;
+        --encrypted) ENCRYPTED=1; shift ;;
         --seed) SEED="${2:?--seed requires a value}"; shift 2 ;;
         --runs) RUNS="${2:?--runs requires a value}"; shift 2 ;;
         --warmup) WARMUP="${2:?--warmup requires a value}"; shift 2 ;;
@@ -128,6 +134,34 @@ echo "==> Building views (initial reconcile)"
 "$BIN" reconcile --vault "$VAULT" >/dev/null
 
 # =========================================================
+# Optional: convert the corpus to an encrypted vault
+# =========================================================
+
+# The generator writes plaintext and `vault encrypt` converts it, rather than
+# teaching the generator to encrypt. That keeps one code path producing the
+# corpus and gets the conversion measured for free — it is the slowest thing
+# encryption adds, and the only one that touches every note at once.
+if [[ "$ENCRYPTED" == 1 ]]; then
+    PASSPHRASE_FILE="$WORK_DIR/passphrase.txt"
+    printf 'benchmark passphrase\n' > "$PASSPHRASE_FILE"
+
+    echo "==> Encrypting the vault ($NOTES notes)"
+    ENCRYPT_START=$(date +%s)
+    "$BIN" -n --vault "$VAULT" --passphrase-file "$PASSPHRASE_FILE" \
+        vault encrypt -y >/dev/null
+    echo "    took $(( $(date +%s) - ENCRYPT_START ))s"
+
+    # Unlock once, so the benchmarked commands read the key from the OS
+    # credential store. Passing `--passphrase-file` to each of them instead
+    # would measure the scrypt derivation — deliberately tuned to take about a
+    # second — rather than the per-note decryption this is trying to observe.
+    # The vault is locked again at the end.
+    echo "==> Unlocking the vault for the benchmark"
+    "$BIN" -n --vault "$VAULT" --passphrase-file "$PASSPHRASE_FILE" unlock >/dev/null
+    trap '"$BIN" -n --vault "$VAULT" lock >/dev/null 2>&1 || true' EXIT
+fi
+
+# =========================================================
 # Read the corpus manifest
 # =========================================================
 
@@ -197,8 +231,13 @@ COMMANDS=(
     "combined-tag-and-text|$NT search 'tag:$TAG_SHALLOW and text:$TEXT_COMMON'"
     "tags-aggregate|$NT tags"
     "info-stats|$NT info"
-    "reconcile|$NT reconcile"
 )
+
+# An encrypted vault has no views to sync, so `reconcile` there measures
+# something else entirely and the row would not be comparable.
+if [[ "$ENCRYPTED" != 1 ]]; then
+    COMMANDS+=("reconcile|$NT reconcile")
+fi
 
 # Assemble the hyperfine argument vector: shared options first, then a
 # (--command-name, command) pair per benchmark.
