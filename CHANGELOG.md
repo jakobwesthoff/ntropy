@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Dependencies updated to their latest compatible releases: `anyhow` 1.0.104,
+  `clap` 4.6.5, `ignore` 0.4.33, `jiff` 0.2.35, `libc` 0.2.189, `regex` 1.13.1,
+  `serde` 1.0.229, `serde_json` 1.0.151, `thiserror` 2.0.19, `toml` 1.1.4.
+
 ## v1.9.0 - 2026-08-06
 
 ### Added
