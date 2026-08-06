@@ -17,7 +17,8 @@ and this project adheres to
 - `ntropy vault encrypt|decrypt|rekey|passphrase` convert an existing vault's
   storage, re-encrypt it to a fresh key, or change its passphrase. Each rewrites
   the whole vault and is safe to interrupt: every note is written and verified
-  before anything is deleted, and `--resume` finishes a run that was.
+  before anything is deleted, and `--resume` finishes a run that was. `rekey`
+  keeps the vault's passphrase unless `--new-passphrase-file` names another.
 - `--identity <path>` (or `$NTROPY_IDENTITY`) and `--passphrase-file <path>`
   supply a key and a passphrase without the OS credential store or a prompt,
   which is what makes an encrypted vault usable from a script.

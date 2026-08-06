@@ -374,7 +374,7 @@ readable in your provider's version history, and cleaning that up is your job.
 ```bash
 ntropy vault encrypt      # convert an existing vault
 ntropy vault decrypt      # and back again
-ntropy vault rekey        # re-encrypt everything to a fresh key
+ntropy vault rekey        # re-encrypt everything to a fresh key (same passphrase)
 ntropy vault passphrase   # change the passphrase; notes are untouched
 ```
 

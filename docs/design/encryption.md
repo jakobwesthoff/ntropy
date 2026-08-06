@@ -145,7 +145,11 @@ group under a `vault` namespace:
 - `vault encrypt` converts a plaintext vault in place; `vault decrypt` is
   the inverse and requires the identity.
 - `vault rekey` generates a fresh keypair and re-encrypts every note to it,
-  for a suspected identity compromise. It requires the old identity.
+  for a suspected identity compromise. It requires the old identity. The
+  passphrase is unchanged unless `--new-passphrase-file` names another, since
+  the point of a rekey is the key rather than the passphrase; the new keypair
+  is written only once every note has been converted and verified, so an
+  interrupted rekey can still read its own sources.
 
 ### Migration crash safety
 

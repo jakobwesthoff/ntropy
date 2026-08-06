@@ -37,9 +37,19 @@ pub fn run(global: &GlobalArgs, command: VaultCommand, interactive: bool) -> Res
         VaultCommand::Decrypt { resume, yes } => {
             decrypt(global, &context, vault, resume, yes, interactive)
         }
-        VaultCommand::Rekey { resume, yes } => {
-            rekey(global, &context, vault, resume, yes, interactive)
-        }
+        VaultCommand::Rekey {
+            resume,
+            yes,
+            new_passphrase_file,
+        } => rekey(
+            global,
+            &context,
+            vault,
+            resume,
+            yes,
+            interactive,
+            new_passphrase_file,
+        ),
         VaultCommand::Passphrase {
             new_passphrase_file,
         } => passphrase(&context, vault, new_passphrase_file),
@@ -168,6 +178,7 @@ fn rekey(
     resume: bool,
     yes: bool,
     interactive: bool,
+    new_passphrase_file: Option<std::path::PathBuf>,
 ) -> Result<()> {
     if !layout::is_encrypted(vault.root()) {
         bail!("this vault is not encrypted");
@@ -180,7 +191,14 @@ fn rekey(
     let old_identity = context.identity_for(&vault, &old_recipient)?;
     let source = AgeCipher::new(old_recipient.clone(), Some(old_identity));
 
-    let passphrase = context.new_passphrase(&vault.root().display().to_string())?;
+    // The new key needs a passphrase to be wrapped under. Naming one changes
+    // it; leaving it out reuses whatever opened the old key, so the vault keeps
+    // its passphrase and only the key changes — which is what `rekey` is for.
+    let label = vault.root().display().to_string();
+    let passphrase = match new_passphrase_file.as_deref() {
+        Some(path) => context.passphrase_from(Some(path), "the new passphrase")?,
+        None => context.new_passphrase(&label)?,
+    };
     let (new_identity, new_recipient) = age_io::generate_keypair();
     let target = AgeCipher::new(new_recipient.clone(), Some(new_identity.clone()));
 

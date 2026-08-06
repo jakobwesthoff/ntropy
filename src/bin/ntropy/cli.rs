@@ -221,6 +221,12 @@ pub enum VaultCommand {
         /// Skip the confirmation prompt.
         #[arg(short = 'y', long)]
         yes: bool,
+        /// Read the passphrase for the new key from this file's first line.
+        ///
+        /// Without it the global `--passphrase-file` is reused, so the vault
+        /// keeps its current passphrase and only the key changes.
+        #[arg(long, value_name = "PATH")]
+        new_passphrase_file: Option<PathBuf>,
     },
     /// Change the passphrase protecting the vault's identity.
     ///

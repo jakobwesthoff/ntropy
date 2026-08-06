@@ -273,6 +273,10 @@ rewrite everything and are nothing like daily use. `encrypt` and `decrypt`
 convert a vault's storage; `rekey` re-encrypts every note to a fresh keypair;
 `passphrase` re-wraps the identity, leaving the notes untouched.
 
+`rekey` replaces the key and keeps the passphrase: whatever opened the old key
+wraps the new one. `--new-passphrase-file` changes that too, using the same
+flag name `vault passphrase` takes for the same purpose.
+
 ### `lsp`
 
 Run the ntropy language server over stdin/stdout, for an editor's LSP client to

@@ -321,10 +321,15 @@ fn cmd_vault(_global: &GlobalArgs, command: VaultCommand) -> Result<ExitCode> {
     // Every variant is named so the flags count as read and the stripped build
     // stays warning-free.
     match command {
-        VaultCommand::Encrypt { resume, yes }
-        | VaultCommand::Decrypt { resume, yes }
-        | VaultCommand::Rekey { resume, yes } => {
+        VaultCommand::Encrypt { resume, yes } | VaultCommand::Decrypt { resume, yes } => {
             let _ = (resume, yes);
+        }
+        VaultCommand::Rekey {
+            resume,
+            yes,
+            new_passphrase_file,
+        } => {
+            let _ = (resume, yes, new_passphrase_file);
         }
         VaultCommand::Passphrase {
             new_passphrase_file,

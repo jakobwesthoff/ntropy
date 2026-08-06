@@ -2102,6 +2102,73 @@ mod encrypted {
     }
 
     #[test]
+    fn vault_rekey_keeps_the_passphrase_by_default() {
+        // Rekey is about replacing the key, not the passphrase, so the one
+        // that opened the old key wraps the new one unless told otherwise.
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+        ntropy_convert(vault)
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("encrypt");
+
+        redacted(vault).bind(|| {
+            let mut settings = insta::Settings::clone_current();
+            settings.add_filter(r"age1[0-9a-z]+", "[RECIPIENT]");
+            settings.bind(|| {
+                assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "rekey", "-y"]));
+            });
+        });
+
+        // The original passphrase still opens the vault.
+        let output = ntropy_convert(vault)
+            .args(["search", "-p"])
+            .output()
+            .expect("search");
+        assert!(output.status.success(), "the passphrase must be unchanged");
+    }
+
+    #[test]
+    fn vault_rekey_can_set_a_new_passphrase() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+        ntropy_convert(vault)
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("encrypt");
+
+        fs::write(vault.join("new-pw.txt"), "a different passphrase\n").expect("write");
+        let rekey = ntropy_convert(vault)
+            .args([
+                "vault",
+                "rekey",
+                "-y",
+                "--new-passphrase-file",
+                "new-pw.txt",
+            ])
+            .output()
+            .expect("rekey");
+        assert!(rekey.status.success(), "{rekey:?}");
+
+        // The old passphrase no longer opens it; the new one does.
+        let mut old = ntropy(vault);
+        old.args([
+            "-n",
+            "--passphrase-file",
+            TEST_PASSPHRASE_FILE,
+            "search",
+            "-p",
+        ]);
+        assert!(!old.output().expect("search").status.success());
+
+        let mut new = ntropy(vault);
+        new.args(["-n", "--passphrase-file", "new-pw.txt", "search", "-p"]);
+        assert!(new.output().expect("search").status.success());
+    }
+
+    #[test]
     fn vault_passphrase_changes_the_wrapper_and_leaves_notes_alone() {
         let dir = convertible_vault();
         let vault = dir.path();
