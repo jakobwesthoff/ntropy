@@ -1,6 +1,6 @@
 [package]
 name = "ntropy"
-version = "1.8.0"
+version = "1.9.0"
 edition = "2024"
 authors = ["Jakob Westhoff <jakob@westhoffswelt.de>"]
 description = "An opinionated Markdown note-taking and management CLI."
@@ -27,7 +27,9 @@ encryption = [
 # `armor` is the only feature needed: the ASCII-armored wrap of the vault
 # identity. X25519 and the scrypt passphrase recipient are in age's core, and
 # leaving the rest off keeps the ssh, plugin and CLI machinery out of the tree.
-age = { version = "0.12.1", default-features = false, features = ["armor"], optional = true }
+age = { version = "0.12.1", default-features = false, features = [
+    "armor",
+], optional = true }
 anyhow = "1.0.103"
 clap = { version = "4.6.1", features = ["derive"] }
 crossterm = "0.29.0"
@@ -73,7 +75,9 @@ libc = "0.2.186"
 # and `keyring`'s own documentation points applications that need to choose
 # their stores at `keyring-core` plus the stores they want.
 [target.'cfg(target_os = "macos")'.dependencies]
-apple-native-keyring-store = { version = "1.0.1", features = ["keychain"], optional = true }
+apple-native-keyring-store = { version = "1.0.1", features = [
+    "keychain",
+], optional = true }
 
 # The Secret Service client is the zbus one, which is pure Rust. Its
 # `dbus-secret-service` sibling would build a vendored libdbus from C source.
