@@ -344,6 +344,9 @@ linked C libraries, distribution unchanged:
   recipients and identities, the scrypt passphrase recipient, streaming
   encryption and decryption, and ASCII armor. Everything ntropy writes is a
   standard age file readable by stock tooling.
+- The Secret Service client runs on zbus's own `async-io` reactor with the
+  pure-Rust crypto backend, so no tokio runtime and no OpenSSL enter the tree.
+  The crate refuses to compile without an explicit runtime choice.
 - Credential stores are named individually against the `keyring-core` crate —
   the macOS Keychain, the pure-Rust zbus Secret Service client, and the Linux
   kernel keyring — rather than through the `keyring` facade, which binds one
