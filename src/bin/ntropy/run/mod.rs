@@ -89,9 +89,18 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     match command {
         // Handled above, before vault resolution.
         Command::Init { .. } => unreachable!("init is dispatched before vault resolution"),
-        Command::Search { query, print } => {
-            cmd_search(&cli.global, &session, join(&query), print, interactive)
-        }
+        Command::Search {
+            query,
+            print,
+            print_content,
+        } => cmd_search(
+            &cli.global,
+            &session,
+            join(&query),
+            print,
+            print_content,
+            interactive,
+        ),
         Command::New {
             title,
             template,
@@ -345,6 +354,7 @@ fn cmd_search(
     session: &VaultSession,
     selector: String,
     print: bool,
+    print_content: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
     // A bare invocation browses the whole vault; a selector resolves a full ULID
@@ -367,6 +377,24 @@ fn cmd_search(
             eprintln!("No notes matched your search criteria.");
             Ok(ExitCode::FAILURE)
         }
+        // `--print-content` emits the note itself rather than a path, so it
+        // needs exactly one note: several notes concatenated with nothing
+        // between them is not something a caller can take apart again. That is
+        // `render`'s rule (ADR 0025), for the same reason.
+        [note] if print_content => {
+            print!(
+                "{}",
+                session
+                    .cipher()
+                    .read(&note.path)
+                    .context("while reading the note")?
+            );
+            Ok(ExitCode::SUCCESS)
+        }
+        notes if print_content && !interactive => {
+            report_ambiguous(&selector, notes)?;
+            Ok(ExitCode::FAILURE)
+        }
         notes => {
             if interactive {
                 // On a TTY a lone match is selected straight away; several open
@@ -378,6 +406,18 @@ fn cmd_search(
                     picker::pick(candidates, picker::align_candidates)?.map(|s| s.path)
                 };
                 match selected {
+                    // `--print-content` writes the note itself, decrypting
+                    // where the vault requires it, so the output is the same
+                    // whichever way the vault stores its notes.
+                    Some(path) if print_content => {
+                        print!(
+                            "{}",
+                            session
+                                .cipher()
+                                .read(&path)
+                                .context("while reading the note")?
+                        );
+                    }
                     // `--print` writes the selection's path to stdout instead
                     // of opening the editor (ADR 0035). Nothing was edited, so
                     // no realign or view refresh is needed.
@@ -387,7 +427,7 @@ fn cmd_search(
                     // the command fails and `p=$(ntropy search -p ...)`
                     // branches correctly; without `--print` a cancel stays a
                     // successful no-op.
-                    None if print => return Ok(ExitCode::FAILURE),
+                    None if print || print_content => return Ok(ExitCode::FAILURE),
                     None => {}
                 }
             } else if print {

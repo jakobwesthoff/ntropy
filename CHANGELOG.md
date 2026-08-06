@@ -19,6 +19,10 @@ and this project adheres to
   the whole vault and is safe to interrupt: every note is written and verified
   before anything is deleted, and `--resume` finishes a run that was. `rekey`
   keeps the vault's passphrase unless `--new-passphrase-file` names another.
+- `search --print-content`/`-P` writes a note's text to stdout instead of
+  opening the editor, resolving to exactly one note. Unlike `--print`, which
+  names a file, it reads through the vault's cipher and so produces the same
+  bytes whether or not the vault is encrypted.
 - `--identity <path>` (or `$NTROPY_IDENTITY`) and `--passphrase-file <path>`
   supply a key and a passphrase without the OS credential store or a prompt,
   which is what makes an encrypted vault usable from a script.

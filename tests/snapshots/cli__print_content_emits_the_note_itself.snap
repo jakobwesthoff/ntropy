@@ -1,0 +1,22 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - search
+    - "-P"
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+---
+title: A
+tags: [work]
+---
+body line
+
+----- stderr -----

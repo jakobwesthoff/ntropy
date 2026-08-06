@@ -211,7 +211,7 @@ sync.
 | `init [path]` | Scaffold (or complete) a vault; idempotent. Target is `path` or, if omitted, `--vault` (both is an error; neither uses the cwd). `--set-default` records it as the global default. |
 | `new <title>` | Create a note from a [template](#templates) and open it. `--template`/`-t <name>` picks a template; `--print`/`-p` just prints the path. |
 | `today` | Open today's note, creating it from the [`today` template](#daily-notes-with-today) on first use that day. `--print`/`-p` just prints the path. |
-| `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it. |
+| `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it; `--print-content`/`-P` prints the note's text (exactly one note). |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
 | `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) with ntropy's own typst engine (only `typst` required on `PATH`). Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`, or `typst` for the emitted Typst document), `-o` the output path (default `./<slug>.<ext>`), `-p` prints the artifact path. |
 | `reconcile` | Realign filenames whose slug drifted from the title and re-sync every view (catches up after edits made outside ntropy). |
@@ -399,8 +399,9 @@ rather than blocking on a terminal that isn't there.
 
 > [!NOTE]
 > `--print`/`-p` reports the real path, which in an encrypted vault is the
-> ciphertext file. It's there for scripting against the file itself; opening it
-> in an editor shows binary. Edit through `ntropy search` instead.
+> ciphertext file — fine for `stat` or `xargs rm`, not for reading. Use
+> `search -P`/`--print-content` to get the note's text instead, which reads the
+> same in either kind of vault. Editing still goes through `ntropy search`.
 
 Two things behave differently in an encrypted vault. [Materialized
 views](#materialized-views) are disabled, because a `by-tag/` symlink tree would
@@ -650,6 +651,18 @@ positional contract. ID and DATE can never contain spaces and are always safe.
 File paths need no parsing at all: `search -n -p` prints every match as one
 path per line (`ntropy search -n -p tag:work | xargs grep -l deadline`), and
 `new -p`/`today -p` print the created note's path.
+
+To read a note rather than locate it, `search -P`/`--print-content` writes its
+text to stdout. It must resolve to exactly one note, and unlike `-p` it works
+the same in an [encrypted vault](#encrypted-vaults) — the path there names a
+ciphertext file, the content does not:
+
+```bash
+ntropy search -n -P 01J8Z9K…            # the note, either kind of vault
+for id in $(ntropy search -n tag:work | tail -n +2 | awk '{print $1}'); do
+    ntropy search -n -P "$id"
+done
+```
 
 Against an [encrypted vault](#encrypted-vaults), `--identity <path>` or
 `$NTROPY_IDENTITY` supplies the key without the OS credential store, and

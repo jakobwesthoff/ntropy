@@ -76,6 +76,45 @@ fn redacted(vault: &Path) -> insta::Settings {
 }
 
 #[test]
+fn print_content_emits_the_note_itself() {
+    let dir = setup_vault();
+    let vault = dir.path();
+    write_note(
+        vault,
+        ULID_A,
+        "a",
+        "---\ntitle: A\ntags: [work]\n---\nbody line\n",
+    );
+    redacted(vault).bind(|| {
+        assert_cmd_snapshot!(ntropy(vault).args(["-n", "search", "-P", ULID_A]));
+    });
+}
+
+#[test]
+fn print_content_needs_exactly_one_note() {
+    // Several notes run together with nothing between them is not something a
+    // caller can take apart again, so the ambiguity is reported instead.
+    let dir = setup_vault();
+    let vault = dir.path();
+    write_note(vault, ULID_A, "a", "---\ntitle: A\n---\nbody\n");
+    write_note(vault, ULID_B, "b", "---\ntitle: B\n---\nbody\n");
+    redacted(vault).bind(|| {
+        assert_cmd_snapshot!(ntropy(vault).args(["-n", "search", "-P"]));
+    });
+}
+
+#[test]
+fn print_content_and_print_are_mutually_exclusive() {
+    let dir = setup_vault();
+    let vault = dir.path();
+    let output = ntropy(vault)
+        .args(["-n", "search", "-p", "-P", ULID_A])
+        .output()
+        .expect("run");
+    assert!(!output.status.success());
+}
+
+#[test]
 fn bare_invocation_prints_help() {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
     cmd.env_remove("NTROPY_VAULT");
@@ -1806,6 +1845,40 @@ mod encrypted {
         redacted(vault).bind(|| {
             assert_cmd_snapshot!(cmd);
         });
+    }
+
+    #[test]
+    fn print_content_reads_the_same_as_a_plaintext_vault() {
+        // The whole point of the flag: `-p` names a ciphertext file here, but
+        // `-P` gives the note, so a script reads a vault the same way either
+        // way it stores its notes.
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let note = "---\ntitle: Shared\ntags: [work]\n---\nbody line\n";
+
+        // Write it through the CLI so it really is ciphertext on disk.
+        fs::write(
+            vault.join("all-notes").join(format!("{ULID_A}-shared.md")),
+            note,
+        )
+        .expect("stray plaintext note");
+        ntropy_encrypted(vault)
+            .arg("reconcile")
+            .output()
+            .expect("adopt");
+        assert!(
+            vault
+                .join("all-notes")
+                .join(format!("{ULID_A}.age"))
+                .is_file()
+        );
+
+        let output = ntropy_encrypted(vault)
+            .args(["search", "-P", ULID_A])
+            .output()
+            .expect("run");
+        assert!(output.status.success(), "{output:?}");
+        assert_eq!(String::from_utf8_lossy(&output.stdout), note);
     }
 
     #[test]

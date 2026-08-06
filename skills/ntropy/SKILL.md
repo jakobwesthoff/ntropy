@@ -64,7 +64,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy init [path]` | Scaffold or complete a vault; idempotent. `--set-default` records it as the global default. |
 | `ntropy new --print <title…>` | Create a note from a template, print its path. `-t <name>` picks `.ntropy/templates/<name>.md`. |
 | `ntropy today --print` | Print today's daily note path, creating it on first use each day. |
-| `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table. |
+| `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, or `-P` to print one note's text. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
 | `ntropy render -n -p <id> -o out.pdf` | Render one note to a document (v1: PDF via pandoc + typst, both required on `PATH`). Resolves to exactly one note; `-p` prints the artifact path. |
 | `ntropy reconcile` | Realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
@@ -85,8 +85,9 @@ A vault whose `.ntropy/identity.pub` exists stores its notes encrypted as
 `all-notes/<ulid>.age`. Everything above works there unchanged once the vault
 is unlocked; what differs for an agent:
 
-- **Never open a `-p` path in an editor.** In an encrypted vault it is the
-  ciphertext file. Read a note with `ntropy search`, not by opening the path.
+- **Never read a `-p` path directly.** In an encrypted vault it is the
+  ciphertext file. Use `ntropy search -n -P <id>` to get a note's text; it
+  reads the same in either kind of vault.
 - **Reading needs the key**, so a locked vault fails with a message naming
   `ntropy unlock`. Creating does not: `ntropy new` works locked. `ntropy today`
   does not, because it finds today's note by title.

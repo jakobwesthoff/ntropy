@@ -145,6 +145,16 @@ Examples:
     ntropy search tag:work -n           # print, don't pick
     ntropy edit 01ARZ3NDEKTSV4RRFFQ69G5FAV      # `edit` is a hidden alias
 
+`--print-content` / `-P` writes the note's text to stdout instead of opening
+the editor, and must resolve to exactly one note — several notes concatenated
+with nothing between them could not be taken apart again, so an ambiguous
+selector is reported as such (as `render` does). It conflicts with `--print`.
+
+The two flags differ in what survives encryption: `--print` names a file, which
+in an encrypted vault is ciphertext, while `--print-content` reads through the
+vault's cipher and therefore produces the same bytes whichever way the vault
+stores its notes.
+
 ### `delete <id|query>`
 
 Remove a note (its canonical file) and refresh the views. The selector follows

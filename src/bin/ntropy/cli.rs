@@ -114,6 +114,13 @@ pub enum Command {
         // `new`/`today` (ADR 0035).
         #[arg(short = 'p', long, alias = "no-edit")]
         print: bool,
+        /// Print the note's content to stdout instead of opening the editor.
+        ///
+        /// Must resolve to exactly one note. Reads identically whether or not
+        /// the vault is encrypted, which `--print` cannot: there the path
+        /// names a ciphertext file.
+        #[arg(short = 'P', long, conflicts_with = "print")]
+        print_content: bool,
     },
 
     /// Realign drifted filenames, re-sync views, and sync `.gitignore`.

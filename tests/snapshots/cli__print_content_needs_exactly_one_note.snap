@@ -1,0 +1,20 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - search
+    - "-P"
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: `` is ambiguous (2 matches):
+  [DATE....]  B  ([ULID....................])
+  [DATE....]  A  ([ULID....................])
+refine the query or pass a full ULID
