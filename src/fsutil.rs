@@ -84,8 +84,8 @@ pub fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
     // A ULID suffix keeps concurrent or repeated writes from clobbering each
     // other's temp file while still landing in the same directory.
     let tmp_name = match path.file_name() {
-        Some(name) => format!("{}.{}.tmp", name.to_string_lossy(), Ulid::new()),
-        None => format!("{}.tmp", Ulid::new()),
+        Some(name) => format!("{}.{}.tmp", name.to_string_lossy(), Ulid::generate()),
+        None => format!("{}.tmp", Ulid::generate()),
     };
     let tmp_path = parent.join(tmp_name);
 
@@ -114,8 +114,8 @@ pub fn atomic_write_private(path: &Path, contents: &[u8]) -> Result<()> {
 
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
     let tmp_name = match path.file_name() {
-        Some(name) => format!("{}.{}.tmp", name.to_string_lossy(), Ulid::new()),
-        None => format!("{}.tmp", Ulid::new()),
+        Some(name) => format!("{}.{}.tmp", name.to_string_lossy(), Ulid::generate()),
+        None => format!("{}.tmp", Ulid::generate()),
     };
     let tmp_path = parent.join(tmp_name);
 

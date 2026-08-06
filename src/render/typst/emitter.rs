@@ -286,7 +286,7 @@ impl<'a> Emitter<'a> {
             // pulldown-cmark 0.13 does not strip NUL from text, so NUL alone
             // would not suffice. Every token is substituted out before `emit`
             // returns, so the artifact is deterministic and nonce-free.
-            nonce: format!("\u{0}ntropy-footnote-{}\u{0}", ulid::Ulid::new()),
+            nonce: format!("\u{0}ntropy-footnote-{}\u{0}", ulid::Ulid::generate()),
             link_depth: 0,
             image_depth: 0,
         }

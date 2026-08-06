@@ -39,7 +39,7 @@ pub struct IdError {
 impl Id {
     /// Generate a fresh identity stamped with the current time.
     pub fn generate() -> Self {
-        Id(Ulid::new())
+        Id(Ulid::generate())
     }
 
     /// Construct an identity from an explicit millisecond timestamp with a zero
