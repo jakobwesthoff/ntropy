@@ -13,7 +13,7 @@ and this project adheres to
 - Dependencies updated to their latest compatible releases: `anyhow` 1.0.104,
   `clap` 4.6.5, `ignore` 0.4.33, `jiff` 0.2.35, `libc` 0.2.189, `regex` 1.13.1,
   `serde` 1.0.229, `serde_json` 1.0.151, `thiserror` 2.0.19, `toml` 1.1.4.
-- `ulid` updated to 3.0.0.
+- `ulid` updated to 3.0.0 and `lsp-server` to 0.10.0.
 
 ## v1.9.0 - 2026-08-06
 

@@ -589,7 +589,7 @@ mod tests {
             .sender
             .send(notification("initialized", json!({})))
             .unwrap();
-        response.result.expect("initialize result")
+        response.response_result.expect("initialize result")
     }
 
     /// Cleanly stop the server and assert it reports a clean shutdown.
@@ -657,7 +657,7 @@ mod tests {
         let Message::Response(response) = recv(&client) else {
             panic!("expected an error response");
         };
-        let error = response.error.expect("error payload");
+        let error = response.response_result.expect_err("error payload");
         assert_eq!(error.code, ErrorCode::MethodNotFound as i32);
         // The loop is still alive: a clean shutdown still works.
         shutdown(&client, handle);
@@ -720,7 +720,7 @@ mod tests {
         let Message::Response(response) = recv(&client) else {
             panic!("expected the shutdown response, not a registration");
         };
-        assert!(response.error.is_none());
+        assert!(response.response_result.is_ok());
         client
             .sender
             .send(notification("exit", json!(null)))
@@ -818,7 +818,7 @@ mod tests {
         let Message::Response(response) = recv(client) else {
             panic!("expected a response to {method}");
         };
-        response.result.expect("a result")
+        response.response_result.expect("a result")
     }
 
     fn completion_labels(result: &serde_json::Value) -> Vec<String> {
