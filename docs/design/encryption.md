@@ -106,6 +106,10 @@ interaction, and *locked* otherwise.
   as if `unlock` had run, so the explicit command is mostly a formality.
   Without a controlling terminal the command fails with an error naming
   `ntropy unlock`.
+- A passphrase supplied by `--passphrase-file` is *not* stored. A scripted run
+  already has a non-interactive way in and did not ask to unlock the machine,
+  so writing a key into the credential store there would be a side effect
+  nobody requested. Only a typed passphrase leaves the vault unlocked.
 - For scripts and headless environments, `--identity <path>` / `-i` or the
   `NTROPY_IDENTITY` environment variable names a plain age identity file to
   use instead of the keychain. The file is the native `age-keygen` format,

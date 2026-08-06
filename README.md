@@ -392,8 +392,10 @@ the key, so `ntropy today` (which finds today's note by title) does not.
 **For scripts and headless machines**, `--identity <path>` or `$NTROPY_IDENTITY`
 names an age identity file to use instead of the credential store, and
 `--passphrase-file <path>` supplies a passphrase from a file's first line rather
-than a prompt. With `-n`, ntropy never prompts at all: it fails with a message
-naming `ntropy unlock` rather than blocking on a terminal that isn't there.
+than a prompt. Neither writes anything to your credential store — only a
+passphrase you actually typed leaves the vault unlocked afterwards. With `-n`,
+ntropy never prompts at all: it fails with a message naming `ntropy unlock`
+rather than blocking on a terminal that isn't there.
 
 > [!NOTE]
 > `--print`/`-p` reports the real path, which in an encrypted vault is the

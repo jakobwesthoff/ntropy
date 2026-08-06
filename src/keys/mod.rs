@@ -206,19 +206,27 @@ mod acquire {
             }
         }
 
-        // Both remaining sources produce a passphrase, so they share the
-        // unwrap-and-store tail below.
-        let passphrase = match (request.passphrase_file, request.prompt) {
-            (Some(path), _) => read_passphrase_file(path)?,
-            (None, Some(prompt)) => prompt.existing(&recipient)?,
+        // Both remaining sources produce a passphrase, but only one of them
+        // should leave the vault unlocked afterwards.
+        let (passphrase, asked_a_human) = match (request.passphrase_file, request.prompt) {
+            (Some(path), _) => (read_passphrase_file(path)?, false),
+            (None, Some(prompt)) => (prompt.existing(&recipient)?, true),
             (None, None) => return Ok(None),
         };
 
         let identity = unwrap_identity_at(request.wrapped_identity, &passphrase)?;
 
-        // Storing here is what makes the explicit `unlock` command a
-        // formality: a command that had to ask leaves the vault unlocked.
-        request.store.set(&recipient, &identity.expose_secret())?;
+        // Storing is what makes the explicit `unlock` command a formality:
+        // someone who just typed their passphrase should not be asked again.
+        //
+        // A run that named a passphrase file gets no such treatment. It
+        // already has a non-interactive way in and did not ask to unlock this
+        // machine, so quietly writing a key into the user's credential store
+        // would be a side effect nobody requested — and in the test suite, one
+        // that pollutes the developer's real keychain.
+        if asked_a_human {
+            request.store.set(&recipient, &identity.expose_secret())?;
+        }
         Ok(Some(identity))
     }
 
@@ -614,6 +622,22 @@ mod tests {
                 .as_deref(),
             Some(fixture.identity.expose_secret().as_str())
         );
+    }
+
+    #[test]
+    fn a_passphrase_file_does_not_populate_the_store() {
+        // A scripted run already has a non-interactive way in and did not ask
+        // to unlock this machine. Writing a key into the credential store
+        // there would be a side effect nobody requested.
+        let fixture = Fixture::new("from the file");
+        let passphrase_file = fixture.write("pw", "from the file\n");
+        let store = MemoryIdentityStore::new();
+
+        let mut request = fixture.request(&store);
+        request.passphrase_file = Some(&passphrase_file);
+        acquire(&request).expect("acquire").expect("unlocked");
+
+        assert!(store.is_empty());
     }
 
     #[test]
