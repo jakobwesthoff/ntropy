@@ -25,7 +25,16 @@ and this project adheres to
   bytes whether or not the vault is encrypted.
 - `--identity <path>` (or `$NTROPY_IDENTITY`) and `--passphrase-file <path>`
   supply a key and a passphrase without the OS credential store or a prompt,
-  which is what makes an encrypted vault usable from a script.
+  which is what makes an encrypted vault usable from a script. Neither writes
+  to the credential store: only a passphrase you typed leaves the vault
+  unlocked afterwards.
+- The language server works against encrypted vaults with the same feature set.
+  Following a link opens a decrypted, read-only copy outside the vault, since
+  the note itself is ciphertext; editing still goes through `ntropy search`.
+- `reconcile` adopts a plaintext note dropped into an encrypted vault by hand,
+  encrypting it in place. It takes only files that already parse as notes and
+  never overwrites an existing one; because encrypting needs no key, this works
+  on a locked vault too.
 - The `encryption` cargo feature, enabled by default, carries the cryptography
   and OS credential-store dependencies. Building with `--no-default-features`
   drops them; none links a C library, so distribution is unchanged either way.
@@ -35,7 +44,21 @@ and this project adheres to
 ### Changed
 
 - Materialized views are unavailable in an encrypted vault, where a symlink tree
-  would spell out the tag taxonomy in plaintext directory names.
+  would spell out the tag taxonomy in plaintext directory names. `view add` says
+  so rather than accepting a definition that would produce nothing; `view list`
+  and `view remove` keep working.
+- `info` reports whether a vault is encrypted and whether it is unlocked. A
+  locked vault says so instead of printing note statistics, which would be
+  indistinguishable from an empty vault.
+- Editing a note in an encrypted vault decrypts it to an owner-only file outside
+  the vault, so a sync provider never sees the plaintext. Plaintext vaults are
+  unaffected and still open the note itself, leaving editor swap and undo files
+  exactly where they were. If the note changes underneath an open editor the
+  write is refused rather than silently overwriting, and your version is kept at
+  a path the error names.
+- `render` warns when the artifact would land inside an encrypted vault: the
+  output is plaintext by nature and would sync unencrypted. The render still
+  proceeds and the exit code is unaffected.
 
 ## v1.8.0 - 2026-08-05
 
