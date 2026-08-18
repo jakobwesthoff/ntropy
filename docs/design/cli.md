@@ -84,10 +84,10 @@ substituted), then open it in the editor.
 - `--print` / `-p`: create and print the path only (no editor). `--no-edit`
   is a hidden alias (ADR 0035).
 - `--empty`: write the file with no content at all, for a caller that authors
-  the note itself. No template is read, so `--template` is rejected alongside
-  it. The file is not a well-formed note until frontmatter is written into it;
-  until then a scan skips it with a warning like any other malformed file
-  (ADR 0019).
+  the note itself (ADR 0042). No template is read, so `--template` is rejected
+  alongside it. The file is not a well-formed note until frontmatter is written
+  into it; until then a scan skips it with a warning like any other malformed
+  file (ADR 0019).
 
 Both modes place the note identically — a fresh ULID and the filename the
 vault's storage implies — and both know the content they wrote, so the editor

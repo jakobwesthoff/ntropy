@@ -10,6 +10,9 @@ The `--no-edit`/`--print` flag naming is superseded by
 [ADR 0035](0035-generic-print-flag-replaces-no-edit.md): the flag is
 `--print`/`-p`, with `--no-edit` as a hidden alias.
 
+[ADR 0042](0042-empty-note-creation-for-machine-authors.md) adds `--empty`, a
+second creation mode that stamps no template.
+
 ## Context
 
 ntropy opens notes in the user's editor and creates new notes. It needs an
