@@ -1,0 +1,18 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - new
+    - "--empty"
+    - My First Note
+    - "--print"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+[VAULT]/all-notes/[ULID....................]-my-first-note.md
+
+----- stderr -----

@@ -104,8 +104,9 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Command::New {
             title,
             template,
+            empty,
             print,
-        } => cmd_new(&session, join(&title), template, print, interactive),
+        } => cmd_new(&session, join(&title), template, empty, print, interactive),
         Command::Today { print } => cmd_today(&session, print, interactive),
         Command::Reconcile => cmd_reconcile(&cli.global, &session),
         Command::Delete { selector, force } => {
@@ -451,23 +452,32 @@ fn cmd_new(
     session: &VaultSession,
     title: String,
     template: Option<String>,
+    empty: bool,
     print: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
-    let note = ops::create_note(session, &title, template.as_deref())
-        .context("while creating the note")?;
+    // The two creation modes differ only in what lands in the file. Both know
+    // their content without reading it back, which is what keeps the tail below
+    // shared and an encrypted vault from having to decrypt a file written
+    // moments earlier.
+    let (path, initial) = if empty {
+        let path =
+            ops::create_empty_note(session, &title).context("while creating the empty note")?;
+        (path, String::new())
+    } else {
+        let note = ops::create_note(session, &title, template.as_deref())
+            .context("while creating the note")?;
+        let initial = format!("{}{}", note.raw_header, note.body);
+        (note.path, initial)
+    };
 
     // Open the editor only when interactive and not explicitly suppressed;
-    // otherwise create-and-print for scripting (ADR 0015). The note was just
-    // rendered, so its content is handed straight to the editor rather than
-    // read back — which in an encrypted vault would mean decrypting something
-    // written moments earlier.
+    // otherwise create-and-print for scripting (ADR 0015).
     if !print && interactive {
-        let initial = format!("{}{}", note.raw_header, note.body);
-        open_and_refresh_from(session, &note.path, Some(&initial))?;
+        open_and_refresh_from(session, &path, Some(&initial))?;
     } else {
         reconcile::refresh_views(session).context("while refreshing views")?;
-        println!("{}", note.path.display());
+        println!("{}", path.display());
     }
     Ok(ExitCode::SUCCESS)
 }

@@ -16,7 +16,7 @@ pub mod select;
 pub mod tags;
 pub mod view_admin;
 
-pub use create::{TodayOutcome, create_note, today_note};
+pub use create::{TodayOutcome, create_empty_note, create_note, today_note};
 pub use delete::delete_note;
 pub use info::{VaultStats, vault_stats};
 pub use init::{InitOptions, InitReport, init_vault, init_vault_with};

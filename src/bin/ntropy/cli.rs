@@ -83,6 +83,10 @@ pub enum Command {
         /// `default`).
         #[arg(short = 't', long, value_name = "NAME")]
         template: Option<String>,
+        /// Create the file empty instead of stamping a template, for callers
+        /// that write the note's frontmatter and body themselves.
+        #[arg(long, conflicts_with = "template")]
+        empty: bool,
         /// Create and print the path only; do not open the editor.
         // `--no-edit` is accepted as a hidden alias for
         // backward compatibility (ADR 0035).

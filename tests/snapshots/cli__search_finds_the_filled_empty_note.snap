@@ -1,0 +1,18 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - search
+    - "-n"
+    - "tag:planning and status:draft"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+ID                          DATE        TITLE             TAGS           PATH
+[ULID....................]  [DATE....]  Quarterly Review  work,planning  [VAULT]/all-notes/[ULID....................]-quarterly-review.md
+
+----- stderr -----

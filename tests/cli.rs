@@ -249,6 +249,111 @@ fn new_uses_named_template() {
 }
 
 #[test]
+fn new_empty_creates_a_file_with_no_content() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["new", "--empty", "My First Note", "--print"]);
+        assert_cmd_snapshot!(cmd);
+    });
+
+    // The name is canonical, the file is there, and nothing is in it.
+    let created: Vec<_> = fs::read_dir(dir.path().join("all-notes"))
+        .expect("read all-notes")
+        .map(|e| e.expect("entry").path())
+        .collect();
+    assert_eq!(created.len(), 1);
+    let name = created[0].file_name().expect("name").to_string_lossy();
+    assert!(name.ends_with("-my-first-note.md"), "got: {name}");
+    assert_eq!(fs::read_to_string(&created[0]).expect("read note"), "");
+}
+
+#[test]
+fn new_empty_ignores_a_broken_default_template() {
+    // No template is consulted at all, so one that could never render into a
+    // well-formed note does not stand in the way.
+    let dir = setup_vault();
+    let templates = dir.path().join(".ntropy/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(templates.join("default.md"), "no frontmatter at all\n")
+        .expect("write broken default template");
+
+    let out = ntropy(dir.path())
+        .args(["new", "--empty", "-p", "Unaffected"])
+        .output()
+        .expect("run ntropy");
+    assert!(out.status.success(), "--empty must not read the template");
+    let path = String::from_utf8_lossy(&out.stdout).trim_end().to_string();
+    assert_eq!(fs::read_to_string(&path).expect("read note"), "");
+}
+
+#[test]
+fn new_empty_rejects_a_template_selection() {
+    // The two are contradictory: one says "stamp this template", the other
+    // "stamp nothing".
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["new", "--empty", "-t", "meeting", "-p", "Standup"]);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert_eq!(
+        fs::read_dir(dir.path().join("all-notes"))
+            .expect("read all-notes")
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn new_empty_help_documents_the_flag() {
+    let dir = setup_vault();
+    let help = ntropy(dir.path())
+        .args(["new", "--help"])
+        .output()
+        .expect("run ntropy");
+    let help_text = String::from_utf8_lossy(&help.stdout);
+    assert!(help_text.contains("--empty"), "got: {help_text}");
+}
+
+#[test]
+fn new_empty_becomes_a_note_once_the_caller_fills_it() {
+    // The whole workflow the flag exists for: take the path, write the note
+    // yourself, reconcile. The scan warns about the empty file in between,
+    // which is what `--strict` would turn into an error.
+    let dir = setup_vault();
+    let out = ntropy(dir.path())
+        .args(["new", "--empty", "-p", "Quarterly Review"])
+        .output()
+        .expect("run ntropy");
+    let path = String::from_utf8_lossy(&out.stdout).trim_end().to_string();
+
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n"]);
+        assert_cmd_snapshot!("search_warns_about_an_unfilled_empty_note", cmd);
+    });
+
+    fs::write(
+        &path,
+        "---\ntitle: Quarterly Review\ntags: [work, planning]\nstatus: draft\n---\n# Quarterly Review\n\nNumbers go here.\n",
+    )
+    .expect("fill the note");
+
+    let reconciled = ntropy(dir.path())
+        .args(["reconcile"])
+        .output()
+        .expect("run ntropy");
+    assert!(reconciled.status.success());
+
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n", "tag:planning and status:draft"]);
+        assert_cmd_snapshot!("search_finds_the_filled_empty_note", cmd);
+    });
+}
+
+#[test]
 fn new_missing_named_template_errors() {
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {
