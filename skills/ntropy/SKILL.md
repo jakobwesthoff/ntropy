@@ -57,9 +57,10 @@ language for filtering, and materialized symlink views for filesystem browsing.
 9. **Delete by ULID, with `-f`.** `delete` requires exactly one match and, in
    non-interactive mode, `--force`. Search first, then
    `ntropy delete -n -f <ulid>`.
-10. **`render` needs pandoc and typst on `PATH`.** It resolves to exactly one
+10. **`render` to PDF needs `typst` on `PATH`.** It resolves to exactly one
    note; pass `-p` to capture the artifact path (`out=$(ntropy render -n -p
-   <ulid>)`).
+   <ulid>)`). `--to typst` emits the Typst document instead and needs no
+   external tool at all.
 
 ## Do / don't
 
@@ -89,7 +90,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy write <id\|filename\|path>` | Replace that note's content with the whole note text read from stdin, then realign the filename and refresh views. Names its target, never searches: a full ULID, the filename, or the path. Refuses text that is not a well-formed note. Prints the resulting path. |
 | `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, or `-P` to print one note's text. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
-| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document (v1: PDF via pandoc + typst, both required on `PATH`). Resolves to exactly one note; `-p` prints the artifact path. |
+| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`) or `typst` for the emitted document, which needs no external tool. Resolves to exactly one note; `-p` prints the artifact path. |
 | `ntropy reconcile` | Realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
 | `ntropy tags -n` | Every tag with its note count — check this before inventing new tags. |
