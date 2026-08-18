@@ -26,21 +26,29 @@ language for filtering, and materialized symlink views for filesystem browsing.
    terminal exists — piping or capturing the output does NOT prevent that, so
    `$(ntropy search …)` without `-n` hangs waiting for keys.
 2. **NEVER hand-create files in `all-notes/`.** Create with
-   `ntropy new --print <title>` (it prints the path), then edit that file.
-3. **Run `ntropy reconcile` after editing note files directly.** Direct edits
+   `ntropy new --print <title>` (it prints the path), then edit that file. To
+   write the whole note yourself in one pass, add `--empty`: ntropy creates the
+   file with no content, and you owe it valid frontmatter (see rule 3).
+3. **`--empty` means you write a complete note, immediately.** The file it
+   leaves is empty, and an empty file is malformed: every ntropy command warns
+   about it, `--strict` fails on it, and it appears in no search until you fill
+   it. Write frontmatter with at least `title:` (matching the title you passed
+   to `new`, since the filename slug came from it), then the body, then run
+   `ntropy reconcile`. Never leave an `--empty` note unwritten.
+4. **Run `ntropy reconcile` after editing note files directly.** Direct edits
    to a title or frontmatter leave the filename slug and the views stale;
    reconcile realigns filenames, refreshes inter-note links, and re-syncs
    views. It is cheap and idempotent.
-4. **Check the active vault before mutating.** `ntropy info` names the vault
+5. **Check the active vault before mutating.** `ntropy info` names the vault
    and the rule that resolved it. When in doubt, pin the vault explicitly with
    `--vault <path>`.
-5. **NEVER touch derived state.** Do not write inside `by-*/` view
+6. **NEVER touch derived state.** Do not write inside `by-*/` view
    directories, do not edit ntropy's managed `.gitignore` entries, and do not
    store `id` or dates in frontmatter (identity lives in the filename).
-6. **Delete by ULID, with `-f`.** `delete` requires exactly one match and, in
+7. **Delete by ULID, with `-f`.** `delete` requires exactly one match and, in
    non-interactive mode, `--force`. Search first, then
    `ntropy delete -n -f <ulid>`.
-7. **`render` needs pandoc and typst on `PATH`.** It resolves to exactly one
+8. **`render` needs pandoc and typst on `PATH`.** It resolves to exactly one
    note; pass `-p` to capture the artifact path (`out=$(ntropy render -n -p
    <ulid>)`).
 
@@ -50,6 +58,9 @@ language for filtering, and materialized symlink views for filesystem browsing.
 |-------|----|
 | `ntropy new My note` — blocks in an editor | `ntropy new --print My note` |
 | Write a new file into `all-notes/` yourself | `path=$(ntropy new --print …)`, then edit `$path` |
+| `ntropy new --empty -p …` and move on | fill the file with frontmatter + body, then `ntropy reconcile` |
+| `--empty` because a template is inconvenient | `--empty` when you are writing the whole note anyway |
+| `--empty --template meeting` — contradictory, refused | pick one: a template stamps content, `--empty` writes none |
 | Rename a note file to retitle it | edit the frontmatter `title`, then `ntropy reconcile` |
 | Put `id:` or `created:` in frontmatter | nothing — identity and date live in the filename ULID |
 | `ntropy delete -n -f tag:old` — broad query | `ntropy delete -n -f <full-26-char-ulid>` |
@@ -62,7 +73,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | Command | Purpose |
 |---------|---------|
 | `ntropy init [path]` | Scaffold or complete a vault; idempotent. `--set-default` records it as the global default. |
-| `ntropy new --print <title…>` | Create a note from a template, print its path. `-t <name>` picks `.ntropy/templates/<name>.md`. |
+| `ntropy new --print <title…>` | Create a note from a template, print its path. `-t <name>` picks `.ntropy/templates/<name>.md`. `--empty` creates the file with no content instead, for when you write the whole note yourself (conflicts with `-t`). |
 | `ntropy today --print` | Print today's daily note path, creating it on first use each day. |
 | `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, or `-P` to print one note's text. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
@@ -91,6 +102,10 @@ is unlocked; what differs for an agent:
 - **Reading needs the key**, so a locked vault fails with a message naming
   `ntropy unlock`. Creating does not: `ntropy new` works locked. `ntropy today`
   does not, because it finds today's note by title.
+- **Do not use `--empty` there.** Its premise is that you write the file
+  yourself, and in an encrypted vault that path is an age container: plain text
+  written into it is not something ntropy can read back. Create from a template
+  instead.
 - **Headless use** wants `--identity <path>` (or `$NTROPY_IDENTITY`) and
   `--passphrase-file <path>`; with `-n` ntropy never prompts.
 - **Views do not exist** there, so `ntropy view add` is refused.
@@ -115,7 +130,31 @@ path=$(ntropy new --print Quarterly review)
 ntropy reconcile
 ```
 
-Frontmatter rules, tags, inter-note links, and template authoring:
+**Write a note in one pass (`--empty`):** when you already know the note's full
+shape, take the empty file and write all of it, no read-back needed:
+
+```bash
+path=$(ntropy new --empty --print Quarterly review)
+cat > "$path" <<'EOF'
+---
+title: Quarterly review
+tags: [work, planning]
+status: draft
+---
+# Quarterly review
+
+Body in ordinary Markdown.
+EOF
+ntropy reconcile
+```
+
+What you write has to be a well-formed note, since nothing stamped a skeleton
+for you: a YAML frontmatter block first, `title` in it (the title you passed to
+`new`, so the filename slug matches), `tags` a flat list of strings if present,
+no `id`/`created`/`modified` fields, YAML-quoting for values with `: ` in them,
+then the Markdown body.
+
+Frontmatter rules in full, plus tags, inter-note links, and template authoring:
 [references/writing-notes.md](references/writing-notes.md).
 
 **Find and read notes:**

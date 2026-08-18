@@ -17,6 +17,9 @@ and this project adheres to
   rewriting around a stamped skeleton. `--template` is rejected alongside it,
   and until frontmatter is written the file is not a well-formed note, so a scan
   skips it with a warning.
+- The agent skill teaches `--empty`: when to reach for it, the frontmatter and
+  body contract a note written that way must satisfy, and the obligation to fill
+  the file in the same step it is created.
 
 ## v1.9.1 - 2026-08-06
 

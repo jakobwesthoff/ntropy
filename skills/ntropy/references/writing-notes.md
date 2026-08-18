@@ -33,6 +33,53 @@ opening an editor. This is the agent path; the editor flow is for humans.
 ULID; a wrong or duplicate one corrupts note identity. Create via `ntropy new`,
 then edit.
 
+### Writing the whole note yourself: `--empty`
+
+`ntropy new --empty --print <title>` creates the file with nothing in it, no
+template stamped. Use it when you already know the note's full shape: you write
+frontmatter and body in a single write, with no need to read back or edit around
+a skeleton somebody else chose.
+
+```bash
+path=$(ntropy new --empty --print Refactor the parser)
+cat > "$path" <<'EOF'
+---
+title: Refactor the parser
+tags: [engineering, refactor]
+status: in progress
+---
+# Refactor the parser
+
+Why, and what changes.
+EOF
+ntropy reconcile
+```
+
+ntropy still owns the parts you must not invent — the ULID, the location, the
+filename — and nothing else. `--template` is rejected alongside `--empty`: one
+stamps content, the other writes none.
+
+**What you write must be a well-formed note.** Nothing validated it on the way
+in, so the "Frontmatter rules" below are your contract, not a suggestion. In
+particular:
+
+- The file **starts** with `---`, the YAML block, and a closing `---`. A file
+  with no frontmatter block is not a note.
+- `title` is required, and should be the title you passed to `new` — the
+  filename slug was derived from it, and a different title means immediate drift
+  that reconcile then renames away.
+- `tags`, if present, is a flat list of strings; no `id`, `created` or
+  `modified` fields; YAML-quote any value containing `: ` or starting with YAML
+  syntax.
+- Then the Markdown body, conventionally opening with `# <title>`.
+
+**Never leave the file empty.** Until frontmatter lands in it, every ntropy
+command warns about it (`--strict` fails outright) and no search returns it.
+Write it in the same step you created it, then run `ntropy reconcile`.
+
+`--empty` is for plaintext vaults. In an encrypted vault the printed path is an
+age container, not text you can write into; create from a template there.
+
 **MUST run `ntropy reconcile` after directly editing a note's frontmatter or
 title.** ntropy only realigns automatically when it launched the editor itself.
 After out-of-band edits, the filename slug can drift from the title and the
@@ -184,7 +231,9 @@ plain lexical sort of `all-notes/` is chronological.
 
 ## Well-behaved note checklist
 
-- Created via `ntropy new --print`, never hand-placed in `all-notes/`.
+- Created via `ntropy new --print` (add `--empty` to author it yourself), never
+  hand-placed in `all-notes/`.
+- No file left empty: an `--empty` note is filled in the same step it is created.
 - Frontmatter has `title`; `tags` is a flat string list; no `id`/date fields.
 - YAML values containing `: ` or starting with YAML syntax are quoted.
 - Field names and values reused consistently with the rest of the vault.
