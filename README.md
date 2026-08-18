@@ -211,6 +211,7 @@ sync.
 | `init [path]` | Scaffold (or complete) a vault; idempotent. Target is `path` or, if omitted, `--vault` (both is an error; neither uses the cwd). `--set-default` records it as the global default. |
 | `new <title>` | Create a note from a [template](#templates) and open it. `--template`/`-t <name>` picks a template; `--empty` writes no content at all, for a caller that authors the note itself; `--print`/`-p` just prints the path. |
 | `today` | Open today's note, creating it from the [`today` template](#daily-notes-with-today) on first use that day. `--print`/`-p` just prints the path. |
+| `write <id\|filename\|path>` | Replace one note's content with text read from stdin, then realign and refresh views. Names its target rather than searching for it, never prompts, and works on an encrypted vault including a locked one. |
 | `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it; `--print-content`/`-P` prints the note's text (exactly one note). |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
 | `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) with ntropy's own typst engine (only `typst` required on `PATH`). Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`, or `typst` for the emitted Typst document), `-o` the output path (default `./<slug>.<ext>`), `-p` prints the artifact path. |
@@ -401,7 +402,9 @@ rather than blocking on a terminal that isn't there.
 > `--print`/`-p` reports the real path, which in an encrypted vault is the
 > ciphertext file — fine for `stat` or `xargs rm`, not for reading. Use
 > `search -P`/`--print-content` to get the note's text instead, which reads the
-> same in either kind of vault. Editing still goes through `ntropy search`.
+> same in either kind of vault. Editing by hand goes through `ntropy search`;
+> `ntropy write` puts content back without an editor, which is what makes an
+> encrypted vault scriptable.
 
 Two things behave differently in an encrypted vault. [Materialized
 views](#materialized-views) are disabled, because a `by-tag/` symlink tree would
@@ -475,6 +478,24 @@ what goes inside is yours to write. That is mainly for scripts and agents, which
 would otherwise have to parse and rewrite around a stamped skeleton. Until
 frontmatter lands in the file it is not a well-formed note, so ntropy skips it
 with a warning meanwhile.
+
+`ntropy write` is the other half of that: it takes a note's whole text on stdin
+and stores it, then realigns the filename and refreshes the views for you. The
+two together author a note without ever reading one back, and without an editor,
+in a plaintext and an encrypted vault alike:
+
+```bash
+path=$(ntropy new --empty -p Quarterly review)
+ntropy write "$path" <<'EOF'
+---
+title: Quarterly review
+tags: [work, planning]
+---
+# Quarterly review
+
+Numbers go here.
+EOF
+```
 
 ### Daily notes with today
 

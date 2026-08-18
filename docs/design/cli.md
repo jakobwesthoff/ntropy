@@ -215,6 +215,31 @@ Examples:
     open "$(ntropy render -p 'text:"quarterly"')"    # render, then open the PDF
     ntropy render 01ARZ3NDEKTSV4RRFFQ69G5FAV -o report.pdf
 
+### `write <ULID|FILENAME|PATH>`
+
+Replace one note's content with text read from stdin (ADR 0043). This is how a
+note is authored without an editor, and the only way to author one in an
+encrypted vault.
+
+The target is named, not searched for: a full ULID, the note's filename, or a
+path into `all-notes/`. It must exist, and a ULID matching more than one file is
+an error. Resolution reads the directory listing and no note, so a locked
+encrypted vault still accepts a write; encrypting needs only the public
+recipient (ADR 0041).
+
+Text that is not a well-formed note is refused before anything is written
+(ADR 0034). Identity comes from the filename and nothing in the content can
+change it.
+
+No picker and no prompt, terminal or not: stdin carries the payload, so the
+invocation is scripted by construction. Afterwards the note is realigned and
+views refreshed, exactly as on editor exit, and the resulting path is printed,
+which is how a caller learns the new name when a written title renamed the file.
+
+    path=$(ntropy new --empty -p Quarterly review)
+    ntropy write "$path" < note.md
+    ntropy search -n -P <ulid> | rewrite | ntropy write <ulid>
+
 ### `reconcile`
 
 Realign filenames whose slugs drifted from their titles after out-of-band

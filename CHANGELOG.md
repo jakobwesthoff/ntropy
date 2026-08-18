@@ -17,9 +17,19 @@ and this project adheres to
   rewriting around a stamped skeleton. `--template` is rejected alongside it,
   and until frontmatter is written the file is not a well-formed note, so a scan
   skips it with a warning.
-- The agent skill teaches `--empty`: when to reach for it, the frontmatter and
-  body contract a note written that way must satisfy, and the obligation to fill
-  the file in the same step it is created.
+- `ntropy write <id|filename|path>` replaces one note's content with text read
+  from stdin. It names its target rather than searching for it, refuses text
+  that is not a well-formed note before writing anything, and then realigns the
+  filename and refreshes the views itself, so a written title cannot leave those
+  stale. It never prompts and never opens a picker, terminal or not.
+- Authoring a note in an encrypted vault no longer needs an editor, which a
+  script cannot drive. `write` resolves its target from the directory listing
+  and reads no note, so it works on a locked vault too, the same way `new`
+  already did. Paired with `new --empty`, a caller composes a note and stores it
+  without ever reading one back, identically in both kinds of vault.
+- The agent skill teaches `--empty` and `write`: when to reach for them, the
+  frontmatter and body contract a note written that way must satisfy, and the
+  obligation to fill the file in the same step it is created.
 
 ## v1.9.1 - 2026-08-06
 
