@@ -127,6 +127,22 @@ pub enum Command {
         print_content: bool,
     },
 
+    /// Replace one note's content with text read from stdin.
+    ///
+    /// The note is named, never searched for: a full ULID, the note's filename,
+    /// or its path in `all-notes/`. Nothing is prompted for and no picker opens,
+    /// so this composes into a pipeline; a target that names no note, or more
+    /// than one, is an error. The text must be a well-formed note (frontmatter
+    /// block with a `title`) or it is refused before anything is written.
+    ///
+    /// Works on an encrypted vault, including a locked one, which is what makes
+    /// it the way to author notes there without an editor (ADR 0043).
+    Write {
+        /// The note to write to.
+        #[arg(value_name = "ULID|FILENAME|PATH")]
+        target: String,
+    },
+
     /// Realign drifted filenames, re-sync views, and sync `.gitignore`.
     ///
     /// Brings the root `.gitignore` in line with the configured views, adding

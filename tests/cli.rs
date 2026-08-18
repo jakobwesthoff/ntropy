@@ -353,6 +353,250 @@ fn new_empty_becomes_a_note_once_the_caller_fills_it() {
     });
 }
 
+// =============================================================================
+// `write`
+// =============================================================================
+
+/// The note text the write tests feed in, and the title it carries.
+const WRITTEN: &str = "---\ntitle: Written Note\ntags: [written, work]\nstatus: draft\n---\n# Written Note\n\nBody.\n";
+
+/// Run `cmd` with `content` on stdin.
+///
+/// stdin has to be a pipe the test controls: `write` reads it to EOF, and an
+/// inherited stdin would make the run depend on how the harness was invoked.
+fn feed(cmd: &mut Command, content: &str) -> std::process::Output {
+    use std::io::Write as _;
+    use std::process::Stdio;
+
+    let mut child = cmd
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn ntropy");
+    child
+        .stdin
+        .as_mut()
+        .expect("stdin")
+        .write_all(content.as_bytes())
+        .expect("feed stdin");
+    child.wait_with_output().expect("wait for ntropy")
+}
+
+/// Run `ntropy write <args…>` in `vault` with `content` on stdin.
+fn run_write(vault: &Path, args: &[&str], content: &str) -> std::process::Output {
+    let mut cmd = ntropy(vault);
+    cmd.arg("write").args(args);
+    feed(&mut cmd, content)
+}
+
+/// Render one run as a snapshot body, so a failure shows exit code and both
+/// streams the way `assert_cmd_snapshot!` does for the stdin-less commands.
+fn rendered(out: &std::process::Output) -> String {
+    format!(
+        "success: {}\nexit_code: {}\n----- stdout -----\n{}\n----- stderr -----\n{}",
+        out.status.success(),
+        out.status.code().expect("exit code"),
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
+    )
+}
+
+#[test]
+fn write_fills_an_empty_note() {
+    // The whole point of the pairing: `new --empty` allocates the identity,
+    // `write` supplies the content, and nothing had to be read in between.
+    let dir = setup_vault();
+    let created = ntropy(dir.path())
+        .args(["new", "--empty", "-p", "Written Note"])
+        .output()
+        .expect("run ntropy");
+    let path = String::from_utf8_lossy(&created.stdout)
+        .trim_end()
+        .to_string();
+
+    let out = run_write(dir.path(), &[&path], WRITTEN);
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert_eq!(fs::read_to_string(&path).expect("read note"), WRITTEN);
+
+    // The written path is echoed back, and the note is now findable.
+    assert_eq!(String::from_utf8_lossy(&out.stdout).trim_end(), path);
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n", "tag:written and status:draft"]);
+        assert_cmd_snapshot!("write_search_finds_the_written_note", cmd);
+    });
+}
+
+#[test]
+fn write_replaces_an_existing_notes_content() {
+    let dir = setup_vault();
+    let created = ntropy(dir.path())
+        .args(["new", "-p", "Written Note"])
+        .output()
+        .expect("run ntropy");
+    let path = String::from_utf8_lossy(&created.stdout)
+        .trim_end()
+        .to_string();
+
+    let out = run_write(dir.path(), &[&path], WRITTEN);
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert_eq!(fs::read_to_string(&path).expect("read note"), WRITTEN);
+}
+
+#[test]
+fn write_accepts_a_bare_ulid_and_a_bare_filename() {
+    let dir = setup_vault();
+    let created = ntropy(dir.path())
+        .args(["new", "--empty", "-p", "Written Note"])
+        .output()
+        .expect("run ntropy");
+    let path = String::from_utf8_lossy(&created.stdout)
+        .trim_end()
+        .to_string();
+    let name = Path::new(&path)
+        .file_name()
+        .expect("name")
+        .to_string_lossy()
+        .into_owned();
+    let ulid = &name[..26];
+
+    let by_ulid = run_write(dir.path(), &[ulid], WRITTEN);
+    assert!(by_ulid.status.success(), "{}", rendered(&by_ulid));
+    assert_eq!(
+        String::from_utf8_lossy(&by_ulid.stdout).trim_end(),
+        path,
+        "a bare ULID must resolve to the same file"
+    );
+
+    let by_name = run_write(dir.path(), &[&name], WRITTEN);
+    assert!(by_name.status.success(), "{}", rendered(&by_name));
+    assert_eq!(String::from_utf8_lossy(&by_name.stdout).trim_end(), path);
+}
+
+#[test]
+fn write_realigns_the_filename_when_the_title_changed() {
+    // Same post-processing the editor round trip does on exit: a written title
+    // renames the file, and the path printed is the one that now exists.
+    let dir = setup_vault();
+    let created = ntropy(dir.path())
+        .args(["new", "--empty", "-p", "Placeholder Title"])
+        .output()
+        .expect("run ntropy");
+    let path = String::from_utf8_lossy(&created.stdout)
+        .trim_end()
+        .to_string();
+
+    let out = run_write(dir.path(), &[&path], WRITTEN);
+    assert!(out.status.success(), "{}", rendered(&out));
+
+    let printed = String::from_utf8_lossy(&out.stdout).trim_end().to_string();
+    assert!(
+        printed.ends_with("-written-note.md"),
+        "the printed path must be the realigned one, got: {printed}"
+    );
+    assert!(Path::new(&printed).is_file());
+    assert!(!Path::new(&path).exists(), "the old filename must be gone");
+}
+
+#[test]
+fn write_refreshes_the_views() {
+    // The other half of reconciling: a written tag has to reach `by-tag/`
+    // without the caller running `reconcile` separately.
+    let dir = setup_vault();
+    let created = ntropy(dir.path())
+        .args(["new", "--empty", "-p", "Written Note"])
+        .output()
+        .expect("run ntropy");
+    let path = String::from_utf8_lossy(&created.stdout)
+        .trim_end()
+        .to_string();
+
+    let out = run_write(dir.path(), &[&path], WRITTEN);
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(
+        dir.path().join("by-tag/written").is_dir(),
+        "the written tag never reached the view"
+    );
+}
+
+#[test]
+fn write_needs_no_interactivity_flag() {
+    // stdin carries the payload, so nothing about this command branches on the
+    // controlling terminal: no `-n`, no picker, no prompt.
+    let dir = setup_vault();
+    let created = ntropy(dir.path())
+        .args(["new", "--empty", "-p", "Written Note"])
+        .output()
+        .expect("run ntropy");
+    let path = String::from_utf8_lossy(&created.stdout)
+        .trim_end()
+        .to_string();
+
+    let out = run_write(dir.path(), &[&path], WRITTEN);
+    assert!(out.status.success(), "{}", rendered(&out));
+}
+
+#[test]
+fn write_refuses_content_that_is_not_a_note() {
+    let dir = setup_vault();
+    let created = ntropy(dir.path())
+        .args(["new", "-p", "Written Note"])
+        .output()
+        .expect("run ntropy");
+    let path = String::from_utf8_lossy(&created.stdout)
+        .trim_end()
+        .to_string();
+    let before = fs::read_to_string(&path).expect("read note");
+
+    let out = run_write(dir.path(), &[&path], "no frontmatter at all\n");
+    assert!(!out.status.success());
+    redacted(dir.path()).bind(|| {
+        insta::assert_snapshot!("write_rejects_non_note_content", rendered(&out));
+    });
+    assert_eq!(
+        fs::read_to_string(&path).expect("read note"),
+        before,
+        "a refused write must leave the note alone"
+    );
+}
+
+#[test]
+fn write_refuses_an_unknown_target() {
+    let dir = setup_vault();
+    let out = run_write(dir.path(), &[ULID_A], WRITTEN);
+    assert!(!out.status.success());
+    redacted(dir.path()).bind(|| {
+        insta::assert_snapshot!("write_rejects_unknown_target", rendered(&out));
+    });
+    assert_eq!(
+        fs::read_dir(dir.path().join("all-notes"))
+            .expect("read all-notes")
+            .count(),
+        0,
+        "a failed write must not create a note"
+    );
+}
+
+#[test]
+fn write_refuses_a_path_outside_all_notes() {
+    let dir = setup_vault();
+    let outside = dir.path().join("elsewhere.md");
+    fs::write(&outside, "---\ntitle: Elsewhere\n---\n").expect("write outside");
+
+    let out = run_write(dir.path(), &[outside.to_str().expect("utf-8")], WRITTEN);
+    assert!(!out.status.success());
+    redacted(dir.path()).bind(|| {
+        insta::assert_snapshot!("write_rejects_path_outside_all_notes", rendered(&out));
+    });
+    assert!(
+        fs::read_to_string(&outside)
+            .expect("read")
+            .contains("Elsewhere"),
+        "the file outside the vault must be untouched"
+    );
+}
+
 #[test]
 fn new_missing_named_template_errors() {
     let dir = setup_vault();
@@ -1913,6 +2157,97 @@ mod encrypted {
         redacted(vault).bind(|| {
             assert_cmd_snapshot!(cmd);
         });
+    }
+
+    #[test]
+    fn write_authors_a_note_in_an_encrypted_vault() {
+        // The gap `write` exists to close: authoring content here previously
+        // needed an editor, which a script cannot drive.
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let created = ntropy_encrypted(vault)
+            .args(["new", "--empty", "-p", "Written Note"])
+            .output()
+            .expect("run new");
+        let path = String::from_utf8_lossy(&created.stdout)
+            .trim_end()
+            .to_string();
+
+        let mut cmd = ntropy_encrypted(vault);
+        cmd.arg("write").arg(&path);
+        let out = super::feed(&mut cmd, super::WRITTEN);
+        assert!(out.status.success(), "{}", super::rendered(&out));
+
+        // Stored as ciphertext, and readable back as the note through ntropy.
+        let raw = fs::read(&path).expect("read bytes");
+        assert!(
+            !raw.windows(12).any(|w| w == b"Written Note"),
+            "the title reached the file in the clear"
+        );
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(
+                "write_encrypted_reads_back",
+                ntropy_encrypted(vault).args(["search", "-P", "tag:written"])
+            );
+        });
+    }
+
+    #[test]
+    fn write_works_on_a_locked_vault() {
+        // Encrypting needs only the public recipient, and targeting by name
+        // reads no note, so a machine without the key can still author.
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let created = ntropy_encrypted(vault)
+            .args(["new", "--empty", "-p", "Written Note"])
+            .output()
+            .expect("run new");
+        let path = String::from_utf8_lossy(&created.stdout)
+            .trim_end()
+            .to_string();
+
+        let mut cmd = ntropy(vault);
+        cmd.env_remove("NTROPY_IDENTITY");
+        cmd.args(["-n", "write"]).arg(&path);
+        let out = super::feed(&mut cmd, super::WRITTEN);
+        assert!(
+            out.status.success(),
+            "a locked vault must still accept a write: {}",
+            super::rendered(&out)
+        );
+
+        // And it really is the note, once a key shows up again.
+        let read_back = ntropy_encrypted(vault)
+            .args(["search", "-P", "tag:written"])
+            .output()
+            .expect("run search");
+        assert_eq!(String::from_utf8_lossy(&read_back.stdout), super::WRITTEN);
+    }
+
+    #[test]
+    fn write_refuses_content_that_is_not_a_note_in_an_encrypted_vault() {
+        // Validation happens before the cipher, so a rejected write cannot
+        // leave unreadable bytes where a note used to be.
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let created = ntropy_encrypted(vault)
+            .args(["new", "-p", "Intact Note"])
+            .output()
+            .expect("run new");
+        let path = String::from_utf8_lossy(&created.stdout)
+            .trim_end()
+            .to_string();
+        let before = fs::read(&path).expect("read bytes");
+
+        let mut cmd = ntropy_encrypted(vault);
+        cmd.arg("write").arg(&path);
+        let out = super::feed(&mut cmd, "no frontmatter at all\n");
+        assert!(!out.status.success());
+        assert_eq!(
+            fs::read(&path).expect("read bytes"),
+            before,
+            "a refused write must leave the ciphertext alone"
+        );
     }
 
     #[test]

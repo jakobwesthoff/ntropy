@@ -18,7 +18,7 @@ use crate::datetime::DateError;
 use crate::fsutil::FsError;
 use crate::id::IdError;
 use crate::note::NoteError;
-use crate::ops::ViewAdminError;
+use crate::ops::{ViewAdminError, WriteError};
 use crate::query::QueryError;
 use crate::render::RenderError;
 use crate::scan::ScanError;
@@ -71,6 +71,10 @@ pub enum Error {
     /// A note could not be rendered to an output artifact.
     #[error(transparent)]
     Render(#[from] RenderError),
+
+    /// A write could not be directed at a note.
+    #[error(transparent)]
+    Write(#[from] WriteError),
 
     /// A note could not be read from or written to its storage form.
     #[error(transparent)]

@@ -24,7 +24,7 @@ mod securetemp;
 #[cfg(feature = "encryption")]
 mod vault_cmd;
 
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
@@ -108,6 +108,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             print,
         } => cmd_new(&session, join(&title), template, empty, print, interactive),
         Command::Today { print } => cmd_today(&session, print, interactive),
+        Command::Write { target } => cmd_write(&session, &target),
         Command::Reconcile => cmd_reconcile(&cli.global, &session),
         Command::Delete { selector, force } => {
             cmd_delete(&session, join(&selector), force, interactive)
@@ -479,6 +480,32 @@ fn cmd_new(
         reconcile::refresh_views(session).context("while refreshing views")?;
         println!("{}", path.display());
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn cmd_write(session: &VaultSession, target: &str) -> Result<ExitCode> {
+    // stdin is the payload, which is why this command has no picker and no
+    // prompt: an invocation that carries a note on stdin is a scripted one, and
+    // dropping a fullscreen picker into the middle of a pipeline would be worse
+    // than failing on an ambiguous target (ADR 0043).
+    let mut content = String::new();
+    std::io::stdin()
+        .read_to_string(&mut content)
+        .context("while reading the note from stdin")?;
+
+    let note = ops::write_note(session, target, &content).context("while writing the note")?;
+
+    // The same post-processing the editor round trip does on exit, so a title
+    // the caller changed cannot leave the filename and the views behind.
+    let path = match reconcile::realign(session, &note.path)
+        .context("while realigning the written note")?
+    {
+        Some(rename) => rename.to,
+        None => note.path,
+    };
+    reconcile::refresh_views(session).context("while refreshing views")?;
+
+    println!("{}", path.display());
     Ok(ExitCode::SUCCESS)
 }
 

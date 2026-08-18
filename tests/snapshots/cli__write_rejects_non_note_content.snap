@@ -1,0 +1,10 @@
+---
+source: tests/cli.rs
+expression: rendered(&out)
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while writing the note: the note has no frontmatter block
