@@ -17,32 +17,13 @@ frontmatter and let queries and views do the organizing.
 
 ## Creating a note (the only correct way)
 
-Always create through `ntropy new` so the ULID and filename are right, then
-edit the file it prints:
+ntropy owns the parts you must not invent: the ULID, the location and the
+filename. You own the content. `new` hands you the first, and `write` takes the
+second:
 
 ```bash
-path=$(ntropy new --print Refactor the parser)   # trailing args join into the title
-# now write frontmatter/body into "$path" with your file tools
-ntropy reconcile                                    # realign filename + views after direct edits
-```
-
-`--print` (short form `-p`) creates the note and prints its path instead of
-opening an editor. This is the agent path; the editor flow is for humans.
-
-**FORBIDDEN: hand-creating files in `all-notes/`.** You would have to invent a
-ULID; a wrong or duplicate one corrupts note identity. Create via `ntropy new`,
-then edit.
-
-### Writing the whole note yourself: `--empty`
-
-`ntropy new --empty --print <title>` creates the file with nothing in it, no
-template stamped. Use it when you already know the note's full shape: you write
-frontmatter and body in a single write, with no need to read back or edit around
-a skeleton somebody else chose.
-
-```bash
-path=$(ntropy new --empty --print Refactor the parser)
-cat > "$path" <<'EOF'
+path=$(ntropy new --empty -p Refactor the parser)   # trailing args join into the title
+ntropy write "$path" <<'EOF'
 ---
 title: Refactor the parser
 tags: [engineering, refactor]
@@ -52,39 +33,80 @@ status: in progress
 
 Why, and what changes.
 EOF
-ntropy reconcile
 ```
 
-ntropy still owns the parts you must not invent — the ULID, the location, the
-filename — and nothing else. `--template` is rejected alongside `--empty`: one
-stamps content, the other writes none.
+That is the whole flow. No read-back, no template to work around, no
+`reconcile` afterwards, and it is the same in an encrypted vault as in a
+plaintext one.
 
-**What you write must be a well-formed note.** Nothing validated it on the way
-in, so the "Frontmatter rules" below are your contract, not a suggestion. In
-particular:
+`--print` (short form `-p`) makes `new` print the path instead of opening an
+editor. `--empty` makes it stamp no template; `--template` is rejected alongside
+it, since one stamps content and the other writes none.
 
-- The file **starts** with `---`, the YAML block, and a closing `---`. A file
-  with no frontmatter block is not a note.
+**FORBIDDEN: hand-creating files in `all-notes/`.** You would have to invent a
+ULID; a wrong or duplicate one corrupts note identity.
+
+### What `write` accepts
+
+The target is named, never searched for. All three of these reach the same note:
+
+```bash
+ntropy write 01J8ZA2ABCDEFGHJKMNPQRSTVW < note.md              # full ULID
+ntropy write 01J8ZA2ABCDEFGHJKMNPQRSTVW-q3-planning.md < note.md   # filename
+ntropy write /vault/all-notes/01J8ZA2ABCDEFGHJKMNPQRSTVW-q3-planning.md < note.md
+```
+
+The note must already exist, and a path must point into the vault's
+`all-notes/`. Nothing is prompted for and no picker opens, so `write` is safe in
+a pipeline; a target naming no note, or more than one, is an error.
+
+**Feed it the whole note, not a fragment.** The text you pipe in becomes the
+file, so the "Frontmatter rules" below are your contract:
+
+- The text **starts** with `---`, the YAML block, and a closing `---`. Anything
+  without a frontmatter block is refused and nothing is written.
 - `title` is required, and should be the title you passed to `new` — the
-  filename slug was derived from it, and a different title means immediate drift
-  that reconcile then renames away.
+  filename slug was derived from it. A different title is not an error; `write`
+  realigns the filename to it and prints the new path.
 - `tags`, if present, is a flat list of strings; no `id`, `created` or
   `modified` fields; YAML-quote any value containing `: ` or starting with YAML
   syntax.
 - Then the Markdown body, conventionally opening with `# <title>`.
 
-**Never leave the file empty.** Until frontmatter lands in it, every ntropy
-command warns about it (`--strict` fails outright) and no search returns it.
-Write it in the same step you created it, then run `ntropy reconcile`.
+**Never leave an `--empty` note unwritten.** Until frontmatter lands in it,
+every ntropy command warns about it (`--strict` fails outright) and no search
+returns it. Write it in the same step you created it.
 
-`--empty` is for plaintext vaults. In an encrypted vault the printed path is an
-age container, not text you can write into; create from a template there.
+### Rewriting an existing note
+
+`search -P` and `write` are inverses, and both behave the same whether or not
+the vault is encrypted:
+
+```bash
+ntropy search -n -P 01J8ZA2ABCDEFGHJKMNPQRSTVW > /tmp/note.md
+# edit /tmp/note.md
+ntropy write 01J8ZA2ABCDEFGHJKMNPQRSTVW < /tmp/note.md
+```
+
+`write` replaces the note's entire content, so send back the whole file, not
+just the part you changed.
+
+### Starting from a template instead
+
+When you want the vault's own skeleton — a meeting note whose shape the user
+defined — create from the template and edit the file directly:
+
+```bash
+path=$(ntropy new --print -t meeting Standup)
+# edit "$path" with your file tools
+ntropy reconcile
+```
 
 **MUST run `ntropy reconcile` after directly editing a note's frontmatter or
-title.** ntropy only realigns automatically when it launched the editor itself.
-After out-of-band edits, the filename slug can drift from the title and the
-materialized views go stale until reconcile runs. It is cheap and idempotent;
-when in doubt, run it.
+title.** ntropy realigns automatically when it launched the editor itself and
+when you go through `ntropy write`. After any other out-of-band edit the
+filename slug can drift from the title and the materialized views go stale until
+reconcile runs. It is cheap and idempotent; when in doubt, run it.
 
 ### YAML-special titles
 
@@ -163,8 +185,8 @@ alone). DO NOT link by title or by relative folder paths into views.
 
 ## Templates
 
-Every `ntropy new` stamps a note from a template in
-`<vault>/.ntropy/templates/`; the filename minus `.md` is the template name:
+`ntropy new` stamps a note from a template in `<vault>/.ntropy/templates/`
+unless `--empty` says otherwise; the filename minus `.md` is the template name:
 
 ```bash
 ntropy new --print Standup --template meeting   # uses .ntropy/templates/meeting.md
@@ -231,11 +253,13 @@ plain lexical sort of `all-notes/` is chronological.
 
 ## Well-behaved note checklist
 
-- Created via `ntropy new --print` (add `--empty` to author it yourself), never
-  hand-placed in `all-notes/`.
-- No file left empty: an `--empty` note is filled in the same step it is created.
+- Created via `ntropy new`, never hand-placed in `all-notes/`.
+- Content supplied through `ntropy write`, or edited in the file and followed by
+  `ntropy reconcile`.
+- No file left empty: an `--empty` note is written in the same step it is created.
 - Frontmatter has `title`; `tags` is a flat string list; no `id`/date fields.
 - YAML values containing `: ` or starting with YAML syntax are quoted.
 - Field names and values reused consistently with the rest of the vault.
 - Links target `<ulid>-<slug>.md` filenames.
-- `ntropy reconcile` run after any direct edit to frontmatter or title.
+- `ntropy reconcile` run after any direct edit to frontmatter or title (`write`
+  does this itself).
