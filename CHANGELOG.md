@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- `new --empty` creates the note file with no content in it, skipping the
+  template step. ntropy still decides the identity, the location and the
+  filename; the caller writes the frontmatter and body. This is for scripts and
+  agents, which can then author a note in one write instead of parsing and
+  rewriting around a stamped skeleton. `--template` is rejected alongside it,
+  and until frontmatter is written the file is not a well-formed note, so a scan
+  skips it with a warning.
+
 ## v1.9.1 - 2026-08-06
 
 ### Changed

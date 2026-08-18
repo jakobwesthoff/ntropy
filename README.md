@@ -209,7 +209,7 @@ sync.
 | Command | What it does |
 |---------|--------------|
 | `init [path]` | Scaffold (or complete) a vault; idempotent. Target is `path` or, if omitted, `--vault` (both is an error; neither uses the cwd). `--set-default` records it as the global default. |
-| `new <title>` | Create a note from a [template](#templates) and open it. `--template`/`-t <name>` picks a template; `--print`/`-p` just prints the path. |
+| `new <title>` | Create a note from a [template](#templates) and open it. `--template`/`-t <name>` picks a template; `--empty` writes no content at all, for a caller that authors the note itself; `--print`/`-p` just prints the path. |
 | `today` | Open today's note, creating it from the [`today` template](#daily-notes-with-today) on first use that day. `--print`/`-p` just prints the path. |
 | `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it; `--print-content`/`-P` prints the note's text (exactly one note). |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
@@ -468,6 +468,13 @@ The `{{...}}` placeholders are filled in at creation time:
 
 Anything ntropy doesn't recognize is left untouched, so a stray `{{mustache}}` in
 your prose survives intact.
+
+To skip templating entirely, `ntropy new --empty <title>` creates the file with
+no content in it. ntropy still picks the ULID, the location and the filename;
+what goes inside is yours to write. That is mainly for scripts and agents, which
+would otherwise have to parse and rewrite around a stamped skeleton. Until
+frontmatter lands in the file it is not a well-formed note, so ntropy skips it
+with a warning meanwhile.
 
 ### Daily notes with today
 
