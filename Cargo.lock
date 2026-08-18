@@ -1756,7 +1756,7 @@ dependencies = [
 
 [[package]]
 name = "ntropy"
-version = "1.9.1"
+version = "1.10.0"
 dependencies = [
  "age",
  "anyhow",
