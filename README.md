@@ -214,7 +214,7 @@ sync.
 | `write <id\|filename\|path>` | Replace one note's content with text read from stdin, then realign and refresh views. Names its target rather than searching for it, never prompts, and works on an encrypted vault including a locked one. |
 | `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it; `--print-content`/`-P` prints the note's text (exactly one note). |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
-| `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) with ntropy's own typst engine (only `typst` required on `PATH`). Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`, or `typst` for the emitted Typst document), `-o` the output path (default `./<slug>.<ext>`), `-p` prints the artifact path. |
+| `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) with ntropy's own typst engine (only `typst` required on `PATH`). Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`, or `typst` for the emitted Typst document), `-o` the output path (default `./<slug>.<ext>`), `--theme` overrides the vault's [configured theme](#theming-rendered-documents), `-p` prints the artifact path. |
 | `reconcile` | Realign filenames whose slug drifted from the title and re-sync every view (catches up after edits made outside ntropy). |
 | `view list\|add\|remove` | Manage [materialized views](#materialized-views), e.g. `ntropy view add by-status --field status`. |
 | `tags` | List every tag with its note count. |
@@ -599,6 +599,81 @@ was rendered into a different directory or under a different name. Two notes
 whose slugs are identical also share an artifact name, so a link to either
 reaches whichever was written last.
 
+### Theming rendered documents
+
+A vault can render in its own livery. Drop a Typst file into
+`.ntropy/themes/` and name it in the `[render]` section:
+
+```toml
+# .ntropy/config.toml
+[render]
+theme = "corporate"
+```
+
+That is the whole setup. From then on every `ntropy render` in the vault uses
+it, with nothing extra on the command line:
+
+```bash
+ntropy render 01j8za2…              # themed
+
+# and so is every note in the vault
+ntropy search -n | tail -n +2 | awk '{print $1}' |
+  while read -r id; do ntropy render -n "$id"; done
+```
+
+A theme redefines what it wants and inherits the rest. This one puts a logo in
+the page header and drops the metadata strip, so internal tags and
+`status: draft` never reach a customer:
+
+```typst
+// .ntropy/themes/corporate.typ
+#let note(title: none, frontmatter: (:), paper: "a4", body) = {
+  set document(title: title) if title != none
+
+  set page(
+    paper: paper,
+    margin: (x: 2.2cm, top: 3.4cm, bottom: 2.4cm),
+    header: {
+      align(right, image("/assets/logo.svg", width: 3.2cm))
+      v(-0.4em)
+      line(length: 100%, stroke: 0.6pt + rgb("#2dd4bf"))
+    },
+  )
+  set text(size: 11pt)
+
+  if title != none {
+    text(size: 1.6em, weight: "bold", title)
+    v(0.8em)
+  }
+
+  // No frontmatter strip: nothing but the body below the title.
+  body
+}
+```
+
+The logo lives at `<vault>/assets/logo.svg` — outside `all-notes/`, which holds
+notes and nothing else. Paths starting with `/` are relative to the vault root,
+which is what the compiler is given access to.
+
+Four functions are yours to override; a theme defining only `note` keeps the
+built-in look for the others:
+
+| Function | Signature | Renders |
+| :--- | :--- | :--- |
+| `note` | `note(title: none, frontmatter: (:), paper: "a4", body)` | the whole document |
+| `callout` | `callout(kind: "note", body)` | a `> [!NOTE]` admonition |
+| `notelink` | `notelink(body)` | a link to another note |
+| `task` | `task(done: false)` | a task-list checkbox |
+
+`--theme <name>` overrides the configured theme for one render, and
+`--theme default` goes back to ntropy's built-in look. A theme that is missing
+or does not compile fails the render: a document is never quietly produced in
+the wrong livery.
+
+> [!NOTE]
+> Because a theme's assets are addressed from the vault root, compiling a
+> `--to typst` artifact by hand takes `typst compile --root <vault> note.typ`.
+
 **Paper size.** Rendering defaults to a4. A `[render]` section in the vault's
 `.ntropy/config.toml` picks a different format:
 
@@ -613,7 +688,8 @@ config error naming the bad name, reported before anything renders.
 
 > [!NOTE]
 > ntropy's rendering infrastructure is built around interchangeable rendering
-> engines. Styling and theming control is planned for future releases.
+> engines. Themes are per-vault Typst files; ntropy ships no named themes of
+> its own beyond the built-in default.
 
 > [!NOTE]
 > A rendered artifact is plaintext by nature. Writing one into an

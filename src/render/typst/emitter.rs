@@ -35,7 +35,8 @@
 //!   link. Known limitation: a URL split across text events (by an entity or
 //!   adjacent markup) is not detected, because detection is per event.
 //! - Images collect their alt subtree as plain text. A local path becomes
-//!   `#image("path")`; a remote `http(s)` image cannot be embedded by the
+//!   `#image("path")`, rewritten to a root-absolute path under the note's
+//!   directory (ADR 0045); a remote `http(s)` image cannot be embedded by the
 //!   offline compiler, so it degrades to `#link("url")[alt-or-url]` and
 //!   raises a [`Warning`].
 //! - Footnotes are assembled in two passes. Definitions (which may hold
@@ -105,7 +106,7 @@ impl Warning {
 /// The returned string is the converted body alone; document assembly
 /// (prelude, template application) lives in the engine layer, which also
 /// forwards the returned warnings to the host.
-pub fn emit(body: &str, links: &[ResolvedLink]) -> (String, Vec<Warning>) {
+pub fn emit(body: &str, links: &[ResolvedLink], asset_base: &str) -> (String, Vec<Warning>) {
     // GitHub's rendered surface: tables, strikethrough, task lists, and
     // footnotes, with `ENABLE_GFM` supplying the callout kinds on block
     // quotes. Math stays off by omission, so `$` never gains meaning.
@@ -115,7 +116,7 @@ pub fn emit(body: &str, links: &[ResolvedLink]) -> (String, Vec<Warning>) {
         | Options::ENABLE_FOOTNOTES
         | Options::ENABLE_GFM;
 
-    let mut emitter = Emitter::new(links);
+    let mut emitter = Emitter::new(links, asset_base);
     // The offset iterator carries each event's byte span. The span identifies
     // note links: a Link event's span is matched against `ResolvedLink::range`
     // (both index the same body bytes) to distinguish note links from ordinary
@@ -240,6 +241,12 @@ struct Emitter<'a> {
     stack: Vec<Frame>,
     /// The note-link table, matched by byte range against Link events.
     links: &'a [ResolvedLink],
+
+    /// The note's own directory as a compile-root-absolute path, e.g.
+    /// `/all-notes`. Relative image paths are resolved against it so they
+    /// survive a compile whose root is the vault rather than the note's
+    /// directory (ADR 0045).
+    asset_base: &'a str,
     /// Warnings accumulated during the walk, returned alongside the body.
     warnings: Vec<Warning>,
     /// URL/email detector for autolinking `Text` events. Configured once.
@@ -262,7 +269,7 @@ struct Emitter<'a> {
 }
 
 impl<'a> Emitter<'a> {
-    fn new(links: &'a [ResolvedLink]) -> Self {
+    fn new(links: &'a [ResolvedLink], asset_base: &'a str) -> Self {
         // GFM extended autolinks cover scheme URLs, `www.` URLs, and emails.
         // `linkify` finds scheme URLs and emails out of the box; enabling
         // `www.` needs `url_must_have_scheme(false)`, which also matches bare
@@ -280,6 +287,7 @@ impl<'a> Emitter<'a> {
                 nonempty: false,
             }],
             links,
+            asset_base,
             warnings: Vec::new(),
             finder,
             footnote_definitions: HashMap::new(),
@@ -822,7 +830,7 @@ impl<'a> Emitter<'a> {
             )));
         } else {
             writer.syntax("#image(\"");
-            writer.string_literal(&dest);
+            writer.string_literal(&resolve_asset(self.asset_base, &dest));
             writer.syntax("\")");
         }
         self.append_inline(&writer.finish());
@@ -982,6 +990,44 @@ fn indent_continuation(body: &str, marker: &str) -> String {
 // Inline rendering
 // =========================================================
 
+/// Resolve a local image path against the note's directory, as a path absolute
+/// within the compile root.
+///
+/// The compiler's root is the vault, not the note's directory, so a document
+/// piped to it behaves as if it sat at the root: `diagram.png` beside a note
+/// would be looked for at the vault root and not found (ADR 0045). Joining the
+/// note's own root-absolute directory onto the path restores what the author
+/// meant, and lets a note reach a vault asset with `../assets/logo.svg` at the
+/// same time.
+///
+/// A path that is already root-absolute is the author addressing the vault
+/// directly and passes through. So does one that climbs out of the root
+/// altogether, which cannot be expressed as a root-absolute path; the compiler
+/// rejects it by name rather than by an invented substitute.
+fn resolve_asset(base: &str, dest: &str) -> String {
+    if dest.starts_with('/') {
+        return dest.to_string();
+    }
+
+    // `base` is root-absolute (`/all-notes`); walking the joined components
+    // resolves `.` and `..` textually, which is what Typst's own root-relative
+    // lookup does. There is no filesystem here to consult, by design: the
+    // emitter is pure.
+    let mut parts: Vec<&str> = base.split('/').filter(|part| !part.is_empty()).collect();
+    for part in dest.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                if parts.pop().is_none() {
+                    return dest.to_string();
+                }
+            }
+            other => parts.push(other),
+        }
+    }
+    format!("/{}", parts.join("/"))
+}
+
 /// Wrap already-escaped inner markup in the styling function for `style`.
 fn wrap_styled(style: &InlineStyle, inner: &str) -> String {
     let call = match style {
@@ -1096,14 +1142,18 @@ mod tests {
 
     /// Emit a body with no note-link table, keeping the string alone. Most
     /// tests exercise constructs the note-link table does not touch.
+    /// The note directory every emitter test resolves assets against: the
+    /// standard vault layout, where notes live in `all-notes/`.
+    const ASSET_BASE: &str = "/all-notes";
+
     fn body(input: &str) -> String {
-        emit(input, &[]).0
+        emit(input, &[], ASSET_BASE).0
     }
 
     /// Emit and keep only the warnings, for the raw-HTML and remote-image
     /// cases whose contract is the warning rather than the body.
     fn warnings(input: &str) -> Vec<Warning> {
-        emit(input, &[]).1
+        emit(input, &[], ASSET_BASE).1
     }
 
     /// Build a note-link table entry from an optional `(title, slug)` target.
@@ -1525,7 +1575,7 @@ mod tests {
         let input = "See [my note](abc123) end.";
         let links = [note_link(4..21, Some(("Target Title", "target-title")))];
         assert_eq!(
-            emit(input, &links).0,
+            emit(input, &links, ASSET_BASE).0,
             "See #link(\"target-title.pdf\")[#notelink[Target Title]] end\\.\n"
         );
     }
@@ -1538,7 +1588,7 @@ mod tests {
         let input = "[x](id)";
         let links = [note_link(0..7, Some(("A Renamed Note", "old-slug")))];
         assert_eq!(
-            emit(input, &links).0,
+            emit(input, &links, ASSET_BASE).0,
             "#link(\"old-slug.pdf\")[#notelink[A Renamed Note]]\n"
         );
     }
@@ -1550,7 +1600,7 @@ mod tests {
         let input = "[**bold** display](id)";
         let links = [note_link(0..22, Some(("The Title", "the-title")))];
         assert_eq!(
-            emit(input, &links).0,
+            emit(input, &links, ASSET_BASE).0,
             "#link(\"the-title.pdf\")[#notelink[The Title]]\n"
         );
     }
@@ -1560,7 +1610,7 @@ mod tests {
         let input = "[x](id)";
         let links = [note_link(0..7, Some(("a*b [c] #d", "a-b-c-d")))];
         assert_eq!(
-            emit(input, &links).0,
+            emit(input, &links, ASSET_BASE).0,
             "#link(\"a-b-c-d.pdf\")[#notelink[a\\*b \\[c\\] \\#d]]\n"
         );
     }
@@ -1570,7 +1620,7 @@ mod tests {
         // A dangling note link drops the wrapper and keeps the display markup.
         let input = "[*display* text](id)";
         let links = [note_link(0..20, None)];
-        assert_eq!(emit(input, &links).0, "#emph[display] text\n");
+        assert_eq!(emit(input, &links, ASSET_BASE).0, "#emph[display] text\n");
     }
 
     #[test]
@@ -1579,7 +1629,7 @@ mod tests {
         // matches no Link event changes nothing.
         let input = "just prose";
         let links = [note_link(0..4, Some(("Title", "title")))];
-        assert_eq!(emit(input, &links).0, "just prose\n");
+        assert_eq!(emit(input, &links, ASSET_BASE).0, "just prose\n");
     }
 
     #[test]
@@ -1596,26 +1646,84 @@ mod tests {
 
     #[test]
     fn local_image_becomes_an_image_call_without_alt() {
-        assert_eq!(body("![alt text](pics/x.png)"), "#image(\"pics/x.png\")\n");
+        assert_eq!(
+            body("![alt text](pics/x.png)"),
+            "#image(\"/all-notes/pics/x.png\")\n"
+        );
     }
 
     #[test]
     fn image_with_empty_alt() {
-        assert_eq!(body("![](x.png)"), "#image(\"x.png\")\n");
+        assert_eq!(body("![](x.png)"), "#image(\"/all-notes/x.png\")\n");
     }
 
     #[test]
     fn image_alt_with_markup_flattens_to_plain_text() {
         // Only the remote form emits the alt, and it emits the flattened text
         // with the emphasis markers gone.
-        let (out, warnings) = emit("![*bold* and `code`](https://h/x.png)", &[]);
+        let (out, warnings) = emit("![*bold* and `code`](https://h/x.png)", &[], ASSET_BASE);
         assert_eq!(out, "#link(\"https://h/x.png\")[bold and code]\n");
         assert_eq!(warnings.len(), 1);
     }
 
     #[test]
+    fn a_note_relative_image_resolves_under_the_notes_directory() {
+        // The compiler's root is the vault, so a bare filename beside the note
+        // must be spelled out from the root or it is looked for at the wrong
+        // place (ADR 0045).
+        assert_eq!(
+            resolve_asset("/all-notes", "diagram.png"),
+            "/all-notes/diagram.png"
+        );
+        assert_eq!(
+            resolve_asset("/all-notes", "./pics/x.png"),
+            "/all-notes/pics/x.png"
+        );
+    }
+
+    #[test]
+    fn an_image_path_climbing_out_of_the_notes_directory_reaches_the_vault() {
+        // The same rewrite gives a note access to a shared vault asset, which
+        // it could not reach at all while the root was the notes directory.
+        assert_eq!(
+            resolve_asset("/all-notes", "../assets/logo.svg"),
+            "/assets/logo.svg"
+        );
+    }
+
+    #[test]
+    fn an_already_absolute_image_path_is_left_alone() {
+        // The author is addressing the vault root directly.
+        assert_eq!(
+            resolve_asset("/all-notes", "/assets/logo.svg"),
+            "/assets/logo.svg"
+        );
+    }
+
+    #[test]
+    fn an_image_path_escaping_the_root_is_left_for_the_compiler_to_reject() {
+        // It cannot be expressed as a root-absolute path, and inventing one
+        // would point at a different file than the author wrote.
+        assert_eq!(
+            resolve_asset("/all-notes", "../../outside.png"),
+            "../../outside.png"
+        );
+    }
+
+    #[test]
+    fn a_remote_image_url_is_never_rewritten_as_a_path() {
+        // The remote arm runs before any path resolution, so the URL survives
+        // intact into the degraded link.
+        let (out, _) = emit("![x](https://host/pic.png)", &[], ASSET_BASE);
+        assert!(
+            out.contains("https://host/pic.png") && !out.contains("/all-notes/https"),
+            "a remote URL was treated as a path: {out}"
+        );
+    }
+
+    #[test]
     fn remote_image_degrades_to_a_link_with_a_warning() {
-        let (out, warnings) = emit("![caption](http://host/pic.png)", &[]);
+        let (out, warnings) = emit("![caption](http://host/pic.png)", &[], ASSET_BASE);
         assert_eq!(out, "#link(\"http://host/pic.png\")[caption]\n");
         assert_eq!(
             warnings[0].message,
@@ -1625,7 +1733,7 @@ mod tests {
 
     #[test]
     fn remote_image_with_empty_alt_labels_with_the_url() {
-        let (out, _) = emit("![](https://host/pic.png)", &[]);
+        let (out, _) = emit("![](https://host/pic.png)", &[], ASSET_BASE);
         assert_eq!(
             out,
             "#link(\"https://host/pic.png\")[https\\:\\/\\/host\\/pic\\.png]\n"
@@ -1637,7 +1745,7 @@ mod tests {
         // The image renders its degraded or local form inside the link label.
         assert_eq!(
             body("[![alt](local.png)](https://target)"),
-            "#link(\"https://target\")[#image(\"local.png\")]\n"
+            "#link(\"https://target\")[#image(\"/all-notes/local.png\")]\n"
         );
     }
 
@@ -1766,7 +1874,7 @@ mod tests {
 
     #[test]
     fn raw_html_block_is_dropped_with_a_warning() {
-        let (out, warnings) = emit("<div class=\"box\">\ncontent\n</div>", &[]);
+        let (out, warnings) = emit("<div class=\"box\">\ncontent\n</div>", &[], ASSET_BASE);
         assert_eq!(out, "");
         assert_eq!(warnings.len(), 1);
         assert!(
@@ -1780,7 +1888,7 @@ mod tests {
 
     #[test]
     fn inline_raw_html_is_dropped_with_a_warning() {
-        let (out, warnings) = emit("text <span>x</span> more", &[]);
+        let (out, warnings) = emit("text <span>x</span> more", &[], ASSET_BASE);
         // The surrounding prose survives; only the tags are dropped.
         assert_eq!(out, "text x more\n");
         assert_eq!(warnings.len(), 2);
@@ -1836,7 +1944,7 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             note_link(note_span, Some(("Resolved Title", "resolved-title"))),
             note_link(dangling_span, None),
         ];
-        let (out, warnings) = emit(input, &links);
+        let (out, warnings) = emit(input, &links, ASSET_BASE);
         insta::assert_snapshot!(out);
         insta::assert_debug_snapshot!(warnings);
     }
@@ -1873,7 +1981,7 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             note_link(note_span, Some(("Resolved Title", "resolved-title"))),
             note_link(dangling_span, None),
         ];
-        let (out, _) = emit(input, &links);
+        let (out, _) = emit(input, &links, ASSET_BASE);
 
         let root = typst_syntax::parse(&out);
         let (errors, _warnings) = root.errors_and_warnings();

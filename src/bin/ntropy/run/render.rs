@@ -46,6 +46,7 @@ pub fn cmd_render(
     to: String,
     engine: Option<String>,
     output: Option<PathBuf>,
+    theme: Option<String>,
     print: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
@@ -60,7 +61,17 @@ pub fn cmd_render(
     // authority), so a bad value reports what exists without a wasted scan. The
     // extension comes from the same lookup, so the default output name is known
     // up front.
-    let registry = Registry::new(config.render);
+    // The theme is selected from `--theme` over the vault's `[render] theme`
+    // and loaded before anything else, so a name that resolves to no file fails
+    // here rather than after a scan and a compile (ADR 0045). `default` from
+    // either source means the built-in look and reads no file.
+    let selected = ntropy::render::theme::select(theme.as_deref(), config.render.theme.as_deref());
+    let loaded_theme = selected
+        .map(|name| ntropy::render::theme::load(&session.layout().themes_dir(), name))
+        .transpose()
+        .context("while loading the render theme")?;
+
+    let registry = Registry::new(config.render.clone(), loaded_theme);
     let renderer = registry
         .resolve(&to, engine.as_deref())
         .context("while selecting the render engine")?;
@@ -154,7 +165,7 @@ pub fn cmd_render(
     // printing each twice.
     let indexed = ops::search(session, None).context("while indexing the vault for links")?;
     let index = link::index(&indexed.notes);
-    let doc = prepare(&note, &index).context("while preparing the document")?;
+    let doc = prepare(&note, &index, session.root()).context("while preparing the document")?;
 
     // The engine may run its tool in the note's own directory (the typst pdf
     // pipeline does, so relative assets resolve against the note). A relative

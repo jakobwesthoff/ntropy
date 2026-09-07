@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use super::{RenderError, RenderOptions, Renderer, Typst};
+use super::{RenderError, RenderOptions, Renderer, Theme, Typst};
 
 /// The format selected when the user names none.
 pub const DEFAULT_FORMAT: &str = "pdf";
@@ -51,8 +51,14 @@ pub struct Registry {
 
 impl Registry {
     /// The registry ntropy ships with: `pdf` and `typst`, both produced by the
-    /// ntropy-owned typst engine, constructed with the vault's render options.
-    pub fn new(options: RenderOptions) -> Self {
+    /// ntropy-owned typst engine, constructed with the vault's render options
+    /// and the selected theme.
+    ///
+    /// `theme` is the already-loaded theme for this render, or `None` for the
+    /// built-in look. Loading happens once, before the registry is built, so
+    /// a missing theme fails before any note is scanned and both formats emit
+    /// the identical document.
+    pub fn new(options: RenderOptions, theme: Option<Theme>) -> Self {
         let mut registry = Registry {
             formats: HashMap::new(),
         };
@@ -60,13 +66,13 @@ impl Registry {
             "pdf",
             "pdf",
             "typst",
-            Box::new(Typst::for_pdf_format(options)),
+            Box::new(Typst::for_pdf_format(options.clone(), theme.clone())),
         );
         registry.register(
             "typst",
             "typ",
             "typst",
-            Box::new(Typst::for_typst_format(options)),
+            Box::new(Typst::for_typst_format(options, theme)),
         );
         registry
     }
@@ -146,7 +152,7 @@ impl Registry {
 
 impl Default for Registry {
     fn default() -> Self {
-        Self::new(RenderOptions::default())
+        Self::new(RenderOptions::default(), None)
     }
 }
 
@@ -173,7 +179,7 @@ mod tests {
     /// The second format lets a test prove an engine known for another format is
     /// still `UnknownEngine`.
     fn populated() -> Registry {
-        let mut registry = Registry::new(RenderOptions::default());
+        let mut registry = Registry::new(RenderOptions::default(), None);
         registry.register("pdf", "pdf", "dummy", Box::new(DummyRenderer));
         registry.register("html", "html", "web", Box::new(DummyRenderer));
         registry
@@ -266,7 +272,7 @@ mod tests {
     /// is an error.
     #[test]
     fn shipped_registry_resolves_pdf_through_typst_by_default() {
-        let registry = Registry::new(RenderOptions::default());
+        let registry = Registry::new(RenderOptions::default(), None);
         assert_eq!(
             registry
                 .default_engine(DEFAULT_FORMAT)
@@ -294,7 +300,7 @@ mod tests {
     /// which serves each with its own format-specific delivery.
     #[test]
     fn shipped_registry_resolves_typst_through_the_typst_engine() {
-        let registry = Registry::new(RenderOptions::default());
+        let registry = Registry::new(RenderOptions::default(), None);
         assert!(registry.resolve("typst", None).is_ok());
         assert!(registry.resolve("typst", Some("typst")).is_ok());
         assert_eq!(
@@ -317,7 +323,7 @@ mod tests {
     /// `UnknownEngine`: the registry never crosses format boundaries.
     #[test]
     fn typst_format_rejects_an_unregistered_engine() {
-        let registry = Registry::new(RenderOptions::default());
+        let registry = Registry::new(RenderOptions::default(), None);
         let err = registry
             .resolve("typst", Some("no-such-engine"))
             .err()
@@ -329,7 +335,7 @@ mod tests {
     /// same extension, and the same default across every lookup path.
     #[test]
     fn typ_alias_resolves_like_typst() {
-        let registry = Registry::new(RenderOptions::default());
+        let registry = Registry::new(RenderOptions::default(), None);
         assert!(registry.resolve("typ", None).is_ok());
         assert_eq!(
             registry.extension("typ").expect("the alias resolves"),

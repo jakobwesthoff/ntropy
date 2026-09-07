@@ -18,6 +18,10 @@ pub const NTROPY_DIR: &str = ".ntropy";
 pub const CONFIG_FILE: &str = "config.toml";
 /// The templates directory, inside [`NTROPY_DIR`].
 pub const TEMPLATES_DIR: &str = "templates";
+/// The render themes directory, inside [`NTROPY_DIR`] (ADR 0045).
+pub const THEMES_DIR: &str = "themes";
+/// The filename extension of a render theme, a Typst source file.
+pub const THEME_EXTENSION: &str = "typ";
 /// The default template file, inside [`TEMPLATES_DIR`].
 pub const DEFAULT_TEMPLATE_FILE: &str = "default.md";
 /// The daily-note template file, inside [`TEMPLATES_DIR`].
@@ -92,6 +96,21 @@ impl Layout {
     /// `<root>/.ntropy/templates/today.md`.
     pub fn today_template(&self) -> PathBuf {
         self.templates_dir().join(TODAY_TEMPLATE_FILE)
+    }
+
+    /// `<root>/.ntropy/themes`.
+    pub fn themes_dir(&self) -> PathBuf {
+        self.ntropy_dir().join(THEMES_DIR)
+    }
+
+    /// `<root>/.ntropy/themes/<name>.typ`, a render theme's source file.
+    ///
+    /// The name is a single filename component by contract, which
+    /// [`crate::render::theme::validate_name`] enforces before this is called;
+    /// joining a name carrying separators would otherwise reach outside the
+    /// themes directory.
+    pub fn theme_file(&self, name: &str) -> PathBuf {
+        self.themes_dir().join(format!("{name}.{THEME_EXTENSION}"))
     }
 
     /// The output directory of a named view: `<root>/<name>`.

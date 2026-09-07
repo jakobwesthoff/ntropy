@@ -240,21 +240,34 @@ generic picker already serve `search` and `delete` unchanged.
 ## Configuration
 
 Render options live in the `[render]` section of the vault's
-`config.toml` and are typed enums, so a typo is a config parse error
-naming the bad value before anything scans or renders. The options are
-loaded by the binary and handed to `Registry::new`, which constructs the
-engines with them; each engine decides how to honor a setting for the
-formats it produces. One option exists: `paper` (default `a4`; also
-`a3`, `a5`, `iso-b5`, `jis-b5`, `us-letter`, `us-legal`, `us-tabloid`,
-`us-executive`, `us-oficio`), which the typst engine passes into the
-emitted document's template application.
+`config.toml`. The options are loaded by the binary and handed to
+`Registry::new`, which constructs the engines with them; each engine
+decides how to honor a setting for the formats it produces.
+
+- `paper` (default `a4`; also `a3`, `a5`, `iso-b5`, `jis-b5`,
+  `us-letter`, `us-legal`, `us-tabloid`, `us-executive`, `us-oficio`) is
+  a typed enum, so a typo is a config parse error naming the bad value
+  before anything scans or renders. The typst engine passes it into the
+  emitted document's template application.
+- `theme` names a Typst file in `<vault>/.ntropy/themes/` and is the
+  vault-wide default look (ADR 0045). It is a free-form string rather
+  than an enum, because the legal values are whatever files the vault
+  holds; a name resolving to no file is reported when the theme loads,
+  naming the path. `--theme` overrides it per invocation and the reserved
+  name `default` selects the built-in look from either source.
+
+Theme selection is a pure decision over those two sources; loading the
+file is the one step that touches the filesystem, and it happens before
+the vault is scanned so a bad name costs nothing. The loaded theme
+travels into `Registry::new` beside the options, so both formats emit it
+identically.
 
 ## Deferred
 
 Not supported:
 
 - rendering more than one note per invocation,
-- styling and template control,
+- built-in named themes beside the vault's own,
 - a config surface for engine selection (per-format engine defaults,
   tool paths),
 - a render action inside the search picker.

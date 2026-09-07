@@ -19,6 +19,10 @@ use super::{LinkTarget, PreparedDocument, ResolvedLink};
 /// Build the lossless [`PreparedDocument`] for `note`, resolving its links
 /// against `index`.
 ///
+/// `vault_root` is the root of the vault `note` was scanned from. It is a fact
+/// about the note's context rather than something derived from its path here,
+/// so the layout stays the caller's knowledge (ADR 0007).
+///
 /// The note's own fields are copied verbatim. The one derived value is
 /// `created`, the ULID's creation date in the system-local timezone (ADR 0010);
 /// deriving it is the sole fallible step, since a corrupt id can carry a
@@ -28,7 +32,11 @@ use super::{LinkTarget, PreparedDocument, ResolvedLink};
 /// `index`, not to anything the link itself spells out, so the prepared table
 /// always reflects the vault as it stands now. A link whose id is absent from
 /// the index is dangling and carries `target = None`.
-pub fn prepare(note: &Note, index: &NoteIndex<'_>) -> crate::error::Result<PreparedDocument> {
+pub fn prepare(
+    note: &Note,
+    index: &NoteIndex<'_>,
+    vault_root: &std::path::Path,
+) -> crate::error::Result<PreparedDocument> {
     let links = link::extract(&note.body)
         .into_iter()
         .map(|link| ResolvedLink {
@@ -45,6 +53,7 @@ pub fn prepare(note: &Note, index: &NoteIndex<'_>) -> crate::error::Result<Prepa
     Ok(PreparedDocument {
         id: note.id,
         path: note.path.clone(),
+        vault_root: vault_root.to_path_buf(),
         title: note.title.clone(),
         tags: note.tags.clone(),
         created: note.created_date()?,
@@ -58,7 +67,7 @@ pub fn prepare(note: &Note, index: &NoteIndex<'_>) -> crate::error::Result<Prepa
 mod tests {
     use super::*;
 
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     // Two fixed identities give deterministic paths and ULID-derived dates in
     // snapshots; a source note and a link target.
@@ -99,7 +108,7 @@ mod tests {
             "---\ntitle: Quarterly Review\ntags: [area/work, programming/rust]\nstatus: draft\n---\nThe body text.\n",
         );
         let index = link::index(std::slice::from_ref(&source));
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         assert_prepared_snapshot!(doc, @r#"
         PreparedDocument {
             id: Id(
@@ -108,6 +117,7 @@ mod tests {
                 ),
             ),
             path: "/vault/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-quarterly-review.md",
+            vault_root: "/vault",
             title: "Quarterly Review",
             tags: [
                 "area/work",
@@ -132,7 +142,7 @@ mod tests {
     fn empty_body_prepares_without_links() {
         let source = note(ULID_A, "empty", "---\ntitle: Empty\n---\n");
         let index = link::index(std::slice::from_ref(&source));
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         assert_eq!(doc.body, "");
         assert!(doc.links.is_empty());
     }
@@ -145,7 +155,7 @@ mod tests {
             "---\ntitle: Prose\n---\nJust prose, no links at all.\n",
         );
         let index = link::index(std::slice::from_ref(&source));
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         assert_eq!(doc.body, "Just prose, no links at all.\n");
         assert!(doc.links.is_empty());
     }
@@ -162,7 +172,7 @@ mod tests {
         );
         let notes = vec![source.clone(), target];
         let index = link::index(&notes);
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         assert_eq!(doc.links.len(), 1);
         let link = &doc.links[0];
         assert_eq!(link.display, "Old Display Text");
@@ -188,7 +198,7 @@ mod tests {
         );
         let notes = vec![source.clone(), target];
         let index = link::index(&notes);
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         let target = doc.links[0].target.as_ref().expect("the link resolves");
         assert_eq!(target.slug, "stale-slug");
     }
@@ -202,7 +212,7 @@ mod tests {
         );
         // The target id is absent from the index, so the link is dangling.
         let index = link::index(std::slice::from_ref(&source));
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         assert_eq!(doc.links.len(), 1);
         assert!(doc.links[0].target.is_none());
     }
@@ -224,7 +234,7 @@ mod tests {
             ),
         );
         let index = link::index(std::slice::from_ref(&source));
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         assert_eq!(doc.links.len(), 1);
         assert_eq!(doc.links[0].display, "Real");
     }
@@ -242,7 +252,7 @@ mod tests {
             "---\ntitle: Über Größe – café 日本語\ntags: [Área/Work, Life/Café]\n---\nbody\n",
         );
         let index = link::index(std::slice::from_ref(&source));
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         assert_eq!(doc.title, "Über Größe – café 日本語");
         assert_eq!(doc.tags, source.tags);
     }
@@ -251,7 +261,7 @@ mod tests {
     fn empty_tags_prepare_as_an_empty_vector() {
         let source = note(ULID_A, "untagged", "---\ntitle: Untagged\n---\nbody\n");
         let index = link::index(std::slice::from_ref(&source));
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         assert!(doc.tags.is_empty());
     }
 
@@ -269,7 +279,7 @@ mod tests {
         );
         let notes = vec![source.clone(), target];
         let index = link::index(&notes);
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
 
         assert_eq!(doc.links.len(), 2);
         let first = &doc.links[0];
@@ -296,7 +306,7 @@ mod tests {
         // is exactly what the note derives, whatever the host zone renders.
         let source = note(ULID_A, "dated", "---\ntitle: Dated\n---\nbody\n");
         let index = link::index(std::slice::from_ref(&source));
-        let doc = prepare(&source, &index).expect("prepare");
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         assert_eq!(doc.created, source.created_date().expect("date"));
     }
 }

@@ -61,7 +61,12 @@ language for filtering, and materialized symlink views for filesystem browsing.
    note; pass `-p` to capture the artifact path (`out=$(ntropy render -n -p
    <ulid>)`). `--to typst` emits the Typst document instead and needs no
    external tool at all.
-11. **Rendering a linked set: no `-o`, one directory.** A note link becomes a
+11. **The vault's theme is automatic; never pass `--theme` to get it.** If
+   `.ntropy/config.toml` has `[render] theme`, every `render` already uses it.
+   `--theme <name>` picks a different file from `.ntropy/themes/`, and
+   `--theme default` forces ntropy's built-in look. A theme that is missing or
+   broken fails the render rather than falling back.
+12. **Rendering a linked set: no `-o`, one directory.** A note link becomes a
    link to `<target-slug>.pdf`, the name `render` gives the target's own
    artifact by default. Render each note from the same working directory
    without `-o` and the cross-references find each other; rename an artifact
@@ -95,7 +100,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy write <id\|filename\|path>` | Replace that note's content with the whole note text read from stdin, then realign the filename and refresh views. Names its target, never searches: a full ULID, the filename, or the path. Refuses text that is not a well-formed note. Prints the resulting path. |
 | `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, or `-P` to print one note's text. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
-| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`) or `typst` for the emitted document, which needs no external tool. Resolves to exactly one note; `-p` prints the artifact path. |
+| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`) or `typst` for the emitted document, which needs no external tool. Resolves to exactly one note; `-p` prints the artifact path. |
 | `ntropy reconcile` | Realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
 | `ntropy tags -n` | Every tag with its note count — check this before inventing new tags. |

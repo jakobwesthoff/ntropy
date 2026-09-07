@@ -20,6 +20,7 @@ use insta_cmd::assert_cmd_snapshot;
 
 const ULID_A: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 const ULID_B: &str = "01BRZ3NDEKTSV4RRFFQ69G5FAV";
+const ULID_C: &str = "01CRZ3NDEKTSV4RRFFQ69G5FAV";
 
 /// Build a vault directly (faster and more deterministic than running `init`),
 /// with a `by-tag` view configured.
@@ -1008,6 +1009,34 @@ exit 0
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub typst");
 }
 
+/// Write a fake `typst` that records its own argument vector instead of a
+/// fixed marker, so a test can assert on how ntropy invoked the compiler.
+/// One argument per line, into the last argument (the output path).
+fn write_arg_recording_typst(vault: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    let bin = vault.join(STUB_BIN);
+    fs::create_dir_all(&bin).expect("stub-bin dir");
+    let script = r#"#!/bin/sh
+/bin/cat > /dev/null
+out=""
+for arg in "$@"; do
+  out="$arg"
+done
+if [ -n "$out" ]; then
+  : > "$out"
+  for arg in "$@"; do
+    printf '%s
+' "$arg" >> "$out"
+  done
+fi
+exit 0
+"#;
+    let path = bin.join("typst");
+    fs::write(&path, script).expect("write stub typst");
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub typst");
+}
+
 #[test]
 fn render_bare_empty_vault_errors() {
     // A blank selector browses all notes, so an empty vault is a no-match,
@@ -1373,6 +1402,284 @@ fn a_resolved_note_link_targets_the_targets_default_artifact_name() {
     );
 }
 
+// =========================================================================
+// Render themes (ADR 0045)
+// =========================================================================
+
+/// Write a theme file into the vault's themes directory, creating it.
+fn write_theme(vault: &Path, name: &str, source: &str) {
+    let dir = vault.join(".ntropy/themes");
+    fs::create_dir_all(&dir).expect("themes dir");
+    fs::write(dir.join(format!("{name}.typ")), source).expect("write theme");
+}
+
+/// Point the vault's `[render]` section at a theme.
+fn configure_theme(vault: &Path, name: &str) {
+    let config = vault.join(".ntropy/config.toml");
+    let mut text = fs::read_to_string(&config).expect("read config");
+    text.push_str(&format!("\n[render]\ntheme = \"{name}\"\n"));
+    fs::write(&config, text).expect("write config");
+}
+
+/// A theme whose `note()` renders only the body, marked so the artifact can be
+/// told apart from the built-in look and from another theme.
+fn marker_theme(marker: &str) -> String {
+    format!(
+        "#let note(title: none, frontmatter: (:), paper: \"a4\", body) = {{\n  \
+         [{marker}]\n  body\n}}\n"
+    )
+}
+
+/// Render `id` to a `typst` artifact and return it. No external tool is
+/// involved, so the emitted document is inspectable without a compiler.
+fn render_to_typst(vault: &Path, id: &str, extra: &[&str]) -> String {
+    let mut cmd = ntropy(vault);
+    cmd.args(["render", id, "--to", "typst", "-o", "out.typ", "-n"]);
+    cmd.args(extra);
+    cmd.current_dir(vault);
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(
+        output.status.success(),
+        "render failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    fs::read_to_string(vault.join("out.typ")).expect("typ artifact exists")
+}
+
+/// A vault with one note and a `corporate` theme configured vault-wide.
+fn themed_vault() -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\ntags: [confidential]\nstatus: draft\n---\nBody text.\n",
+    );
+    write_theme(dir.path(), "corporate", &marker_theme("CORPORATE-THEME"));
+    configure_theme(dir.path(), "corporate");
+    dir
+}
+
+#[test]
+fn the_vault_configured_theme_applies_with_no_flags_on_the_command_line() {
+    // Goal 3: after a one-time `[render] theme`, a plain `ntropy render`
+    // produces themed output. No theme-related argument appears here.
+    let dir = themed_vault();
+    let artifact = render_to_typst(dir.path(), ULID_A, &[]);
+    assert!(
+        artifact.contains("CORPORATE-THEME"),
+        "the configured theme did not reach the document: {artifact}"
+    );
+}
+
+#[test]
+fn the_configured_theme_applies_to_every_note_in_the_vault() {
+    // The same one-time configuration serves a loop over the whole vault, not
+    // just the note it was tried on.
+    let dir = themed_vault();
+    for (ulid, slug) in [(ULID_B, "second"), (ULID_C, "third")] {
+        write_note(
+            dir.path(),
+            ulid,
+            slug,
+            &format!("---\ntitle: {slug}\n---\nMore body.\n"),
+        );
+    }
+    for ulid in [ULID_A, ULID_B, ULID_C] {
+        let artifact = render_to_typst(dir.path(), ulid, &[]);
+        assert!(
+            artifact.contains("CORPORATE-THEME"),
+            "note {ulid} rendered unthemed: {artifact}"
+        );
+    }
+}
+
+#[test]
+fn the_theme_is_spliced_after_the_prelude_and_before_the_template_application() {
+    // Order is what makes overriding work: Typst binds `note` to the last
+    // `#let` above its use.
+    let dir = themed_vault();
+    let artifact = render_to_typst(dir.path(), ULID_A, &[]);
+    let prelude = artifact.find("#let notelink").expect("prelude present");
+    let theme = artifact.find("CORPORATE-THEME").expect("theme present");
+    let show = artifact
+        .find("#show: note.with")
+        .expect("template application present");
+    assert!(
+        prelude < theme && theme < show,
+        "theme is not between the prelude and the template application"
+    );
+}
+
+#[test]
+fn a_theme_defining_only_note_still_gets_callouts_and_tasks_from_the_prelude() {
+    // The inheritance half of the contract: a minimal theme does not have to
+    // reimplement the constructs the body uses.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "mixed",
+        "---\ntitle: Mixed\n---\n> [!NOTE]\n> A callout.\n\n- [x] A task\n",
+    );
+    write_theme(dir.path(), "minimal", &marker_theme("MINIMAL-THEME"));
+    configure_theme(dir.path(), "minimal");
+
+    let artifact = render_to_typst(dir.path(), ULID_A, &[]);
+    assert!(artifact.contains("MINIMAL-THEME"), "theme missing");
+    assert!(
+        artifact.contains("#callout(kind: \"note\")"),
+        "callout not emitted: {artifact}"
+    );
+    assert!(
+        artifact.contains("#task(done: true)"),
+        "task not emitted: {artifact}"
+    );
+}
+
+#[test]
+fn the_theme_flag_overrides_the_configured_theme() {
+    let dir = themed_vault();
+    write_theme(dir.path(), "customer", &marker_theme("CUSTOMER-THEME"));
+
+    let artifact = render_to_typst(dir.path(), ULID_A, &["--theme", "customer"]);
+    assert!(
+        artifact.contains("CUSTOMER-THEME") && !artifact.contains("CORPORATE-THEME"),
+        "the flag did not override the configured theme: {artifact}"
+    );
+}
+
+#[test]
+fn the_reserved_default_name_overrides_a_configured_theme_back_to_the_built_in_look() {
+    let dir = themed_vault();
+    let artifact = render_to_typst(dir.path(), ULID_A, &["--theme", "default"]);
+    assert!(
+        !artifact.contains("CORPORATE-THEME"),
+        "the configured theme survived `--theme default`: {artifact}"
+    );
+    assert!(
+        artifact.contains("#let note("),
+        "the built-in prelude is missing: {artifact}"
+    );
+}
+
+#[test]
+fn an_unthemed_vault_renders_exactly_as_before() {
+    // The feature is inert until configured: no theme marker, no seam comment.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "plain",
+        "---\ntitle: Plain\n---\nBody.\n",
+    );
+    let artifact = render_to_typst(dir.path(), ULID_A, &[]);
+    assert!(
+        !artifact.contains("vault theme"),
+        "an unconfigured vault emitted a theme seam: {artifact}"
+    );
+}
+
+#[test]
+fn a_configured_theme_with_no_file_errors_naming_the_path() {
+    // Hard error rather than a silent fall back: a document in the wrong
+    // livery is worse than one that was not produced.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    configure_theme(dir.path(), "no-such-theme");
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success(), "a missing theme must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no-such-theme") && stderr.contains(".ntropy/themes/no-such-theme.typ"),
+        "the error does not name the theme and the path: {stderr}"
+    );
+    assert!(
+        !dir.path().join("report.typ").exists(),
+        "an artifact was produced despite the failure"
+    );
+}
+
+#[test]
+fn a_theme_name_carrying_a_path_is_rejected() {
+    // The name is joined onto the themes directory, so a traversing name must
+    // not reach a file outside it.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args([
+        "render",
+        ULID_A,
+        "--to",
+        "typst",
+        "-n",
+        "--theme",
+        "../outside",
+    ]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success(), "a traversing name must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("invalid theme name"),
+        "the error does not name the problem: {stderr}"
+    );
+}
+
+#[test]
+fn the_vault_root_is_granted_to_the_compiler() {
+    // The asset half of the feature: without `--root` at the vault, a theme
+    // referencing `/assets/...` cannot resolve it. The stub records its
+    // arguments so the contract is checked without the real compiler.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    write_arg_recording_typst(dir.path());
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "args.pdf", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", STUB_BIN);
+    assert!(cmd.status().expect("run render").success());
+
+    let args = fs::read_to_string(dir.path().join("args.pdf")).expect("recorded args");
+    let recorded: Vec<&str> = args.lines().collect();
+    let root_at = recorded
+        .iter()
+        .position(|arg| *arg == "--root")
+        .unwrap_or_else(|| panic!("no --root in the invocation: {recorded:?}"));
+    let granted = Path::new(recorded[root_at + 1])
+        .canonicalize()
+        .expect("the granted root exists");
+    assert_eq!(
+        granted,
+        dir.path().canonicalize().expect("canonical vault path"),
+        "the compiler was granted a directory other than the vault root"
+    );
+}
+
 /// The kitchen-sink fixture: one note exercising every supported construct
 /// (frontmatter value shapes, all callout kinds, footnote orders, task lists,
 /// explicit ordered-list numbers, fence collisions, table alignments, note
@@ -1468,8 +1775,13 @@ fn render_kitchen_sink_compiles_with_real_typst() {
 
     let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/verify-render");
     fs::create_dir_all(&out_dir).expect("create verify-render dir");
+    // `--root` at the vault, as ntropy itself compiles: the emitted document
+    // addresses its assets from the vault root (ADR 0045), so a hand-compile
+    // needs the same root to resolve them.
     let png_status = Command::new("typst")
-        .args(["compile", "--format", "png", "kitchen-sink.typ"])
+        .args(["compile", "--format", "png", "--root"])
+        .arg(dir.path())
+        .arg("kitchen-sink.typ")
         .arg(out_dir.join("kitchen-sink-{p}.png"))
         .current_dir(dir.path().join("all-notes"))
         .status()
@@ -1545,6 +1857,64 @@ fn render_note_link_reaches_the_real_pdf_as_a_link_to_the_sibling_file() {
         pdf.windows(needle.len()).any(|window| window == needle),
         "no link annotation targeting the sibling artifact in the rendered pdf"
     );
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_theme_reaches_an_asset_outside_all_notes_with_real_typst() {
+    // The crux of the theming feature, and the one part only the real
+    // compiler can prove: typst sandboxes file access to its root, so a theme
+    // referencing `/assets/logo.svg` compiles only because ntropy grants the
+    // vault root. The asset stays outside `all-notes/`, which holds notes and
+    // nothing else (ADR 0045).
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\ntags: [confidential]\nstatus: draft\n---\nBody text.\n",
+    );
+
+    let assets = dir.path().join("assets");
+    fs::create_dir_all(&assets).expect("assets dir");
+    fs::write(
+        assets.join("logo.svg"),
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 16">
+             <rect width="64" height="16" fill="#2dd4bf"/>
+           </svg>"##,
+    )
+    .expect("write logo");
+
+    // A logo in the page header, and no frontmatter strip: the two
+    // requirements the feature exists for.
+    write_theme(
+        dir.path(),
+        "corporate",
+        r#"#let note(title: none, frontmatter: (:), paper: "a4", body) = {
+  set page(
+    paper: paper,
+    margin: (x: 2.2cm, top: 3.4cm, bottom: 2.4cm),
+    header: align(right, image("/assets/logo.svg", width: 3.2cm)),
+  )
+  if title != none { text(size: 1.6em, weight: "bold", title); v(0.8em) }
+  body
+}
+"#,
+    );
+    configure_theme(dir.path(), "corporate");
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "themed.pdf", "-n"]);
+    cmd.current_dir(dir.path());
+    let output = cmd.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "themed compile failed \u{2014} the asset outside all-notes did not resolve:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let pdf = fs::metadata(dir.path().join("themed.pdf")).expect("the artifact exists");
+    assert!(pdf.len() > 0, "the themed artifact is empty");
 }
 
 #[test]

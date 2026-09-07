@@ -197,11 +197,24 @@ annotation pointing at a file that is not there.
 
 ### Asset paths
 
-Image paths and relative link targets pass through verbatim: the emitted
-document behaves as if it sits in the same directory as the note. Typst
-resolves relative paths against the file they appear in (not the process
-working directory), so the `typst`-format artifact compiles correctly
-when placed next to the note.
+The compile root is the **vault**, passed as `typst compile --root
+<vault>` on every render (ADR 0045). That is what lets a theme reach an
+asset outside `all-notes/` with a root-absolute path such as
+`image("/assets/logo.svg")`.
+
+Typst places a document read from stdin at the root rather than at the
+working directory, so a bare `diagram.png` in a note body would be looked
+for at the vault root. The emitter therefore resolves local image paths
+against the note's own root-absolute directory, emitting
+`#image("/all-notes/diagram.png")`. The same rewrite lets a note reach a
+shared vault asset with `../assets/logo.svg`; a path climbing out of the
+vault cannot be expressed against the root and is left as written, for
+the compiler to reject by name.
+
+Because the emitted document addresses assets from the vault root,
+compiling a `typst`-format artifact by hand takes `typst compile --root
+<vault>`. An artifact whose note and theme reference no files compiles
+on its own.
 
 The pdf pipeline makes that premise hold via stdin: `typst compile -`
 with the note's directory as the invocation's working directory, the
@@ -279,14 +292,57 @@ identical file.
   as key-value lines beneath, nested values included. Which fields to
   feature or hide is a presentation decision and thus a theme's.
 - **`#show: note.with(...)` is the single seam** between content and
-  presentation. A theme is a different prelude defining `note`,
-  `callout`, `notelink`, and `task`; the document part never changes.
-  The prelude is inlined, not imported, so the artifact stays a single
-  self-contained file that compiles next to the note.
+  presentation. A theme redefines `note`, `callout`, `notelink`, or
+  `task` after the prelude; the document part never changes. The prelude
+  is inlined, not imported, so the artifact stays a single file (see
+  "Theme contract" below).
 - `set document(title: ...)` inside `note` supplies the PDF metadata.
 - The two formats never diverge: the pdf pipeline compiles the `typst`
   format's exact bytes, which the stdin-based asset mechanism (see
   Asset paths) preserves.
+
+## Theme contract
+
+A vault theme is a Typst file at `<vault>/.ntropy/themes/<name>.typ`,
+selected by `[render] theme` or `--theme` (ADR 0045). Its source is
+emitted **after** the prelude and **before** the template application:
+
+```typst
+// 1. the engine's prelude
+#let callout(kind: "note", body) = ...
+#let notelink(body) = ...
+#let task(done: false) = ...
+#let note(title: none, frontmatter: (:), paper: "a4", body) = ...
+
+// ---- vault theme ----
+// 2. the theme, verbatim
+#let note(title: none, frontmatter: (:), paper: "a4", body) = { ... }
+
+// 3. the template application
+#show: note.with(title: "My Note", frontmatter: (...), paper: "a4",)
+```
+
+Typst binds a name to the last `#let` above its use, so a theme's
+definition wins for everything below it, and a theme that defines only
+`note` inherits the rest. These four are the API a theme may override:
+
+| Function | Signature | Called for |
+| :--- | :--- | :--- |
+| `note` | `note(title: none, frontmatter: (:), paper: "a4", body)` | the whole document, through `#show` |
+| `callout` | `callout(kind: "note", body)` | each GFM admonition; `kind` is one of the five kinds or an unrecognized one |
+| `notelink` | `notelink(body)` | a resolved note-to-note link's title |
+| `task` | `task(done: false)` | each task-list checkbox |
+
+`fmt-value`, `is-empty` and `callout-styles` are helpers the prelude
+defines for its own `note` and `callout`. A theme may call them.
+Redefining one does **not** change the built-in `note` or `callout`: a
+Typst closure resolves the names it uses where it is defined, which is
+above the theme.
+
+A theme that fails to compile fails the render, with the compiler's error
+citing the line of the emitted document. A configured theme with no file
+fails before the vault is scanned. Neither falls back to the built-in
+look, so a document is never quietly produced in the wrong livery.
 
 ## Engine surface
 

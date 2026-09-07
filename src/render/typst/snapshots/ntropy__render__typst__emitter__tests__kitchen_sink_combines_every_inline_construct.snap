@@ -8,7 +8,7 @@ Prose with #strong[strong], #emph[emph], #strike[strike], an autolink #link("htt
 
 A footnote reference\.#footnote[Footnote body with #emph[emphasis] and a second line\.] And a dangling display #emph[text]\.
 
-#image("pic.png") then #link("https://host/img.png")[remote]\.
+#image("/all-notes/pic.png") then #link("https://host/img.png")[remote]\.
 
 - item with #raw("inline")
 - item with #link("https://li.st")[link]

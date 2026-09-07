@@ -25,11 +25,13 @@ use crate::id::Id;
 pub mod options;
 pub mod prepare;
 pub mod registry;
+pub mod theme;
 pub mod typst;
 
 pub use options::{Paper, RenderOptions};
 pub use prepare::prepare;
 pub use registry::{DEFAULT_FORMAT, Registry};
+pub use theme::{DEFAULT_THEME, Theme};
 pub use typst::Typst;
 
 // =========================================================
@@ -119,6 +121,13 @@ pub struct ToolOutput {
 pub struct PreparedDocument {
     pub id: Id,
     pub path: PathBuf,
+    /// The root of the vault the note lives in.
+    ///
+    /// A fact about the note's vault context like the rest of this type, and
+    /// the directory an engine grants its tool access to: the typst engine
+    /// passes it as `--root`, so a theme can reach vault assets that sit
+    /// outside `all-notes/` (ADR 0045).
+    pub vault_root: PathBuf,
     pub title: String,
     pub tags: Vec<String>,
     /// The creation date derived from the ULID, rendered in the system-local
@@ -178,6 +187,26 @@ pub enum RenderError {
     /// The requested output format is not registered.
     #[error("unknown output format `{0}`")]
     UnknownFormat(String),
+
+    /// The selected theme has no file in the vault's themes directory. Never a
+    /// fall back to the built-in look (ADR 0045); the render fails naming the
+    /// path it looked for, so a typo cannot ship a document in the wrong
+    /// livery.
+    #[error("theme `{name}` not found at {}", path.display())]
+    ThemeNotFound { name: String, path: PathBuf },
+
+    /// The theme's file exists but could not be read.
+    #[error("while reading the theme at {}", path.display())]
+    ThemeRead {
+        path: PathBuf,
+        #[source]
+        source: io::Error,
+    },
+
+    /// The theme name is not a single filename component, so it does not name
+    /// a file inside the themes directory.
+    #[error("invalid theme name `{name}`: a theme is named by a single file, without a path")]
+    InvalidThemeName { name: String },
 
     /// The requested engine does not produce the requested format. An engine
     /// registered for a different format is still unknown here.

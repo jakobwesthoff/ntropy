@@ -58,11 +58,22 @@ impl Paper {
 
 /// Engine-independent render settings, the `[render]` section of the vault
 /// config.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RenderOptions {
     /// The paper format artifacts are laid out for.
     #[serde(default)]
     pub paper: Paper,
+    /// The vault's default theme name, resolved against
+    /// `<vault>/.ntropy/themes/<name>.typ` (ADR 0045). `None` — the key
+    /// absent — is the engine's built-in look, and so is the reserved name
+    /// `default`.
+    ///
+    /// A free-form string rather than a narrow enum like [`Paper`], because
+    /// the legal values are whatever files the vault holds; a name that
+    /// resolves to nothing is reported when the theme is loaded, naming the
+    /// path it looked for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub theme: Option<String>,
 }
 
 impl RenderOptions {
@@ -95,7 +106,7 @@ mod tests {
             Paper::UsOficio,
         ];
         for paper in variants {
-            let options = RenderOptions { paper };
+            let options = RenderOptions { paper, theme: None };
             let toml = toml::to_string(&options).expect("options serialize");
             assert_eq!(toml.trim(), format!("paper = \"{}\"", paper.as_str()));
             let back: RenderOptions = toml::from_str(&toml).expect("the name parses back");
@@ -125,9 +136,48 @@ mod tests {
         assert!(RenderOptions::default().is_default());
         assert!(
             !RenderOptions {
-                paper: Paper::UsLetter
+                paper: Paper::UsLetter,
+                theme: None,
             }
             .is_default()
         );
+        assert!(
+            !RenderOptions {
+                paper: Paper::A4,
+                theme: Some("corporate".into()),
+            }
+            .is_default(),
+            "a configured theme alone is not the default section"
+        );
+    }
+
+    #[test]
+    fn the_theme_name_round_trips_and_is_omitted_when_absent() {
+        // The key is free-form, so any name the vault holds a file for
+        // survives; an absent theme writes no key at all, leaving configs that
+        // never touch theming untouched.
+        let options = RenderOptions {
+            paper: Paper::A4,
+            theme: Some("corporate".into()),
+        };
+        let toml = toml::to_string(&options).expect("options serialize");
+        assert!(
+            toml.contains(r#"theme = "corporate""#),
+            "the theme name is not in the serialized form: {toml}"
+        );
+        let back: RenderOptions = toml::from_str(&toml).expect("the options parse back");
+        assert_eq!(back, options);
+
+        let bare = toml::to_string(&RenderOptions::default()).expect("defaults serialize");
+        assert!(
+            !bare.contains("theme"),
+            "an absent theme still wrote a key: {bare}"
+        );
+    }
+
+    #[test]
+    fn a_config_without_a_theme_key_parses_as_no_theme() {
+        let options: RenderOptions = toml::from_str(r#"paper = "a4""#).expect("parses");
+        assert_eq!(options.theme, None);
     }
 }

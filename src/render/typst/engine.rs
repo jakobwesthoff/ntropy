@@ -13,7 +13,7 @@
 
 use super::{document, emitter};
 use crate::render::{
-    Invocation, PreparedDocument, RenderContext, RenderError, RenderOptions, Renderer,
+    Invocation, PreparedDocument, RenderContext, RenderError, RenderOptions, Renderer, Theme,
 };
 
 /// The ntropy-owned engine registered as `typst`.
@@ -26,6 +26,9 @@ use crate::render::{
 pub struct Typst {
     format: Format,
     options: RenderOptions,
+    /// The vault's theme for this render, spliced after the prelude, or `None`
+    /// for the built-in look (ADR 0045).
+    theme: Option<Theme>,
 }
 
 /// Which artifact the engine produces. Both formats emit the identical
@@ -42,19 +45,21 @@ enum Format {
 impl Typst {
     /// The engine that produces the `typst` format: the emitted document written
     /// out directly as the artifact.
-    pub fn for_typst_format(options: RenderOptions) -> Self {
+    pub fn for_typst_format(options: RenderOptions, theme: Option<Theme>) -> Self {
         Typst {
             format: Format::Typst,
             options,
+            theme,
         }
     }
 
     /// The engine that produces the `pdf` format: the identical emitted document
     /// compiled through the external `typst` binary.
-    pub fn for_pdf_format(options: RenderOptions) -> Self {
+    pub fn for_pdf_format(options: RenderOptions, theme: Option<Theme>) -> Self {
         Typst {
             format: Format::Pdf,
             options,
+            theme,
         }
     }
 }
@@ -67,8 +72,17 @@ impl Renderer for Typst {
     ) -> Result<(), RenderError> {
         // Convert the body once; the same bytes back every format. Note links
         // resolve against the prepared link table (ADR 0028).
-        let (body, warnings) = emitter::emit(&doc.body, &doc.links);
-        let document = document::assemble(&doc.title, &doc.frontmatter, self.options.paper, &body);
+        // The compiler's root is the vault, so the note's own directory is
+        // where its relative asset paths must be anchored (ADR 0045).
+        let asset_base = asset_base(doc);
+        let (body, warnings) = emitter::emit(&doc.body, &doc.links, &asset_base);
+        let document = document::assemble(
+            &doc.title,
+            &doc.frontmatter,
+            self.options.paper,
+            self.theme.as_ref().map(|theme| theme.source.as_str()),
+            &body,
+        );
 
         // Every degradation the emitter reported (dropped raw HTML, remote
         // images the offline compiler cannot embed) reaches the host, which
@@ -94,8 +108,14 @@ impl Renderer for Typst {
             // job, keeping the engine headless: it touches neither the
             // filesystem nor the working directory itself.
             Format::Pdf => {
+                // `--root` grants the compiler the whole vault, so a theme can
+                // reach assets outside `all-notes/` by a vault-absolute path
+                // like `/assets/logo.svg` (ADR 0045). It is passed on every
+                // render, themed or not, so one invocation shape covers both.
                 let args: Vec<std::ffi::OsString> = vec![
                     "compile".into(),
+                    "--root".into(),
+                    doc.vault_root.as_os_str().to_os_string(),
                     "-".into(),
                     ctx.output_path().as_os_str().to_os_string(),
                 ];
@@ -116,6 +136,30 @@ impl Renderer for Typst {
                 Ok(())
             }
         }
+    }
+}
+
+/// The note's directory expressed as a path absolute within the compile root,
+/// e.g. `/all-notes` for a note in a standard vault.
+///
+/// Falls back to the root itself when the note does not sit under it, which no
+/// vault produces; the emitted paths are then root-relative to the root, and
+/// the compiler reports anything it cannot find.
+fn asset_base(doc: &PreparedDocument) -> String {
+    let dir = match doc.path.parent() {
+        Some(dir) => dir,
+        None => return "/".to_string(),
+    };
+    match dir.strip_prefix(&doc.vault_root) {
+        Ok(relative) => {
+            let text = relative.to_string_lossy();
+            if text.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{text}")
+            }
+        }
+        Err(_) => "/".to_string(),
     }
 }
 
@@ -230,6 +274,7 @@ mod tests {
         PreparedDocument {
             id: Id::from_str(ULID).expect("ulid parses"),
             path: PathBuf::from("/vault/all-notes/note.md"),
+            vault_root: PathBuf::from("/vault"),
             title: title.to_string(),
             tags: Vec::new(),
             created: "2020-01-01".to_string(),
@@ -252,7 +297,7 @@ mod tests {
             Vec::new(),
         );
         let mut ctx = FakeContext::new();
-        Typst::for_typst_format(RenderOptions::default())
+        Typst::for_typst_format(RenderOptions::default(), None)
             .render(&document, &mut ctx)
             .expect("render succeeds");
 
@@ -287,7 +332,7 @@ mod tests {
         // engine forwards the warning to the host.
         let document = doc("HTML", "{}", "<div>raw</div>\n", Vec::new());
         let mut ctx = FakeContext::new();
-        Typst::for_typst_format(RenderOptions::default())
+        Typst::for_typst_format(RenderOptions::default(), None)
             .render(&document, &mut ctx)
             .expect("render succeeds");
 
@@ -317,7 +362,7 @@ mod tests {
         let document = doc("Links", "{}", &body, links);
 
         let mut ctx = FakeContext::new();
-        Typst::for_typst_format(RenderOptions::default())
+        Typst::for_typst_format(RenderOptions::default(), None)
             .render(&document, &mut ctx)
             .expect("render succeeds");
 
@@ -339,7 +384,7 @@ mod tests {
         let document = doc("Links", "{}", &body, links);
 
         let mut ctx = FakeContext::new();
-        Typst::for_typst_format(RenderOptions::default())
+        Typst::for_typst_format(RenderOptions::default(), None)
             .render(&document, &mut ctx)
             .expect("render succeeds");
 
@@ -368,7 +413,7 @@ mod tests {
         );
 
         let mut typst_ctx = FakeContext::new();
-        Typst::for_typst_format(RenderOptions::default())
+        Typst::for_typst_format(RenderOptions::default(), None)
             .render(&document, &mut typst_ctx)
             .expect("typst-format render succeeds");
         let expected_document = typst_ctx
@@ -377,7 +422,7 @@ mod tests {
             .expect("the typst format wrote the document");
 
         let mut ctx = FakeContext::new().with_output("/artifacts/note.pdf");
-        Typst::for_pdf_format(RenderOptions::default())
+        Typst::for_pdf_format(RenderOptions::default(), None)
             .render(&document, &mut ctx)
             .expect("pdf render succeeds");
 
@@ -393,7 +438,11 @@ mod tests {
             .iter()
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect();
-        assert_eq!(args, vec!["compile", "-", "/artifacts/note.pdf"]);
+        assert_eq!(
+            args,
+            vec!["compile", "--root", "/vault", "-", "/artifacts/note.pdf"],
+            "the vault root is granted to the compiler so a theme reaches its assets"
+        );
         assert_eq!(
             invocation.stdin.as_deref(),
             Some(expected_document.as_slice()),
@@ -419,7 +468,7 @@ mod tests {
                 stderr: b"error: file would escape the project root".to_vec(),
             }));
 
-        let err = Typst::for_pdf_format(RenderOptions::default())
+        let err = Typst::for_pdf_format(RenderOptions::default(), None)
             .render(&document, &mut ctx)
             .expect_err("a non-zero exit fails the render");
         match err {
@@ -437,12 +486,13 @@ mod tests {
 
         let options = RenderOptions {
             paper: Paper::UsLetter,
+            theme: None,
         };
         let document = doc("Paper", "{}", "body\n", Vec::new());
 
         // The typst format carries the paper in the written artifact.
         let mut typst_ctx = FakeContext::new();
-        Typst::for_typst_format(options)
+        Typst::for_typst_format(options.clone(), None)
             .render(&document, &mut typst_ctx)
             .expect("render succeeds");
         assert!(
@@ -454,7 +504,7 @@ mod tests {
         // The pdf format compiles the identical bytes, so the same paper rides
         // on the compiler's stdin.
         let mut pdf_ctx = FakeContext::new().with_output("/artifacts/note.pdf");
-        Typst::for_pdf_format(options)
+        Typst::for_pdf_format(options, None)
             .render(&document, &mut pdf_ctx)
             .expect("render succeeds");
         let stdin = pdf_ctx.invocations[0]

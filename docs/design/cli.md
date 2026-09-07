@@ -200,6 +200,11 @@ correctly, and is a successful no-op without it, like `delete`.
   is overwritten. That default name is what a note link in another artifact
   points at (ADR 0044), so a set of notes rendered without `-o` into one
   directory cross-references itself.
+- `--theme <name>` renders with a named theme from
+  `<vault>/.ntropy/themes/<name>.typ`, overriding the vault's
+  `[render] theme` for this invocation (ADR 0045). The reserved name
+  `default` selects the built-in look. A name with no file, or one carrying a
+  path, fails before the vault is scanned.
 - `--print` / `-p` prints the artifact's path to stdout as one line on success
   (ADR 0036); without it a `Rendering <reference>...` line announces the work
   and a completion report follows:
