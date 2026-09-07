@@ -1494,6 +1494,60 @@ fn render_kitchen_sink_compiles_with_real_typst() {
 }
 
 #[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn render_note_link_reaches_the_real_pdf_as_a_link_to_the_sibling_file() {
+    // What the stub cannot show: that the emitted `#link` survives the real
+    // compiler as a PDF link annotation, and that its target names a file
+    // actually sitting next to it (ADR 0044). Both notes render with no `-o`
+    // into the same directory, which is the arrangement the naming contract
+    // is built for. Opt-in like the kitchen-sink compile above, since it needs
+    // typst installed (ADR 0021).
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "source",
+        &format!("---\ntitle: Source\n---\nSee [the target]({ULID_B}-target-note.md).\n"),
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "target-note",
+        "---\ntitle: Target Note\n---\nTarget body.\n",
+    );
+
+    let out_dir = dir.path().join("out");
+    fs::create_dir_all(&out_dir).expect("create output dir");
+    for id in [ULID_A, ULID_B] {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["render", id, "-n"]);
+        cmd.current_dir(&out_dir);
+        let output = cmd.output().expect("run render to pdf");
+        assert!(
+            output.status.success(),
+            "pdf compile failed for {id}:\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    // The link target is the name the target note rendered itself under, so
+    // the annotation resolves against a file that is really there.
+    assert!(
+        out_dir.join("target-note.pdf").exists(),
+        "the target did not render under the name the link points at"
+    );
+
+    // typst writes the annotation's action uncompressed, so the URI is
+    // findable in the raw bytes: `/A<</Type/Action/S/URI/URI(target-note.pdf)>>`.
+    let pdf = fs::read(out_dir.join("source.pdf")).expect("read the source pdf");
+    let needle = b"/URI(target-note.pdf)";
+    assert!(
+        pdf.windows(needle.len()).any(|window| window == needle),
+        "no link annotation targeting the sibling artifact in the rendered pdf"
+    );
+}
+
+#[test]
 fn render_survives_a_tool_that_exits_without_reading_stdin() {
     // ntropy restores `SIGPIPE`'s default disposition for its own stdout (see
     // the sigpipe test at the end of this file), so writing the document to a

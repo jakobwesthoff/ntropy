@@ -20,10 +20,11 @@ fmt:
 check: clippy test
     cargo fmt --check
 
-# Render the kitchen-sink fixture with the real typst binary and drop the
-# pdf/png/typ artifacts under target/verify-render/ for optical inspection
+# Run the tests that need the real typst binary: the kitchen-sink fixture,
+# whose pdf/png/typ artifacts land under target/verify-render/ for optical
+# inspection, and the note-link annotation check
 verify-render:
-    cargo test --test cli render_kitchen_sink_compiles_with_real_typst -- --ignored --nocapture
+    cargo test --test cli -- --ignored --nocapture
 
 # Measure test coverage
 coverage:
