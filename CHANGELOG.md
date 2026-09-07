@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.12.0 - 2026-09-07
+
+### Added
+
+- Vault render themes. A Typst file in `<vault>/.ntropy/themes/` named by
+  `[render] theme` in the vault config becomes the look of every rendered
+  document: after that one line, a plain `ntropy render` and a loop over the
+  whole vault both produce themed output with nothing theme-related on the
+  command line. `--theme <name>` overrides it for one invocation and
+  `--theme default` returns to the built-in look.
+- A theme redefines only what it wants. Its source is emitted after the
+  engine's prelude, so `note`, `callout`, `notelink` and `task` shadow the
+  built-in versions and anything it leaves alone is inherited. The four
+  signatures are documented as the theme API in `docs/design/typst-engine.md`
+  and pinned by a snapshot test.
+- Themes can use vault assets. `typst` now compiles with the vault as its
+  root, so a theme reaches a logo or a font outside `all-notes/` with a
+  root-absolute path such as `image("/assets/logo.svg")`, and `all-notes/` goes
+  on holding notes and nothing else.
+
+### Changed
+
+- Local image paths in a note body are emitted as root-absolute paths
+  (`#image("/all-notes/diagram.png")`). Typst places a document read from stdin
+  at the compile root, so with the root widened to the vault a bare filename
+  would otherwise be looked for in the wrong directory. A note can now also
+  reach a shared vault asset with `../assets/logo.svg`.
+- Compiling a `--to typst` artifact by hand takes `typst compile --root <vault>
+  <file>.typ`, since the emitted document addresses its assets from the vault
+  root. An artifact whose note and theme reference no files still compiles on
+  its own.
+- A missing or broken theme fails the render, naming the theme and the path it
+  looked for. There is no fall back to the built-in look, so a document is
+  never quietly produced in the wrong livery.
+
 ## v1.11.0 - 2026-09-07
 
 ### Changed
