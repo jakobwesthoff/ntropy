@@ -61,6 +61,11 @@ language for filtering, and materialized symlink views for filesystem browsing.
    note; pass `-p` to capture the artifact path (`out=$(ntropy render -n -p
    <ulid>)`). `--to typst` emits the Typst document instead and needs no
    external tool at all.
+11. **Rendering a linked set: no `-o`, one directory.** A note link becomes a
+   link to `<target-slug>.pdf`, the name `render` gives the target's own
+   artifact by default. Render each note from the same working directory
+   without `-o` and the cross-references find each other; rename an artifact
+   and its incoming links break.
 
 ## Do / don't
 

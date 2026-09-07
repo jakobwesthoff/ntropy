@@ -164,7 +164,7 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Link (external URL) | `#link("url")[escaped label]` |
 | Bare URL in text (`https://...`, `www....`) | detected by the emitter with the `linkify` crate over text events (GFM autolink rules; pulldown-cmark has no option for this — verified) and emitted as `#link("url")[url]`; a `www.` URL gains an `https://` scheme in the target |
 | Email autolink (`<user@host>` or bare in text) | `#link("mailto:user@host")[user@host]`; the `mailto:` scheme is added so the link is actionable |
-| Note link, resolved | `#notelink[Title]`, the target note's current title through a prelude-defined function, so a theme can style note links distinctly from ordinary emphasis |
+| Note link, resolved | `#link("<target-slug>.pdf")[#notelink[Title]]`, the target note's current title through a prelude-defined function, so a theme can style note links distinctly from ordinary emphasis, wrapped in a link to the target note's own artifact (see below) |
 | Note link, unresolved | the wrapper is dropped and the display text's inner inline events are re-emitted, so markup inside the display text survives |
 | Task list item | bullet item with a `#task(done: ...)` lead-in — the prelude-defined function draws one identical checkbox for both states, so checked and unchecked match optically regardless of font glyph coverage |
 | Footnote | `#footnote[...]` inlined at the reference site; definitions are buffered because pulldown-cmark delivers them separately from references |
@@ -176,6 +176,24 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Mermaid, emoji shortcodes, color chips | out of scope: rendered as their literal text (a mermaid block is an ordinary code block), no warning |
 | Math (`$...$`, `$$...$$`, `math` fences) | not supported: `ENABLE_MATH` stays off, `$` is escaped like all text and renders literally, `math` fences render as plain code blocks |
 | Raw HTML | dropped with a render warning naming what was dropped — never silently |
+
+### Cross-document note links
+
+A resolved note link targets `<target-slug>.pdf`: the target note's current
+filename slug plus the `pdf` extension, with no directory part (ADR 0044).
+That is the name a default `ntropy render` of the target note gives its
+artifact, so notes rendered into a common directory reference each other by
+name.
+
+The slug is read from the vault at render time rather than from the link's own
+target, so a slug that has drifted in the Markdown does not reach the artifact.
+The extension is always `pdf`, never the extension of the format in hand: the
+`typst` artifact is the source of a PDF, and both formats emit identical bytes.
+
+The annotation this produces is a `/Link` whose action is a `/URI` holding the
+relative name. Following it is the viewer's behavior, and a target that was
+rendered elsewhere, renamed by `-o`, or never rendered at all leaves the
+annotation pointing at a file that is not there.
 
 ### Asset paths
 

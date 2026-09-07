@@ -23,8 +23,9 @@
 //! - Soft breaks map to a space and hard breaks to `#linebreak()`.
 //! - Links check the note-link table first: a Link event whose byte span
 //!   equals a [`ResolvedLink::range`] is a note link. A resolved note link
-//!   (the target has a title) renders as `#emph[Title]` and its inner events
-//!   are dropped; an unresolved note link drops only the wrapper and
+//!   renders as `#link("<target-slug>.pdf")[#notelink[Title]]` and its inner
+//!   events are dropped, so the artifact carries a clickable target next to
+//!   itself (ADR 0044); an unresolved note link drops only the wrapper and
 //!   re-emits its inner markup, so formatting in the display text survives.
 //!   Every other link, along with URL and email autolinks, renders as
 //!   `#link("target")[label]`.
@@ -72,6 +73,10 @@ use pulldown_cmark::{
 
 use super::writer::{self, TypstWriter};
 use crate::render::ResolvedLink;
+
+/// The extension a resolved note link targets: the artifact a default
+/// `ntropy render` of the target note produces (ADR 0044).
+const NOTE_LINK_EXTENSION: &str = "pdf";
 
 // =========================================================
 // Public entry
@@ -191,10 +196,12 @@ enum InlineStyle {
 enum LinkEmit {
     /// Not a note link: `#link("dest")[inner]`, `dest` string-literal escaped.
     Ordinary { dest: String },
-    /// A note link whose target resolves: `#notelink[Title]`, inner events
-    /// dropped. `notelink` is defined by the prelude, so a theme can style
-    /// note links distinctly from ordinary emphasis.
-    ResolvedNote { title: String },
+    /// A note link whose target resolves:
+    /// `#link("<slug>.pdf")[#notelink[Title]]`, inner events dropped.
+    /// `notelink` is defined by the prelude, so a theme can style note links
+    /// distinctly from ordinary emphasis, and the surrounding `#link` makes
+    /// the sibling artifact clickable (ADR 0044).
+    ResolvedNote { title: String, slug: String },
     /// A note link whose target is dangling: the wrapper is dropped and the
     /// inner markup re-emitted, so formatting in the display text survives.
     UnresolvedNote,
@@ -633,9 +640,10 @@ impl<'a> Emitter<'a> {
     /// target title; any other span is an ordinary link.
     fn classify_link(&self, dest: &str, span: std::ops::Range<usize>) -> LinkEmit {
         match self.links.iter().find(|link| link.range == span) {
-            Some(link) => match &link.target_title {
-                Some(title) => LinkEmit::ResolvedNote {
-                    title: title.clone(),
+            Some(link) => match &link.target {
+                Some(target) => LinkEmit::ResolvedNote {
+                    title: target.title.clone(),
+                    slug: target.slug.clone(),
                 },
                 None => LinkEmit::UnresolvedNote,
             },
@@ -770,7 +778,7 @@ impl<'a> Emitter<'a> {
                     LinkEmit::Ordinary { dest } => wrap_link(&dest, &inner),
                     // The inner events were collected but a resolved note link
                     // shows the target's title instead, so `inner` is dropped.
-                    LinkEmit::ResolvedNote { title } => wrap_notelink(&title),
+                    LinkEmit::ResolvedNote { title, slug } => wrap_notelink(&title, &slug),
                     LinkEmit::UnresolvedNote => inner,
                 };
                 self.append_inline(&out);
@@ -996,13 +1004,21 @@ fn wrap_link(dest: &str, inner: &str) -> String {
     writer.finish()
 }
 
-/// A `#notelink[Title]` call with `title` escaped as markup text, used for a
-/// resolved note link. The prelude defines `notelink`.
-fn wrap_notelink(title: &str) -> String {
+/// A resolved note link: `#link("<slug>.pdf")[#notelink[Title]]`, with `slug`
+/// string-literal escaped and `title` escaped as markup text.
+///
+/// The target is the artifact a default `ntropy render` of the target note
+/// produces in the same directory, so a set of notes rendered together
+/// cross-navigates (ADR 0044). The extension is always `pdf`, never the
+/// extension of the format being produced: the `typst` artifact is the source
+/// of a PDF, and both formats emit identical bytes by design.
+fn wrap_notelink(title: &str, slug: &str) -> String {
     let mut writer = TypstWriter::new();
-    writer.syntax("#notelink[");
+    writer.syntax("#link(\"");
+    writer.string_literal(&format!("{slug}.{NOTE_LINK_EXTENSION}"));
+    writer.syntax("\")[#notelink[");
     writer.markup_text(title);
-    writer.syntax("]");
+    writer.syntax("]]");
     writer.finish()
 }
 
@@ -1074,6 +1090,8 @@ mod tests {
 
     use std::ops::Range;
 
+    use crate::render::LinkTarget;
+
     use typst_syntax::{SyntaxKind, SyntaxNode};
 
     /// Emit a body with no note-link table, keeping the string alone. Most
@@ -1088,14 +1106,18 @@ mod tests {
         emit(input, &[]).1
     }
 
-    /// Build a note-link table entry. The range must equal the Link event's
-    /// byte span in `input` for the emitter to treat it as a note link.
-    fn note_link(range: Range<usize>, target_title: Option<&str>) -> ResolvedLink {
+    /// Build a note-link table entry from an optional `(title, slug)` target.
+    /// The range must equal the Link event's byte span in `input` for the
+    /// emitter to treat it as a note link.
+    fn note_link(range: Range<usize>, target: Option<(&str, &str)>) -> ResolvedLink {
         ResolvedLink {
             range,
             display: String::new(),
             id: crate::id::Id::from_timestamp_ms(0),
-            target_title: target_title.map(str::to_string),
+            target: target.map(|(title, slug)| LinkTarget {
+                title: title.to_string(),
+                slug: slug.to_string(),
+            }),
         }
     }
 
@@ -1495,15 +1517,29 @@ mod tests {
     // =====================================================================
 
     #[test]
-    fn resolved_note_link_becomes_the_notelink_title() {
+    fn resolved_note_link_becomes_a_link_to_the_targets_pdf() {
         // `[my note](abc123)` spans bytes 4..21; a matching resolved entry
         // replaces the whole link with its target's current title through the
-        // prelude-defined `notelink` function.
+        // prelude-defined `notelink` function, wrapped in a `#link` at the
+        // artifact a default render of the target produces (ADR 0044).
         let input = "See [my note](abc123) end.";
-        let links = [note_link(4..21, Some("Target Title"))];
+        let links = [note_link(4..21, Some(("Target Title", "target-title")))];
         assert_eq!(
             emit(input, &links).0,
-            "See #notelink[Target Title] end\\.\n"
+            "See #link(\"target-title.pdf\")[#notelink[Target Title]] end\\.\n"
+        );
+    }
+
+    #[test]
+    fn resolved_note_link_targets_the_slug_not_the_title() {
+        // The slug is the artifact's stem and the title is only what the
+        // reader sees; a title that would slugify differently must not leak
+        // into the target.
+        let input = "[x](id)";
+        let links = [note_link(0..7, Some(("A Renamed Note", "old-slug")))];
+        assert_eq!(
+            emit(input, &links).0,
+            "#link(\"old-slug.pdf\")[#notelink[A Renamed Note]]\n"
         );
     }
 
@@ -1512,15 +1548,21 @@ mod tests {
         // The display text carries markup, but a resolved note link shows the
         // target's title instead, so the inner `#strong` never appears.
         let input = "[**bold** display](id)";
-        let links = [note_link(0..22, Some("The Title"))];
-        assert_eq!(emit(input, &links).0, "#notelink[The Title]\n");
+        let links = [note_link(0..22, Some(("The Title", "the-title")))];
+        assert_eq!(
+            emit(input, &links).0,
+            "#link(\"the-title.pdf\")[#notelink[The Title]]\n"
+        );
     }
 
     #[test]
     fn resolved_note_link_title_escapes_markup_active_characters() {
         let input = "[x](id)";
-        let links = [note_link(0..7, Some("a*b [c] #d"))];
-        assert_eq!(emit(input, &links).0, "#notelink[a\\*b \\[c\\] \\#d]\n");
+        let links = [note_link(0..7, Some(("a*b [c] #d", "a-b-c-d")))];
+        assert_eq!(
+            emit(input, &links).0,
+            "#link(\"a-b-c-d.pdf\")[#notelink[a\\*b \\[c\\] \\#d]]\n"
+        );
     }
 
     #[test]
@@ -1536,7 +1578,7 @@ mod tests {
         // The note text already renders literally; a stray table entry that
         // matches no Link event changes nothing.
         let input = "just prose";
-        let links = [note_link(0..4, Some("Title"))];
+        let links = [note_link(0..4, Some(("Title", "title")))];
         assert_eq!(emit(input, &links).0, "just prose\n");
     }
 
@@ -1791,7 +1833,7 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             start..start + "[display *text*](danglingid)".len()
         };
         let links = [
-            note_link(note_span, Some("Resolved Title")),
+            note_link(note_span, Some(("Resolved Title", "resolved-title"))),
             note_link(dangling_span, None),
         ];
         let (out, warnings) = emit(input, &links);
@@ -1828,7 +1870,7 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             start..start + "[display *text*](danglingid)".len()
         };
         let links = [
-            note_link(note_span, Some("Resolved Title")),
+            note_link(note_span, Some(("Resolved Title", "resolved-title"))),
             note_link(dangling_span, None),
         ];
         let (out, _) = emit(input, &links);

@@ -102,14 +102,16 @@ engine-agnostic, lossless view of the note and its vault context.
 - The raw body, verbatim.
 - The link table: every note-to-note link in the body (ADR 0028) with its
   span, display text, and target id, plus the target note's current title
-  where the id resolves against the vault.
+  and slug where the id resolves against the vault.
 
 The guardrail for growing this type: a field must be a fact about the note
 or its vault context, resolvable without knowing the output format.
 Anything that discards information or shapes it for output belongs in an
 engine. This keeps every engine free to choose its own materialization:
-one engine may flatten links to styled text while a later one emits real
-hyperlinks, both from the same resolved link table.
+one engine may flatten links to styled text while another emits real
+hyperlinks, both from the same resolved link table. The typst engine does
+the latter, pointing each link at the target note's own artifact
+(ADR 0044).
 
 ## Execution model
 

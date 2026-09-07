@@ -561,7 +561,8 @@ You can type these by hand, but you don't have to — that's what the
 ## Rendering notes to PDF
 
 `ntropy render` turns a single note into a typeset PDF — title, date, and tags
-up top, the body below, and links to other notes replaced by their titles:
+up top, the body below, and links to other notes shown by their current
+titles:
 
 ```bash
 # Render a note into ./<slug>.pdf in the current directory
@@ -578,6 +579,25 @@ what's missing if it isn't on your `PATH`.
 
 `--to typst` writes the emitted Typst document (a `.typ` file) instead of a
 PDF, needing no external tool at all.
+
+**Links between rendered notes.** A link to another note becomes a real link in
+the PDF, pointing at `<slug>.pdf` — the target note's slug, which is also the
+name `render` gives that note's artifact by default. Render a set of notes into
+one directory and their cross-references line up:
+
+```bash
+# Rendered with no -o, each artifact is named after the note's own slug,
+# which is exactly what the other one's link points at
+cd out
+ntropy render 01j8za2…   # writes ./architecture.pdf
+ntropy render 01j8zb7…   # writes ./deployment.pdf
+```
+
+The link is a plain relative reference, so whether a click opens the other file
+is up to your PDF viewer. It finds nothing if the target was never rendered, or
+was rendered into a different directory or under a different name. Two notes
+whose slugs are identical also share an artifact name, so a link to either
+reaches whichever was written last.
 
 **Paper size.** Rendering defaults to a4. A `[render]` section in the vault's
 `.ntropy/config.toml` picks a different format:

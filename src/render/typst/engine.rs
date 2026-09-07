@@ -123,7 +123,7 @@ impl Renderer for Typst {
 mod tests {
     use super::*;
     use crate::id::Id;
-    use crate::render::{ResolvedLink, ToolOutput};
+    use crate::render::{LinkTarget, ResolvedLink, ToolOutput};
 
     use std::collections::VecDeque;
     use std::ops::Range;
@@ -207,12 +207,15 @@ mod tests {
         }
     }
 
-    fn link(range: Range<usize>, display: &str, target_title: Option<&str>) -> ResolvedLink {
+    fn link(range: Range<usize>, display: &str, target: Option<(&str, &str)>) -> ResolvedLink {
         ResolvedLink {
             range,
             display: display.to_string(),
             id: Id::from_str(TARGET_ULID).expect("target ulid parses"),
-            target_title: target_title.map(str::to_string),
+            target: target.map(|(title, slug)| LinkTarget {
+                title: title.to_string(),
+                slug: slug.to_string(),
+            }),
         }
     }
 
@@ -300,13 +303,17 @@ mod tests {
     }
 
     #[test]
-    fn resolved_note_link_renders_the_title() {
-        // A resolved note link becomes the target's emphasized title; the
-        // display text does not appear.
+    fn resolved_note_link_renders_the_title_linked_to_the_targets_artifact() {
+        // A resolved note link becomes the target's styled title wrapped in a
+        // link to the target's own artifact; the display text does not appear.
         let body = "see [old](note.md) here".to_string();
         let start = body.find("[old]").expect("link present");
         let end = start + "[old](note.md)".len();
-        let links = vec![link(start..end, "old", Some("Current Title"))];
+        let links = vec![link(
+            start..end,
+            "old",
+            Some(("Current Title", "current-title")),
+        )];
         let document = doc("Links", "{}", &body, links);
 
         let mut ctx = FakeContext::new();
@@ -316,8 +323,8 @@ mod tests {
 
         let written = ctx.document();
         assert!(
-            written.contains("#notelink[Current Title]"),
-            "resolved title not routed through notelink: {written}"
+            written.contains(r#"#link("current-title.pdf")[#notelink[Current Title]]"#),
+            "resolved note link not linked to the target's artifact: {written}"
         );
     }
 

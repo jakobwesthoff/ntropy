@@ -204,7 +204,7 @@ expression: artifact
 
 Intro with #emph[emphasis], #strong[strong], #strike[struck], #raw("let x = \"a\\\\b\";"), and a bare URL #link("https://example.com/path")[https\:\/\/example\.com\/path] plus #link("https://www.example.org")[www\.example\.org] and mail to #link("mailto:jaw@ekko.io")[jaw\@ekko\.io] too\. Literal math \$x^2\$ stays text\. Unicode\: Über Größe 日本語\.
 
-A resolved note link to #notelink[Current Linked Title] and a dangling one to #strong[bold] ghost\.
+A resolved note link to #link("linked.pdf")[#notelink[Current Linked Title]] and a dangling one to #strong[bold] ghost\.
 
 An #link("https://example.org/docs")[external link], a #link("notes/other.md")[relative file], an #link("#table")[anchor], and a #link("mailto:jaw@ekko.io")[mail link]\.
 

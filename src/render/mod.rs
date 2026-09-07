@@ -135,8 +135,8 @@ pub struct PreparedDocument {
 /// A note-to-note link resolved against the vault (ADR 0028).
 ///
 /// The link table stays lossless: it carries the span and display text an
-/// engine needs to substitute the link, plus the target's current title where
-/// the id resolves, without committing to any particular materialization.
+/// engine needs to substitute the link, plus what the vault currently knows
+/// about the target, without committing to any particular materialization.
 #[derive(Debug, Clone)]
 pub struct ResolvedLink {
     /// The link's byte span in [`PreparedDocument::body`].
@@ -145,9 +145,23 @@ pub struct ResolvedLink {
     pub display: String,
     /// The target note's identity.
     pub id: Id,
-    /// The target note's current title, or `None` when the id does not resolve
-    /// against the vault (a dangling link).
-    pub target_title: Option<String>,
+    /// What the vault knows about the target, or `None` when the id resolves
+    /// against no note (a dangling link).
+    pub target: Option<LinkTarget>,
+}
+
+/// The target note of a resolved link, as the vault has it now.
+///
+/// Title and slug always travel together because they are read from the same
+/// note in the same lookup: a link either resolves and has both, or dangles
+/// and has neither.
+#[derive(Debug, Clone)]
+pub struct LinkTarget {
+    /// The target note's current title.
+    pub title: String,
+    /// The target note's current slug, which is also the stem of the artifact
+    /// a default `ntropy render` of that note produces (ADR 0044).
+    pub slug: String,
 }
 
 // =========================================================

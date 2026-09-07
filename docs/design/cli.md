@@ -197,7 +197,9 @@ correctly, and is a successful no-op without it, like `delete`.
 - `--output <path>` / `-o` names the artifact; the default is
   `./<slug>.<ext>` in the current directory, from the slug component of the
   note's filename and the format's extension. An existing file at the target
-  is overwritten.
+  is overwritten. That default name is what a note link in another artifact
+  points at (ADR 0044), so a set of notes rendered without `-o` into one
+  directory cross-references itself.
 - `--print` / `-p` prints the artifact's path to stdout as one line on success
   (ADR 0036); without it a `Rendering <reference>...` line announces the work
   and a completion report follows:

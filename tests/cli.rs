@@ -1327,6 +1327,52 @@ fn render_to_typst_writes_a_real_artifact_without_any_tool() {
     );
 }
 
+#[test]
+fn a_resolved_note_link_targets_the_targets_default_artifact_name() {
+    // The cross-document link contract of ADR 0044, pinned from both ends: the
+    // emitted document links to `<target-slug>.pdf`, and a default render of
+    // that target lands at exactly that name in the same directory. The two
+    // halves are what makes a folder of rendered notes navigable, so a change
+    // to either naming rule alone must fail here.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "source",
+        &format!("---\ntitle: Source\n---\nSee [the target]({ULID_B}-target-note.md).\n"),
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "target-note",
+        "---\ntitle: Target Note\n---\nTarget body.\n",
+    );
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    assert!(cmd.status().expect("run render").success());
+
+    let artifact = fs::read_to_string(dir.path().join("source.typ")).expect("typ artifact exists");
+    assert!(
+        artifact.contains(r#"#link("target-note.pdf")[#notelink[Target Note]]"#),
+        "the note link does not target the target's artifact: {artifact}"
+    );
+
+    // The other half: rendering the target with no `-o` produces that file.
+    write_stub_typst(dir.path());
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_B, "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", STUB_BIN);
+    assert!(cmd.status().expect("run render").success());
+    assert!(
+        dir.path().join("target-note.pdf").exists(),
+        "the target's default artifact is not the name the link points at"
+    );
+}
+
 /// The kitchen-sink fixture: one note exercising every supported construct
 /// (frontmatter value shapes, all callout kinds, footnote orders, task lists,
 /// explicit ordered-list numbers, fence collisions, table alignments, note

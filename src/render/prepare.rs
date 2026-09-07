@@ -14,7 +14,7 @@
 use crate::link::{self, NoteIndex};
 use crate::note::Note;
 
-use super::{PreparedDocument, ResolvedLink};
+use super::{LinkTarget, PreparedDocument, ResolvedLink};
 
 /// Build the lossless [`PreparedDocument`] for `note`, resolving its links
 /// against `index`.
@@ -24,10 +24,10 @@ use super::{PreparedDocument, ResolvedLink};
 /// deriving it is the sole fallible step, since a corrupt id can carry a
 /// timestamp outside the supported year range.
 ///
-/// Each link resolves to the target note's *current* title through `index`, not
-/// the link's own display text, so the prepared table always reflects the vault
-/// as it stands now. A link whose id is absent from the index is dangling and
-/// carries `target_title = None`.
+/// Each link resolves to the target note's *current* title and slug through
+/// `index`, not to anything the link itself spells out, so the prepared table
+/// always reflects the vault as it stands now. A link whose id is absent from
+/// the index is dangling and carries `target = None`.
 pub fn prepare(note: &Note, index: &NoteIndex<'_>) -> crate::error::Result<PreparedDocument> {
     let links = link::extract(&note.body)
         .into_iter()
@@ -35,7 +35,10 @@ pub fn prepare(note: &Note, index: &NoteIndex<'_>) -> crate::error::Result<Prepa
             range: link.range,
             display: link.display.to_string(),
             id: link.id,
-            target_title: index.get(&link.id).map(|target| target.title.clone()),
+            target: index.get(&link.id).map(|target| LinkTarget {
+                title: target.title.clone(),
+                slug: target.slug.clone(),
+            }),
         })
         .collect();
 
@@ -163,11 +166,35 @@ mod tests {
         assert_eq!(doc.links.len(), 1);
         let link = &doc.links[0];
         assert_eq!(link.display, "Old Display Text");
-        assert_eq!(link.target_title.as_deref(), Some("The Current Title"));
+        let target = link.target.as_ref().expect("the link resolves");
+        assert_eq!(target.title, "The Current Title");
     }
 
     #[test]
-    fn dangling_link_has_no_target_title() {
+    fn resolved_link_carries_the_targets_filename_slug_not_one_derived_from_its_title() {
+        // The target's filename slug has drifted from its title (reconcile has
+        // not run). The slug an engine builds a cross-document link from must be
+        // the on-disk one, because that is what a default render of the target
+        // names its artifact.
+        let target = note(
+            ULID_B,
+            "stale-slug",
+            "---\ntitle: The Current Title\n---\nx\n",
+        );
+        let source = note(
+            ULID_A,
+            "source",
+            &format!("---\ntitle: Source\n---\nsee [x]({ULID_B}-stale-slug.md) here\n"),
+        );
+        let notes = vec![source.clone(), target];
+        let index = link::index(&notes);
+        let doc = prepare(&source, &index).expect("prepare");
+        let target = doc.links[0].target.as_ref().expect("the link resolves");
+        assert_eq!(target.slug, "stale-slug");
+    }
+
+    #[test]
+    fn dangling_link_has_no_target() {
         let source = note(
             ULID_A,
             "source",
@@ -177,7 +204,7 @@ mod tests {
         let index = link::index(std::slice::from_ref(&source));
         let doc = prepare(&source, &index).expect("prepare");
         assert_eq!(doc.links.len(), 1);
-        assert_eq!(doc.links[0].target_title, None);
+        assert!(doc.links[0].target.is_none());
     }
 
     #[test]
@@ -257,8 +284,10 @@ mod tests {
             format!("[second]({ULID_B}-target.md)")
         );
         assert!(first.range.end <= second.range.start);
-        assert_eq!(first.target_title.as_deref(), Some("Shared Target"));
-        assert_eq!(second.target_title.as_deref(), Some("Shared Target"));
+        let first_target = first.target.as_ref().expect("the first link resolves");
+        let second_target = second.target.as_ref().expect("the second link resolves");
+        assert_eq!(first_target.title, "Shared Target");
+        assert_eq!(second_target.title, "Shared Target");
     }
 
     #[test]
