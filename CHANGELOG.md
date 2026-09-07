@@ -6,6 +6,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Dependencies updated to their latest compatible releases:
+  `apple-native-keyring-store` 1.0.2, `clap` 4.6.6, `thiserror` 2.0.20,
+  `toml` 1.1.5.
+
+### Fixed
+
+- `chacha20` 0.10.1, which reaches ntropy transitively through `ulid`, was
+  yanked from crates.io, so building the previous release warned about it. The
+  lockfile moves to 0.10.2.
+
 ## v1.12.0 - 2026-09-07
 
 ### Added
