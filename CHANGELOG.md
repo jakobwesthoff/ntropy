@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.11.0 - 2026-09-07
+
+### Changed
+
+- A note link in a rendered document is now a real link, not just the target's
+  styled title. It points at `<target-slug>.pdf`, which is the name `render`
+  gives that target's own artifact by default, so a set of notes rendered
+  without `-o` into one directory cross-references itself. The target is read
+  from the vault at render time, so a slug that has drifted in the Markdown does
+  not reach the artifact. The link is a plain relative reference: following it
+  is the PDF viewer's behavior, and it finds nothing when the target was never
+  rendered or was renamed.
+
 ## v1.10.0 - 2026-08-18
 
 ### Added
