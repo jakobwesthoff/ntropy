@@ -11,11 +11,15 @@ Pitfall research distilled from a prior converter implementation lives in
 
 ## Shape
 
-- The emitter is built on the `pulldown-cmark` parser. The supported
-  input surface is what GitHub renders, mapped to `pulldown-cmark`
-  options flags (tables, strikethrough, task lists; callouts behind
-  `ENABLE_GFM`), with the exceptions and degradations recorded in the
-  element mapping below.
+- The emitter is the Typst output of the shared Markdown walk over the
+  `pulldown-cmark` parser ([html-engine.md](html-engine.md), "Shape").
+  The walk owns the structure: the container stack, note-link
+  classification, autolink detection, footnote buffering, image alt
+  flattening. The Typst output owns the markup and the escaping. The
+  supported input surface is what GitHub renders, mapped to
+  `pulldown-cmark` options flags (tables, strikethrough, task lists;
+  callouts behind `ENABLE_GFM`), with the exceptions and degradations
+  recorded in the element mapping below.
 - The `typst` format's artifact is the emitted document itself; `pdf`
   compiles that identical document by running the `typst` binary. The
   compiler is not embedded as a crate dependency.
@@ -369,16 +373,17 @@ user-derived text is exactly the three escaped channels. There is no mode
 flag to switch and therefore none to forget — the failure mode behind the
 reference implementation's unescaped URLs and captions.
 
-The event loop still carries a stack, but a structural one, needed
-regardless of escaping: pulldown-cmark end events carry less data than
-start events (URLs, table alignments, fence info, list types), so those
-facts are saved at `Start` and consumed at `End`. `Event::Text` dispatches
-on that stack's top: inside a code block to `raw`, everywhere else to
-`markup_text`; `string_literal` is called only while emitting a specific
-construct's quoted argument, never from the generic text arm.
+The container stack belongs to the shared walk, not to the Typst output:
+pulldown-cmark end events carry less data than start events (URLs, table
+alignments, fence info, list types), so the walk saves those facts at
+`Start` and hands them to the output at `End`. The output receives user
+text and already-rendered children through one method per construct.
+Running text goes to `markup_text`; a code block's verbatim content to
+`raw`; `string_literal` is called only while emitting a specific
+construct's quoted argument, never for running text.
 
 The writer stays dumb about structure: block terminators, newline
-discipline, and indentation are the event loop's job, because those rules
-are per-construct knowledge and the writer must not grow a parallel model
-of Markdown constructs.
+discipline, and indentation are per-construct knowledge of the output's
+construct methods, and the writer must not grow a parallel model of
+Markdown constructs.
 

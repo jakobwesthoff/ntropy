@@ -2,17 +2,19 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! The Markdown-to-Typst emitter: a `pulldown-cmark` event loop that turns a
-//! note body into a complete Typst body fragment
-//! (`docs/design/typst-engine.md`, "Element mapping" and "Writer and
-//! context model").
+//! The Typst output of the shared Markdown walk: turns a note body into a
+//! Typst body fragment (`docs/design/typst-engine.md`, "Element mapping" and
+//! "Writer and context model"). The walk itself, and everything that is a
+//! property of the Markdown structure rather than of Typst, lives in
+//! [`crate::render::markdown`].
 //!
-//! # What the emitter covers
+//! # Element mapping
 //!
-//! Block constructs: paragraphs, headings, fenced and indented code blocks,
-//! bullet and ordered lists (including task lists, nesting, and loose-list
-//! continuation blocks), block quotes, GFM callouts, tables, and thematic
-//! breaks.
+//! Block constructs: paragraphs as blank-line separated text, headings as
+//! `=` markers, fenced and indented code blocks as content-sized raw fences,
+//! bullet and ordered lists as `- `/`n. ` markers with continuation lines
+//! indented under the marker, block quotes as `#quote`, GFM callouts as
+//! `#callout(kind:)`, tables as `#table`, thematic breaks as `#line`.
 //!
 //! Inline constructs, all emitted as Typst function calls so that no
 //! user-derived character is ever load-bearing markup:
@@ -21,59 +23,26 @@
 //!   `#strong[…]`, and `#strike[…]`; the wrappers nest.
 //! - Inline code becomes `#raw("…")` with string-literal escaping.
 //! - Soft breaks map to a space and hard breaks to `#linebreak()`.
-//! - Links check the note-link table first: a Link event whose byte span
-//!   equals a [`ResolvedLink::range`] is a note link. A resolved note link
-//!   renders as `#link("<target-slug>.pdf")[#notelink[Title]]` and its inner
-//!   events are dropped, so the artifact carries a clickable target next to
-//!   itself (ADR 0044); an unresolved note link drops only the wrapper and
-//!   re-emits its inner markup, so formatting in the display text survives.
-//!   Every other link, along with URL and email autolinks, renders as
-//!   `#link("target")[label]`.
-//! - Autolinks are detected with `linkify` over `Text` events that are not
-//!   inside a link label or raw content. A scheme URL keeps its target; a
-//!   `www.` URL is prefixed with `https://`; an email becomes a `mailto:`
-//!   link. Known limitation: a URL split across text events (by an entity or
-//!   adjacent markup) is not detected, because detection is per event.
-//! - Images collect their alt subtree as plain text. A local path becomes
-//!   `#image("path")`, rewritten to a root-absolute path under the note's
-//!   directory (ADR 0045); a remote `http(s)` image cannot be embedded by the
-//!   offline compiler, so it degrades to `#link("url")[alt-or-url]` and
-//!   raises a [`Warning`].
-//! - Footnotes are assembled in two passes. Definitions (which may hold
-//!   block content and may appear before or after their references) are
-//!   collected during the walk; each reference emits a unique placeholder
-//!   token that is replaced with the definition's content once the walk is
-//!   done. A reference to an undefined footnote renders as its literal
-//!   source text (GFM behaviour); a definition nobody references produces no
-//!   output.
-//! - Raw HTML — both `Event::Html` blocks and `Event::InlineHtml` fragments
-//!   — is dropped and raises a [`Warning`] naming the dropped fragment.
+//! - A resolved note link renders as `#link("<target-slug>.pdf")[#notelink[Title]]`,
+//!   so the artifact carries a clickable target next to itself (ADR 0044).
+//!   Every other link, autolinks included, renders as `#link("target")[label]`.
+//! - A local image becomes `#image("path")`, rewritten to a root-absolute
+//!   path under the note's directory (ADR 0045); a remote `http(s)` image
+//!   cannot be embedded by the offline compiler, so it degrades to
+//!   `#link("url")[alt-or-url]` and raises a [`Warning`].
+//! - A footnote is inlined at its reference site as `#footnote[…]`.
+//! - Raw HTML, blocks and inline fragments alike, is dropped and raises a
+//!   [`Warning`] naming the dropped fragment.
 //!
-//! Math is off, so `$` is ordinary escaped text.
-//!
-//! # Structure
-//!
-//! The loop carries a stack of [`Frame`]s, one per open container. A frame is
-//! the natural home for the facts `pulldown-cmark` 0.13 only exposes at
-//! `Start` (fence language, list ordinality, table alignments, a link's kind)
-//! and for content a container can only shape once complete (a code fence
-//! sized from its content, a table laid out from its rows, an inline wrapper
-//! sized around its children). Inline text and finished children accumulate
-//! in the frame's [`TypstWriter`]; every character of user text passes
-//! through one of the writer's escaped channels, and finished children are
-//! spliced back through the unescaped `syntax` channel. When a container
-//! closes, its frame produces one string the parent incorporates: block
-//! frames separate with a blank line, inline frames concatenate in place.
-
-use std::collections::HashMap;
-
-use linkify::{LinkFinder, LinkKind};
-use pulldown_cmark::{
-    Alignment, BlockQuoteKind, CodeBlockKind, Event, LinkType, Options, Parser, Tag, TagEnd,
-};
+//! Every character of user text passes through one of the [`TypstWriter`]'s
+//! escaped channels; already-rendered children are spliced back through the
+//! unescaped `syntax` channel.
 
 use super::writer::{self, TypstWriter};
 use crate::render::ResolvedLink;
+use crate::render::markdown::{
+    self, Alignment, BlockQuoteKind, HeadingLevel, InlineStyle, List, Output, Table, Warning,
+};
 
 /// The extension a resolved note link targets: the artifact a default
 /// `ntropy render` of the target note produces (ADR 0044).
@@ -83,23 +52,6 @@ const NOTE_LINK_EXTENSION: &str = "pdf";
 // Public entry
 // =========================================================
 
-/// A non-fatal problem the emitter surfaces to the engine, which forwards it
-/// to `RenderContext::warn`. Raised for content the emitter cannot faithfully
-/// carry into the artifact: a remote image the offline compiler cannot embed,
-/// and dropped raw HTML.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Warning {
-    pub message: String,
-}
-
-impl Warning {
-    fn new(message: impl Into<String>) -> Self {
-        Warning {
-            message: message.into(),
-        }
-    }
-}
-
 /// Convert a note body to a Typst body fragment, resolving note links against
 /// `links` (ADR 0028).
 ///
@@ -107,711 +59,92 @@ impl Warning {
 /// (prelude, template application) lives in the engine layer, which also
 /// forwards the returned warnings to the host.
 pub fn emit(body: &str, links: &[ResolvedLink], asset_base: &str) -> (String, Vec<Warning>) {
-    // GitHub's rendered surface: tables, strikethrough, task lists, and
-    // footnotes, with `ENABLE_GFM` supplying the callout kinds on block
-    // quotes. Math stays off by omission, so `$` never gains meaning.
-    let options = Options::ENABLE_TABLES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_FOOTNOTES
-        | Options::ENABLE_GFM;
-
-    let mut emitter = Emitter::new(links, asset_base);
-    // The offset iterator carries each event's byte span. The span identifies
-    // note links: a Link event's span is matched against `ResolvedLink::range`
-    // (both index the same body bytes) to distinguish note links from ordinary
-    // ones.
-    for (event, span) in Parser::new_ext(body, options).into_offset_iter() {
-        emitter.handle(event, span);
-    }
-    emitter.finish()
+    let mut output = TypstOutput { asset_base };
+    markdown::walk(body, links, &mut output)
 }
 
 // =========================================================
-// The structural stack
+// The Typst output
 // =========================================================
 
-/// One open block container. The `body` writer accumulates the container's
-/// inline text and its already-emitted child blocks; `nonempty` records
-/// whether anything has been written yet, which decides block separation.
-struct Frame {
-    kind: FrameKind,
-    body: TypstWriter,
-    nonempty: bool,
-}
-
-/// The per-container state the loop must retain between a `Start` and its
-/// matching `End`.
-enum FrameKind {
-    /// The whole document. Its accumulated body is the emitter's output.
-    Document,
-    Paragraph,
-    Heading,
-    /// Block quotes and GFM callouts share this frame; the kind arrives again
-    /// on the `End` event, so only the accumulated child blocks live here.
-    Quote,
-    /// A fenced or indented code block. Content is buffered verbatim so the
-    /// closing fence can be sized to exceed the longest backtick run inside.
-    CodeBlock {
-        language: Option<String>,
-        content: String,
-    },
-    List(ListState),
-    Item,
-    Table(TableState),
-    TableCell,
-    /// An emphasis/strong/strikethrough span. Inner markup accumulates in the
-    /// frame body; the closing tag wraps it in the matching function call.
-    Styled(InlineStyle),
-    /// A link. Its inner markup accumulates in the frame body; the closing tag
-    /// materializes the link per its resolved kind.
-    Link(LinkEmit),
-    /// An image. Its alt subtree is collected as plain text (markup flattened),
-    /// then rendered as `#image` (local) or a degraded `#link` (remote).
-    Image {
-        dest: String,
-        alt: String,
-    },
-    /// A footnote definition's block content. Buffered here and diverted into
-    /// the definitions map at its `End`, never spliced into the surrounding
-    /// document.
-    FootnoteDefinition {
-        label: String,
-    },
-    /// A raw HTML block. Its verbatim text accumulates so the drop `Warning`
-    /// can name the fragment; nothing reaches the output.
-    HtmlBlock {
-        content: String,
-    },
-}
-
-/// The three inline span stylings the emitter wraps as function calls.
-enum InlineStyle {
-    Emph,
-    Strong,
-    Strike,
-}
-
-/// How a link materializes at its `End`, decided at `Start` from the note-link
-/// table and the link's destination.
-enum LinkEmit {
-    /// Not a note link: `#link("dest")[inner]`, `dest` string-literal escaped.
-    Ordinary { dest: String },
-    /// A note link whose target resolves:
-    /// `#link("<slug>.pdf")[#notelink[Title]]`, inner events dropped.
-    /// `notelink` is defined by the prelude, so a theme can style note links
-    /// distinctly from ordinary emphasis, and the surrounding `#link` makes
-    /// the sibling artifact clickable (ADR 0044).
-    ResolvedNote { title: String, slug: String },
-    /// A note link whose target is dangling: the wrapper is dropped and the
-    /// inner markup re-emitted, so formatting in the display text survives.
-    UnresolvedNote,
-}
-
-/// A list under construction. Items are collected as finished strings and
-/// joined at the end so tight and loose lists can differ only in the joiner.
-struct ListState {
-    /// `true` for ordered lists; the marker then carries an explicit number.
-    ordered: bool,
-    /// The next ordinal to emit. `pulldown-cmark` reports the real start
-    /// number, so `6.` `7.` `8.` survive without a Typst `start:` argument.
-    next: u64,
-    /// A blank line between two items, or any item wrapped in a paragraph,
-    /// makes the whole list loose. Detected when a paragraph opens directly
-    /// inside an item.
-    loose: bool,
-    items: Vec<String>,
-}
-
-/// A table under construction. The header fixes the column count and the
-/// per-column alignment; body rows shorter than the header are padded.
-struct TableState {
-    alignments: Vec<Alignment>,
-    header: Vec<String>,
-    rows: Vec<Vec<String>>,
-    /// The row currently receiving cells (header or body alike).
-    current: Vec<String>,
-}
-
-// =========================================================
-// The event loop
-// =========================================================
-
-struct Emitter<'a> {
-    stack: Vec<Frame>,
-    /// The note-link table, matched by byte range against Link events.
-    links: &'a [ResolvedLink],
-
+struct TypstOutput<'a> {
     /// The note's own directory as a compile-root-absolute path, e.g.
     /// `/all-notes`. Relative image paths are resolved against it so they
     /// survive a compile whose root is the vault rather than the note's
     /// directory (ADR 0045).
     asset_base: &'a str,
-    /// Warnings accumulated during the walk, returned alongside the body.
-    warnings: Vec<Warning>,
-    /// URL/email detector for autolinking `Text` events. Configured once.
-    finder: LinkFinder,
-    /// Footnote definitions collected during the walk, keyed by label. Filled
-    /// wherever a definition appears; consumed when references are patched.
-    footnote_definitions: HashMap<String, String>,
-    /// The labels every footnote reference used, so patching visits exactly
-    /// the referenced ones (undefined included, unreferenced excluded).
-    footnote_references: Vec<String>,
-    /// A per-run random token wrapping footnote-reference placeholders. See
-    /// [`Emitter::footnote_placeholder`] for the collision argument.
-    nonce: String,
-    /// Depth of open links. A positive depth suppresses autolinking, because
-    /// GFM never autolinks inside a link's label.
-    link_depth: usize,
-    /// Depth of open images. A positive depth flattens all inner inline markup
-    /// into the current image's alt text.
-    image_depth: usize,
 }
 
-impl<'a> Emitter<'a> {
-    fn new(links: &'a [ResolvedLink], asset_base: &'a str) -> Self {
-        // GFM extended autolinks cover scheme URLs, `www.` URLs, and emails.
-        // `linkify` finds scheme URLs and emails out of the box; enabling
-        // `www.` needs `url_must_have_scheme(false)`, which also matches bare
-        // dotted words like `report.txt`. Those false positives are filtered
-        // at emission (see `write_autolinked`): only real schemes, `www.`
-        // prefixes, and emails become links.
-        let mut finder = LinkFinder::new();
-        finder.kinds(&[LinkKind::Url, LinkKind::Email]);
-        finder.url_must_have_scheme(false);
-
-        Emitter {
-            stack: vec![Frame {
-                kind: FrameKind::Document,
-                body: TypstWriter::new(),
-                nonempty: false,
-            }],
-            links,
-            asset_base,
-            warnings: Vec::new(),
-            finder,
-            footnote_definitions: HashMap::new(),
-            footnote_references: Vec::new(),
-            // A fresh ULID carries 80 random bits. Wrapping the reference
-            // placeholder token in this nonce makes the token unequal to any
-            // substring the note can produce: the note author cannot embed a
-            // value that is generated randomly, per run, after the note is
-            // written. NUL is added as a second guard (Typst markup never
-            // writes it), though the randomness is what makes the token safe;
-            // pulldown-cmark 0.13 does not strip NUL from text, so NUL alone
-            // would not suffice. Every token is substituted out before `emit`
-            // returns, so the artifact is deterministic and nonce-free.
-            nonce: format!("\u{0}ntropy-footnote-{}\u{0}", ulid::Ulid::generate()),
-            link_depth: 0,
-            image_depth: 0,
-        }
+impl Output for TypstOutput<'_> {
+    fn text(&mut self, text: &str) -> String {
+        let mut writer = TypstWriter::new();
+        writer.markup_text(text);
+        writer.finish()
     }
 
-    /// The placeholder emitted at a footnote reference and patched at the end
-    /// of the walk. Identical for repeated references to one label, so a
-    /// single substitution rule inlines the definition at every site.
-    fn footnote_placeholder(&self, label: &str) -> String {
-        format!("{n}{label}{n}", n = self.nonce)
-    }
-
-    fn finish(mut self) -> (String, Vec<Warning>) {
-        let document = self
-            .stack
-            .pop()
-            .expect("the document frame is pushed at construction and never popped");
-        let mut body = document.body.finish();
-
-        // Patch every footnote reference. A defined reference inlines the
-        // definition's content inside `#footnote[…]`; an undefined one renders
-        // as its literal source text (GFM). The substitutions are applied
-        // repeatedly because a definition may itself contain references, whose
-        // placeholders only appear once the enclosing definition is inlined;
-        // the pass count bounds any self-referential cycle.
-        let substitutions: Vec<(String, String)> = self
-            .footnote_references
-            .iter()
-            .map(|label| {
-                let placeholder = self.footnote_placeholder(label);
-                let replacement = match self.footnote_definitions.get(label) {
-                    Some(content) => format!("#footnote[{}]", content.trim_end_matches('\n')),
-                    None => escape_markup(&format!("[^{label}]")),
-                };
-                (placeholder, replacement)
-            })
-            .collect();
-
-        for _ in 0..=substitutions.len() {
-            let mut changed = false;
-            for (placeholder, replacement) in &substitutions {
-                if body.contains(placeholder.as_str()) {
-                    body = body.replace(placeholder, replacement);
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
-
-        (body, self.warnings)
-    }
-
-    /// The innermost open container, the sink for the current event.
-    fn top(&mut self) -> &mut Frame {
-        self.stack
-            .last_mut()
-            .expect("the document frame keeps the stack non-empty")
-    }
-
-    fn push(&mut self, kind: FrameKind) {
-        self.stack.push(Frame {
-            kind,
-            body: TypstWriter::new(),
-            nonempty: false,
-        });
-    }
-
-    /// Splice a finished child block into the current container. Blocks carry
-    /// their own trailing newline; a single separator newline between two
-    /// siblings therefore yields the blank line that separates every
-    /// block-level construct.
-    fn append_block(&mut self, block: &str) {
-        let frame = self.top();
-        if frame.nonempty {
-            frame.body.syntax("\n");
-        }
-        frame.body.syntax(block);
-        frame.nonempty = true;
-    }
-
-    fn handle(&mut self, event: Event, span: std::ops::Range<usize>) {
-        match event {
-            Event::Start(tag) => self.start(tag, span),
-            Event::End(tag) => self.end(tag),
-            Event::Text(text) => self.text(&text),
-            Event::Code(code) => self.code(&code),
-            // Math is disabled, so these never arrive; routing their content
-            // as text keeps the match total without a panic path.
-            Event::InlineMath(m) | Event::DisplayMath(m) => self.text(&m),
-            Event::SoftBreak => self.inline_break(" "),
-            Event::HardBreak => self.inline_break("#linebreak()"),
-            Event::Rule => self.append_block("#line(length: 100%)\n"),
-            // The prelude defines `task`, which draws one identical checkbox
-            // for both states, so checked and unchecked always match optically
-            // regardless of font glyph coverage.
-            Event::TaskListMarker(checked) => {
-                self.inline_syntax(if checked {
-                    "#task(done: true) "
-                } else {
-                    "#task(done: false) "
-                });
-            }
-            Event::FootnoteReference(label) => self.footnote_reference(&label),
-            // A raw HTML block's text arrives as `Html` events between its
-            // `Start`/`End`; collect it so the drop warning can name it.
-            Event::Html(html) => self.html_block_text(&html),
-            Event::InlineHtml(html) => self.inline_html(&html),
-        }
-    }
-
-    // -----------------------------------------------------
-    // Text and inline routing
-    // -----------------------------------------------------
-
-    /// Route user text to the correct channel for the current container: an
-    /// open image collects it as plain alt text; a code block keeps it
-    /// verbatim; everywhere else it is escaped markup, autolinked unless the
-    /// text sits inside a link label.
-    fn text(&mut self, text: &str) {
-        if self.image_depth > 0 {
-            self.push_alt(text);
-            return;
-        }
-        let in_link = self.link_depth > 0;
-        // Borrow the finder and the top frame as disjoint fields so the
-        // autolinker can write into the frame while reading the finder.
-        let finder = &self.finder;
-        let frame = self
-            .stack
-            .last_mut()
-            .expect("the document frame keeps the stack non-empty");
-        match &mut frame.kind {
-            FrameKind::CodeBlock { content, .. } => content.push_str(text),
-            FrameKind::HtmlBlock { .. } => {}
-            _ => {
-                if in_link {
-                    frame.body.markup_text(text);
-                } else {
-                    write_autolinked(finder, &mut frame.body, text);
-                }
-                frame.nonempty = true;
-            }
-        }
-    }
-
-    /// Inline code: `#raw("…")` with string-literal escaping. Inside an image
-    /// alt it degrades to the code's plain text, matching the flatten policy.
-    fn code(&mut self, code: &str) {
-        if self.image_depth > 0 {
-            self.push_alt(code);
-            return;
-        }
+    fn inline_code(&mut self, code: &str) -> String {
         let mut writer = TypstWriter::new();
         writer.syntax("#raw(\"");
         writer.string_literal(code);
         writer.syntax("\")");
-        self.append_inline(&writer.finish());
+        writer.finish()
     }
 
-    /// A soft or hard break. Inside an image alt both collapse to a space in
-    /// the flattened text; elsewhere the caller's syntax is emitted inline.
-    fn inline_break(&mut self, syntax: &str) {
-        if self.image_depth > 0 {
-            self.push_alt(" ");
-            return;
-        }
-        self.inline_syntax(syntax);
+    fn soft_break(&mut self) -> String {
+        " ".to_string()
     }
 
-    /// Emitter-owned inline markup (the task-list box, break syntax), routed so
-    /// it never lands in a code block's verbatim content or a dropped subtree.
-    fn inline_syntax(&mut self, s: &str) {
-        let frame = self.top();
-        match &frame.kind {
-            FrameKind::CodeBlock { .. } | FrameKind::HtmlBlock { .. } => {}
-            _ => {
-                frame.body.syntax(s);
-                frame.nonempty = true;
-            }
+    fn hard_break(&mut self) -> String {
+        "#linebreak()".to_string()
+    }
+
+    /// The prelude defines `task`, which draws one identical checkbox for both
+    /// states, so checked and unchecked always match optically regardless of
+    /// font glyph coverage.
+    fn task_marker(&mut self, checked: bool) -> String {
+        if checked {
+            "#task(done: true) ".to_string()
+        } else {
+            "#task(done: false) ".to_string()
         }
     }
 
-    /// Splice already-escaped inline content into the current container with no
-    /// separation, marking it non-empty. Used by every inline construct as it
-    /// closes.
-    fn append_inline(&mut self, s: &str) {
-        let frame = self.top();
-        frame.body.syntax(s);
-        frame.nonempty = true;
-    }
-
-    /// Append plain text to the innermost open image's alt buffer.
-    fn push_alt(&mut self, text: &str) {
-        if let FrameKind::Image { alt, .. } = &mut self.top().kind {
-            alt.push_str(text);
-        }
-    }
-
-    /// Emit a footnote reference: record the label and drop a placeholder that
-    /// `finish` patches once every definition is known. Inside an image alt a
-    /// reference is meaningless and is dropped.
-    fn footnote_reference(&mut self, label: &str) {
-        if self.image_depth > 0 {
-            return;
-        }
-        self.footnote_references.push(label.to_string());
-        let placeholder = self.footnote_placeholder(label);
-        self.append_inline(&placeholder);
-    }
-
-    /// Collect a raw HTML block's verbatim text so its drop warning can name
-    /// the fragment.
-    fn html_block_text(&mut self, html: &str) {
-        if let FrameKind::HtmlBlock { content } = &mut self.top().kind {
-            content.push_str(html);
-        }
-    }
-
-    /// Drop an inline raw HTML fragment, warning with its content. Inside an
-    /// image alt the fragment is dropped silently, as alt is plain text.
-    fn inline_html(&mut self, html: &str) {
-        if self.image_depth > 0 {
-            return;
-        }
-        self.warnings.push(Warning::new(format!(
-            "dropped raw HTML: {}",
-            truncate_fragment(html)
-        )));
-    }
-
-    // -----------------------------------------------------
-    // Start events
-    // -----------------------------------------------------
-
-    fn start(&mut self, tag: Tag, span: std::ops::Range<usize>) {
-        // Inside an image alt every construct flattens to its text; only a
-        // nested image bumps the depth so the matching `End` is balanced.
-        if self.image_depth > 0 {
-            if matches!(tag, Tag::Image { .. }) {
-                self.image_depth += 1;
-            }
-            return;
-        }
-        match tag {
-            Tag::Paragraph => {
-                // A paragraph opening directly inside an item is the signal
-                // that its list is loose (CommonMark wraps loose-item content
-                // in paragraphs, tight-item content bare). The enclosing list
-                // is always the frame directly beneath that item.
-                let depth = self.stack.len();
-                if depth >= 2
-                    && matches!(self.stack[depth - 1].kind, FrameKind::Item)
-                    && let FrameKind::List(list) = &mut self.stack[depth - 2].kind
-                {
-                    list.loose = true;
-                }
-                self.push(FrameKind::Paragraph);
-            }
-            Tag::Heading { .. } => self.push(FrameKind::Heading),
-            Tag::BlockQuote(_) => self.push(FrameKind::Quote),
-            Tag::CodeBlock(kind) => {
-                let language = match kind {
-                    CodeBlockKind::Fenced(info) => language_tag(&info),
-                    CodeBlockKind::Indented => None,
-                };
-                self.push(FrameKind::CodeBlock {
-                    language,
-                    content: String::new(),
-                });
-            }
-            Tag::List(start) => self.push(FrameKind::List(ListState {
-                ordered: start.is_some(),
-                next: start.unwrap_or(0),
-                loose: false,
-                items: Vec::new(),
-            })),
-            Tag::Item => self.push(FrameKind::Item),
-            Tag::Table(alignments) => self.push(FrameKind::Table(TableState {
-                alignments,
-                header: Vec::new(),
-                rows: Vec::new(),
-                current: Vec::new(),
-            })),
-            // Head and body rows both fill `current`; it is drained when the
-            // row ends, so clearing it here is a defensive reset.
-            Tag::TableHead | Tag::TableRow => {
-                if let FrameKind::Table(table) = &mut self.top().kind {
-                    table.current.clear();
-                }
-            }
-            Tag::TableCell => self.push(FrameKind::TableCell),
-            // A definition's block content is diverted to the definitions map
-            // at its `End`, never spliced into the surrounding document.
-            Tag::FootnoteDefinition(label) => {
-                self.push(FrameKind::FootnoteDefinition {
-                    label: label.to_string(),
-                });
-            }
-            Tag::HtmlBlock => self.push(FrameKind::HtmlBlock {
-                content: String::new(),
-            }),
-            Tag::Emphasis => self.push(FrameKind::Styled(InlineStyle::Emph)),
-            Tag::Strong => self.push(FrameKind::Styled(InlineStyle::Strong)),
-            Tag::Strikethrough => self.push(FrameKind::Styled(InlineStyle::Strike)),
-            Tag::Link {
-                link_type,
-                dest_url,
-                ..
-            } => {
-                // An angle-bracket email autolink (`<user@host>`) arrives with
-                // the bare address as its destination; a PDF viewer needs the
-                // `mailto:` scheme to act on it, exactly as GFM renders it.
-                let dest = if link_type == LinkType::Email {
-                    format!("mailto:{dest_url}")
-                } else {
-                    dest_url.to_string()
-                };
-                let emit = self.classify_link(&dest, span);
-                self.push(FrameKind::Link(emit));
-                self.link_depth += 1;
-            }
-            Tag::Image { dest_url, .. } => {
-                self.push(FrameKind::Image {
-                    dest: dest_url.to_string(),
-                    alt: String::new(),
-                });
-                self.image_depth += 1;
-            }
-            // Not enabled in the parser options, so never produced. Super- and
-            // subscript stay transparent: their inner text flows on unwrapped.
-            Tag::Superscript
-            | Tag::Subscript
-            | Tag::DefinitionList
-            | Tag::DefinitionListTitle
-            | Tag::DefinitionListDefinition
-            | Tag::MetadataBlock(_) => {}
-        }
-    }
-
-    /// Decide how a link materializes. A byte span equal to a note link's
-    /// range makes it a note link, resolved or dangling by the presence of a
-    /// target title; any other span is an ordinary link.
-    fn classify_link(&self, dest: &str, span: std::ops::Range<usize>) -> LinkEmit {
-        match self.links.iter().find(|link| link.range == span) {
-            Some(link) => match &link.target {
-                Some(target) => LinkEmit::ResolvedNote {
-                    title: target.title.clone(),
-                    slug: target.slug.clone(),
-                },
-                None => LinkEmit::UnresolvedNote,
-            },
-            None => LinkEmit::Ordinary {
-                dest: dest.to_string(),
-            },
-        }
-    }
-
-    // -----------------------------------------------------
-    // End events
-    // -----------------------------------------------------
-
-    fn end(&mut self, tag: TagEnd) {
-        // Inside an image alt only the image's own close matters; when it
-        // brings the depth back to zero the frame is finalized.
-        if self.image_depth > 0 {
-            if matches!(tag, TagEnd::Image) {
-                self.image_depth -= 1;
-                if self.image_depth == 0 {
-                    self.finish_image();
-                }
-            }
-            return;
-        }
-        match tag {
-            TagEnd::Paragraph => {
-                let body = self.pop().body.finish();
-                self.append_block(&format!("{body}\n"));
-            }
-            TagEnd::Heading(level) => {
-                let body = self.pop().body.finish();
-                let marker = "=".repeat(level as usize);
-                self.append_block(&format!("{marker} {body}\n"));
-            }
-            TagEnd::BlockQuote(kind) => {
-                let children = self.pop().body.finish();
-                self.append_block(&wrap_quote(kind, &children));
-            }
-            TagEnd::CodeBlock => {
-                let frame = self.pop();
-                let FrameKind::CodeBlock { language, content } = frame.kind else {
-                    unreachable!("a code-block end closes a code-block frame");
-                };
-                self.append_block(&render_code_block(language.as_deref(), &content));
-            }
-            TagEnd::List(_) => {
-                let frame = self.pop();
-                let FrameKind::List(list) = frame.kind else {
-                    unreachable!("a list end closes a list frame");
-                };
-                let joiner = if list.loose { "\n\n" } else { "\n" };
-                self.append_block(&format!("{}\n", list.items.join(joiner)));
-            }
-            TagEnd::Item => {
-                let body = self.pop().body.finish();
-                let body = body.trim_end_matches('\n');
-                // The marker, and thus the continuation indent, is a property
-                // of the enclosing list, now the top of the stack.
-                let FrameKind::List(list) = &mut self.top().kind else {
-                    unreachable!("an item end exposes its enclosing list");
-                };
-                let marker = if list.ordered {
-                    let marker = format!("{}. ", list.next);
-                    list.next += 1;
-                    marker
-                } else {
-                    "- ".to_string()
-                };
-                let item = indent_continuation(body, &marker);
-                list.items.push(item);
-            }
-            TagEnd::TableCell => {
-                let cell = self.pop().body.finish();
-                if let FrameKind::Table(table) = &mut self.top().kind {
-                    table.current.push(cell);
-                }
-            }
-            TagEnd::TableHead => {
-                if let FrameKind::Table(table) = &mut self.top().kind {
-                    table.header = std::mem::take(&mut table.current);
-                }
-            }
-            TagEnd::TableRow => {
-                if let FrameKind::Table(table) = &mut self.top().kind {
-                    let row = std::mem::take(&mut table.current);
-                    table.rows.push(row);
-                }
-            }
-            TagEnd::Table => {
-                let frame = self.pop();
-                let FrameKind::Table(table) = frame.kind else {
-                    unreachable!("a table end closes a table frame");
-                };
-                self.append_block(&render_table(&table));
-            }
-            TagEnd::FootnoteDefinition => {
-                let frame = self.pop();
-                let FrameKind::FootnoteDefinition { label } = frame.kind else {
-                    unreachable!("a footnote-definition end closes its frame");
-                };
-                // Later definitions with a repeated label overwrite earlier
-                // ones, matching pulldown-cmark's own last-wins resolution.
-                self.footnote_definitions.insert(label, frame.body.finish());
-            }
-            TagEnd::HtmlBlock => {
-                let frame = self.pop();
-                let FrameKind::HtmlBlock { content } = frame.kind else {
-                    unreachable!("an HTML-block end closes its frame");
-                };
-                self.warnings.push(Warning::new(format!(
-                    "dropped raw HTML: {}",
-                    truncate_fragment(&content)
-                )));
-            }
-            TagEnd::Emphasis | TagEnd::Strong | TagEnd::Strikethrough => {
-                let frame = self.pop();
-                let FrameKind::Styled(style) = frame.kind else {
-                    unreachable!("an inline-style end closes a styled frame");
-                };
-                let inner = frame.body.finish();
-                self.append_inline(&wrap_styled(&style, &inner));
-            }
-            TagEnd::Link => {
-                self.link_depth -= 1;
-                let frame = self.pop();
-                let FrameKind::Link(emit) = frame.kind else {
-                    unreachable!("a link end closes a link frame");
-                };
-                let inner = frame.body.finish();
-                let out = match emit {
-                    LinkEmit::Ordinary { dest } => wrap_link(&dest, &inner),
-                    // The inner events were collected but a resolved note link
-                    // shows the target's title instead, so `inner` is dropped.
-                    LinkEmit::ResolvedNote { title, slug } => wrap_notelink(&title, &slug),
-                    LinkEmit::UnresolvedNote => inner,
-                };
-                self.append_inline(&out);
-            }
-            // Image is finalized in the depth-guarded branch above; disabled
-            // and transparent constructs pushed no frame.
-            TagEnd::Image
-            | TagEnd::Superscript
-            | TagEnd::Subscript
-            | TagEnd::DefinitionList
-            | TagEnd::DefinitionListTitle
-            | TagEnd::DefinitionListDefinition
-            | TagEnd::MetadataBlock(_) => {}
-        }
-    }
-
-    /// Render the innermost image and splice it into its parent. A local path
-    /// becomes `#image("path")`; a remote one cannot be embedded offline and
-    /// degrades to a link plus a warning.
-    fn finish_image(&mut self) {
-        let frame = self.pop();
-        let FrameKind::Image { dest, alt } = frame.kind else {
-            unreachable!("an image end closes an image frame");
+    fn styled(&mut self, style: InlineStyle, inner: &str) -> String {
+        let call = match style {
+            InlineStyle::Emph => "emph",
+            InlineStyle::Strong => "strong",
+            InlineStyle::Strike => "strike",
         };
+        format!("#{call}[{inner}]")
+    }
 
+    fn link(&mut self, dest: &str, inner: &str) -> String {
+        wrap_link(dest, inner)
+    }
+
+    /// `#link("<slug>.pdf")[#notelink[Title]]`, with `slug` string-literal
+    /// escaped and `title` escaped as markup text.
+    ///
+    /// The target is the artifact a default `ntropy render` of the target note
+    /// produces in the same directory, so a set of notes rendered together
+    /// cross-navigates (ADR 0044). The extension is always `pdf`, never the
+    /// extension of the format being produced: the `typst` artifact is the
+    /// source of a PDF, and both formats emit identical bytes by design.
+    /// `notelink` is defined by the prelude, so a theme can style note links
+    /// distinctly from ordinary emphasis.
+    fn note_link(&mut self, title: &str, slug: &str) -> String {
+        let mut writer = TypstWriter::new();
+        writer.syntax("#link(\"");
+        writer.string_literal(&format!("{slug}.{NOTE_LINK_EXTENSION}"));
+        writer.syntax("\")[#notelink[");
+        writer.markup_text(title);
+        writer.syntax("]]");
+        writer.finish()
+    }
+
+    /// A local path becomes `#image("path")`; a remote one cannot be embedded
+    /// offline and degrades to a link plus a warning.
+    fn image(&mut self, dest: &str, alt: &str, warnings: &mut Vec<Warning>) -> String {
         let lowered = dest.to_ascii_lowercase();
         let remote = lowered.starts_with("http://") || lowered.starts_with("https://");
 
@@ -819,27 +152,93 @@ impl<'a> Emitter<'a> {
         if remote {
             // The label falls back to the URL when the alt is empty, so the
             // degraded link is never blank.
-            let label = if alt.is_empty() { dest.as_str() } else { &alt };
+            let label = if alt.is_empty() { dest } else { alt };
             writer.syntax("#link(\"");
-            writer.string_literal(&dest);
+            writer.string_literal(dest);
             writer.syntax("\")[");
             writer.markup_text(label);
             writer.syntax("]");
-            self.warnings.push(Warning::new(format!(
+            warnings.push(Warning::new(format!(
                 "remote image cannot be embedded; linked instead: {dest}"
             )));
         } else {
             writer.syntax("#image(\"");
-            writer.string_literal(&resolve_asset(self.asset_base, &dest));
+            writer.string_literal(&resolve_asset(self.asset_base, dest));
             writer.syntax("\")");
         }
-        self.append_inline(&writer.finish());
+        writer.finish()
     }
 
-    fn pop(&mut self) -> Frame {
-        self.stack
-            .pop()
-            .expect("every end event closes a frame its start event opened")
+    fn footnote(&mut self, content: &str) -> String {
+        format!("#footnote[{}]", content.trim_end_matches('\n'))
+    }
+
+    fn inline_html(&mut self, html: &str, warnings: &mut Vec<Warning>) -> Option<String> {
+        warnings.push(Warning::new(format!(
+            "dropped raw HTML: {}",
+            truncate_fragment(html)
+        )));
+        None
+    }
+
+    fn paragraph(&mut self, body: &str) -> String {
+        format!("{body}\n")
+    }
+
+    fn heading(&mut self, level: HeadingLevel, body: &str) -> String {
+        let marker = "=".repeat(level as usize);
+        format!("{marker} {body}\n")
+    }
+
+    fn quote(&mut self, kind: Option<BlockQuoteKind>, body: &str) -> String {
+        wrap_quote(kind, body)
+    }
+
+    fn code_block(&mut self, info: Option<&str>, content: &str) -> String {
+        let language = info.and_then(language_tag);
+        render_code_block(language.as_deref(), content)
+    }
+
+    /// Items get `- ` or `n. ` markers with continuation lines indented to
+    /// the marker's width; a loose list separates its items with blank lines.
+    fn list(&mut self, list: &List) -> String {
+        let mut next = list.start.unwrap_or(0);
+        let items: Vec<String> = list
+            .items
+            .iter()
+            .map(|body| {
+                let body = body.trim_end_matches('\n');
+                let marker = match list.start {
+                    // `pulldown-cmark` reports the real start number, so
+                    // `6.` `7.` `8.` survive without a Typst `start:` argument.
+                    Some(_) => {
+                        let marker = format!("{next}. ");
+                        next += 1;
+                        marker
+                    }
+                    None => "- ".to_string(),
+                };
+                indent_continuation(body, &marker)
+            })
+            .collect();
+        let joiner = if list.loose { "\n\n" } else { "\n" };
+        format!("{}\n", items.join(joiner))
+    }
+
+    fn table(&mut self, table: &Table) -> String {
+        render_table(table)
+    }
+
+    fn rule(&mut self) -> String {
+        "#line(length: 100%)\n".to_string()
+    }
+
+    fn html_block(&mut self, html: &str, warnings: &mut Vec<Warning>) -> Option<String> {
+        warnings.push(Warning::new(format!(
+            "dropped raw HTML: {}",
+            truncate_fragment(html)
+        )));
+        None
     }
 }
 
@@ -919,9 +318,8 @@ fn render_code_block(language: Option<&str>, content: &str) -> String {
 }
 
 /// Render a `#table(...)`. The header fixes the column count and per-column
-/// alignment; body rows shorter than the header are padded with empty cells so
-/// every row has the same width.
-fn render_table(table: &TableState) -> String {
+/// alignment.
+fn render_table(table: &Table) -> String {
     let columns = table.header.len();
 
     let mut writer = TypstWriter::new();
@@ -942,11 +340,7 @@ fn render_table(table: &TableState) -> String {
     writer.syntax(&format!("table.header({},),\n", join_cells(&table.header)));
 
     for row in &table.rows {
-        let mut cells = row.clone();
-        while cells.len() < columns {
-            cells.push(String::new());
-        }
-        writer.syntax(&format!("{},\n", join_cells(&cells)));
+        writer.syntax(&format!("{},\n", join_cells(row)));
     }
 
     writer.syntax(")\n");
@@ -1012,7 +406,7 @@ fn resolve_asset(base: &str, dest: &str) -> String {
     // `base` is root-absolute (`/all-notes`); walking the joined components
     // resolves `.` and `..` textually, which is what Typst's own root-relative
     // lookup does. There is no filesystem here to consult, by design: the
-    // emitter is pure.
+    // output is pure.
     let mut parts: Vec<&str> = base.split('/').filter(|part| !part.is_empty()).collect();
     for part in dest.split('/') {
         match part {
@@ -1028,16 +422,6 @@ fn resolve_asset(base: &str, dest: &str) -> String {
     format!("/{}", parts.join("/"))
 }
 
-/// Wrap already-escaped inner markup in the styling function for `style`.
-fn wrap_styled(style: &InlineStyle, inner: &str) -> String {
-    let call = match style {
-        InlineStyle::Emph => "emph",
-        InlineStyle::Strong => "strong",
-        InlineStyle::Strike => "strike",
-    };
-    format!("#{call}[{inner}]")
-}
-
 /// A `#link("dest")[inner]` call: `dest` string-literal escaped, `inner`
 /// already-escaped markup.
 fn wrap_link(dest: &str, inner: &str) -> String {
@@ -1047,32 +431,6 @@ fn wrap_link(dest: &str, inner: &str) -> String {
     writer.syntax("\")[");
     writer.syntax(inner);
     writer.syntax("]");
-    writer.finish()
-}
-
-/// A resolved note link: `#link("<slug>.pdf")[#notelink[Title]]`, with `slug`
-/// string-literal escaped and `title` escaped as markup text.
-///
-/// The target is the artifact a default `ntropy render` of the target note
-/// produces in the same directory, so a set of notes rendered together
-/// cross-navigates (ADR 0044). The extension is always `pdf`, never the
-/// extension of the format being produced: the `typst` artifact is the source
-/// of a PDF, and both formats emit identical bytes by design.
-fn wrap_notelink(title: &str, slug: &str) -> String {
-    let mut writer = TypstWriter::new();
-    writer.syntax("#link(\"");
-    writer.string_literal(&format!("{slug}.{NOTE_LINK_EXTENSION}"));
-    writer.syntax("\")[#notelink[");
-    writer.markup_text(title);
-    writer.syntax("]]");
-    writer.finish()
-}
-
-/// Escape a string as markup text in isolation, for content assembled outside
-/// a frame's writer (a footnote reference's literal fallback).
-fn escape_markup(text: &str) -> String {
-    let mut writer = TypstWriter::new();
-    writer.markup_text(text);
     writer.finish()
 }
 
@@ -1086,48 +444,6 @@ fn truncate_fragment(fragment: &str) -> String {
         out.push('…');
     }
     out
-}
-
-/// Write `text` to `writer`, turning autolinkable spans into `#link` calls and
-/// escaping the rest as markup.
-///
-/// `linkify` is configured (in [`Emitter::new`]) to also surface scheme-less
-/// URLs, which include `www.` hosts but also bare dotted words. The filter
-/// here keeps only spans that carry meaning as links: any real scheme, a
-/// `www.` host (GFM prefixes it with `https://`), and emails (rendered as
-/// `mailto:` links). A scheme-less non-`www.` span is not a link and flows
-/// through as text.
-fn write_autolinked(finder: &LinkFinder, writer: &mut TypstWriter, text: &str) {
-    for span in finder.spans(text) {
-        let s = span.as_str();
-        let link = match span.kind() {
-            Some(LinkKind::Url) if s.contains("://") => Some((s.to_string(), s)),
-            Some(LinkKind::Url) if starts_with_ascii_ci(s, "www.") => {
-                Some((format!("https://{s}"), s))
-            }
-            Some(LinkKind::Email) => Some((format!("mailto:{s}"), s)),
-            // A scheme-less, non-`www.` match (`report.txt`) is not a link.
-            _ => None,
-        };
-        match link {
-            Some((target, label)) => {
-                writer.syntax("#link(\"");
-                writer.string_literal(&target);
-                writer.syntax("\")[");
-                writer.markup_text(label);
-                writer.syntax("]");
-            }
-            None => writer.markup_text(s),
-        }
-    }
-}
-
-/// Case-insensitive ASCII prefix test, for the `www.` autolink rule. Compares
-/// bytes so an IRI match whose fourth byte falls inside a multi-byte character
-/// cannot panic a string slice.
-fn starts_with_ascii_ci(haystack: &str, prefix: &str) -> bool {
-    let (haystack, prefix) = (haystack.as_bytes(), prefix.as_bytes());
-    haystack.len() >= prefix.len() && haystack[..prefix.len()].eq_ignore_ascii_case(prefix)
 }
 
 #[cfg(test)]
@@ -1826,14 +1142,6 @@ mod tests {
             body("end at https://example.com."),
             "end at #link(\"https://example.com\")[https\\:\\/\\/example\\.com]\\.\n"
         );
-    }
-
-    #[test]
-    fn www_prefix_test_is_byte_safe_across_multibyte_boundaries() {
-        // A short multi-byte string must not panic the prefix test, which
-        // guards the `www.` autolink rule against `str` slicing.
-        assert!(!starts_with_ascii_ci("wwü", "www."));
-        assert!(starts_with_ascii_ci("WWW.example.com", "www."));
     }
 
     #[test]
