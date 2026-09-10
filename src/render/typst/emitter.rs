@@ -39,6 +39,7 @@
 //! unescaped `syntax` channel.
 
 use super::writer::{self, TypstWriter};
+use crate::id::Id;
 use crate::render::ResolvedLink;
 use crate::render::markdown::{
     self, Alignment, BlockQuoteKind, HeadingLevel, InlineStyle, List, Output, Table, Warning,
@@ -132,7 +133,7 @@ impl Output for TypstOutput<'_> {
     /// source of a PDF, and both formats emit identical bytes by design.
     /// `notelink` is defined by the prelude, so a theme can style note links
     /// distinctly from ordinary emphasis.
-    fn note_link(&mut self, title: &str, slug: &str) -> String {
+    fn note_link(&mut self, _id: Id, title: &str, slug: &str) -> String {
         let mut writer = TypstWriter::new();
         writer.syntax("#link(\"");
         writer.string_literal(&format!("{slug}.{NOTE_LINK_EXTENSION}"));

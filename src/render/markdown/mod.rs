@@ -50,6 +50,7 @@ use pulldown_cmark::{CodeBlockKind, Event, LinkType, Options, Parser, Tag, TagEn
 
 pub use pulldown_cmark::{Alignment, BlockQuoteKind, HeadingLevel};
 
+use crate::id::Id;
 use crate::render::ResolvedLink;
 
 // =========================================================
@@ -136,17 +137,20 @@ pub trait Output {
         self.link(target, &label)
     }
 
-    /// A note link whose target resolves: the target's current title and the
-    /// slug its default artifact is named after (ADR 0044). The link's own
-    /// display text is not offered, since the artifact shows the title.
-    fn note_link(&mut self, title: &str, slug: &str) -> String;
+    /// A note link whose target resolves: the target's id, its current title,
+    /// and the slug its default artifact is named after (ADR 0044). The
+    /// link's own display text is not offered, since the artifact shows the
+    /// title.
+    fn note_link(&mut self, id: Id, title: &str, slug: &str) -> String;
 
     /// An image. `alt` is the flattened plain text of the alt subtree. An
     /// output that cannot carry the image records why in `warnings`.
     fn image(&mut self, dest: &str, alt: &str, warnings: &mut Vec<Warning>) -> String;
 
-    /// A footnote, inlined at its reference site with the definition's
-    /// rendered block content.
+    /// A footnote reference, given the definition's rendered block content.
+    /// Called once per label, in first-reference order; the result replaces
+    /// every reference to that label. An output either inlines the content
+    /// here or keeps it for the section it appends in [`Output::finish`].
     fn footnote(&mut self, content: &str) -> String;
 
     /// A raw HTML fragment inside running content. `None` drops it; an output
@@ -175,6 +179,15 @@ pub trait Output {
     /// A raw HTML block. `None` drops it; an output that drops records why in
     /// `warnings`.
     fn html_block(&mut self, html: &str, warnings: &mut Vec<Warning>) -> Option<String>;
+
+    /// The output's last word over the rendered document body, called once
+    /// after the last event and before footnote placeholders are patched.
+    /// Content appended here may therefore itself contain footnote
+    /// references (a footnote section built from definitions, say) and still
+    /// gets its markers.
+    fn finish(&mut self, body: String) -> String {
+        body
+    }
 }
 
 // =========================================================
@@ -276,7 +289,7 @@ enum LinkEmit {
     Ordinary { dest: String },
     /// A note link whose target resolves; the inner events are dropped because
     /// the output shows the target's title.
-    ResolvedNote { title: String, slug: String },
+    ResolvedNote { id: Id, title: String, slug: String },
     /// A note link whose target is dangling: the wrapper is dropped and the
     /// inner content re-emitted, so formatting in the display text survives.
     UnresolvedNote,
@@ -382,17 +395,21 @@ impl<'a, O: Output> Walker<'a, O> {
             .stack
             .pop()
             .expect("the document frame is pushed at construction and never popped");
-        let mut body = document.body;
-
-        // Patch every footnote reference. A defined reference inlines the
-        // definition's content through the output's footnote construct; an
-        // undefined one renders as its literal source text (GFM). The
-        // substitutions are applied repeatedly because a definition may itself
-        // contain references, whose placeholders only appear once the
-        // enclosing definition is inlined; the pass count bounds any
-        // self-referential cycle.
+        // Patch every footnote reference. A defined reference renders through
+        // the output's footnote construct, once per label in the order labels
+        // were first referenced, so an output that numbers footnotes numbers
+        // them in reading order; an undefined one renders as its literal
+        // source text (GFM). The substitutions are applied repeatedly because
+        // a definition may itself contain references, whose placeholders only
+        // appear once the enclosing definition is inlined; the pass count
+        // bounds any self-referential cycle.
         let mut substitutions: Vec<(String, String)> = Vec::new();
+        let mut seen: Vec<&String> = Vec::new();
         for label in &self.footnote_references {
+            if seen.contains(&label) {
+                continue;
+            }
+            seen.push(label);
             let placeholder = self.footnote_placeholder(label);
             let replacement = match self.footnote_definitions.get(label) {
                 Some(content) => self.output.footnote(content),
@@ -400,6 +417,10 @@ impl<'a, O: Output> Walker<'a, O> {
             };
             substitutions.push((placeholder, replacement));
         }
+
+        // The output sees the body before the placeholders are patched, so
+        // whatever it appends is patched too.
+        let mut body = self.output.finish(document.body);
 
         for _ in 0..=substitutions.len() {
             let mut changed = false;
@@ -729,6 +750,7 @@ impl<'a, O: Output> Walker<'a, O> {
         match self.links.iter().find(|link| link.range == span) {
             Some(link) => match &link.target {
                 Some(target) => LinkEmit::ResolvedNote {
+                    id: link.id,
                     title: target.title.clone(),
                     slug: target.slug.clone(),
                 },
@@ -869,7 +891,9 @@ impl<'a, O: Output> Walker<'a, O> {
                 let inner = frame.body;
                 let rendered = match emit {
                     LinkEmit::Ordinary { dest } => self.output.link(&dest, &inner),
-                    LinkEmit::ResolvedNote { title, slug } => self.output.note_link(&title, &slug),
+                    LinkEmit::ResolvedNote { id, title, slug } => {
+                        self.output.note_link(id, &title, &slug)
+                    }
                     LinkEmit::UnresolvedNote => inner,
                 };
                 self.append_inline(&rendered);
@@ -909,6 +933,375 @@ fn starts_with_ascii_ci(haystack: &str, prefix: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::ops::Range;
+
+    use crate::render::LinkTarget;
+
+    /// An output that renders every construct as a tagged, parenthesized
+    /// form, so a test reads the walk's decisions (which construct, with
+    /// which arguments, in which order) straight off the result. It escapes
+    /// nothing; user text passes through as written.
+    ///
+    /// Two knobs simulate real outputs: an image or HTML fragment whose
+    /// source contains `drop` is dropped with a warning, and with
+    /// `section` set, `finish` appends the collected footnote contents the
+    /// way a footnote section would.
+    #[derive(Default)]
+    struct Trace {
+        /// Every footnote content the walk handed over, in call order.
+        footnotes: Vec<String>,
+        section: bool,
+    }
+
+    impl Output for Trace {
+        fn text(&mut self, text: &str) -> String {
+            text.to_string()
+        }
+        fn inline_code(&mut self, code: &str) -> String {
+            format!("(code {code})")
+        }
+        fn soft_break(&mut self) -> String {
+            "(sb)".to_string()
+        }
+        fn hard_break(&mut self) -> String {
+            "(hb)".to_string()
+        }
+        fn task_marker(&mut self, checked: bool) -> String {
+            format!("(task {checked})")
+        }
+        fn styled(&mut self, style: InlineStyle, inner: &str) -> String {
+            format!("({style:?} {inner})")
+        }
+        fn link(&mut self, dest: &str, inner: &str) -> String {
+            format!("(link {dest} {inner})")
+        }
+        fn note_link(&mut self, id: Id, title: &str, slug: &str) -> String {
+            format!("(note {id} {slug} {title})")
+        }
+        fn image(&mut self, dest: &str, alt: &str, warnings: &mut Vec<Warning>) -> String {
+            if dest.contains("drop") {
+                warnings.push(Warning::new(format!("dropped image {dest}")));
+            }
+            format!("(img {dest} {alt})")
+        }
+        fn footnote(&mut self, content: &str) -> String {
+            self.footnotes.push(content.to_string());
+            format!("(fn {})", content.trim_end())
+        }
+        fn inline_html(&mut self, html: &str, warnings: &mut Vec<Warning>) -> Option<String> {
+            if html.contains("drop") {
+                warnings.push(Warning::new(format!("dropped {html}")));
+                return None;
+            }
+            Some(format!("(ihtml {html})"))
+        }
+        fn paragraph(&mut self, body: &str) -> String {
+            format!("(p {body})\n")
+        }
+        fn heading(&mut self, level: HeadingLevel, body: &str) -> String {
+            format!("({level} {body})\n")
+        }
+        fn quote(&mut self, kind: Option<BlockQuoteKind>, body: &str) -> String {
+            match kind {
+                None => format!("(quote\n{body})\n"),
+                Some(kind) => format!("(callout {kind:?}\n{body})\n"),
+            }
+        }
+        fn code_block(&mut self, info: Option<&str>, content: &str) -> String {
+            format!("(pre {info:?} {content:?})\n")
+        }
+        fn list(&mut self, list: &List) -> String {
+            format!(
+                "(list start={:?} loose={} {:?})\n",
+                list.start, list.loose, list.items
+            )
+        }
+        fn table(&mut self, table: &Table) -> String {
+            format!(
+                "(table {:?} {:?} {:?})\n",
+                table.alignments, table.header, table.rows
+            )
+        }
+        fn rule(&mut self) -> String {
+            "(hr)\n".to_string()
+        }
+        fn html_block(&mut self, html: &str, warnings: &mut Vec<Warning>) -> Option<String> {
+            if html.contains("drop") {
+                warnings.push(Warning::new(format!("dropped {}", html.trim_end())));
+                return None;
+            }
+            Some(format!("(html {})\n", html.trim_end()))
+        }
+        fn finish(&mut self, body: String) -> String {
+            if self.section {
+                format!("{body}\n(section {})", self.footnotes.join(" "))
+            } else {
+                body
+            }
+        }
+    }
+
+    fn trace(input: &str) -> String {
+        walk(input, &[], &mut Trace::default()).0
+    }
+
+    fn note_link(range: Range<usize>, id: u64, target: Option<(&str, &str)>) -> ResolvedLink {
+        ResolvedLink {
+            range,
+            display: String::new(),
+            id: Id::from_timestamp_ms(id),
+            target: target.map(|(title, slug)| LinkTarget {
+                title: title.to_string(),
+                slug: slug.to_string(),
+            }),
+        }
+    }
+
+    // =====================================================================
+    // Block splicing
+    // =====================================================================
+
+    #[test]
+    fn sibling_blocks_are_separated_by_one_newline() {
+        // Each block carries its own trailing newline; the separator turns
+        // that into a blank line between siblings and nothing after the last.
+        assert_eq!(trace("a\n\nb\n\n---"), "(p a)\n\n(p b)\n\n(hr)\n");
+    }
+
+    #[test]
+    fn a_dropped_html_block_leaves_no_trace_in_its_container() {
+        // `None` from the output means the block never existed: no separator
+        // newline is spent on it and the container stays empty until real
+        // content arrives.
+        let (out, warnings) = walk("<div>drop</div>\n\npara", &[], &mut Trace::default());
+        assert_eq!(out, "(p para)\n");
+        assert_eq!(warnings[0].message, "dropped <div>drop</div>");
+    }
+
+    #[test]
+    fn a_kept_html_block_is_spliced_as_a_block() {
+        assert_eq!(
+            trace("<div>keep</div>\n\npara"),
+            "(html <div>keep</div>)\n\n(p para)\n"
+        );
+    }
+
+    #[test]
+    fn inline_html_is_kept_or_dropped_per_the_output() {
+        let (out, warnings) = walk(
+            "a <b>keep</b> c <drop>x</drop> d",
+            &[],
+            &mut Trace::default(),
+        );
+        assert_eq!(out, "(p a (ihtml <b>)keep(ihtml </b>) c x d)\n");
+        assert_eq!(warnings.len(), 2);
+    }
+
+    // =====================================================================
+    // Lists and tables
+    // =====================================================================
+
+    #[test]
+    fn a_paragraph_directly_inside_an_item_marks_the_list_loose() {
+        assert_eq!(
+            trace("- one\n\n- two"),
+            "(list start=None loose=true [\"(p one)\\n\", \"(p two)\\n\"])\n"
+        );
+        assert_eq!(
+            trace("- one\n- two"),
+            "(list start=None loose=false [\"one\", \"two\"])\n"
+        );
+    }
+
+    #[test]
+    fn a_nested_list_does_not_make_its_parent_loose() {
+        // The nested list's paragraphs open inside the nested items, two
+        // frames below the outer item, so only the nested list is loose. The
+        // outer item's body is its text followed by the nested list block.
+        let expected = concat!(
+            r#"(list start=None loose=false ["outer\n(list start=None loose=true [\"(p a)\\n\", \"(p b)\\n\"])\n"])"#,
+            "\n"
+        );
+        assert_eq!(trace("- outer\n  - a\n\n  - b"), expected);
+    }
+
+    #[test]
+    fn ordered_lists_carry_their_start_number() {
+        assert_eq!(
+            trace("6. six\n7. seven"),
+            "(list start=Some(6) loose=false [\"six\", \"seven\"])\n"
+        );
+    }
+
+    #[test]
+    fn task_markers_lead_their_item() {
+        assert_eq!(
+            trace("- [x] done\n- [ ] open"),
+            "(list start=None loose=false [\"(task true)done\", \"(task false)open\"])\n"
+        );
+    }
+
+    #[test]
+    fn table_rows_are_padded_to_the_header_width() {
+        let out = trace("| a | b | c |\n| :-- | :-: | --: |\n| 1 |\n| 1 | 2 | 3 | 4 |");
+        assert_eq!(
+            out,
+            "(table [Left, Center, Right] [\"a\", \"b\", \"c\"] [[\"1\", \"\", \"\"], [\"1\", \"2\", \"3\"]])\n"
+        );
+    }
+
+    // =====================================================================
+    // Links
+    // =====================================================================
+
+    #[test]
+    fn link_events_are_classified_by_their_byte_span() {
+        let input = "[t](01ARZ3NDEKTSV4RRFFQ69G5FAV-x.md) [u](01ARZ3NDEKTSV4RRFFQ69G5FAV-y.md) [o](https://e.org)";
+        let resolved = 0..input.find(" [u]").expect("second link");
+        let dangling = resolved.end + 1..input.find(" [o]").expect("third link");
+        let links = [
+            note_link(resolved, 0, Some(("Title", "slug"))),
+            note_link(dangling, 0, None),
+        ];
+        let (out, _) = walk(input, &links, &mut Trace::default());
+        assert_eq!(
+            out,
+            "(p (note 00000000000000000000000000 slug Title) u (link https://e.org o))\n"
+        );
+    }
+
+    #[test]
+    fn an_unresolved_note_link_keeps_its_inner_markup() {
+        let input = "[**bold** ghost](01ARZ3NDEKTSV4RRFFQ69G5FAV-x.md)";
+        let links = [note_link(0..input.len(), 0, None)];
+        let (out, _) = walk(input, &links, &mut Trace::default());
+        assert_eq!(out, "(p (Strong bold) ghost)\n");
+    }
+
+    #[test]
+    fn autolinks_are_detected_per_gfm_and_skipped_inside_link_labels() {
+        assert_eq!(
+            trace("see https://a.io and www.b.org or me@c.dev not report.txt"),
+            "(p see (link https://a.io https://a.io) and (link https://www.b.org www.b.org) or (link mailto:me@c.dev me@c.dev) not report.txt)\n"
+        );
+        assert_eq!(
+            trace("[label www.b.org](https://e.org)"),
+            "(p (link https://e.org label www.b.org))\n"
+        );
+    }
+
+    #[test]
+    fn an_angle_bracket_email_gains_the_mailto_scheme() {
+        assert_eq!(trace("<me@c.dev>"), "(p (link mailto:me@c.dev me@c.dev))\n");
+    }
+
+    // =====================================================================
+    // Images
+    // =====================================================================
+
+    #[test]
+    fn an_image_alt_flattens_every_nested_construct_to_text() {
+        assert_eq!(
+            trace("![a *b* `c` [d](e) ![f](g)\nh](img.png)"),
+            "(p (img img.png a b c d f h))\n"
+        );
+    }
+
+    #[test]
+    fn an_image_the_output_cannot_carry_still_warns_through_the_walk() {
+        let (out, warnings) = walk("![alt](drop.png)", &[], &mut Trace::default());
+        assert_eq!(out, "(p (img drop.png alt))\n");
+        assert_eq!(warnings[0].message, "dropped image drop.png");
+    }
+
+    // =====================================================================
+    // Footnotes
+    // =====================================================================
+
+    #[test]
+    fn the_footnote_construct_runs_once_per_label_in_first_reference_order() {
+        let mut output = Trace::default();
+        let (out, _) = walk("a[^y] b[^x] c[^y]\n\n[^x]: X\n\n[^y]: Y", &[], &mut output);
+        assert_eq!(output.footnotes, vec!["(p Y)\n", "(p X)\n"]);
+        assert_eq!(out, "(p a(fn (p Y)) b(fn (p X)) c(fn (p Y)))\n");
+    }
+
+    #[test]
+    fn an_undefined_reference_renders_as_its_source_text() {
+        assert_eq!(trace("a[^ghost]"), "(p a[^ghost])\n");
+    }
+
+    #[test]
+    fn an_unreferenced_definition_produces_nothing() {
+        assert_eq!(trace("a\n\n[^x]: unused"), "(p a)\n");
+    }
+
+    #[test]
+    fn a_definition_referencing_another_footnote_is_patched_recursively() {
+        // The nested reference's placeholder only enters the body once the
+        // outer definition is inlined; the repeated passes patch it too.
+        let (out, _) = walk(
+            "x[^a]\n\n[^a]: sees[^b]\n\n[^b]: B",
+            &[],
+            &mut Trace::default(),
+        );
+        assert!(!out.contains('\u{0}'), "placeholder leaked: {out:?}");
+        assert_eq!(out, "(p x(fn (p sees(fn (p B)))))\n");
+    }
+
+    #[test]
+    fn a_self_referencing_definition_terminates() {
+        let (out, _) = walk("x[^a]\n\n[^a]: me[^a]", &[], &mut Trace::default());
+        // The pass count bounds the expansion; what remains after the last
+        // pass is one unpatched placeholder, which is the accepted outcome
+        // for a cycle no output could render anyway.
+        assert!(out.starts_with("(p x(fn (p me(fn (p me"));
+    }
+
+    #[test]
+    fn finish_runs_before_placeholders_are_patched() {
+        // The section `finish` appends is built from stored definition
+        // contents, which still hold the raw placeholder of the nested
+        // reference; it is patched only because `finish` runs first.
+        let mut output = Trace {
+            footnotes: Vec::new(),
+            section: true,
+        };
+        let (out, _) = walk("x[^a]\n\n[^a]: sees[^b]\n\n[^b]: B", &[], &mut output);
+        assert!(
+            out.ends_with("\n(section (p sees(fn (p B)))\n (p B)\n)"),
+            "finish output missing or unpatched: {out:?}"
+        );
+        assert!(!out.contains('\u{0}'), "placeholder leaked: {out:?}");
+    }
+
+    // =====================================================================
+    // Inline routing
+    // =====================================================================
+
+    #[test]
+    fn breaks_and_inline_code_route_through_the_output() {
+        assert_eq!(trace("a\nb  \nc `d`"), "(p a(sb)b(hb)c (code d))\n");
+    }
+
+    #[test]
+    fn text_inside_a_code_block_is_kept_verbatim_with_its_info_string() {
+        assert_eq!(
+            trace("```rust ignore\nfn x() {}\n```"),
+            "(pre Some(\"rust ignore\") \"fn x() {}\\n\")\n"
+        );
+        // An indented block's final line carries no newline of its own.
+        assert_eq!(trace("    indented"), "(pre None \"indented\")\n");
+    }
+
+    #[test]
+    fn callouts_carry_their_kind_and_quotes_none() {
+        assert_eq!(
+            trace("> [!TIP]\n> t\n\n> q"),
+            "(callout Tip\n(p t)\n)\n\n(quote\n(p q)\n)\n"
+        );
+    }
 
     #[test]
     fn www_prefix_test_is_byte_safe_across_multibyte_boundaries() {

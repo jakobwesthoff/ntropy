@@ -22,6 +22,7 @@ use std::path::{Path, PathBuf};
 
 use crate::id::Id;
 
+pub mod html;
 pub mod markdown;
 pub mod options;
 pub mod prepare;

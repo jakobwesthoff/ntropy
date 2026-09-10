@@ -1,0 +1,23 @@
+---
+source: src/render/html/emitter.rs
+expression: "html(\"a[^y] b[^x] c[^y]\\n\\n[^x]: X with `code`\\n\\n[^y]: Y\\n    - one\\n    - two\")"
+---
+<p>a<sup class="footnote-ref"><a href="#fn-1" id="fnref-1">1</a></sup> b<sup class="footnote-ref"><a href="#fn-2" id="fnref-2">2</a></sup> c<sup class="footnote-ref"><a href="#fn-1" id="fnref-1">1</a></sup></p>
+
+<section class="footnotes">
+<ol>
+<li id="fn-1">
+<p>Y</p>
+
+<ul>
+<li>one</li>
+<li>two</li>
+</ul>
+<a class="footnote-backref" href="#fnref-1">↩</a>
+</li>
+<li id="fn-2">
+<p>X with <code>code</code></p>
+<a class="footnote-backref" href="#fnref-2">↩</a>
+</li>
+</ol>
+</section>

@@ -33,11 +33,21 @@ engine's:
 | Raw HTML in the body | passed through verbatim (the Typst engine drops it with a warning) |
 | Math, `mermaid` fences | as the Typst engine: literal text, an ordinary code block |
 | Heading | an `id` by GitHub's rule: lowercase, punctuation dropped except hyphens and underscores, spaces to hyphens, Unicode letters kept, duplicates suffixed `-1`, `-2` |
-| Note link, resolved | a link to `<slug>.html`, in the site the collision-safe page name |
+| Note link, resolved | `<a class="note-link">` showing the target's current title, its `href` decided by the caller: `<slug>.html` beside a single-note artifact, the collision-safe page name in the site |
 | Note link, unresolved | the display text, as in the Typst engine |
-| Local image or link to a vault file | the path rewritten relative to the page; the file recorded for the export to copy |
-| Code block | `<pre><code>` carrying the fence language for the highlighter ([site-frontend.md](site-frontend.md)) |
-| Callout, task checkbox, note link | markup a stylesheet can address, since themes are CSS only |
+| Local image or link to a vault file | `<img>` or `<a>` whose `src`/`href` the caller decides; the path as written is recorded so the export copies the file. Local means no URI scheme, not protocol-relative, not a fragment |
+| Remote image | `<img>` with the URL as written; the browser fetches it, so nothing degrades and nothing warns |
+| Code block | `<pre><code class="language-<tag>">`, the tag being the info string's first token, recorded per body for the highlighter ([site-frontend.md](site-frontend.md)) |
+| Callout | `<div class="callout callout-<kind>">` with a `<p class="callout-title">` naming the kind |
+| Task checkbox | a disabled `<input type="checkbox">`, checked or not |
+| Footnote | a numbered `<sup class="footnote-ref">` at every reference and a `<section class="footnotes">` after the body listing each definition once with a back-link, numbered in first-reference order |
+
+Besides the fragment, the emitter returns the local paths the body
+references and the fence languages it saw, each once, so the site copies
+exactly the referenced files and loads only the grammars a page needs.
+Where a note link or a local path points in the artifact is not the
+emitter's decision: the caller supplies it, because it depends on where the
+artifact lands relative to other artifacts and to the vault.
 
 ## The `render --to html` artifact
 

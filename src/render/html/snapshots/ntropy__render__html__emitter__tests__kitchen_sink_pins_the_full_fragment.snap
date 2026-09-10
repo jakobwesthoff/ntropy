@@ -1,0 +1,154 @@
+---
+source: src/render/html/emitter.rs
+expression: out.html
+---
+<p>Intro with <em>emphasis</em>, <strong>strong</strong>, <del>struck</del>, <code>let x = &quot;a\\b&quot;;</code>, and a
+bare URL <a href="https://example.com/path">https://example.com/path</a> plus <a href="https://www.example.org">www.example.org</a> and mail to
+<a href="mailto:jaw@ekko.io">jaw@ekko.io</a> too. Literal math $x^2$ stays text. Unicode: Über Größe
+日本語.</p>
+
+<p>A resolved note link to <a class="note-link" href="linked.html">Current Linked Title</a>
+and a dangling one to <strong>bold</strong> ghost.</p>
+
+<p>An <a href="https://example.org/docs">external link</a>, a <a href="notes/other.md">relative file</a>,
+an <a href="#table">anchor</a>, and a <a href="mailto:jaw@ekko.io">mail link</a>.</p>
+
+<div class="callout callout-note">
+<p class="callout-title">Note</p>
+<p>A note callout with a <code>code chip</code> inside.</p>
+</div>
+
+<div class="callout callout-tip">
+<p class="callout-title">Tip</p>
+<p>Tips look encouraging.</p>
+</div>
+
+<div class="callout callout-important">
+<p class="callout-title">Important</p>
+<p>Important stands out.</p>
+</div>
+
+<div class="callout callout-warning">
+<p class="callout-title">Warning</p>
+<p>Careful<sup class="footnote-ref"><a href="#fn-1" id="fnref-1">1</a></sup> with content.</p>
+</div>
+
+<div class="callout callout-caution">
+<p class="callout-title">Caution</p>
+<p>Caution is loud.</p>
+</div>
+
+<blockquote>
+<p>A plain block quote with a second paragraph.</p>
+
+<p>The second paragraph.</p>
+</blockquote>
+
+<p>Another reference to the same footnote<sup class="footnote-ref"><a href="#fn-1" id="fnref-1">1</a></sup>, one used before its
+definition<sup class="footnote-ref"><a href="#fn-2" id="fnref-2">2</a></sup>, and an undefined one[^ghost].</p>
+
+<h2>Table</h2>
+
+<table>
+<thead>
+<tr>
+<th style="text-align: left">Left</th>
+<th style="text-align: center">Center</th>
+<th style="text-align: right">Right</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left">a</td>
+<td style="text-align: center"><em>b</em></td>
+<td style="text-align: right">c</td>
+</tr>
+<tr>
+<td style="text-align: left">short row</td>
+<td style="text-align: center"></td>
+<td style="text-align: right"></td>
+</tr>
+</tbody>
+</table>
+
+<h2>Lists</h2>
+
+<ul>
+<li>bullet</li>
+<li>
+nested parent
+<ul>
+<li>
+child level two
+<ul>
+<li>child level three</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+<ol start="6">
+<li>sixth</li>
+<li>seventh</li>
+</ol>
+
+<ul>
+<li><input type="checkbox" disabled checked> done task</li>
+<li><input type="checkbox" disabled> open task</li>
+</ul>
+
+<p>A loose list:</p>
+
+<ul>
+<li>
+<p>first item</p>
+
+<p>with a continuation paragraph</p>
+</li>
+<li>
+<p>second item</p>
+</li>
+</ul>
+
+<h2>Code</h2>
+
+<pre><code class="language-rust">fn demo() {
+    println!(&quot;a ``` fence inside&quot;);
+}
+</code></pre>
+
+<pre><code>indented code block
+</code></pre>
+
+<h2>Media and HTML</h2>
+
+<p><img src="diagram.png" alt="A local diagram"></p>
+
+<p><img src="https://example.com/remote.png" alt="A remote image"></p>
+
+<div class="raw">block HTML is dropped with a warning</div>
+
+<p>Inline <br> HTML too.</p>
+
+<hr>
+
+<p>The end.</p>
+
+<section class="footnotes">
+<ol>
+<li id="fn-1">
+<p>A footnote with <code>code</code> inside and a list:</p>
+
+<ul>
+<li>one</li>
+<li>two</li>
+</ul>
+<a class="footnote-backref" href="#fnref-1">↩</a>
+</li>
+<li id="fn-2">
+<p>Defined after use.</p>
+<a class="footnote-backref" href="#fnref-2">↩</a>
+</li>
+</ol>
+</section>

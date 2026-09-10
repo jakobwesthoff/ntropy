@@ -1,0 +1,14 @@
+---
+source: src/render/html/emitter.rs
+expression: "html(\"- first\\n\\n  continued\\n\\n- second\")"
+---
+<ul>
+<li>
+<p>first</p>
+
+<p>continued</p>
+</li>
+<li>
+<p>second</p>
+</li>
+</ul>

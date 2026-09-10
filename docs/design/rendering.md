@@ -230,7 +230,8 @@ tools installed:
 - `src/render/` (library): the document model and shared preparation, the
   format/engine registry, `Renderer`, `RenderContext`, `RenderError`, the
   shared Markdown walk and its output trait under `src/render/markdown/`,
-  and the typst engine under `src/render/typst/`.
+  the typst engine under `src/render/typst/`, and the HTML emitter under
+  `src/render/html/`.
 - `src/bin/ntropy/run/render.rs` (binary): `cmd_render` (selector
   resolution, picker on ambiguity, output-path defaulting) and the
   production `RenderContext`.
