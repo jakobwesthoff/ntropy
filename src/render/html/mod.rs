@@ -13,6 +13,9 @@
 //! call site, never through a mode flag.
 
 pub mod emitter;
+pub mod engine;
+pub mod frontmatter;
 pub mod writer;
 
 pub use emitter::{Emitted, SiblingArtifacts, Targets, emit};
+pub use engine::Html;

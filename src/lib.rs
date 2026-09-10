@@ -54,6 +54,7 @@ pub mod query;
 pub mod reconcile;
 pub mod render;
 pub mod scan;
+pub mod site;
 pub mod template;
 pub mod view;
 

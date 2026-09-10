@@ -178,9 +178,11 @@ is required, since there is no prompt.
 ### `render [id|query]`
 
 Turn one note into a document artifact: `pdf` (the default, compiled by the
-external `typst` binary, the one tool that must be on `PATH`) or `typst`, the
-emitted Typst document, which needs no external tool. An engine whose tool is
-missing is an error naming what to install, never a silent fall-back. The
+external `typst` binary, the one tool that must be on `PATH`), `typst`, the
+emitted Typst document, or `html`, a self-contained web page
+([html-engine.md](html-engine.md)); the latter two need no external tool. An
+engine whose tool is missing is an error naming what to install, never a
+silent fall-back. The
 selector follows the same id-or-query rule as `search`
 and, like `search`, is optional: omitted, every note feeds the picker for
 fuzzy selection. Like `delete`, `render` must resolve to exactly one note:
@@ -191,20 +193,23 @@ exits non-zero under `-p`, so `open "$(ntropy render -p ...)"` branches
 correctly, and is a successful no-op without it, like `delete`.
 
 - `--to <format>` names the output format and defaults to `pdf`.
-- `--engine <name>` overrides the format's default engine; both shipped
-  formats are produced by the typst engine, and the flag exists so
-  invocations written today keep working when other engines arrive.
+- `--engine <name>` overrides the format's default engine; `pdf` and `typst`
+  are produced by the typst engine, `html` by the html engine, and the flag
+  exists so invocations written today keep working when other engines
+  arrive.
 - `--output <path>` / `-o` names the artifact; the default is
   `./<slug>.<ext>` in the current directory, from the slug component of the
   note's filename and the format's extension. An existing file at the target
   is overwritten. That default name is what a note link in another artifact
   points at (ADR 0044), so a set of notes rendered without `-o` into one
   directory cross-references itself.
-- `--theme <name>` renders with a named theme from
-  `<vault>/.ntropy/themes/typst/<name>.typ`, overriding the vault's
-  `[render] theme` for this invocation (ADR 0045). The reserved name
-  `default` selects the built-in look. A name with no file, or one carrying a
-  path, fails before the vault is scanned.
+- `--theme <name>` renders with a named theme, overriding the vault's
+  configured one for this invocation. Which kind follows the format: for
+  `pdf` and `typst` it names `<vault>/.ntropy/themes/typst/<name>.typ` and
+  overrides `[render] theme` (ADR 0045); for `html` it names the directory
+  `<vault>/.ntropy/themes/site/<name>/` and overrides `[site] theme`
+  (ADR 0048). The reserved name `default` selects the built-in look. A name
+  with no file, or one carrying a path, fails before the vault is scanned.
 - `--print` / `-p` prints the artifact's path to stdout as one line on success
   (ADR 0036); without it a `Rendering <reference>...` line announces the work
   and a completion report follows:

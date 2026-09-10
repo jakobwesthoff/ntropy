@@ -1,0 +1,34 @@
+---
+source: src/site/page.rs
+expression: document().render()
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quarterly &lt;Review&gt;</title>
+<style>
+body { color: red }
+</style>
+</head>
+<body class="document">
+<main>
+<header class="note-header">
+<h1 class="note-title">Quarterly &lt;Review&gt;</h1>
+<p class="note-created"><time datetime="2026-06-24">2026-06-24</time></p>
+<ul class="tags">
+<li class="tag">area&#x2f;work</li>
+<li class="tag">a&amp;b</li>
+</ul>
+<dl class="frontmatter">
+<dt>status</dt>
+<dd><ul><li>draft</li></ul></dd>
+</dl>
+</header>
+<article class="note-body">
+<p>Hello <em>there</em></p>
+</article>
+</main>
+</body>
+</html>

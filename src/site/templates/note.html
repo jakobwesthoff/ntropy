@@ -1,0 +1,14 @@
+<header class="note-header">
+<h1 class="note-title">{{ title }}</h1>
+<p class="note-created"><time datetime="{{ created }}">{{ created }}</time></p>
+{% if tags %}<ul class="tags">
+{% for tag in tags %}<li class="tag">{{ tag }}</li>
+{% endfor %}</ul>
+{% endif %}{% if fields %}<dl class="frontmatter">
+{% for field in fields %}<dt>{{ field.key }}</dt>
+<dd>{{ field.html }}</dd>
+{% endfor %}</dl>
+{% endif %}</header>
+<article class="note-body">
+{{ body | trim }}
+</article>

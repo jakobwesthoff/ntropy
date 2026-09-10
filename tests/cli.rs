@@ -1447,6 +1447,215 @@ fn render_to_typst(vault: &Path, id: &str, extra: &[&str]) -> String {
     fs::read_to_string(vault.join("out.typ")).expect("typ artifact exists")
 }
 
+// ---------------------------------------------------------------------------
+// The html format (ADR 0046, ADR 0048)
+// ---------------------------------------------------------------------------
+
+/// Write a site theme's stylesheet into `.ntropy/themes/site/<name>/`.
+fn write_site_theme(vault: &Path, name: &str, css: &str) {
+    let dir = vault.join(".ntropy/themes/site").join(name);
+    fs::create_dir_all(&dir).expect("site theme dir");
+    fs::write(dir.join("style.css"), css).expect("write stylesheet");
+}
+
+/// Append a `[site]` table to the vault config.
+fn configure_site(vault: &Path, table: &str) {
+    let path = vault.join(".ntropy/config.toml");
+    let mut text = fs::read_to_string(&path).expect("config exists");
+    text.push_str("\n[site]\n");
+    text.push_str(table);
+    fs::write(path, text).expect("write config");
+}
+
+fn render_to_html(vault: &Path, id: &str, extra: &[&str]) -> std::process::Output {
+    let mut cmd = ntropy(vault);
+    cmd.args(["render", id, "--to", "html", "-n"]);
+    cmd.args(extra);
+    cmd.current_dir(vault);
+    cmd.env("PATH", "no-such-bin");
+    cmd.output().expect("run render")
+}
+
+#[test]
+fn render_to_html_writes_a_self_contained_page_without_any_tool() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        &format!(
+            "---\ntitle: Report\ntags: [work]\nstatus: draft\n---\n## Findings\n\nSee [the other]({ULID_B}-other.md).\n"
+        ),
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "other",
+        "---\ntitle: The Other One\n---\nBody.\n",
+    );
+
+    let output = render_to_html(dir.path(), ULID_A, &["-p"]);
+    assert!(
+        output.status.success(),
+        "render failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "report.html"
+    );
+
+    let page = fs::read_to_string(dir.path().join("report.html")).expect("html artifact");
+    assert!(page.starts_with("<!doctype html>"), "{page}");
+    assert!(page.contains("<title>Report</title>"), "{page}");
+    assert!(
+        page.contains("--callout-note"),
+        "the built-in stylesheet is inlined: {page}"
+    );
+    assert!(page.contains("<h2 id=\"findings\">Findings</h2>"), "{page}");
+    assert!(
+        page.contains("<a class=\"note-link\" href=\"other.html\">The Other One</a>"),
+        "{page}"
+    );
+    assert!(page.contains("<dt>status</dt>"), "{page}");
+}
+
+#[test]
+fn render_to_html_reports_the_format_and_engine() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    let output = render_to_html(dir.path(), ULID_A, &[]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Rendered report.html (html via html"),
+        "unexpected report: {stdout}"
+    );
+}
+
+#[test]
+fn render_to_html_takes_the_site_theme_from_config_and_the_flag() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    write_site_theme(dir.path(), "corporate", "/* CORPORATE-SITE-THEME */");
+    write_site_theme(dir.path(), "customer", "/* CUSTOMER-SITE-THEME */");
+    configure_site(dir.path(), "theme = \"corporate\"\nlang = \"de\"\n");
+
+    let read = |suffix: &str| {
+        fs::read_to_string(dir.path().join(format!("report{suffix}.html"))).expect("artifact")
+    };
+
+    assert!(
+        render_to_html(dir.path(), ULID_A, &["-o", "report.html"])
+            .status
+            .success()
+    );
+    let page = read("");
+    assert!(
+        page.contains("CORPORATE-SITE-THEME"),
+        "config theme applies: {page}"
+    );
+    assert!(
+        !page.contains("--callout-note"),
+        "the built-in stylesheet is replaced"
+    );
+    assert!(
+        page.contains("<html lang=\"de\">"),
+        "the configured language applies: {page}"
+    );
+
+    assert!(
+        render_to_html(
+            dir.path(),
+            ULID_A,
+            &["--theme", "customer", "-o", "report-flag.html"]
+        )
+        .status
+        .success()
+    );
+    assert!(
+        read("-flag").contains("CUSTOMER-SITE-THEME"),
+        "the flag overrides the config"
+    );
+
+    assert!(
+        render_to_html(
+            dir.path(),
+            ULID_A,
+            &["--theme", "default", "-o", "report-default.html"]
+        )
+        .status
+        .success()
+    );
+    let page = read("-default");
+    assert!(
+        page.contains("--callout-note"),
+        "`default` restores the built-in stylesheet"
+    );
+    assert!(!page.contains("CORPORATE-SITE-THEME"));
+}
+
+#[test]
+fn render_to_html_ignores_the_typst_theme_and_typst_ignores_the_site_theme() {
+    // `--theme` follows the format: each format resolves only its own kind of
+    // theme, so a vault configuring both renders each format in its own look
+    // and a missing theme of the other kind never gets in the way.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    configure_theme(dir.path(), "no-such-typst-theme");
+    write_site_theme(dir.path(), "corporate", "/* CORPORATE-SITE-THEME */");
+    configure_site(dir.path(), "theme = \"corporate\"\n");
+
+    let output = render_to_html(dir.path(), ULID_A, &["-o", "report.html"]);
+    assert!(
+        output.status.success(),
+        "the missing typst theme must not affect html: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        fs::read_to_string(dir.path().join("report.html"))
+            .expect("artifact")
+            .contains("CORPORATE-SITE-THEME")
+    );
+}
+
+#[test]
+fn render_to_html_with_a_missing_site_theme_fails_naming_the_stylesheet() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    configure_site(dir.path(), "theme = \"no-such-theme\"\n");
+
+    let output = render_to_html(dir.path(), ULID_A, &[]);
+    assert!(!output.status.success(), "a missing site theme must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no-such-theme")
+            && stderr.contains(".ntropy/themes/site/no-such-theme/style.css"),
+        "the error does not name the theme and the path: {stderr}"
+    );
+    assert!(!dir.path().join("report.html").exists());
+}
+
 /// A vault with one note and a `corporate` theme configured vault-wide.
 fn themed_vault() -> tempfile::TempDir {
     let dir = setup_vault();

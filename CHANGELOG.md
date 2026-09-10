@@ -8,6 +8,20 @@ and this project adheres to
 
 ## Unreleased
 
+### Added
+
+- `render --to html` writes a note as one self-contained web page: the
+  site theme's stylesheet inlined, the title, tags, and remaining
+  frontmatter as a header, the converted body with heading anchors, and
+  note links pointing at `<slug>.html` beside the artifact. No external
+  tool is involved.
+- Site themes. A directory `<vault>/.ntropy/themes/site/<name>/` holding a
+  `style.css` is a theme; `[site] theme` in the vault config selects it
+  and `--theme` overrides it for the `html` format. A built-in theme with
+  light and dark palettes ships in the binary.
+- A `[site]` table in the vault config: `theme`, `index`, `title`, and
+  `lang`, all optional.
+
 ### Changed
 
 - Typst themes live in `<vault>/.ntropy/themes/typst/`, one subdirectory

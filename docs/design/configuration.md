@@ -45,6 +45,22 @@ field = "status"
 
 `view list|add|edit|remove` (ADR 0018) read and write this file.
 
+The same file holds an optional `[render]` table for the document formats
+([rendering.md](rendering.md), "Configuration") and an optional `[site]`
+table for the `html` format and the site export
+([site-export.md](site-export.md), "Configuration"):
+
+```toml
+[site]
+theme = "corporate"                  # .ntropy/themes/site/corporate/
+index = "01ARZ3NDEKTSV4RRFFQ69G5FAV" # the note that becomes the front page
+title = "Team Docs"                  # defaults to the vault directory name
+lang = "en"                          # the html lang attribute, default en
+```
+
+Every key of both tables is optional, and an entirely default table is
+omitted when ntropy writes the file.
+
 Templates are not in config; they live as files under `<vault>/.ntropy/templates/`
 (`default.md` in v1, ADR 0017).
 

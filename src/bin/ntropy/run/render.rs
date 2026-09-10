@@ -61,17 +61,35 @@ pub fn cmd_render(
     // authority), so a bad value reports what exists without a wasted scan. The
     // extension comes from the same lookup, so the default output name is known
     // up front.
-    // The theme is selected from `--theme` over the vault's `[render] theme`
-    // and loaded before anything else, so a name that resolves to no file fails
+    // The theme is selected from `--theme` over the vault's configured one and
+    // loaded before anything else, so a name that resolves to no file fails
     // here rather than after a scan and a compile (ADR 0045). `default` from
-    // either source means the built-in look and reads no file.
-    let selected = ntropy::render::theme::select(theme.as_deref(), config.render.theme.as_deref());
-    let loaded_theme = selected
-        .map(|name| ntropy::render::theme::load(session.layout(), name))
-        .transpose()
-        .context("while loading the render theme")?;
+    // either source means the built-in look and reads no file. Which theme
+    // kind `--theme` names follows the format: the `html` format takes a site
+    // theme from `[site] theme` and `themes/site/`, every other format a Typst
+    // theme from `[render] theme` and `themes/typst/` (ADR 0048).
+    let mut loaded_theme = None;
+    let mut site = ntropy::site::DocumentSettings {
+        theme: None,
+        lang: config.site.lang().to_string(),
+    };
+    if to == "html" {
+        let selected =
+            ntropy::render::theme::select(theme.as_deref(), config.site.theme.as_deref());
+        site.theme = selected
+            .map(|name| ntropy::site::theme::load(session.layout(), name))
+            .transpose()
+            .context("while loading the site theme")?;
+    } else {
+        let selected =
+            ntropy::render::theme::select(theme.as_deref(), config.render.theme.as_deref());
+        loaded_theme = selected
+            .map(|name| ntropy::render::theme::load(session.layout(), name))
+            .transpose()
+            .context("while loading the render theme")?;
+    }
 
-    let registry = Registry::new(config.render.clone(), loaded_theme);
+    let registry = Registry::new(config.render.clone(), loaded_theme, site);
     let renderer = registry
         .resolve(&to, engine.as_deref())
         .context("while selecting the render engine")?;

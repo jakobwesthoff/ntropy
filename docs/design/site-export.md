@@ -126,11 +126,15 @@ The themes directory has one subdirectory per type:
       typst/<name>.typ     Typst themes ([rendering.md](rendering.md))
       site/<name>/         site themes
 
-A site theme is a directory of stylesheets and static assets. The HTML
-structure of every page is ntropy's own, so a theme controls appearance,
-not markup. A theme provides the palettes for both light and dark mode;
-the page follows the system preference by default and remembers a manual
-switch in the browser.
+A site theme is a directory of stylesheets and static assets. Its entry
+point is `style.css`, which every page links and which `render --to html`
+inlines; a directory without it is not a theme. The HTML structure of
+every page is ntropy's own, so a theme controls appearance, not markup. A
+theme provides the palettes for both light and dark mode; the page follows
+the system preference by default and remembers a manual switch in the
+browser. The built-in theme keeps every color in a custom property on the
+root element, so a theme that wants only a palette redefines those and
+keeps the rest.
 
 Selection is `--theme`, then `[site] theme`, then the built-in theme. The
 binary embeds exactly one built-in theme, and `site theme init` copies

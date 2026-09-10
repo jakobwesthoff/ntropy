@@ -164,20 +164,22 @@ pub enum Command {
 
     /// Render a note to a document artifact.
     ///
-    /// `--to` selects the output format: `pdf` (the default) or `typst`, the
-    /// emitted Typst document. `pdf` is produced by ntropy's own typst engine,
-    /// which compiles the note with the external `typst` binary, so only `typst`
-    /// need be on `PATH`. The `typst` format needs no external tool.
+    /// `--to` selects the output format: `pdf` (the default), `typst`, the
+    /// emitted Typst document, or `html`, a self-contained web page. `pdf` is
+    /// produced by ntropy's own typst engine, which compiles the note with the
+    /// external `typst` binary, so only `typst` need be on `PATH`. The `typst`
+    /// and `html` formats need no external tool.
     ///
-    /// The look comes from the vault's `[render] theme` in
-    /// `.ntropy/config.toml`, a Typst file in `.ntropy/themes/typst/`;
-    /// `--theme` overrides it for one invocation.
+    /// The look comes from the vault's config in `.ntropy/config.toml`:
+    /// `[render] theme`, a Typst file in `.ntropy/themes/typst/`, for `pdf`
+    /// and `typst`; `[site] theme`, a directory in `.ntropy/themes/site/`,
+    /// for `html`. `--theme` overrides it for one invocation.
     Render {
         /// A full ULID or a query DSL expression (joined from trailing
         /// arguments; omitted = choose from all notes).
         #[arg(value_name = "ID|QUERY")]
         selector: Vec<String>,
-        /// The output format: `pdf` (default) or `typst`.
+        /// The output format: `pdf` (default), `typst`, or `html`.
         #[arg(long, value_name = "FORMAT", default_value = ntropy::render::DEFAULT_FORMAT)]
         to: String,
         /// Override the format's default engine.
@@ -188,9 +190,10 @@ pub enum Command {
         output: Option<PathBuf>,
         /// Render with this theme instead of the vault's configured one.
         ///
-        /// Names a file in `<vault>/.ntropy/themes/typst/<NAME>.typ`.
-        /// `default` selects ntropy's built-in look, overriding a configured
-        /// theme.
+        /// Names `<vault>/.ntropy/themes/typst/<NAME>.typ` for `pdf` and
+        /// `typst`, or the directory `<vault>/.ntropy/themes/site/<NAME>/`
+        /// for `html`. `default` selects ntropy's built-in look, overriding a
+        /// configured theme.
         #[arg(long, value_name = "NAME")]
         theme: Option<String>,
         /// Print the artifact's path to stdout on success.
