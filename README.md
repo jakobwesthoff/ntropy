@@ -215,6 +215,7 @@ sync.
 | `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it; `--print-content`/`-P` prints the note's text (exactly one note). |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
 | `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) with ntropy's own typst engine (only `typst` required on `PATH`). Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`, or `typst` for the emitted Typst document), `-o` the output path (default `./<slug>.<ext>`), `--theme` overrides the vault's [configured theme](#theming-rendered-documents), `-p` prints the artifact path. |
+| `site -o <dir> [query]` | [Export the vault as a static website](#exporting-the-vault-as-a-website): a page per note, a tag tree, a page per view and group, sidebar, outline, breadcrumbs. Works from disk without a server. `--force` empties a non-empty directory, `--theme` overrides the [site theme](#site-themes), `-p` prints the front page's path. `site theme init <name>` copies the built-in theme into the vault. |
 | `reconcile` | Realign filenames whose slug drifted from the title and re-sync every view (catches up after edits made outside ntropy). |
 | `view list\|add\|remove` | Manage [materialized views](#materialized-views), e.g. `ntropy view add by-status --field status`. |
 | `tags` | List every tag with its note count. |
@@ -696,6 +697,59 @@ config error naming the bad name, reported before anything renders.
 > [encrypted vault](#encrypted-vaults) means it syncs unencrypted, and ntropy
 > warns when the output path lands there — most often when your shell happens
 > to be sitting in the vault and the default `./<slug>.pdf` applies.
+
+## Exporting the vault as a website
+
+`ntropy site` turns the vault into a static website: a set of files any
+web host serves, and that a browser opens straight from disk, no server
+needed.
+
+```bash
+ntropy site -o ./public              # every note
+ntropy site -o ./public tag:public   # only the notes a query selects
+open "$(ntropy site -o ./public -p)" # export, then open the front page
+```
+
+The site mirrors the ways you reach a note in the vault. Every note is a
+page under `notes/`. The tag hierarchy is a tree of pages under `tags/`,
+each listing the notes carrying the tag or any tag below it. Every
+[materialized view](#materialized-views) becomes a tree under `views/`,
+nested like its directory. Each page carries a sidebar of those sections
+with the current note's groups opened, breadcrumbs, an outline of the
+note's headings, and previous/next links inside the note's first group.
+Note links point at the target's page; images and linked files from the
+vault are copied under `files/`. The front page is the note named by
+`[site] index` in the vault config, or a generated overview of the newest
+notes, the top-level tags, and the views.
+
+A non-empty output directory is refused unless you pass `--force`, which
+empties it first. A single note renders to one self-contained page with
+`ntropy render --to html`.
+
+### Site themes
+
+A site theme is a directory `.ntropy/themes/site/<name>/` holding a
+`style.css` and any assets it references; the HTML structure is ntropy's,
+so a theme changes the look, not the layout. Start from the built-in one:
+
+```bash
+ntropy site theme init mine          # writes .ntropy/themes/site/mine/
+```
+
+```toml
+# .ntropy/config.toml
+[site]
+theme = "mine"
+title = "Team Docs"                  # defaults to the vault directory name
+index = "01ARZ3NDEKTSV4RRFFQ69G5FAV" # the note that becomes the front page
+lang = "en"
+```
+
+Every color of the built-in theme is a custom property on `:root`, with a
+dark palette under `prefers-color-scheme: dark`, so a theme that only wants
+different colors redefines those properties and keeps the rest. `--theme
+<name>` overrides the configured theme for one export, and `--theme
+default` returns to the built-in look.
 
 ## Language server
 

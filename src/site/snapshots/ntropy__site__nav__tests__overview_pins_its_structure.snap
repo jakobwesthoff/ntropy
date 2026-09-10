@@ -1,0 +1,26 @@
+---
+source: src/site/nav.rs
+expression: "overview(&model(), \"\")"
+---
+<h1 class="site-title">Vault &amp; Co</h1>
+<p class="note-count">2 notes</p>
+<section class="recent">
+<h2>Newest notes</h2>
+<ul class="note-list">
+<li><time datetime="2017-09-01">2017-09-01</time> <a href="notes/plain.html">Plain</a></li>
+<li><time datetime="2016-07-31">2016-07-31</time> <a href="notes/rust-tips.html">Rust &lt;Tips&gt;</a> <span class="tags"><a class="tag" href="tags/programming/rust/index.html">programming/rust</a> </span></li>
+</ul>
+</section>
+<section class="section-summary">
+<h2><a href="views/by-status/index.html">by-status</a></h2>
+<ul class="group-list">
+<li><a href="views/by-status/done/index.html">done</a> <span class="count">1</span></li>
+<li><a href="views/by-status/open/index.html">open</a> <span class="count">1</span></li>
+</ul>
+</section>
+<section class="section-summary">
+<h2><a href="tags/index.html">tags</a></h2>
+<ul class="group-list">
+<li><a href="tags/programming/index.html">programming</a> <span class="count">1</span></li>
+</ul>
+</section>

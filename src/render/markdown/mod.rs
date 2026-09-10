@@ -982,6 +982,29 @@ impl<'a, O: Output> Walker<'a, O> {
     }
 }
 
+/// Resolve `dest`, a path as written in a note, against `base`, the note's
+/// directory as a root-absolute path such as `/all-notes`, into a
+/// root-absolute path. `.` and `..` are resolved textually; there is no
+/// filesystem to consult. A `dest` that is already root-absolute passes
+/// through. `None` means `dest` climbs out of the root, which no
+/// root-absolute path can express.
+pub fn resolve_root_relative(base: &str, dest: &str) -> Option<String> {
+    if dest.starts_with('/') {
+        return Some(dest.to_string());
+    }
+    let mut parts: Vec<&str> = base.split('/').filter(|part| !part.is_empty()).collect();
+    for part in dest.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop()?;
+            }
+            other => parts.push(other),
+        }
+    }
+    Some(format!("/{}", parts.join("/")))
+}
+
 /// GitHub's heading slug: lowercase, whitespace to hyphens, keep letters,
 /// digits, hyphens, and underscores, drop everything else. A heading whose
 /// text leaves nothing behind gets `heading`, so every heading has an anchor.
@@ -1432,6 +1455,34 @@ mod tests {
         assert_eq!(
             trace("# See ![the *plan*](p.png) now"),
             "(h1 #see-the-plan-now \"See the plan now\" See (img p.png the plan) now)\n"
+        );
+    }
+
+    #[test]
+    fn root_relative_resolution_joins_climbs_and_refuses_escapes() {
+        assert_eq!(
+            resolve_root_relative("/all-notes", "diagram.png").as_deref(),
+            Some("/all-notes/diagram.png")
+        );
+        assert_eq!(
+            resolve_root_relative("/all-notes", "./pics/x.png").as_deref(),
+            Some("/all-notes/pics/x.png")
+        );
+        assert_eq!(
+            resolve_root_relative("/all-notes", "../assets/logo.svg").as_deref(),
+            Some("/assets/logo.svg")
+        );
+        assert_eq!(
+            resolve_root_relative("/all-notes", "/assets/logo.svg").as_deref(),
+            Some("/assets/logo.svg")
+        );
+        assert_eq!(
+            resolve_root_relative("/all-notes", "../../outside.png"),
+            None
+        );
+        assert_eq!(
+            resolve_root_relative("/", "x.png").as_deref(),
+            Some("/x.png")
         );
     }
 

@@ -1,0 +1,18 @@
+---
+source: src/site/build.rs
+expression: "format!(\"{}\\n--\\n{}\", paths.join(\"\\n\"), copies.join(\"\\n\"))"
+---
+assets/style.css
+index.html
+notes/plain.html
+notes/rust-tips.html
+notes/untagged.html
+tags/index.html
+tags/programming/index.html
+tags/programming/rust/index.html
+views/by-status/done/index.html
+views/by-status/index.html
+views/by-status/open/index.html
+--
+files/all-notes/diagram.png <- all-notes/diagram.png
+files/assets/logo.svg <- assets/logo.svg

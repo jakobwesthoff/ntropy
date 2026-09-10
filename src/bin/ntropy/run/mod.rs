@@ -21,6 +21,7 @@ mod picker;
 mod prompt;
 mod render;
 mod securetemp;
+mod site;
 #[cfg(feature = "encryption")]
 mod vault_cmd;
 
@@ -38,7 +39,7 @@ use ntropy::scan::ScanWarning;
 use ntropy::session::VaultSession;
 use ntropy::vault::{ResolveOptions, Vault, layout, resolve};
 
-use crate::cli::{Cli, Command, GlobalArgs, VaultCommand, ViewCommand, join};
+use crate::cli::{Cli, Command, GlobalArgs, SiteCommand, VaultCommand, ViewCommand, join};
 
 /// Run the parsed CLI to completion, returning the process exit code.
 pub fn run(cli: Cli) -> Result<ExitCode> {
@@ -130,6 +131,26 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             theme,
             print,
             interactive,
+        ),
+        Command::Site {
+            command: Some(SiteCommand::Theme(sub)),
+            ..
+        } => site::cmd_site_theme(&session, sub),
+        Command::Site {
+            command: None,
+            output,
+            query,
+            theme,
+            force,
+            print,
+        } => site::cmd_site(
+            &cli.global,
+            &session,
+            output.expect("clap requires -o when no subcommand is given"),
+            join(&query),
+            theme,
+            force,
+            print,
         ),
         Command::View(sub) => cmd_view(&session, sub),
         // Handled above, before vault resolution.

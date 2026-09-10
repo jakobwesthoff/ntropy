@@ -18,7 +18,7 @@ body { color: red }
 <h1 class="note-title">Quarterly &lt;Review&gt;</h1>
 <p class="note-created"><time datetime="2026-06-24">2026-06-24</time></p>
 <ul class="tags">
-<li class="tag">area&#x2f;work</li>
+<li class="tag">area/work</li>
 <li class="tag">a&amp;b</li>
 </ul>
 <dl class="frontmatter">

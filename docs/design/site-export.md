@@ -72,9 +72,13 @@ One directory per node:
     tags/<a>/<b>/index.html
     views/<name>/index.html
     views/<name>/<group>/<sub>/index.html
+    assets/                      the theme's files, style.css among them
+    files/<vault path>           vault files the notes reference
 
 The `views/` and `tags/` prefixes keep a view named `notes` or `tags`
-from colliding with the note pages.
+from colliding with the note pages. Every link in a page is relative to
+that page, climbing to the site root with `../` per directory level, so
+the site works from `file://` and from any path on a host.
 
 **Front page.** The configured index note, or the generated overview:
 site title, note count, the newest notes, the top-level tags with counts,
@@ -99,7 +103,8 @@ notes carrying the tag or any descendant tag, the sub-path rule of the
 page per group nested as the filesystem view nests its directories, with
 the same grouping rules: a list-valued field places a note under each
 value, `/` nests, values are normalized, notes without the field are
-absent.
+absent. A group's page lists its child groups and, like a tag page, the
+notes of the group and of every group below it.
 
 **Order.** Notes inside a group, on a tag page, and on a group page are
 sorted newest first, ULID descending, as the CLI lists them.

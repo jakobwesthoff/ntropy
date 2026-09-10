@@ -201,6 +201,42 @@ pub enum Command {
         print: bool,
     },
 
+    /// Export the vault as a static website.
+    ///
+    /// Every note becomes a page under `notes/`, beside a tag tree, one page
+    /// per configured view and group, and a front page. Pages carry a
+    /// sidebar, breadcrumbs, an outline, and previous/next links. The site
+    /// works when opened straight from disk; no server is needed.
+    ///
+    /// The look comes from `[site] theme` in `.ntropy/config.toml`, a
+    /// directory in `.ntropy/themes/site/`; `--theme` overrides it for one
+    /// invocation. `site theme init` copies the built-in theme into the vault.
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+    Site {
+        #[command(subcommand)]
+        command: Option<SiteCommand>,
+        /// The output directory. A non-empty directory is refused unless
+        /// `--force` empties it first.
+        #[arg(short = 'o', long, value_name = "DIR", required = true)]
+        output: Option<PathBuf>,
+        /// A query DSL expression restricting the exported notes (joined from
+        /// trailing arguments; omitted = every note).
+        #[arg(value_name = "QUERY")]
+        query: Vec<String>,
+        /// Export with this site theme instead of the vault's configured one.
+        ///
+        /// Names the directory `<vault>/.ntropy/themes/site/<NAME>/`.
+        /// `default` selects the built-in theme, overriding a configured one.
+        #[arg(long, value_name = "NAME")]
+        theme: Option<String>,
+        /// Empty a non-empty output directory before writing.
+        #[arg(long)]
+        force: bool,
+        /// Print the path of the site's `index.html` to stdout on success.
+        #[arg(short = 'p', long)]
+        print: bool,
+    },
+
     /// Manage materialized view definitions.
     #[command(subcommand)]
     View(ViewCommand),
@@ -279,6 +315,26 @@ pub enum VaultCommand {
         /// The current passphrase comes from the global `--passphrase-file`.
         #[arg(long, value_name = "PATH")]
         new_passphrase_file: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SiteCommand {
+    /// Manage site themes.
+    #[command(subcommand)]
+    Theme(SiteThemeCommand),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SiteThemeCommand {
+    /// Copy the built-in site theme into the vault as the starting point for
+    /// a custom one.
+    ///
+    /// Writes `<vault>/.ntropy/themes/site/<NAME>/` and refuses to overwrite
+    /// an existing directory. Select it with `[site] theme = "<NAME>"`.
+    Init {
+        /// The new theme's name.
+        name: String,
     },
 }
 

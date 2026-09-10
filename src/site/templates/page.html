@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · {{ site_title }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ stylesheet }}">{% endblock %}
+{% block body_class %}site{% endblock %}
+{% block body %}<div class="layout">
+<header class="site-header"><a class="site-name" href="{{ prefix }}index.html">{{ site_title }}</a></header>
+{{ sidebar | trim }}
+<main>
+{% if breadcrumbs %}<nav class="breadcrumbs"><ol>
+{% for crumb in breadcrumbs %}<li><a href="{{ crumb.href }}">{{ crumb.label }}</a></li>
+{% endfor %}</ol></nav>
+{% endif %}<div class="content">
+{{ body | trim }}
+</div>
+{% if prev or next %}<nav class="pager">
+{% if prev %}<a class="prev" rel="prev" href="{{ prev.href }}">{{ prev.title }}</a>
+{% endif %}{% if next %}<a class="next" rel="next" href="{{ next.href }}">{{ next.title }}</a>
+{% endif %}</nav>
+{% endif %}</main>
+<aside class="side">
+{{ outline | trim }}
+</aside>
+</div>{% endblock %}

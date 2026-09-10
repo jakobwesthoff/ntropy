@@ -71,6 +71,14 @@ impl Default for HtmlWriter {
     }
 }
 
+/// `text` escaped for text content or an attribute value, for callers that
+/// assemble markup outside the emitter and need the same escaping.
+pub fn escape(text: &str) -> String {
+    let mut out = String::new();
+    escape_into(&mut out, text);
+    out
+}
+
 fn escape_into(out: &mut String, text: &str) {
     for c in text.chars() {
         match ESCAPED.iter().find(|(from, _)| *from == c) {
@@ -117,6 +125,13 @@ mod tests {
         writer.attribute("x\" onclick=\"evil()");
         writer.syntax("\">");
         assert_eq!(writer.finish(), "<a href=\"x&quot; onclick=&quot;evil()\">");
+    }
+
+    #[test]
+    fn escape_matches_the_writer_text_context() {
+        let mut writer = HtmlWriter::new();
+        writer.text("a<b>&\"'");
+        assert_eq!(escape("a<b>&\"'"), writer.finish());
     }
 
     #[test]

@@ -10,6 +10,19 @@ and this project adheres to
 
 ### Added
 
+- `ntropy site -o <dir> [query]` exports the vault as a static website:
+  a page per note under `notes/`, a tag tree under `tags/` with a page per
+  tag, a tree per configured view under `views/`, and a front page (the
+  note named by `[site] index`, or a generated overview). Every page has a
+  sidebar with the current trail opened, breadcrumbs, an outline of the
+  note's headings, and previous/next links. Note links point at the
+  target's page; vault files the notes reference are copied under
+  `files/`. The site works when opened from disk. An optional query
+  restricts the exported notes, `--force` empties a non-empty output
+  directory, `-p` prints the front page's path, and `--strict` fails on
+  export warnings.
+- `ntropy site theme init <name>` copies the built-in site theme into
+  `.ntropy/themes/site/<name>/` as the starting point for a custom one.
 - `render --to html` writes a note as one self-contained web page: the
   site theme's stylesheet inlined, the title, tags, and remaining
   frontmatter as a header, the converted body with heading anchors, and

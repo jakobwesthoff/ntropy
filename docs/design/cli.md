@@ -227,6 +227,45 @@ Examples:
     open "$(ntropy render -p 'text:"quarterly"')"    # render, then open the PDF
     ntropy render 01ARZ3NDEKTSV4RRFFQ69G5FAV -o report.pdf
 
+### `site -o <dir> [query]`
+
+Export the vault as a static website ([site-export.md](site-export.md),
+ADR 0046): every note as a page, a tag tree, one page per configured view
+and group, and a front page, each with a sidebar, breadcrumbs, an outline,
+and previous/next links. The site works when opened straight from disk.
+
+- `--output <dir>` / `-o` is required; there is no default location. A
+  non-empty directory is refused unless `--force` is given, in which case
+  it is emptied before writing. A missing directory is created.
+- The optional query is a DSL expression restricting the exported notes; the
+  default is every note. A link to a note outside the set renders as its
+  display text and is reported as a warning.
+- `--theme <name>` exports with the site theme
+  `<vault>/.ntropy/themes/site/<name>/`, overriding `[site] theme`
+  (ADR 0048). `default` selects the built-in theme. A missing theme fails
+  before the output directory is touched.
+- `--print` / `-p` prints the path of the site's `index.html` as one line;
+  without it a completion report names the directory, the page count, the
+  note count, and the warnings:
+  `Exported 9 pages to out (2 notes, 0 warnings)`.
+- Scan warnings and export warnings (a referenced file missing or outside
+  the vault, a link to a note left out, a configured index note not
+  exported) print to stderr and fail the command under `--strict`; the site
+  is written either way.
+- In an encrypted vault an output directory inside the vault draws a
+  warning, as `render` warns for an artifact.
+
+`site theme init <name>` writes the built-in theme's files to
+`<vault>/.ntropy/themes/site/<name>/` as the starting point for a custom
+theme and refuses to overwrite an existing directory.
+
+Examples:
+
+    ntropy site -o ./public                    # the whole vault
+    ntropy site -o ./public tag:public         # only notes tagged public
+    open "$(ntropy site -o ./public -p)"       # export, then open the front page
+    ntropy site theme init mine                # copy the built-in theme out
+
 ### `write <ULID|FILENAME|PATH>`
 
 Replace one note's content with text read from stdin (ADR 0043). This is how a

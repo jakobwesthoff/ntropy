@@ -165,11 +165,7 @@ mod tests {
             page.contains(&SiteTheme::builtin().stylesheet),
             "the built-in stylesheet is inlined"
         );
-        // minijinja's HTML escaping also encodes the slash.
-        assert!(
-            page.contains("<li class=\"tag\">area&#x2f;work</li>"),
-            "{page}"
-        );
+        assert!(page.contains("<li class=\"tag\">area/work</li>"), "{page}");
         assert!(page.contains("<dt>priority</dt>\n<dd>2</dd>"), "{page}");
         assert!(page.contains("<h1 id=\"heading\">Heading</h1>"), "{page}");
         assert!(page.contains("<em>body</em>"), "{page}");

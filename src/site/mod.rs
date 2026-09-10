@@ -10,10 +10,18 @@
 //!   `<vault>/.ntropy/themes/site/<name>/`, and the embedded default.
 //! - [`page`]: the minijinja templates embedded in the binary and the typed
 //!   contexts they render from.
+//! - [`model`]: the site's structure, computed from the notes and views.
+//! - [`nav`]: the navigation fragments built from the model.
+//! - [`build`]: every file of a site, built in memory, and their writing.
 
+pub mod build;
+pub mod model;
+pub mod nav;
 pub mod options;
 pub mod page;
 pub mod theme;
+
+pub use build::{Built, Input, build, write};
 
 pub use options::SiteOptions;
 pub use theme::SiteTheme;

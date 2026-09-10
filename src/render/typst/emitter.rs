@@ -402,27 +402,10 @@ fn indent_continuation(body: &str, marker: &str) -> String {
 /// altogether, which cannot be expressed as a root-absolute path; the compiler
 /// rejects it by name rather than by an invented substitute.
 fn resolve_asset(base: &str, dest: &str) -> String {
-    if dest.starts_with('/') {
-        return dest.to_string();
-    }
-
-    // `base` is root-absolute (`/all-notes`); walking the joined components
-    // resolves `.` and `..` textually, which is what Typst's own root-relative
-    // lookup does. There is no filesystem here to consult, by design: the
-    // output is pure.
-    let mut parts: Vec<&str> = base.split('/').filter(|part| !part.is_empty()).collect();
-    for part in dest.split('/') {
-        match part {
-            "" | "." => {}
-            ".." => {
-                if parts.pop().is_none() {
-                    return dest.to_string();
-                }
-            }
-            other => parts.push(other),
-        }
-    }
-    format!("/{}", parts.join("/"))
+    // Textual resolution against the root-absolute `base` is what Typst's own
+    // root-relative lookup does; a path that escapes the root stays as
+    // written for the compiler to reject by name.
+    markdown::resolve_root_relative(base, dest).unwrap_or_else(|| dest.to_string())
 }
 
 /// A `#link("dest")[inner]` call: `dest` string-literal escaped, `inner`

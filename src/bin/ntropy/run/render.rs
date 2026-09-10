@@ -285,11 +285,11 @@ impl Drop for SigpipeIgnoredScope {
 /// Component-wise, which `Path::starts_with` already is: a sibling directory
 /// whose name merely begins with the vault's — `/v/vault-notes` beside
 /// `/v/vault` — is not inside it.
-fn lands_inside_vault(vault_root: &Path, output: &Path) -> bool {
+pub(super) fn lands_inside_vault(vault_root: &Path, output: &Path) -> bool {
     output.starts_with(vault_root)
 }
 
-fn absolutize(path: &Path, cwd: &Path) -> PathBuf {
+pub(super) fn absolutize(path: &Path, cwd: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
     } else {

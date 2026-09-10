@@ -16,7 +16,7 @@ use crate::error::Result;
 use crate::note::Note;
 use crate::vault::Vault;
 
-pub use materialize::sync_view;
+pub use materialize::{group_values, sync_view};
 
 /// A view definition: an output directory name plus the field it groups by.
 #[derive(Debug, Clone, PartialEq, Eq)]

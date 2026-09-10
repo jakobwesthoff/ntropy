@@ -1,0 +1,34 @@
+---
+source: src/site/page.rs
+expression: page().render()
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rust &lt;Tips&gt; · Vault &amp; Co</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body class="site">
+<div class="layout">
+<header class="site-header"><a class="site-name" href="../index.html">Vault &amp; Co</a></header>
+<nav class="sidebar">S</nav>
+<main>
+<nav class="breadcrumbs"><ol>
+<li><a href="../views/by-status/index.html">by-status</a></li>
+<li><a href="../views/by-status/done/index.html">done</a></li>
+</ol></nav>
+<div class="content">
+<article>B</article>
+</div>
+<nav class="pager">
+<a class="prev" rel="prev" href="earlier.html">Earlier &lt;one&gt;</a>
+</nav>
+</main>
+<aside class="side">
+<nav class="outline">O</nav>
+</aside>
+</div>
+</body>
+</html>
