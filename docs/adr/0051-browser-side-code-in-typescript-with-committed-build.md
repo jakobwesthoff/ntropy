@@ -6,6 +6,10 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11: Bun is the JavaScript runtime and package manager for
+the toolchain; Node is not used. The user's rule is "bun over node,
+always".
+
 Provides the browser-side code of
 [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md).
 Search is [ADR 0052](0052-client-side-search-as-a-typescript-query-dsl.md),
@@ -27,7 +31,8 @@ ESM-only with no classic-script build, and the site must work over
 ### Language and tools
 
 Browser-side code is TypeScript with Preact, built with Vite, tested with
-Vitest.
+Vitest. Bun is the runtime and package manager that installs dependencies
+and runs both; Node is not used anywhere in the toolchain.
 
 ### Repository layout
 
@@ -35,10 +40,11 @@ Sources (package manifest, TypeScript, CSS, tests) live in `site/` at the
 repository root. Vite writes the built output to `src/site/dist/`, which
 is committed and embedded into the binary. Every output file is a classic
 script or stylesheet; there are no module scripts and no lazily loaded
-chunks. `cargo build` never invokes Node.
+chunks. `cargo build` never invokes Bun.
 
-A CI job builds `site/` and fails when the result differs from the
-committed `src/site/dist/`. A `just` recipe runs the same check locally.
+A CI job builds `site/` with Bun and fails when the result differs from
+the committed `src/site/dist/`. A `just` recipe runs the same check
+locally.
 
 ### License headers
 
@@ -52,8 +58,8 @@ both.
 
 - **Vanilla JavaScript and CSS with no toolchain.**
 - **A separate prebuilt frontend crate** the main crate depends on.
-- **esbuild with Node's test runner**, and **Bun** as runtime, bundler,
-  and test runner.
+- **esbuild with Node's test runner**, and **Bun's own bundler and test
+  runner** in place of Vite and Vitest.
 - **Solid** as the framework, and **no framework**.
 - **`web/` as the source directory**, and `src/site/assets/` or
   `src/site/build/` as the output directory.
@@ -62,8 +68,7 @@ both.
 
 ## Consequences
 
-- Changing the browser-side code needs Node and Vite; building ntropy
-  does not.
+- Changing the browser-side code needs Bun; building ntropy does not.
 - The repository and the crate tarball carry generated files, kept
   honest by the CI diff.
 - Preact's component model is the shape of the search interface.

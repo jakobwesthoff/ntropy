@@ -556,6 +556,15 @@ is [design-notes.md](design-notes.md).
     ids or expected error). The Rust tests and the Vitest tests both
     load it.
 
+### Round 18 (2026-09-11)
+
+- **Q52. JavaScript runtime.** Not asked; stated by the user during the
+  implementation (verbatim): "we prefer bun over node, always that is
+  decided and should be adhered to and be documented".
+  - *Decision:* Bun is the JavaScript runtime and package manager for the
+    frontend toolchain, running Vite and Vitest (Q40); Node is not used.
+    Recorded as an amendment to ADR 0051.
+
 ## Answered but not yet turned into a decision
 
 _Not yet established._

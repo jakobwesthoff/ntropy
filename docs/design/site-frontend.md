@@ -13,12 +13,13 @@ light/dark toggle, syntax highlighting. Decisions are recorded in
 ## Toolchain and layout
 
 The frontend is TypeScript with Preact, built with Vite, tested with
-Vitest. Its sources (package manifest, TypeScript, CSS, tests) live in
+Vitest, both run through Bun, which is also the package manager; Node is
+not used. Its sources (package manifest, TypeScript, CSS, tests) live in
 `site/` at the repository root. Vite writes the built output to
 `src/site/dist/`, which is committed and embedded into the binary;
-`cargo build` never runs Node. A CI job rebuilds `site/` and fails when
-the result differs from the committed output; a `just` recipe runs the
-same check locally.
+`cargo build` never runs Bun. A CI job rebuilds `site/` with Bun and fails
+when the result differs from the committed output; a `just` recipe runs
+the same check locally.
 
 Every built file is a classic script or a stylesheet. There are no module
 scripts and no lazily loaded chunks, because the site works over

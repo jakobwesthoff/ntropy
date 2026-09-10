@@ -18,9 +18,10 @@ Two values stay unfixed until implementation, listed at the end.
   page of the site at export time (Q1).
 - Browser-side code exists for search, the heading outline, the theme
   toggle, and highlighting. It is written in TypeScript with Preact,
-  built with Vite, tested with Vitest (Q2, Q39, Q40). The built output
-  is committed under `src/site/dist/` and embedded into the binary; the
-  Cargo build never runs the JavaScript toolchain (Q2, Q41). A CI job
+  built with Vite, tested with Vitest (Q2, Q39, Q40), both run through
+  Bun, which is also the package manager; Node is not used (Q52). The
+  built output is committed under `src/site/dist/` and embedded into the
+  binary; the Cargo build never runs the JavaScript toolchain (Q2, Q41). A CI job
   rebuilds the frontend and fails on a difference from the committed
   output; a `just` recipe runs the same check locally (Q46).
 - The site works when opened from the filesystem without an HTTP
