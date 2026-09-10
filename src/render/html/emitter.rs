@@ -40,7 +40,7 @@ use super::writer::HtmlWriter;
 use crate::id::Id;
 use crate::render::ResolvedLink;
 use crate::render::markdown::{
-    self, Alignment, BlockQuoteKind, HeadingLevel, InlineStyle, List, Output, Table, Warning,
+    self, Alignment, BlockQuoteKind, Heading, InlineStyle, List, Output, Table, Warning,
 };
 
 // =========================================================
@@ -85,6 +85,9 @@ pub struct Emitted {
     /// Fence languages the body's code blocks carry, each once, in order of
     /// first appearance.
     pub languages: Vec<String>,
+    /// The body's headings in document order, with the ids the fragment
+    /// carries, for an outline.
+    pub headings: Vec<Heading>,
 }
 
 /// Convert a note body to an HTML body fragment, resolving note links against
@@ -94,6 +97,7 @@ pub fn emit(body: &str, links: &[ResolvedLink], targets: &dyn Targets) -> Emitte
         targets,
         assets: Vec::new(),
         languages: Vec::new(),
+        headings: Vec::new(),
         footnotes: Vec::new(),
     };
     let (html, warnings) = markdown::walk(body, links, &mut output);
@@ -102,6 +106,7 @@ pub fn emit(body: &str, links: &[ResolvedLink], targets: &dyn Targets) -> Emitte
         warnings,
         assets: output.assets,
         languages: output.languages,
+        headings: output.headings,
     }
 }
 
@@ -113,6 +118,7 @@ struct HtmlOutput<'a> {
     targets: &'a dyn Targets,
     assets: Vec<String>,
     languages: Vec<String>,
+    headings: Vec<Heading>,
     /// The rendered content of every footnote the walk handed over, in
     /// first-reference order; the position is the footnote's number.
     footnotes: Vec<String>,
@@ -239,9 +245,16 @@ impl Output for HtmlOutput<'_> {
         format!("<p>{body}</p>\n")
     }
 
-    fn heading(&mut self, level: HeadingLevel, body: &str) -> String {
-        let level = level as usize;
-        format!("<h{level}>{body}</h{level}>\n")
+    fn heading(&mut self, heading: &Heading, body: &str) -> String {
+        self.headings.push(heading.clone());
+        let level = heading.level as usize;
+        let mut writer = HtmlWriter::new();
+        writer.syntax(&format!("<h{level} id=\""));
+        writer.attribute(&heading.id);
+        writer.syntax("\">");
+        writer.raw(body);
+        writer.syntax(&format!("</h{level}>\n"));
+        writer.finish()
     }
 
     fn quote(&mut self, kind: Option<BlockQuoteKind>, body: &str) -> String {
@@ -451,11 +464,44 @@ mod tests {
     }
 
     #[test]
-    fn headings_of_every_level() {
+    fn headings_of_every_level_carry_an_id() {
         assert_eq!(
             html("# 1\n## 2\n### 3\n#### 4\n##### 5\n###### 6"),
-            "<h1>1</h1>\n\n<h2>2</h2>\n\n<h3>3</h3>\n\n<h4>4</h4>\n\n<h5>5</h5>\n\n<h6>6</h6>\n"
+            "<h1 id=\"1\">1</h1>\n\n<h2 id=\"2\">2</h2>\n\n<h3 id=\"3\">3</h3>\n\n<h4 id=\"4\">4</h4>\n\n<h5 id=\"5\">5</h5>\n\n<h6 id=\"6\">6</h6>\n"
         );
+    }
+
+    #[test]
+    fn headings_are_recorded_for_the_outline_with_flattened_text() {
+        let out = emitted("# Intro *now*\n\n## Table\n\n## Table");
+        assert_eq!(
+            out.headings,
+            vec![
+                Heading {
+                    level: markdown::HeadingLevel::H1,
+                    id: "intro-now".to_string(),
+                    text: "Intro now".to_string(),
+                },
+                Heading {
+                    level: markdown::HeadingLevel::H2,
+                    id: "table".to_string(),
+                    text: "Table".to_string(),
+                },
+                Heading {
+                    level: markdown::HeadingLevel::H2,
+                    id: "table-1".to_string(),
+                    text: "Table".to_string(),
+                },
+            ]
+        );
+        assert!(out.html.contains("<h2 id=\"table-1\">Table</h2>"));
+    }
+
+    #[test]
+    fn a_heading_id_is_escaped_as_an_attribute() {
+        // The slug rule leaves no characters that need escaping, so this
+        // pins that the attribute context is used regardless.
+        assert_eq!(html("# a\"b"), "<h1 id=\"ab\">a&quot;b</h1>\n");
     }
 
     #[test]
@@ -857,6 +903,20 @@ mod tests {
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
         assert_eq!(out.assets, vec!["notes/other.md", "diagram.png"]);
         assert_eq!(out.languages, vec!["rust"]);
+        let outline: Vec<(usize, &str, &str)> = out
+            .headings
+            .iter()
+            .map(|h| (h.level as usize, h.id.as_str(), h.text.as_str()))
+            .collect();
+        assert_eq!(
+            outline,
+            vec![
+                (2, "table", "Table"),
+                (2, "lists", "Lists"),
+                (2, "code", "Code"),
+                (2, "media-and-html", "Media and HTML"),
+            ]
+        );
         insta::assert_snapshot!(out.html);
     }
 }

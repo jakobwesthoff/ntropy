@@ -47,7 +47,7 @@ an <a href="#table">anchor</a>, and a <a href="mailto:jaw@ekko.io">mail link</a>
 <p>Another reference to the same footnote<sup class="footnote-ref"><a href="#fn-1" id="fnref-1">1</a></sup>, one used before its
 definition<sup class="footnote-ref"><a href="#fn-2" id="fnref-2">2</a></sup>, and an undefined one[^ghost].</p>
 
-<h2>Table</h2>
+<h2 id="table">Table</h2>
 
 <table>
 <thead>
@@ -71,7 +71,7 @@ definition<sup class="footnote-ref"><a href="#fn-2" id="fnref-2">2</a></sup>, an
 </tbody>
 </table>
 
-<h2>Lists</h2>
+<h2 id="lists">Lists</h2>
 
 <ul>
 <li>bullet</li>
@@ -111,7 +111,7 @@ child level two
 </li>
 </ul>
 
-<h2>Code</h2>
+<h2 id="code">Code</h2>
 
 <pre><code class="language-rust">fn demo() {
     println!(&quot;a ``` fence inside&quot;);
@@ -121,7 +121,7 @@ child level two
 <pre><code>indented code block
 </code></pre>
 
-<h2>Media and HTML</h2>
+<h2 id="media-and-html">Media and HTML</h2>
 
 <p><img src="diagram.png" alt="A local diagram"></p>
 

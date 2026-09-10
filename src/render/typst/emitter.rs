@@ -42,7 +42,7 @@ use super::writer::{self, TypstWriter};
 use crate::id::Id;
 use crate::render::ResolvedLink;
 use crate::render::markdown::{
-    self, Alignment, BlockQuoteKind, HeadingLevel, InlineStyle, List, Output, Table, Warning,
+    self, Alignment, BlockQuoteKind, Heading, InlineStyle, List, Output, Table, Warning,
 };
 
 /// The extension a resolved note link targets: the artifact a default
@@ -186,8 +186,10 @@ impl Output for TypstOutput<'_> {
         format!("{body}\n")
     }
 
-    fn heading(&mut self, level: HeadingLevel, body: &str) -> String {
-        let marker = "=".repeat(level as usize);
+    /// The id is not carried into the document: nothing in the Typst output
+    /// links to a heading.
+    fn heading(&mut self, heading: &Heading, body: &str) -> String {
+        let marker = "=".repeat(heading.level as usize);
         format!("{marker} {body}\n")
     }
 

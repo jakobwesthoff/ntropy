@@ -93,6 +93,22 @@ pub struct List {
     pub items: Vec<String>,
 }
 
+/// A heading's level, its id, and its plain text.
+///
+/// The id follows GitHub's rule over the plain text: lowercased, whitespace
+/// becomes a hyphen, every character that is not a letter, a digit, a hyphen,
+/// or an underscore is dropped, and a repeated id within one body gets `-1`,
+/// `-2`, and so on. Anchor links written GitHub-style in a note therefore
+/// resolve unchanged.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Heading {
+    pub level: HeadingLevel,
+    pub id: String,
+    /// The heading's text with inline markup flattened away, as an outline
+    /// shows it.
+    pub text: String,
+}
+
 /// A finished table. The header fixes the column count; every body row is
 /// padded with empty cells to that width, so an output can rely on the table
 /// being rectangular.
@@ -159,7 +175,9 @@ pub trait Output {
 
     fn paragraph(&mut self, body: &str) -> String;
 
-    fn heading(&mut self, level: HeadingLevel, body: &str) -> String;
+    /// A heading. `body` is the rendered inline content; `heading` carries
+    /// the level, the id, and the plain text.
+    fn heading(&mut self, heading: &Heading, body: &str) -> String;
 
     /// A block quote, or a GFM callout when `kind` is present.
     fn quote(&mut self, kind: Option<BlockQuoteKind>, body: &str) -> String;
@@ -342,6 +360,12 @@ struct Walker<'a, O: Output> {
     /// Depth of open images. A positive depth flattens all inner inline markup
     /// into the current image's alt text.
     image_depth: usize,
+    /// The plain text of the open heading, collected beside the rendered
+    /// body while a heading is open; the id and the outline entry are built
+    /// from it.
+    heading_text: Option<String>,
+    /// Every heading id handed out so far, so a repeated one gets a suffix.
+    heading_ids: Vec<String>,
 }
 
 impl<'a, O: Output> Walker<'a, O> {
@@ -380,7 +404,30 @@ impl<'a, O: Output> Walker<'a, O> {
             nonce: format!("\u{0}ntropy-footnote-{}\u{0}", ulid::Ulid::generate()),
             link_depth: 0,
             image_depth: 0,
+            heading_text: None,
+            heading_ids: Vec::new(),
         }
+    }
+
+    /// Collect a heading's plain text: every text event while a heading is
+    /// open, whatever inline container it sits in.
+    fn push_heading_text(&mut self, text: &str) {
+        if let Some(heading) = &mut self.heading_text {
+            heading.push_str(text);
+        }
+    }
+
+    /// The id for a heading's plain text, unique within this body.
+    fn heading_id(&mut self, text: &str) -> String {
+        let base = slug(text);
+        let mut id = base.clone();
+        let mut suffix = 0;
+        while self.heading_ids.contains(&id) {
+            suffix += 1;
+            id = format!("{base}-{suffix}");
+        }
+        self.heading_ids.push(id.clone());
+        id
     }
 
     /// The placeholder emitted at a footnote reference and patched at the end
@@ -505,6 +552,7 @@ impl<'a, O: Output> Walker<'a, O> {
             // as text keeps the match total without a panic path.
             Event::InlineMath(m) | Event::DisplayMath(m) => self.text(&m),
             Event::SoftBreak => {
+                self.push_heading_text(" ");
                 if self.image_depth > 0 {
                     self.push_alt(" ");
                 } else {
@@ -513,6 +561,7 @@ impl<'a, O: Output> Walker<'a, O> {
                 }
             }
             Event::HardBreak => {
+                self.push_heading_text(" ");
                 if self.image_depth > 0 {
                     self.push_alt(" ");
                 } else {
@@ -545,6 +594,7 @@ impl<'a, O: Output> Walker<'a, O> {
     /// raw HTML block never carries text events; everywhere else it is
     /// rendered as text, autolinked unless it sits inside a link label.
     fn text(&mut self, text: &str) {
+        self.push_heading_text(text);
         if self.image_depth > 0 {
             self.push_alt(text);
             return;
@@ -590,6 +640,7 @@ impl<'a, O: Output> Walker<'a, O> {
     /// Inline code. Inside an image alt it degrades to the code's plain text,
     /// matching the flatten policy.
     fn code(&mut self, code: &str) {
+        self.push_heading_text(code);
         if self.image_depth > 0 {
             self.push_alt(code);
             return;
@@ -663,7 +714,10 @@ impl<'a, O: Output> Walker<'a, O> {
                 }
                 self.push(FrameKind::Paragraph);
             }
-            Tag::Heading { .. } => self.push(FrameKind::Heading),
+            Tag::Heading { .. } => {
+                self.heading_text = Some(String::new());
+                self.push(FrameKind::Heading);
+            }
             Tag::BlockQuote(_) => self.push(FrameKind::Quote),
             Tag::CodeBlock(kind) => {
                 let info = match kind {
@@ -786,7 +840,13 @@ impl<'a, O: Output> Walker<'a, O> {
             }
             TagEnd::Heading(level) => {
                 let body = self.pop().body;
-                let rendered = self.output.heading(level, &body);
+                let text = self
+                    .heading_text
+                    .take()
+                    .expect("a heading end closes the heading that set the text");
+                let id = self.heading_id(&text);
+                let heading = Heading { level, id, text };
+                let rendered = self.output.heading(&heading, &body);
                 self.append_block(&rendered);
             }
             TagEnd::BlockQuote(kind) => {
@@ -922,6 +982,24 @@ impl<'a, O: Output> Walker<'a, O> {
     }
 }
 
+/// GitHub's heading slug: lowercase, whitespace to hyphens, keep letters,
+/// digits, hyphens, and underscores, drop everything else. A heading whose
+/// text leaves nothing behind gets `heading`, so every heading has an anchor.
+fn slug(text: &str) -> String {
+    let mut out = String::new();
+    for c in text.chars() {
+        if c.is_whitespace() {
+            out.push('-');
+        } else if c.is_alphanumeric() || c == '-' || c == '_' {
+            out.extend(c.to_lowercase());
+        }
+    }
+    if out.is_empty() {
+        out.push_str("heading");
+    }
+    out
+}
+
 /// Case-insensitive ASCII prefix test, for the `www.` autolink rule. Compares
 /// bytes so an IRI match whose fourth byte falls inside a multi-byte character
 /// cannot panic a string slice.
@@ -999,8 +1077,11 @@ mod tests {
         fn paragraph(&mut self, body: &str) -> String {
             format!("(p {body})\n")
         }
-        fn heading(&mut self, level: HeadingLevel, body: &str) -> String {
-            format!("({level} {body})\n")
+        fn heading(&mut self, heading: &Heading, body: &str) -> String {
+            format!(
+                "({} #{} {:?} {body})\n",
+                heading.level, heading.id, heading.text
+            )
         }
         fn quote(&mut self, kind: Option<BlockQuoteKind>, body: &str) -> String {
             match kind {
@@ -1300,6 +1381,57 @@ mod tests {
         assert_eq!(
             trace("> [!TIP]\n> t\n\n> q"),
             "(callout Tip\n(p t)\n)\n\n(quote\n(p q)\n)\n"
+        );
+    }
+
+    // =====================================================================
+    // Headings
+    // =====================================================================
+
+    #[test]
+    fn a_heading_carries_its_level_id_and_flattened_text() {
+        assert_eq!(
+            trace("## Hello *big* `wide` [world](https://e.org)!"),
+            "(h2 #hello-big-wide-world \"Hello big wide world!\" Hello (Emph big) (code wide) (link https://e.org world)!)\n"
+        );
+    }
+
+    #[test]
+    fn heading_ids_follow_githubs_rule() {
+        assert_eq!(slug("Hello World"), "hello-world");
+        assert_eq!(slug("  Two   spaces "), "--two---spaces-");
+        assert_eq!(slug("Keep_under-scores"), "keep_under-scores");
+        assert_eq!(
+            slug("Drop: punctuation, (parens) & symbols!"),
+            "drop-punctuation-parens--symbols"
+        );
+        assert_eq!(slug("Über Größe 日本語"), "über-größe-日本語");
+        assert_eq!(slug("1.2 Numbers"), "12-numbers");
+        assert_eq!(slug("!!!"), "heading");
+        assert_eq!(slug(""), "heading");
+    }
+
+    #[test]
+    fn repeated_heading_ids_get_numbered_suffixes() {
+        assert_eq!(
+            trace("# A\n\n# A\n\n# A-1\n\n# A"),
+            "(h1 #a \"A\" A)\n\n(h1 #a-1 \"A\" A)\n\n(h1 #a-1-1 \"A-1\" A-1)\n\n(h1 #a-2 \"A\" A)\n"
+        );
+    }
+
+    #[test]
+    fn a_setext_heading_joins_its_lines_with_a_space() {
+        assert_eq!(
+            trace("Line one\nline two\n========"),
+            "(h1 #line-one-line-two \"Line one line two\" Line one(sb)line two)\n"
+        );
+    }
+
+    #[test]
+    fn an_image_inside_a_heading_contributes_its_alt_to_the_text() {
+        assert_eq!(
+            trace("# See ![the *plan*](p.png) now"),
+            "(h1 #see-the-plan-now \"See the plan now\" See (img p.png the plan) now)\n"
         );
     }
 
