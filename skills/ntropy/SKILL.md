@@ -63,7 +63,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
    external tool at all.
 11. **The vault's theme is automatic; never pass `--theme` to get it.** If
    `.ntropy/config.toml` has `[render] theme`, every `render` already uses it.
-   `--theme <name>` picks a different file from `.ntropy/themes/`, and
+   `--theme <name>` picks a different file from `.ntropy/themes/typst/`, and
    `--theme default` forces ntropy's built-in look. A theme that is missing or
    broken fails the render rather than falling back.
 12. **Rendering a linked set: no `-o`, one directory.** A note link becomes a

@@ -170,8 +170,8 @@ pub enum Command {
     /// need be on `PATH`. The `typst` format needs no external tool.
     ///
     /// The look comes from the vault's `[render] theme` in
-    /// `.ntropy/config.toml`, a Typst file in `.ntropy/themes/`; `--theme`
-    /// overrides it for one invocation.
+    /// `.ntropy/config.toml`, a Typst file in `.ntropy/themes/typst/`;
+    /// `--theme` overrides it for one invocation.
     Render {
         /// A full ULID or a query DSL expression (joined from trailing
         /// arguments; omitted = choose from all notes).
@@ -188,8 +188,9 @@ pub enum Command {
         output: Option<PathBuf>,
         /// Render with this theme instead of the vault's configured one.
         ///
-        /// Names a file in `<vault>/.ntropy/themes/<NAME>.typ`. `default`
-        /// selects ntropy's built-in look, overriding a configured theme.
+        /// Names a file in `<vault>/.ntropy/themes/typst/<NAME>.typ`.
+        /// `default` selects ntropy's built-in look, overriding a configured
+        /// theme.
         #[arg(long, value_name = "NAME")]
         theme: Option<String>,
         /// Print the artifact's path to stdout on success.

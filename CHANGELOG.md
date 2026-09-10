@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Changed
+
+- Typst themes live in `<vault>/.ntropy/themes/typst/`, one subdirectory
+  per theme type under `themes/`. A theme still at
+  `.ntropy/themes/<name>.typ` fails the render with a message naming both
+  the old and the new path; move the file to `themes/typst/` once.
+
 ## v1.12.0 - 2026-09-07
 
 ### Added

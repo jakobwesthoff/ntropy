@@ -602,7 +602,7 @@ reaches whichever was written last.
 ### Theming rendered documents
 
 A vault can render in its own livery. Drop a Typst file into
-`.ntropy/themes/` and name it in the `[render]` section:
+`.ntropy/themes/typst/` and name it in the `[render]` section:
 
 ```toml
 # .ntropy/config.toml
@@ -626,7 +626,7 @@ the page header and drops the metadata strip, so internal tags and
 `status: draft` never reach a customer:
 
 ```typst
-// .ntropy/themes/corporate.typ
+// .ntropy/themes/typst/corporate.typ
 #let note(title: none, frontmatter: (:), paper: "a4", body) = {
   set document(title: title) if title != none
 

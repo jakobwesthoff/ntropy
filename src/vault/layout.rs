@@ -18,9 +18,15 @@ pub const NTROPY_DIR: &str = ".ntropy";
 pub const CONFIG_FILE: &str = "config.toml";
 /// The templates directory, inside [`NTROPY_DIR`].
 pub const TEMPLATES_DIR: &str = "templates";
-/// The render themes directory, inside [`NTROPY_DIR`] (ADR 0045).
+/// The themes directory, inside [`NTROPY_DIR`], holding one subdirectory per
+/// theme type (ADR 0047).
 pub const THEMES_DIR: &str = "themes";
-/// The filename extension of a render theme, a Typst source file.
+/// The Typst render themes, inside [`THEMES_DIR`] (ADR 0045).
+pub const TYPST_THEMES_DIR: &str = "typst";
+/// The site themes, inside [`THEMES_DIR`], one directory per theme
+/// (ADR 0048).
+pub const SITE_THEMES_DIR: &str = "site";
+/// The filename extension of a Typst render theme.
 pub const THEME_EXTENSION: &str = "typ";
 /// The default template file, inside [`TEMPLATES_DIR`].
 pub const DEFAULT_TEMPLATE_FILE: &str = "default.md";
@@ -103,14 +109,39 @@ impl Layout {
         self.ntropy_dir().join(THEMES_DIR)
     }
 
-    /// `<root>/.ntropy/themes/<name>.typ`, a render theme's source file.
+    /// `<root>/.ntropy/themes/typst`.
+    pub fn typst_themes_dir(&self) -> PathBuf {
+        self.themes_dir().join(TYPST_THEMES_DIR)
+    }
+
+    /// `<root>/.ntropy/themes/typst/<name>.typ`, a Typst render theme's
+    /// source file.
     ///
     /// The name is a single filename component by contract, which
     /// [`crate::render::theme::validate_name`] enforces before this is called;
     /// joining a name carrying separators would otherwise reach outside the
     /// themes directory.
     pub fn theme_file(&self, name: &str) -> PathBuf {
+        self.typst_themes_dir()
+            .join(format!("{name}.{THEME_EXTENSION}"))
+    }
+
+    /// `<root>/.ntropy/themes/<name>.typ`, where a Typst theme lived before
+    /// the themes directory was split by type. Read only to tell a user
+    /// whose theme is still there where it has to move.
+    pub fn legacy_theme_file(&self, name: &str) -> PathBuf {
         self.themes_dir().join(format!("{name}.{THEME_EXTENSION}"))
+    }
+
+    /// `<root>/.ntropy/themes/site`.
+    pub fn site_themes_dir(&self) -> PathBuf {
+        self.themes_dir().join(SITE_THEMES_DIR)
+    }
+
+    /// `<root>/.ntropy/themes/site/<name>`, a site theme's directory. The
+    /// same single-component contract as [`Self::theme_file`] applies.
+    pub fn site_theme_dir(&self, name: &str) -> PathBuf {
+        self.site_themes_dir().join(name)
     }
 
     /// The output directory of a named view: `<root>/<name>`.
@@ -187,6 +218,32 @@ mod tests {
         assert_eq!(layout.view_dir("by-tag"), PathBuf::from("/vault/by-tag"));
         assert_eq!(layout.gitignore_file(), PathBuf::from("/vault/.gitignore"));
         assert_eq!(layout.readme_file(), PathBuf::from("/vault/README.md"));
+    }
+
+    #[test]
+    fn computes_theme_paths_by_type() {
+        let layout = Layout::new("/vault");
+        assert_eq!(layout.themes_dir(), PathBuf::from("/vault/.ntropy/themes"));
+        assert_eq!(
+            layout.typst_themes_dir(),
+            PathBuf::from("/vault/.ntropy/themes/typst")
+        );
+        assert_eq!(
+            layout.theme_file("corporate"),
+            PathBuf::from("/vault/.ntropy/themes/typst/corporate.typ")
+        );
+        assert_eq!(
+            layout.legacy_theme_file("corporate"),
+            PathBuf::from("/vault/.ntropy/themes/corporate.typ")
+        );
+        assert_eq!(
+            layout.site_themes_dir(),
+            PathBuf::from("/vault/.ntropy/themes/site")
+        );
+        assert_eq!(
+            layout.site_theme_dir("corporate"),
+            PathBuf::from("/vault/.ntropy/themes/site/corporate")
+        );
     }
 
     #[test]

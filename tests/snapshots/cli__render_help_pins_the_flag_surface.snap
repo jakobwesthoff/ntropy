@@ -15,7 +15,7 @@ Render a note to a document artifact.
 
 `--to` selects the output format: `pdf` (the default) or `typst`, the emitted Typst document. `pdf` is produced by ntropy's own typst engine, which compiles the note with the external `typst` binary, so only `typst` need be on `PATH`. The `typst` format needs no external tool.
 
-The look comes from the vault's `[render] theme` in `.ntropy/config.toml`, a Typst file in `.ntropy/themes/`; `--theme` overrides it for one invocation.
+The look comes from the vault's `[render] theme` in `.ntropy/config.toml`, a Typst file in `.ntropy/themes/typst/`; `--theme` overrides it for one invocation.
 
 Usage: ntropy render [OPTIONS] [ID|QUERY]...
 
@@ -52,7 +52,7 @@ Options:
       --theme <NAME>
           Render with this theme instead of the vault's configured one.
           
-          Names a file in `<vault>/.ntropy/themes/<NAME>.typ`. `default` selects ntropy's built-in look, overriding a configured theme.
+          Names a file in `<vault>/.ntropy/themes/typst/<NAME>.typ`. `default` selects ntropy's built-in look, overriding a configured theme.
 
   -p, --print
           Print the artifact's path to stdout on success

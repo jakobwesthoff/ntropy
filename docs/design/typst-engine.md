@@ -307,7 +307,8 @@ identical file.
 
 ## Theme contract
 
-A vault theme is a Typst file at `<vault>/.ntropy/themes/<name>.typ`,
+A vault theme is a Typst file at `<vault>/.ntropy/themes/typst/<name>.typ`
+(the themes directory holds one subdirectory per theme type, ADR 0047),
 selected by `[render] theme` or `--theme` (ADR 0045). Its source is
 emitted **after** the prelude and **before** the template application:
 

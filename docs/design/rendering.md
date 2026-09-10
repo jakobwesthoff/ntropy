@@ -251,7 +251,7 @@ decides how to honor a setting for the formats it produces.
   a typed enum, so a typo is a config parse error naming the bad value
   before anything scans or renders. The typst engine passes it into the
   emitted document's template application.
-- `theme` names a Typst file in `<vault>/.ntropy/themes/` and is the
+- `theme` names a Typst file in `<vault>/.ntropy/themes/typst/` and is the
   vault-wide default look (ADR 0045). It is a free-form string rather
   than an enum, because the legal values are whatever files the vault
   holds; a name resolving to no file is reported when the theme loads,

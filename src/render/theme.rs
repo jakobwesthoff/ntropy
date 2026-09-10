@@ -4,20 +4,21 @@
 
 //! Render themes: selecting one, and loading its source (ADR 0045).
 //!
-//! A theme is a Typst source file at `<vault>/.ntropy/themes/<name>.typ`,
-//! emitted after the engine's own prelude so its definitions shadow the
-//! built-in ones. Selection and loading are separated: [`select`] is a pure
-//! decision over the two places a name can come from, and [`load`] is the one
-//! step that touches the filesystem, so precedence is testable without a vault
-//! on disk.
+//! A theme is a Typst source file at `<vault>/.ntropy/themes/typst/<name>.typ`
+//! (ADR 0047), emitted after the engine's own prelude so its definitions
+//! shadow the built-in ones. Selection and loading are separated: [`select`]
+//! is a pure decision over the two places a name can come from, and [`load`]
+//! is the one step that touches the filesystem, so precedence is testable
+//! without a vault on disk.
 //!
 //! Absence is not an error. A vault that configures no theme, and an
 //! invocation that overrides one with [`DEFAULT_THEME`], both yield `None`,
 //! which the engine renders exactly as it always has.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use super::RenderError;
+use crate::vault::layout::Layout;
 
 /// The reserved theme name that selects the engine's built-in look.
 ///
@@ -46,25 +47,38 @@ pub fn select<'a>(flag: Option<&'a str>, configured: Option<&'a str>) -> Option<
         .filter(|name| !name.is_empty() && *name != DEFAULT_THEME)
 }
 
-/// Load the theme named `name` from `themes_dir`.
+/// Load the theme named `name` from the vault's Typst themes directory.
 ///
 /// The name is validated first: it names one file inside the themes directory,
 /// never a path reaching out of it. A missing file is an error naming the path
 /// that was looked for rather than a silent fall back to the built-in look,
 /// since a document in the wrong livery is worse than one that was not produced
-/// (ADR 0045).
-pub fn load(themes_dir: &Path, name: &str) -> Result<Theme, RenderError> {
+/// (ADR 0045). A file that sits at the location Typst themes had before the
+/// directory was split by type is reported with both paths, so the move is one
+/// command away.
+pub fn load(layout: &Layout, name: &str) -> Result<Theme, RenderError> {
     validate_name(name)?;
-    let path = themes_dir.join(format!("{name}.{}", crate::vault::layout::THEME_EXTENSION));
+    let path = layout.theme_file(name);
     match std::fs::read_to_string(&path) {
         Ok(source) => Ok(Theme {
             name: name.to_string(),
             source,
         }),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(RenderError::ThemeNotFound {
-            name: name.to_string(),
-            path,
-        }),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let legacy = layout.legacy_theme_file(name);
+            if legacy.is_file() {
+                Err(RenderError::ThemeMoved {
+                    name: name.to_string(),
+                    old: legacy,
+                    new: path,
+                })
+            } else {
+                Err(RenderError::ThemeNotFound {
+                    name: name.to_string(),
+                    path,
+                })
+            }
+        }
         Err(source) => Err(RenderError::ThemeRead { path, source }),
     }
 }
@@ -88,12 +102,6 @@ pub fn validate_name(name: &str) -> Result<(), RenderError> {
         });
     }
     Ok(())
-}
-
-/// The path [`load`] would read for `name`, for an error message built before
-/// or without a load attempt.
-pub fn path_for(themes_dir: &Path, name: &str) -> PathBuf {
-    themes_dir.join(format!("{name}.{}", crate::vault::layout::THEME_EXTENSION))
 }
 
 #[cfg(test)]
@@ -185,26 +193,28 @@ mod tests {
     // Loading
     // =====================================================================
 
-    /// A themes directory holding one theme file.
-    fn themes_dir_with(name: &str, source: &str) -> tempfile::TempDir {
+    /// A vault root whose Typst themes directory exists and is empty.
+    fn vault() -> (tempfile::TempDir, Layout) {
         let dir = tempfile::tempdir().expect("temp dir");
-        std::fs::write(dir.path().join(format!("{name}.typ")), source).expect("write theme");
-        dir
+        let layout = Layout::new(dir.path());
+        std::fs::create_dir_all(layout.typst_themes_dir()).expect("themes dir");
+        (dir, layout)
     }
 
     #[test]
     fn a_present_theme_loads_its_source_verbatim() {
         let source = "#let note(title: none, frontmatter: (:), paper: \"a4\", body) = body\n";
-        let dir = themes_dir_with("corporate", source);
-        let theme = load(dir.path(), "corporate").expect("the theme loads");
+        let (_dir, layout) = vault();
+        std::fs::write(layout.theme_file("corporate"), source).expect("write theme");
+        let theme = load(&layout, "corporate").expect("the theme loads");
         assert_eq!(theme.name, "corporate");
         assert_eq!(theme.source, source);
     }
 
     #[test]
     fn a_missing_theme_errors_naming_the_path_it_looked_for() {
-        let dir = tempfile::tempdir().expect("temp dir");
-        let err = load(dir.path(), "no-such-theme").expect_err("a missing theme errors");
+        let (_dir, layout) = vault();
+        let err = load(&layout, "no-such-theme").expect_err("a missing theme errors");
         let message = err.to_string();
         assert!(
             message.contains("no-such-theme"),
@@ -212,10 +222,44 @@ mod tests {
         );
         match err {
             RenderError::ThemeNotFound { path, .. } => {
-                assert_eq!(path, dir.path().join("no-such-theme.typ"));
+                assert_eq!(path, layout.theme_file("no-such-theme"));
             }
             other => panic!("expected ThemeNotFound, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_theme_at_the_pre_split_location_is_reported_with_both_paths() {
+        // The vault was themed before `themes/` was split by type; the file
+        // is exactly where ADR 0045 put it. The error says where it is and
+        // where it has to go, and nothing is loaded from the old place.
+        let (_dir, layout) = vault();
+        std::fs::write(
+            layout.legacy_theme_file("corporate"),
+            "#let note(body) = body",
+        )
+        .expect("write the legacy theme");
+        let err = load(&layout, "corporate").expect_err("the legacy location is not read");
+        match &err {
+            RenderError::ThemeMoved { name, old, new } => {
+                assert_eq!(name, "corporate");
+                assert_eq!(*old, layout.legacy_theme_file("corporate"));
+                assert_eq!(*new, layout.theme_file("corporate"));
+            }
+            other => panic!("expected ThemeMoved, got {other:?}"),
+        }
+        let message = err.to_string();
+        assert!(message.contains("themes/corporate.typ"), "{message}");
+        assert!(message.contains("themes/typst/corporate.typ"), "{message}");
+    }
+
+    #[test]
+    fn a_theme_present_in_both_locations_loads_from_the_new_one() {
+        let (_dir, layout) = vault();
+        std::fs::write(layout.legacy_theme_file("corporate"), "OLD").expect("write legacy");
+        std::fs::write(layout.theme_file("corporate"), "NEW").expect("write theme");
+        let theme = load(&layout, "corporate").expect("the theme loads");
+        assert_eq!(theme.source, "NEW");
     }
 
     #[test]
@@ -223,9 +267,9 @@ mod tests {
         // A directory where the file should be: it exists, so this is not the
         // "you have not created it" case, and the distinct variant keeps the
         // two apart in the message the user sees.
-        let dir = tempfile::tempdir().expect("temp dir");
-        std::fs::create_dir(dir.path().join("corporate.typ")).expect("create the blocking dir");
-        let err = load(dir.path(), "corporate").expect_err("a directory does not read");
+        let (_dir, layout) = vault();
+        std::fs::create_dir(layout.theme_file("corporate")).expect("create the blocking dir");
+        let err = load(&layout, "corporate").expect_err("a directory does not read");
         assert!(
             matches!(err, RenderError::ThemeRead { .. }),
             "expected ThemeRead, got {err:?}"
@@ -234,28 +278,19 @@ mod tests {
 
     #[test]
     fn loading_rejects_a_traversing_name_before_touching_the_filesystem() {
-        // The parent of the themes directory holds a readable file; a
-        // traversing name must not reach it.
-        let parent = tempfile::tempdir().expect("temp dir");
-        std::fs::write(parent.path().join("outside.typ"), "#let note(body) = body")
-            .expect("write the outside file");
-        let themes = parent.path().join("themes");
-        std::fs::create_dir(&themes).expect("themes dir");
+        // The themes directory's parent holds a readable file; a traversing
+        // name must not reach it.
+        let (_dir, layout) = vault();
+        std::fs::write(
+            layout.themes_dir().join("outside.typ"),
+            "#let note(body) = body",
+        )
+        .expect("write the outside file");
 
-        let err = load(&themes, "../outside").expect_err("traversal is rejected");
+        let err = load(&layout, "../outside").expect_err("traversal is rejected");
         assert!(
             matches!(err, RenderError::InvalidThemeName { .. }),
             "expected InvalidThemeName, got {err:?}"
         );
-    }
-
-    #[test]
-    fn path_for_matches_what_load_reads() {
-        let dir = themes_dir_with("corporate", "#let note(body) = body");
-        assert_eq!(
-            path_for(dir.path(), "corporate"),
-            dir.path().join("corporate.typ")
-        );
-        assert!(path_for(dir.path(), "corporate").is_file());
     }
 }

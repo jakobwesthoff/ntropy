@@ -197,6 +197,19 @@ pub enum RenderError {
     #[error("theme `{name}` not found at {}", path.display())]
     ThemeNotFound { name: String, path: PathBuf },
 
+    /// The theme's file sits where Typst themes lived before the themes
+    /// directory was split by type (ADR 0047); it has to be moved.
+    #[error(
+        "theme `{name}` was found at {}; Typst themes live in the `typst` subdirectory, move it to {}",
+        old.display(),
+        new.display()
+    )]
+    ThemeMoved {
+        name: String,
+        old: PathBuf,
+        new: PathBuf,
+    },
+
     /// The theme's file exists but could not be read.
     #[error("while reading the theme at {}", path.display())]
     ThemeRead {

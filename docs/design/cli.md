@@ -201,7 +201,7 @@ correctly, and is a successful no-op without it, like `delete`.
   points at (ADR 0044), so a set of notes rendered without `-o` into one
   directory cross-references itself.
 - `--theme <name>` renders with a named theme from
-  `<vault>/.ntropy/themes/<name>.typ`, overriding the vault's
+  `<vault>/.ntropy/themes/typst/<name>.typ`, overriding the vault's
   `[render] theme` for this invocation (ADR 0045). The reserved name
   `default` selects the built-in look. A name with no file, or one carrying a
   path, fails before the vault is scanned.

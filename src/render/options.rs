@@ -64,7 +64,8 @@ pub struct RenderOptions {
     #[serde(default)]
     pub paper: Paper,
     /// The vault's default theme name, resolved against
-    /// `<vault>/.ntropy/themes/<name>.typ` (ADR 0045). `None` — the key
+    /// `<vault>/.ntropy/themes/typst/<name>.typ` (ADR 0045, ADR 0047).
+    /// `None` — the key
     /// absent — is the engine's built-in look, and so is the reserved name
     /// `default`.
     ///

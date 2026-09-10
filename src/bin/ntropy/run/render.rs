@@ -67,7 +67,7 @@ pub fn cmd_render(
     // either source means the built-in look and reads no file.
     let selected = ntropy::render::theme::select(theme.as_deref(), config.render.theme.as_deref());
     let loaded_theme = selected
-        .map(|name| ntropy::render::theme::load(&session.layout().themes_dir(), name))
+        .map(|name| ntropy::render::theme::load(session.layout(), name))
         .transpose()
         .context("while loading the render theme")?;
 

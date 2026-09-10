@@ -1406,9 +1406,9 @@ fn a_resolved_note_link_targets_the_targets_default_artifact_name() {
 // Render themes (ADR 0045)
 // =========================================================================
 
-/// Write a theme file into the vault's themes directory, creating it.
+/// Write a theme file into the vault's Typst themes directory, creating it.
 fn write_theme(vault: &Path, name: &str, source: &str) {
-    let dir = vault.join(".ntropy/themes");
+    let dir = vault.join(".ntropy/themes/typst");
     fs::create_dir_all(&dir).expect("themes dir");
     fs::write(dir.join(format!("{name}.typ")), source).expect("write theme");
 }
@@ -1602,8 +1602,49 @@ fn a_configured_theme_with_no_file_errors_naming_the_path() {
     assert!(!output.status.success(), "a missing theme must fail");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("no-such-theme") && stderr.contains(".ntropy/themes/no-such-theme.typ"),
+        stderr.contains("no-such-theme")
+            && stderr.contains(".ntropy/themes/typst/no-such-theme.typ"),
         "the error does not name the theme and the path: {stderr}"
+    );
+    assert!(
+        !dir.path().join("report.typ").exists(),
+        "an artifact was produced despite the failure"
+    );
+}
+
+#[test]
+fn a_theme_left_at_the_pre_split_location_fails_naming_both_paths() {
+    // A vault themed under v1.12 keeps its file at `.ntropy/themes/<name>.typ`
+    // (ADR 0047 moved Typst themes into `themes/typst/`). The render fails,
+    // says where the file is and where it has to go, and never reads it
+    // from the old place.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    let legacy = dir.path().join(".ntropy/themes");
+    fs::create_dir_all(&legacy).expect("themes dir");
+    fs::write(
+        legacy.join("corporate.typ"),
+        marker_theme("CORPORATE-THEME"),
+    )
+    .expect("write the legacy theme");
+    configure_theme(dir.path(), "corporate");
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success(), "a moved theme must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(".ntropy/themes/corporate.typ")
+            && stderr.contains(".ntropy/themes/typst/corporate.typ"),
+        "the error does not name both locations: {stderr}"
     );
     assert!(
         !dir.path().join("report.typ").exists(),
