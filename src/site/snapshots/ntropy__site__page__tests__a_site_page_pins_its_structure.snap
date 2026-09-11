@@ -10,8 +10,8 @@ expression: page().render()
 <title>Rust &lt;Tips&gt; · Vault &amp; Co</title>
 <link rel="stylesheet" href="../assets/style.css">
 <script>try{var t=localStorage.getItem("ntropy-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
-<script defer src="../assets/app.js"></script>
 <script defer src="../assets/grammars/rust.js"></script>
+<script defer src="../assets/app.js"></script>
 
 </head>
 <body class="site">

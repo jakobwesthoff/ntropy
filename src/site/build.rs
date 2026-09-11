@@ -583,8 +583,8 @@ fn breadcrumbs(model: &Model, placement: &Placement, prefix: &str) -> Vec<PageLi
 }
 
 /// The chrome of a page at `at`: sidebar with the current trail open, the
-/// stylesheet and scripts relative to the page (the page script always, one
-/// script per grammar in `grammars`), and the given navigation.
+/// stylesheet and scripts relative to the page (one script per grammar in
+/// `grammars`, then the page script), and the given navigation.
 #[allow(clippy::too_many_arguments)]
 fn chrome(
     model: &Model,
@@ -599,13 +599,18 @@ fn chrome(
     grammars: &[String],
 ) -> Page {
     let prefix = nav::prefix_for(at);
-    let mut scripts = vec![format!("{prefix}{ASSETS_DIR}/{}", frontend::APP_SCRIPT)];
-    for grammar in grammars {
-        scripts.push(format!(
-            "{prefix}{ASSETS_DIR}/{}/{grammar}.js",
-            frontend::GRAMMARS_DIR
-        ));
-    }
+    // Deferred scripts run in document order, and the page script highlights
+    // as soon as it runs, so every grammar script has to register before it.
+    let mut scripts: Vec<String> = grammars
+        .iter()
+        .map(|grammar| {
+            format!(
+                "{prefix}{ASSETS_DIR}/{}/{grammar}.js",
+                frontend::GRAMMARS_DIR
+            )
+        })
+        .collect();
+    scripts.push(format!("{prefix}{ASSETS_DIR}/{}", frontend::APP_SCRIPT));
     Page {
         lang: model.lang.clone(),
         site_title: model.title.clone(),
@@ -871,6 +876,11 @@ mod tests {
             page.contains("<script defer src=\"../assets/grammars/rust.js\"></script>"),
             "{page}"
         );
+        // The grammar registers before the page script highlights: deferred
+        // scripts run in document order.
+        let grammar_at = page.find("grammars/rust.js").expect("grammar script");
+        let app_at = page.find("assets/app.js").expect("page script");
+        assert!(grammar_at < app_at, "{page}");
         assert!(!page.contains("grammars/cobol.js"), "{page}");
         // A page without code loads the page script alone.
         let plain = text(&built, "notes/plain.html");

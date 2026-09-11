@@ -40,7 +40,9 @@ output.
 
 Every page of a site loads `assets/app.js` with `defer`; a page whose
 code blocks use a language with a grammar also loads
-`assets/grammars/<name>.js` for that grammar and each grammar it embeds.
+`assets/grammars/<name>.js` for that grammar and each grammar it embeds,
+before the page script, since deferred scripts run in document order and
+the page script highlights as soon as it runs.
 The export writes those scripts, inflating the blob with the pure-Rust
 `ruzstd` crate and wrapping each grammar's JSON in a script that appends
 it to `window.__ntropyGrammars`. A fence language without a grammar is

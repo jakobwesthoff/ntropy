@@ -292,8 +292,8 @@ mod tests {
             prefix: "../".to_string(),
             stylesheet: "../assets/style.css".to_string(),
             scripts: vec![
-                "../assets/app.js".to_string(),
                 "../assets/grammars/rust.js".to_string(),
+                "../assets/app.js".to_string(),
             ],
             icons: "<svg hidden><symbol id=\"icon-menu\"/></svg>".to_string(),
             sidebar: "<nav class=\"sidebar\">S</nav>\n".to_string(),
