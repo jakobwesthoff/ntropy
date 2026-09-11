@@ -21,13 +21,15 @@ skill cannot build or shape a site today.
   note the query left out), and `--strict`. Source:
   `docs/design/site-export.md`, "CLI surface".
 - **Configuration.** The `[site]` table of `.ntropy/config.toml`:
-  `theme`, `index`, `title`, `lang`, and from ADR 0056 `root` and the
-  `[[site.nav]]` table with its item kinds (`note`, `tag`, `view` with
-  optional `group`, `tags = true`, `label` with `items`), including that
-  a nav table is the whole sidebar. Source: `docs/design/site-export.md`,
+  `theme`, `index`, `title`, `lang`, and from ADR 0056 `related`,
+  `root`, and the `[[site.nav]]` table with its item kinds (`note`,
+  `tag`, `view` with optional `group`, `tags = true`, `label` with
+  `items`), including that a nav table is the whole sidebar. Source: `docs/design/site-export.md`,
   "Configuration", and `docs/design/configuration.md`.
 - **Structure from frontmatter.** The `site` table a note may carry:
-  `order`, `label`, `hidden`, `index`, what each does, and the order rule
+  `order`, `label`, `hidden`, `index`, `listing`, `related`, what each
+  does (a landing note stands alone on its group page unless `listing`
+  is true), and the order rule
   within a group (ordered entries first, then notes newest first, then
   groups by label). A worked example of a documentation tree built from
   one tag subtree with landing notes, in the style of
