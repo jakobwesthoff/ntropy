@@ -1832,6 +1832,97 @@ fn site_query_restricts_the_notes_and_warns_about_links_left_out() {
 }
 
 #[test]
+fn site_roots_the_sidebar_by_config_or_by_a_tag_query_and_takes_a_nav_table() {
+    // Replaces the `[site]` table, where `configure_site` appends one.
+    let set_site = |vault: &Path, table: &str| {
+        let path = vault.join(".ntropy/config.toml");
+        let text = fs::read_to_string(&path).expect("config exists");
+        let base = text
+            .split("\n[site]\n")
+            .next()
+            .expect("the split yields text");
+        fs::write(path, format!("{base}\n[site]\n{table}")).expect("write config");
+    };
+
+    // A single `tag:` query roots the sidebar at that tag without config.
+    let dir = site_vault();
+    let output = site(dir.path(), &["-o", "by-query", "tag:work"]);
+    assert!(output.status.success());
+    let page =
+        fs::read_to_string(dir.path().join("by-query/notes/rust-tips.html")).expect("note page");
+    assert!(
+        page.contains("<a class=\"nav-all\" href=\"../tags/work/index.html\">Overview</a>"),
+        "{page}"
+    );
+    assert!(
+        page.contains("<li><a href=\"../tags/work/index.html\">work</a></li>"),
+        "the breadcrumb starts at the root: {page}"
+    );
+
+    // A configured root wins over the query, and a bad one warns.
+    set_site(dir.path(), "root = \"tags/work/rust\"\n");
+    let output = site(dir.path(), &["-o", "by-root", "tag:work"]);
+    assert!(output.status.success());
+    let page =
+        fs::read_to_string(dir.path().join("by-root/notes/rust-tips.html")).expect("note page");
+    assert!(
+        page.contains("<a class=\"nav-all\" href=\"../tags/work/rust/index.html\">Overview</a>"),
+        "{page}"
+    );
+    set_site(dir.path(), "root = \"tags/no-such-tag\"\n");
+    let output = site(dir.path(), &["-o", "bad-root"]);
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("the sidebar root `tags/no-such-tag` is not a tag or view group page"),
+        "{stderr}"
+    );
+
+    // A nav table is the whole sidebar; an item the site cannot resolve
+    // warns and is left out.
+    let dir = site_vault();
+    configure_site(
+        dir.path(),
+        &format!(
+            "[[site.nav]]\nlabel = \"Handbook\"\nitems = [\n  {{ note = \"{ULID_B}\", label = \"Read me first\" }},\n  {{ label = \"Topics\", items = [{{ tag = \"work\" }}, {{ tag = \"no-such-tag\" }}] }},\n]\n"
+        ),
+    );
+    let output = site(dir.path(), &["-o", "by-nav"]);
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no exported note carries the tag `no-such-tag`"),
+        "{stderr}"
+    );
+    let page =
+        fs::read_to_string(dir.path().join("by-nav/notes/the-guide.html")).expect("note page");
+    assert!(
+        page.contains("<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg>Handbook</summary>"),
+        "{page}"
+    );
+    assert!(
+        page.contains(
+            "<a href=\"../notes/the-guide.html\" aria-current=\"page\">Read me first</a>"
+        ),
+        "{page}"
+    );
+    assert!(!page.contains("nav-tags"), "the tag cloud is gone: {page}");
+    assert!(
+        page.contains("<ol>\n<li><span>Handbook</span></li>\n</ol>"),
+        "{page}"
+    );
+    // A nav table that does not parse fails the command before anything
+    // is written.
+    set_site(
+        dir.path(),
+        "[[site.nav]]\nlabel = \"X\"\nitems = [{ notes = \"y\" }]\n",
+    );
+    let output = site(dir.path(), &["-o", "bad-nav"]);
+    assert!(!output.status.success());
+    assert!(!dir.path().join("bad-nav").exists());
+}
+
+#[test]
 fn site_uses_the_configured_site_theme_and_copies_its_files() {
     let dir = site_vault();
     write_site_theme(dir.path(), "corporate", "/* CORPORATE-SITE-THEME */");

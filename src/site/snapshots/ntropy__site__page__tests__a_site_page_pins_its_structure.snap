@@ -35,7 +35,8 @@ expression: page().render()
 </div>
 <main>
 <nav class="breadcrumbs" aria-label="You are here"><ol>
-<li><a href="../views/by-status/index.html">by-status</a></li>
+<li><span>Reference</span></li>
+<li><svg class="icon sep" aria-hidden="true"><use href="#icon-chevron-right"/></svg><a href="../views/by-status/index.html">by-status</a></li>
 <li><svg class="icon sep" aria-hidden="true"><use href="#icon-chevron-right"/></svg><a href="../views/by-status/done/index.html">done</a></li>
 </ol></nav>
 <div class="content">

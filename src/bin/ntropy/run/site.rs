@@ -63,6 +63,12 @@ pub fn cmd_site(
     let matches = ops::search(session, None).context("while scanning the vault")?;
     output::print_warnings(&matches.warnings);
     let vault_ids: HashSet<_> = matches.notes.iter().map(|note| note.id).collect();
+    // The parsed query also reaches the build: a single `tag:` predicate
+    // roots the sidebar at that tag (ADR 0056).
+    let parsed = match super::optional(&query) {
+        Some(query) => Some(ntropy::query::parse(query).context("while parsing the query")?),
+        None => None,
+    };
     let notes: Vec<_> = match super::optional(&query) {
         Some(query) => {
             let prepared = ntropy::query::compile(query).context("while compiling the query")?;
@@ -91,6 +97,7 @@ pub fn cmd_site(
         vault_ids: &vault_ids,
         views: &views,
         options: &config.site,
+        query: parsed.as_ref(),
         fallback_title: &fallback_title,
         vault_root: session.root(),
         theme: loaded_theme.as_ref().zip(theme_dir.as_deref()),

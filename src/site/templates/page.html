@@ -25,7 +25,7 @@
 </div>
 <main>
 {% if breadcrumbs %}<nav class="breadcrumbs" aria-label="You are here"><ol>
-{% for crumb in breadcrumbs %}<li>{% if not loop.first %}<svg class="icon sep" aria-hidden="true"><use href="#icon-chevron-right"/></svg>{% endif %}<a href="{{ crumb.href }}">{{ crumb.label }}</a></li>
+{% for crumb in breadcrumbs %}<li>{% if not loop.first %}<svg class="icon sep" aria-hidden="true"><use href="#icon-chevron-right"/></svg>{% endif %}{% if crumb.href %}<a href="{{ crumb.href }}">{{ crumb.label }}</a>{% else %}<span>{{ crumb.label }}</span>{% endif %}</li>
 {% endfor %}</ol></nav>
 {% endif %}<div class="content">
 {{ body | trim }}

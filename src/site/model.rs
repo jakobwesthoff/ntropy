@@ -18,10 +18,12 @@ use serde_yaml_ng::{Mapping, Value};
 
 use crate::id::Id;
 use crate::note::Note;
-use crate::text::slug;
+use crate::query::Query;
+use crate::text::{slug, tag};
 use crate::view::{self, ViewDef};
 
 use super::SiteOptions;
+use super::options::{NavEntry, NavEntryKind, NavSection};
 
 /// The number of newest notes the generated front page lists.
 pub const FRONT_PAGE_RECENT: usize = 10;
@@ -259,14 +261,51 @@ pub struct Section {
     pub groups: Vec<Group>,
 }
 
+/// One item of the sidebar (ADR 0056).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NavItem {
+    /// A note, by model index, shown by `label` or by its own name.
+    Note { index: usize, label: Option<String> },
+    /// A group of a section with its whole subtree, shown by `label` or by
+    /// its own.
+    Group {
+        section: usize,
+        path: Vec<usize>,
+        label: Option<String>,
+    },
+    /// A group assembled by hand, with no page of its own.
+    Curated { label: String, items: Vec<NavItem> },
+}
+
+/// One section of the sidebar: a section of the site, the root group, or a
+/// `[[site.nav]]` table.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SidebarSection {
+    pub label: String,
+    /// The section's own page and the text of the link to it, when it has
+    /// one.
+    pub page: Option<(String, &'static str)>,
+    /// Drawn as a cloud of the items' groups with counts, the tag section's
+    /// shape, rather than as a tree.
+    pub cloud: bool,
+    pub items: Vec<NavItem>,
+}
+
+/// One step of a breadcrumb: a page of the site, or a hand-assembled nav
+/// group that has none.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Crumb {
+    pub label: String,
+    pub page: Option<String>,
+}
+
 /// Where a note sits first in sidebar order, which fixes its breadcrumb and
 /// its previous and next neighbours (ADR 0054).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Placement {
-    pub section: usize,
-    /// The path of child indices from the section's groups down to the
+    /// The breadcrumb: the sidebar section, then each step down to the
     /// group holding the note.
-    pub path: Vec<usize>,
+    pub trail: Vec<Crumb>,
     pub prev: Option<usize>,
     pub next: Option<usize>,
 }
@@ -296,8 +335,14 @@ pub struct Model {
     /// Every exported note, newest first.
     pub notes: Vec<NoteEntry>,
     pub sections: Vec<Section>,
+    /// The sidebar: the sections, the root group's entries, or the nav
+    /// table (ADR 0056).
+    pub sidebar: Vec<SidebarSection>,
     /// Per note, its first placement, or `None` for a note in no group.
     pub placements: Vec<Option<Placement>>,
+    /// Per group the sidebar reaches, keyed by section and path, the
+    /// breadcrumb above it.
+    group_trails: BTreeMap<(usize, Vec<usize>), Vec<Crumb>>,
     pub front: Front,
     /// Non-fatal findings while building: a configured index note that is
     /// not in the exported set, a `site` table that does not parse.
@@ -305,12 +350,24 @@ pub struct Model {
 }
 
 impl Model {
-    /// Build the model. `notes` is the exported set in any order; the model
-    /// orders them newest first.
+    /// Build the model for an export without a query. `notes` is the
+    /// exported set in any order; the model orders them newest first.
     pub fn build(
         notes: &[Note],
         views: &[ViewDef],
         options: &SiteOptions,
+        fallback_title: &str,
+    ) -> Result<Model, crate::error::Error> {
+        Model::build_for(notes, views, options, None, fallback_title)
+    }
+
+    /// Build the model. `query` is the export's query, whose single `tag:`
+    /// predicate roots the sidebar when the options name no root.
+    pub fn build_for(
+        notes: &[Note],
+        views: &[ViewDef],
+        options: &SiteOptions,
+        query: Option<&Query>,
         fallback_title: &str,
     ) -> Result<Model, crate::error::Error> {
         let mut ordered: Vec<&Note> = notes.iter().collect();
@@ -394,7 +451,8 @@ impl Model {
             }
         }
 
-        let placements = placements(entries.len(), &sections);
+        let sidebar = sidebar(options, query, &entries, &sections, &mut warnings);
+        let (placements, group_trails) = placements(entries.len(), &sections, &sidebar);
 
         let front = match &options.index {
             Some(id) => match entries.iter().position(|entry| entry.id.to_string() == *id) {
@@ -417,7 +475,9 @@ impl Model {
             lang: options.lang().to_string(),
             notes: entries,
             sections,
+            sidebar,
             placements,
+            group_trails,
             front,
             warnings,
         })
@@ -462,26 +522,29 @@ impl Model {
             .map(|entry| entry.page.as_str())
     }
 
-    /// The group a placement points at.
-    pub fn group_at(&self, placement: &Placement) -> &Group {
-        group_at_path(&self.sections, placement.section, &placement.path)
+    /// The group at `path` in the section.
+    pub fn group_at(&self, section: usize, path: &[usize]) -> &Group {
+        group_at_path(&self.sections, section, path)
     }
 
-    /// The groups from the section's root down to the placement's group,
-    /// outermost first: the breadcrumb.
-    pub fn trail(&self, placement: &Placement) -> Vec<&Group> {
-        self.trail_to(placement.section, &placement.path)
-    }
-
-    /// The groups from the section's root down the path, outermost first.
-    pub fn trail_to(&self, section: usize, path: &[usize]) -> Vec<&Group> {
-        let section = &self.sections[section];
-        let mut trail = Vec::new();
-        let mut group = &section.groups[path[0]];
-        trail.push(group);
-        for &index in &path[1..] {
-            group = &group.children[index];
-            trail.push(group);
+    /// The breadcrumb above the group at `path`: where the sidebar first
+    /// reaches it, or, for a group the sidebar never reaches, its section
+    /// and the groups above it.
+    pub fn group_trail(&self, section: usize, path: &[usize]) -> Vec<Crumb> {
+        if let Some(trail) = self.group_trails.get(&(section, path.to_vec())) {
+            return trail.clone();
+        }
+        let owner = &self.sections[section];
+        let mut trail = vec![Crumb {
+            label: owner.title.clone(),
+            page: Some(owner.page.clone()),
+        }];
+        for depth in 1..path.len() {
+            let group = group_at_path(&self.sections, section, &path[..depth]);
+            trail.push(Crumb {
+                label: group.label.clone(),
+                page: Some(group.page.clone()),
+            });
         }
         trail
     }
@@ -643,46 +706,350 @@ fn tree(root: &str, values_per_note: &[Vec<String>], notes: &[NoteEntry]) -> Vec
     convert(root, "", top, notes)
 }
 
-/// Each note's first placement in sidebar order: sections in order, groups
-/// depth-first in reading order, a group's landing note before its entries.
-/// Previous and next are the neighbours in that reading order within the
-/// section, across group boundaries.
-fn placements(count: usize, sections: &[Section]) -> Vec<Option<Placement>> {
-    let mut placements: Vec<Option<Placement>> = vec![None; count];
-
-    fn visit(group: &Group, path: &mut Vec<usize>, out: &mut Vec<(usize, Vec<usize>)>) {
-        if let Some(note) = group.landing {
-            out.push((note, path.clone()));
+/// The sidebar (ADR 0056): the nav table when the options hold one, else
+/// the root group's entries when a root is configured or the query is a
+/// single `tag:` predicate, else one section per section of the site. A
+/// root that names no group of the site is a warning, and the sidebar is
+/// the default.
+fn sidebar(
+    options: &SiteOptions,
+    query: Option<&Query>,
+    notes: &[NoteEntry],
+    sections: &[Section],
+    warnings: &mut Vec<String>,
+) -> Vec<SidebarSection> {
+    if !options.nav.is_empty() {
+        return curated_sidebar(&options.nav, notes, sections, warnings);
+    }
+    let root = options.root.clone().or_else(|| match query {
+        Some(Query::Tag(value)) => Some(format!("tags/{}", tag::normalize(value))),
+        _ => None,
+    });
+    if let Some(root) = root {
+        match find_page(sections, &root) {
+            Some((section, path)) => return vec![root_section(sections, section, path)],
+            None => warnings.push(format!(
+                "the sidebar root `{root}` is not a tag or view group page of the site; the sidebar shows the views and the tags"
+            )),
         }
-        for entry in &group.entries {
-            match *entry {
-                Entry::Note(note) => out.push((note, path.clone())),
-                Entry::Child(child) => {
-                    path.push(child);
-                    visit(&group.children[child], path, out);
-                    path.pop();
+    }
+    default_sidebar(sections)
+}
+
+/// One sidebar section per section of the site, the tag section as a
+/// cloud.
+fn default_sidebar(sections: &[Section]) -> Vec<SidebarSection> {
+    sections
+        .iter()
+        .enumerate()
+        .map(|(index, section)| SidebarSection {
+            label: section.title.clone(),
+            page: Some((section.page.clone(), "All groups")),
+            cloud: section.kind == SectionKind::Tags,
+            items: group_items(section, index, &[]),
+        })
+        .collect()
+}
+
+/// The root group's entries as the sidebar's one section.
+fn root_section(sections: &[Section], section: usize, path: Vec<usize>) -> SidebarSection {
+    let group = group_at_path(sections, section, &path);
+    SidebarSection {
+        label: group.label.clone(),
+        page: Some((group.page.clone(), "Overview")),
+        cloud: false,
+        items: entry_items(group, section, &path),
+    }
+}
+
+/// A group's entries as nav items: its notes, and its children as groups.
+fn entry_items(group: &Group, section: usize, path: &[usize]) -> Vec<NavItem> {
+    group
+        .entries
+        .iter()
+        .map(|entry| match *entry {
+            Entry::Note(index) => NavItem::Note { index, label: None },
+            Entry::Child(child) => NavItem::Group {
+                section,
+                path: [path, &[child]].concat(),
+                label: None,
+            },
+        })
+        .collect()
+}
+
+/// A section's top-level groups as nav items.
+fn group_items(section: &Section, index: usize, _path: &[usize]) -> Vec<NavItem> {
+    (0..section.groups.len())
+        .map(|position| NavItem::Group {
+            section: index,
+            path: vec![position],
+            label: None,
+        })
+        .collect()
+}
+
+/// The section and path of the group page `tags/<path>` or
+/// `views/<name>/<group>` names, if the site has it.
+fn find_page(sections: &[Section], page: &str) -> Option<(usize, Vec<usize>)> {
+    let mut segments = page.trim_matches('/').split('/');
+    let (section, value) = match segments.next()? {
+        "tags" => {
+            let section = sections
+                .iter()
+                .position(|section| section.kind == SectionKind::Tags)?;
+            (section, segments.collect::<Vec<_>>())
+        }
+        "views" => {
+            let name = segments.next()?;
+            let section = sections.iter().position(|section| {
+                matches!(section.kind, SectionKind::View { .. }) && section.title == name
+            })?;
+            (section, segments.collect::<Vec<_>>())
+        }
+        _ => return None,
+    };
+    if value.is_empty() {
+        return None;
+    }
+    let path = find_group(&sections[section].groups, &value.join("/"))?;
+    Some((section, path))
+}
+
+/// The path of child indices to the group with `value`, which lies at the
+/// depth of the value's segments.
+fn find_group(groups: &[Group], value: &str) -> Option<Vec<usize>> {
+    for (position, group) in groups.iter().enumerate() {
+        if group.value == value {
+            return Some(vec![position]);
+        }
+        if value.starts_with(&format!("{}/", group.value)) {
+            let mut path = vec![position];
+            path.extend(find_group(&group.children, value)?);
+            return Some(path);
+        }
+    }
+    None
+}
+
+/// The nav table as the sidebar. An item naming a note that is not
+/// exported or is hidden, a tag or view group the site has no page for, a
+/// view that is not configured, a group without a label, or keys that
+/// name nothing or several things, is a warning and is left out.
+fn curated_sidebar(
+    nav: &[NavSection],
+    notes: &[NoteEntry],
+    sections: &[Section],
+    warnings: &mut Vec<String>,
+) -> Vec<SidebarSection> {
+    nav.iter()
+        .map(|section| SidebarSection {
+            label: section.label.clone(),
+            page: None,
+            cloud: false,
+            items: nav_items(&section.items, notes, sections, warnings),
+        })
+        .collect()
+}
+
+fn nav_items(
+    entries: &[NavEntry],
+    notes: &[NoteEntry],
+    sections: &[Section],
+    warnings: &mut Vec<String>,
+) -> Vec<NavItem> {
+    let mut items = Vec::new();
+    for entry in entries {
+        let kind = match entry.kind() {
+            Ok(kind) => kind,
+            Err(reason) => {
+                warnings.push(format!("[site.nav]: {reason}; the item is left out"));
+                continue;
+            }
+        };
+        let label = entry.label.clone();
+        let tags_section = sections
+            .iter()
+            .position(|section| section.kind == SectionKind::Tags)
+            .expect("the tag section always exists");
+        let item = match kind {
+            NavEntryKind::Note(id) => {
+                match notes
+                    .iter()
+                    .position(|note| note.id.to_string().eq_ignore_ascii_case(id))
+                {
+                    Some(index) if notes[index].site.hidden => {
+                        warnings.push(format!(
+                            "[site.nav]: note {id} is hidden; the item is left out"
+                        ));
+                        continue;
+                    }
+                    Some(index) => NavItem::Note { index, label },
+                    None => {
+                        warnings.push(format!(
+                            "[site.nav]: note {id} is not among the exported notes; the item is left out"
+                        ));
+                        continue;
+                    }
+                }
+            }
+            NavEntryKind::Tag(value) => {
+                match find_group(&sections[tags_section].groups, &tag::normalize(value)) {
+                    Some(path) => NavItem::Group {
+                        section: tags_section,
+                        path,
+                        label,
+                    },
+                    None => {
+                        warnings.push(format!(
+                            "[site.nav]: no exported note carries the tag `{value}`; the item is left out"
+                        ));
+                        continue;
+                    }
+                }
+            }
+            NavEntryKind::View { name, group } => {
+                let Some(section) = sections.iter().position(|section| {
+                    matches!(section.kind, SectionKind::View { .. }) && section.title == name
+                }) else {
+                    warnings.push(format!(
+                        "[site.nav]: `{name}` is not a configured view; the item is left out"
+                    ));
+                    continue;
+                };
+                match group {
+                    Some(value) => {
+                        match find_group(&sections[section].groups, &tag::normalize(value)) {
+                            Some(path) => NavItem::Group {
+                                section,
+                                path,
+                                label,
+                            },
+                            None => {
+                                warnings.push(format!(
+                                    "[site.nav]: the view `{name}` has no group `{value}`; the item is left out"
+                                ));
+                                continue;
+                            }
+                        }
+                    }
+                    None => NavItem::Curated {
+                        label: label.unwrap_or_else(|| name.to_string()),
+                        items: group_items(&sections[section], section, &[]),
+                    },
+                }
+            }
+            NavEntryKind::Tags => NavItem::Curated {
+                label: label.unwrap_or_else(|| sections[tags_section].title.clone()),
+                items: group_items(&sections[tags_section], tags_section, &[]),
+            },
+            NavEntryKind::Group(inner) => {
+                let Some(label) = label else {
+                    warnings.push(
+                        "[site.nav]: a group of items needs a `label`; the item is left out"
+                            .to_string(),
+                    );
+                    continue;
+                };
+                NavItem::Curated {
+                    label,
+                    items: nav_items(inner, notes, sections, warnings),
+                }
+            }
+        };
+        items.push(item);
+    }
+    items
+}
+
+/// Each note's first placement in sidebar order, and the breadcrumb above
+/// each group the sidebar reaches: sections in order, items in order, a
+/// group's landing note before its entries, its entries in reading order.
+/// Previous and next are the neighbours in that reading order within the
+/// sidebar section, across group boundaries.
+#[allow(clippy::type_complexity)]
+fn placements(
+    count: usize,
+    sections: &[Section],
+    sidebar: &[SidebarSection],
+) -> (
+    Vec<Option<Placement>>,
+    BTreeMap<(usize, Vec<usize>), Vec<Crumb>>,
+) {
+    let mut placements: Vec<Option<Placement>> = vec![None; count];
+    let mut group_trails = BTreeMap::new();
+
+    fn visit(
+        items: &[NavItem],
+        sections: &[Section],
+        trail: &mut Vec<Crumb>,
+        out: &mut Vec<(usize, Vec<Crumb>)>,
+        group_trails: &mut BTreeMap<(usize, Vec<usize>), Vec<Crumb>>,
+    ) {
+        for item in items {
+            match item {
+                NavItem::Note { index, .. } => out.push((*index, trail.clone())),
+                NavItem::Group {
+                    section,
+                    path,
+                    label,
+                } => {
+                    let group = group_at_path(sections, *section, path);
+                    group_trails
+                        .entry((*section, path.clone()))
+                        .or_insert_with(|| trail.clone());
+                    if let Some(landing) = group.landing {
+                        out.push((landing, trail.clone()));
+                    }
+                    trail.push(Crumb {
+                        label: label.clone().unwrap_or_else(|| group.label.clone()),
+                        page: Some(group.page.clone()),
+                    });
+                    visit(
+                        &entry_items(group, *section, path),
+                        sections,
+                        trail,
+                        out,
+                        group_trails,
+                    );
+                    trail.pop();
+                }
+                NavItem::Curated { label, items } => {
+                    trail.push(Crumb {
+                        label: label.clone(),
+                        page: None,
+                    });
+                    visit(items, sections, trail, out, group_trails);
+                    trail.pop();
                 }
             }
         }
     }
 
-    for (index, section) in sections.iter().enumerate() {
+    for section in sidebar {
         let mut order = Vec::new();
-        for (position, group) in section.groups.iter().enumerate() {
-            visit(group, &mut vec![position], &mut order);
-        }
-        for (at, (note, path)) in order.iter().enumerate() {
+        let mut trail = vec![Crumb {
+            label: section.label.clone(),
+            page: section.page.as_ref().map(|(page, _)| page.clone()),
+        }];
+        visit(
+            &section.items,
+            sections,
+            &mut trail,
+            &mut order,
+            &mut group_trails,
+        );
+        for (at, (note, trail)) in order.iter().enumerate() {
             if placements[*note].is_none() {
                 placements[*note] = Some(Placement {
-                    section: index,
-                    path: path.clone(),
+                    trail: trail.clone(),
                     prev: at.checked_sub(1).map(|p| order[p].0),
                     next: order.get(at + 1).map(|n| n.0),
                 });
             }
         }
     }
-    placements
+    (placements, group_trails)
 }
 
 #[cfg(test)]
@@ -866,18 +1233,31 @@ mod tests {
         let model = model(&notes, &views, SiteOptions::default());
         // Newest first: Three, Two, One.
         let three = model.placements[0].as_ref().expect("placed");
-        assert_eq!(three.section, 0);
-        assert_eq!(three.path, vec![0]);
+        assert_eq!(labels(&three.trail), ["by-status", "open"]);
         assert_eq!(three.prev, None);
         assert_eq!(three.next, Some(1));
         let one = model.placements[2].as_ref().expect("placed");
         // `One` is also tagged, but the view section comes first.
-        assert_eq!(one.section, 0);
+        assert_eq!(
+            one.trail,
+            [
+                Crumb {
+                    label: "by-status".to_string(),
+                    page: Some("views/by-status/index.html".to_string()),
+                },
+                Crumb {
+                    label: "open".to_string(),
+                    page: Some("views/by-status/open/index.html".to_string()),
+                },
+            ]
+        );
         assert_eq!(one.prev, Some(1));
         assert_eq!(one.next, None);
-        assert_eq!(model.group_at(one).value, "open");
-        let trail: Vec<&str> = model.trail(one).iter().map(|g| g.value.as_str()).collect();
-        assert_eq!(trail, ["open"]);
+        assert_eq!(model.group_at(0, &[0]).value, "open");
+    }
+
+    fn labels(trail: &[Crumb]) -> Vec<&str> {
+        trail.iter().map(|crumb| crumb.label.as_str()).collect()
     }
 
     #[test]
@@ -885,13 +1265,13 @@ mod tests {
         let notes = [note(A, "Deep", "tags: [a/b/c]\n")];
         let model = model(&notes, &[], SiteOptions::default());
         let placement = model.placements[0].as_ref().expect("placed");
-        assert_eq!(placement.path, vec![0, 0, 0]);
-        let trail: Vec<&str> = model
-            .trail(placement)
-            .iter()
-            .map(|g| g.value.as_str())
-            .collect();
-        assert_eq!(trail, ["a", "a/b", "a/b/c"]);
+        assert_eq!(labels(&placement.trail), ["tags", "a", "b", "c"]);
+        assert_eq!(
+            placement.trail[3].page.as_deref(),
+            Some("tags/a/b/c/index.html")
+        );
+        // The group pages above carry the same trail, cut at their level.
+        assert_eq!(labels(&model.group_trail(0, &[0, 0])), ["tags", "a"]);
     }
 
     #[test]
@@ -1089,18 +1469,14 @@ mod tests {
         // Reading order: Five (alpha's landing), Three, One, Two, Four.
         assert_eq!(placed("Five").prev, None);
         assert_eq!(placed("Five").next, Some(by_title("Three")));
-        assert_eq!(placed("Five").path, vec![0, 0]);
+        // A landing note's breadcrumb stops above its group, whose page it
+        // is.
+        assert_eq!(labels(&placed("Five").trail), ["tags", "t"]);
         assert_eq!(placed("Three").prev, Some(by_title("Five")));
         assert_eq!(placed("Two").next, Some(by_title("Four")));
         assert_eq!(placed("Four").prev, Some(by_title("Two")));
         assert_eq!(placed("Four").next, None);
-        assert_eq!(placed("Four").path, vec![0, 1]);
-        let trail: Vec<&str> = model
-            .trail(placed("Four"))
-            .iter()
-            .map(|g| g.label.as_str())
-            .collect();
-        assert_eq!(trail, ["t", "zeta"]);
+        assert_eq!(labels(&placed("Four").trail), ["tags", "t", "zeta"]);
     }
 
     #[test]
@@ -1219,6 +1595,313 @@ mod tests {
             .find(|n| n.title == "Plain")
             .expect("note");
         assert_eq!(plain.name(), "Plain");
+    }
+
+    /// A docs tree under `docs/…` beside an unrelated tag and a view, the
+    /// shape the sidebar settings are for.
+    fn docs_notes() -> [Note; 5] {
+        const D: &str = "01DRZ3NDEKTSV4RRFFQ69G5FAV";
+        const E: &str = "01ERZ3NDEKTSV4RRFFQ69G5FAV";
+        [
+            note(
+                A,
+                "Basics",
+                "tags: [docs/start]\nsite:\n  index: true\n  label: Getting Started\n  order: 1\n",
+            ),
+            note(
+                B,
+                "Install",
+                "tags: [docs/start]\nstatus: open\nsite:\n  order: 2\n",
+            ),
+            note(C, "Manifest", "tags: [docs/dev]\nsite:\n  order: 1\n"),
+            note(D, "Aside", "tags: [misc]\nstatus: open\n"),
+            note(E, "Hidden", "tags: [docs/start]\nsite:\n  hidden: true\n"),
+        ]
+    }
+
+    fn sidebar_labels(model: &Model) -> Vec<String> {
+        fn walk(model: &Model, items: &[NavItem], depth: usize, out: &mut Vec<String>) {
+            for item in items {
+                match item {
+                    NavItem::Note { index, label } => out.push(format!(
+                        "{}{}",
+                        "  ".repeat(depth),
+                        label.as_deref().unwrap_or(model.notes[*index].name())
+                    )),
+                    NavItem::Group {
+                        section,
+                        path,
+                        label,
+                    } => {
+                        let group = model.group_at(*section, path);
+                        out.push(format!(
+                            "{}[{}]",
+                            "  ".repeat(depth),
+                            label.as_deref().unwrap_or(&group.label)
+                        ));
+                        let inner: Vec<NavItem> = group
+                            .entries
+                            .iter()
+                            .map(|entry| match *entry {
+                                Entry::Note(index) => NavItem::Note { index, label: None },
+                                Entry::Child(child) => NavItem::Group {
+                                    section: *section,
+                                    path: [path.as_slice(), &[child]].concat(),
+                                    label: None,
+                                },
+                            })
+                            .collect();
+                        walk(model, &inner, depth + 1, out);
+                    }
+                    NavItem::Curated { label, items } => {
+                        out.push(format!("{}<{label}>", "  ".repeat(depth)));
+                        walk(model, items, depth + 1, out);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for section in &model.sidebar {
+            out.push(format!("# {}", section.label));
+            walk(model, &section.items, 0, &mut out);
+        }
+        out
+    }
+
+    #[test]
+    fn the_default_sidebar_is_one_section_per_section() {
+        let notes = docs_notes();
+        let views = [ViewDef::new("by-status", "status")];
+        let model = model(&notes, &views, SiteOptions::default());
+        assert_eq!(
+            sidebar_labels(&model),
+            [
+                "# by-status",
+                "[open]",
+                "  Install",
+                "  Aside",
+                "# tags",
+                "[docs]",
+                "  [Getting Started]",
+                "    Install",
+                "  [dev]",
+                "    Manifest",
+                "[misc]",
+                "  Aside",
+            ]
+        );
+        assert_eq!(
+            model.sidebar[0].page,
+            Some(("views/by-status/index.html".to_string(), "All groups"))
+        );
+        assert!(!model.sidebar[0].cloud);
+        assert!(model.sidebar[1].cloud);
+        assert!(model.warnings.is_empty(), "{:?}", model.warnings);
+    }
+
+    #[test]
+    fn a_configured_root_shows_that_groups_entries_and_starts_the_breadcrumb_there() {
+        let notes = docs_notes();
+        let views = [ViewDef::new("by-status", "status")];
+        let options = SiteOptions {
+            root: Some("tags/docs".to_string()),
+            ..SiteOptions::default()
+        };
+        let model = model(&notes, &views, options);
+        assert_eq!(
+            sidebar_labels(&model),
+            [
+                "# docs",
+                "[Getting Started]",
+                "  Install",
+                "[dev]",
+                "  Manifest",
+            ]
+        );
+        assert_eq!(
+            model.sidebar[0].page,
+            Some(("tags/docs/index.html".to_string(), "Overview"))
+        );
+        assert!(model.warnings.is_empty(), "{:?}", model.warnings);
+        // Placements come from the rooted sidebar, so Install's breadcrumb
+        // starts at `docs` and ignores the view it is also in; Aside sits
+        // nowhere.
+        let install = model.placements[model
+            .notes
+            .iter()
+            .position(|n| n.title == "Install")
+            .expect("install")]
+        .as_ref()
+        .expect("placed");
+        assert_eq!(labels(&install.trail), ["docs", "Getting Started"]);
+        assert_eq!(
+            install.trail[0].page.as_deref(),
+            Some("tags/docs/index.html")
+        );
+        let aside = model
+            .notes
+            .iter()
+            .position(|n| n.title == "Aside")
+            .expect("aside");
+        assert_eq!(model.placements[aside], None);
+        // A group page below the root starts its breadcrumb at the root too;
+        // one outside the root keeps its section's.
+        assert_eq!(labels(&model.group_trail(1, &[0, 0])), ["docs"]);
+        assert_eq!(labels(&model.group_trail(1, &[1])), ["tags"]);
+        assert_eq!(labels(&model.group_trail(0, &[0])), ["by-status"]);
+    }
+
+    #[test]
+    fn a_view_group_can_be_the_root() {
+        let notes = docs_notes();
+        let views = [ViewDef::new("by-status", "status")];
+        let options = SiteOptions {
+            root: Some("views/by-status/open".to_string()),
+            ..SiteOptions::default()
+        };
+        let model = model(&notes, &views, options);
+        // Install carries an order, Aside does not.
+        assert_eq!(sidebar_labels(&model), ["# open", "Install", "Aside"]);
+    }
+
+    #[test]
+    fn a_single_tag_query_roots_the_sidebar_unless_a_root_is_configured() {
+        let notes = docs_notes();
+        let query = crate::query::parse("tag:Docs/Start").expect("parses");
+        let model = Model::build_for(&notes, &[], &SiteOptions::default(), Some(&query), "V")
+            .expect("model");
+        assert_eq!(sidebar_labels(&model), ["# Getting Started", "Install"]);
+        // Any other query leaves the sidebar alone.
+        let query = crate::query::parse("tag:docs and status:open").expect("parses");
+        let model = Model::build_for(&notes, &[], &SiteOptions::default(), Some(&query), "V")
+            .expect("model");
+        assert_eq!(sidebar_labels(&model)[0], "# tags");
+        // A configured root wins over the query.
+        let query = crate::query::parse("tag:docs/start").expect("parses");
+        let options = SiteOptions {
+            root: Some("tags/docs".to_string()),
+            ..SiteOptions::default()
+        };
+        let model = Model::build_for(&notes, &[], &options, Some(&query), "V").expect("model");
+        assert_eq!(sidebar_labels(&model)[0], "# docs");
+    }
+
+    #[test]
+    fn a_root_that_is_no_page_warns_and_keeps_the_default_sidebar() {
+        let notes = docs_notes();
+        for root in [
+            "tags/nowhere",
+            "views/no-such-view/x",
+            "tags",
+            "notes/basics",
+            "views/by-status",
+        ] {
+            let options = SiteOptions {
+                root: Some(root.to_string()),
+                ..SiteOptions::default()
+            };
+            let model = model(&notes, &[ViewDef::new("by-status", "status")], options);
+            assert_eq!(sidebar_labels(&model)[0], "# by-status", "{root}");
+            assert_eq!(model.warnings.len(), 1, "{root}: {:?}", model.warnings);
+            assert!(model.warnings[0].contains(root), "{}", model.warnings[0]);
+        }
+    }
+
+    fn nav(toml: &str) -> SiteOptions {
+        toml::from_str(toml).expect("the nav table parses")
+    }
+
+    #[test]
+    fn the_nav_table_is_the_whole_sidebar() {
+        let notes = docs_notes();
+        let views = [ViewDef::new("by-status", "status")];
+        let options = nav(&format!(
+            "[[nav]]\nlabel = \"Guide\"\nitems = [\n  {{ note = \"{A}\" }},\n  {{ note = \"{B}\", label = \"Setting up\" }},\n  {{ label = \"Reference\", tag = \"docs/dev\" }},\n  {{ label = \"More\", items = [{{ view = \"by-status\", group = \"open\" }}, {{ tags = true }}] }},\n]\n[[nav]]\nlabel = \"Everything\"\nitems = [{{ view = \"by-status\" }}]\n"
+        ));
+        let model = model(&notes, &views, options);
+        assert_eq!(
+            sidebar_labels(&model),
+            [
+                "# Guide",
+                "Getting Started",
+                "Setting up",
+                "[Reference]",
+                "  Manifest",
+                "<More>",
+                "  [open]",
+                "    Install",
+                "    Aside",
+                "  <tags>",
+                "    [docs]",
+                "      [Getting Started]",
+                "        Install",
+                "      [dev]",
+                "        Manifest",
+                "    [misc]",
+                "      Aside",
+                "# Everything",
+                "<by-status>",
+                "  [open]",
+                "    Install",
+                "    Aside",
+            ]
+        );
+        assert!(model.warnings.is_empty(), "{:?}", model.warnings);
+        assert_eq!(model.sidebar[0].page, None);
+        // A curated step has no page in the breadcrumb; the first placement
+        // wins, so Install's is the Guide section itself.
+        let by_title = |title: &str| {
+            model
+                .notes
+                .iter()
+                .position(|n| n.title == title)
+                .expect("the note exists")
+        };
+        let install = model.placements[by_title("Install")]
+            .as_ref()
+            .expect("placed");
+        assert_eq!(labels(&install.trail), ["Guide"]);
+        assert_eq!(install.trail[0].page, None);
+        assert_eq!(install.prev, Some(by_title("Basics")));
+        assert_eq!(install.next, Some(by_title("Manifest")));
+        let aside = model.placements[by_title("Aside")]
+            .as_ref()
+            .expect("placed");
+        assert_eq!(labels(&aside.trail), ["Guide", "More", "open"]);
+        assert_eq!(aside.trail[1].page, None);
+        assert_eq!(
+            labels(&model.group_trail(1, &[0])),
+            ["Guide", "More", "tags"]
+        );
+    }
+
+    #[test]
+    fn nav_items_that_name_nothing_the_site_has_warn_and_are_left_out() {
+        let notes = docs_notes();
+        let views = [ViewDef::new("by-status", "status")];
+        const E: &str = "01ERZ3NDEKTSV4RRFFQ69G5FAV";
+        const Z: &str = "01ZRZ3NDEKTSV4RRFFQ69G5FAV";
+        let options = nav(&format!(
+            "[[nav]]\nlabel = \"Broken\"\nitems = [\n  {{ note = \"{Z}\" }},\n  {{ note = \"{E}\" }},\n  {{ tag = \"no-such-tag\" }},\n  {{ view = \"no-such-view\" }},\n  {{ view = \"by-status\", group = \"no-such-group\" }},\n  {{ items = [] }},\n  {{ note = \"{A}\", tag = \"docs\" }},\n  {{ label = \"x\" }},\n  {{ note = \"{C}\" }},\n]\n"
+        ));
+        let model = model(&notes, &views, options);
+        assert_eq!(sidebar_labels(&model), ["# Broken", "Manifest"]);
+        let joined = model.warnings.join("\n");
+        assert_eq!(model.warnings.len(), 8, "{joined}");
+        assert!(
+            joined.contains(&format!("note {Z} is not among the exported notes")),
+            "{joined}"
+        );
+        assert!(joined.contains(&format!("note {E} is hidden")), "{joined}");
+        assert!(joined.contains("tag `no-such-tag`"), "{joined}");
+        assert!(
+            joined.contains("`no-such-view` is not a configured view"),
+            "{joined}"
+        );
+        assert!(joined.contains("no group `no-such-group`"), "{joined}");
+        assert!(joined.contains("needs a `label`"), "{joined}");
+        assert!(joined.contains("only one of"), "{joined}");
+        assert!(joined.contains("needs one of"), "{joined}");
     }
 
     #[test]

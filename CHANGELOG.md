@@ -32,6 +32,12 @@ and this project adheres to
   entries read in order: ordered ones first, then notes newest first,
   then groups by label; previous and next follow that reading order
   across group boundaries.
+- `[site] root` roots the sidebar at a tag or view group page
+  (`tags/docs`, `views/by-status/open`), and an export whose query is a
+  single `tag:` predicate is rooted at that tag; `[[site.nav]]` tables
+  assemble the sidebar by hand from notes, tag subtrees, views and their
+  groups, the whole tag tree, and labelled groups of items, and are then
+  the whole sidebar. Breadcrumbs follow the sidebar.
 - Exported pages carry a scheme switch (system, light, dark) that
   remembers the choice in the browser, an outline that follows the
   reader's position, and code blocks highlighted by Shiki in the browser

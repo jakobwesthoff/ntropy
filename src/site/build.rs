@@ -31,6 +31,7 @@ use std::path::{Path, PathBuf};
 use crate::id::Id;
 use crate::link;
 use crate::note::Note;
+use crate::query::Query;
 use crate::render::html::{self, Targets, frontmatter};
 use crate::render::markdown::resolve_root_relative;
 use crate::render::{LinkTarget, ResolvedLink};
@@ -38,9 +39,9 @@ use crate::view::ViewDef;
 
 use super::SiteOptions;
 use super::frontend::{self, Grammars};
-use super::model::{Front, Landing, Model, Placement};
+use super::model::{self, Front, Landing, Model, Placement};
 use super::nav;
-use super::page::{NoteFragment, Page, PageLink, TagLink};
+use super::page::{Crumb, NoteFragment, Page, PageLink, TagLink};
 use super::search;
 use super::theme::{self, SiteTheme};
 
@@ -60,6 +61,9 @@ pub struct Input<'a> {
     pub vault_ids: &'a HashSet<Id>,
     pub views: &'a [ViewDef],
     pub options: &'a SiteOptions,
+    /// The export's query, whose single `tag:` predicate roots the sidebar
+    /// when the options name no root (ADR 0056).
+    pub query: Option<&'a Query>,
     /// The site title when the options configure none.
     pub fallback_title: &'a str,
     pub vault_root: &'a Path,
@@ -112,10 +116,11 @@ impl Built {
 
 /// Build the whole site in memory.
 pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
-    let model = Model::build(
+    let model = Model::build_for(
         input.notes,
         input.views,
         input.options,
+        input.query,
         input.fallback_title,
     )?;
     let mut warnings = model.warnings.clone();
@@ -160,11 +165,10 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             landed
                 .iter()
                 .map(|landing| {
-                    let trail = model.trail_to(landing.section, &landing.path);
-                    let group = trail.last().expect("a landing path is never empty");
+                    let group = model.group_at(landing.section, &landing.path);
                     (
                         group.page.clone(),
-                        Some(group_page(&model, landing.section, &trail)),
+                        Some(group_page(&model, landing.section, &landing.path)),
                     )
                 })
                 .collect()
@@ -304,23 +308,22 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             contents: page.render().into_bytes(),
         });
 
-        // Depth-first over the groups with the trail of groups above each;
-        // a group with a landing note got its page in the notes loop.
-        let mut stack: Vec<(&super::model::Group, Vec<&super::model::Group>)> = section
+        // Depth-first over the groups by path; a group with a landing note
+        // got its page in the notes loop.
+        let mut stack: Vec<(&model::Group, Vec<usize>)> = section
             .groups
             .iter()
-            .map(|group| (group, Vec::new()))
+            .enumerate()
+            .map(|(position, group)| (group, vec![position]))
             .collect();
-        while let Some((group, parents)) = stack.pop() {
-            let mut trail = parents.clone();
-            trail.push(group);
-            for child in &group.children {
-                stack.push((child, trail.clone()));
+        while let Some((group, path)) = stack.pop() {
+            for (position, child) in group.children.iter().enumerate() {
+                stack.push((child, [path.as_slice(), &[position]].concat()));
             }
             if group.landing.is_some() {
                 continue;
             }
-            let extra = group_page(&model, section_index, &trail);
+            let extra = group_page(&model, section_index, &path);
             let body = format!(
                 "<h1>{}</h1>\n{}",
                 html::writer::escape(&group.value),
@@ -504,25 +507,14 @@ struct RenderedNote {
 /// listing of its child groups and its notes, and its breadcrumb.
 struct GroupPage {
     listing: String,
-    crumbs: Vec<PageLink>,
+    crumbs: Vec<Crumb>,
 }
 
-/// The listing and breadcrumb of the group at the end of `trail`, a path
-/// of groups from the section's top level down.
-fn group_page(model: &Model, section: usize, trail: &[&super::model::Group]) -> GroupPage {
-    let (group, parents) = trail.split_last().expect("a trail holds the group itself");
+/// The listing and breadcrumb of the group at `path` in the section.
+fn group_page(model: &Model, section: usize, path: &[usize]) -> GroupPage {
+    let group = model.group_at(section, path);
     let prefix = nav::prefix_for(&group.page);
-    let section = &model.sections[section];
-    let mut crumbs = vec![PageLink {
-        label: section.title.clone(),
-        href: format!("{prefix}{}", section.page),
-    }];
-    for parent in parents {
-        crumbs.push(PageLink {
-            label: parent.label.clone(),
-            href: format!("{prefix}{}", parent.page),
-        });
-    }
+    let crumbs = crumbs(&model.group_trail(section, path), &prefix);
     GroupPage {
         listing: format!(
             "{}{}",
@@ -605,7 +597,7 @@ fn render_note(
         None => {
             body.push_str(&nav::related(model, &model.related(index), &prefix));
             placement
-                .map(|placement| breadcrumbs(model, placement, &prefix))
+                .map(|placement| breadcrumbs(placement, &prefix))
                 .unwrap_or_default()
         }
     };
@@ -637,21 +629,21 @@ fn render_note(
     }
 }
 
-/// The breadcrumb of a placed note: the section, then each group down to
-/// the note's own.
-fn breadcrumbs(model: &Model, placement: &Placement, prefix: &str) -> Vec<PageLink> {
-    let section = &model.sections[placement.section];
-    let mut crumbs = vec![PageLink {
-        label: section.title.clone(),
-        href: format!("{prefix}{}", section.page),
-    }];
-    for group in model.trail(placement) {
-        crumbs.push(PageLink {
-            label: group.label.clone(),
-            href: format!("{prefix}{}", group.page),
-        });
-    }
-    crumbs
+/// The breadcrumb of a placed note, relative to its page.
+fn breadcrumbs(placement: &Placement, prefix: &str) -> Vec<Crumb> {
+    crumbs(&placement.trail, prefix)
+}
+
+/// A model trail as the page's breadcrumb, each step's page made relative
+/// to the page rendered.
+fn crumbs(trail: &[model::Crumb], prefix: &str) -> Vec<Crumb> {
+    trail
+        .iter()
+        .map(|step| Crumb {
+            label: step.label.clone(),
+            href: step.page.as_ref().map(|page| format!("{prefix}{page}")),
+        })
+        .collect()
 }
 
 /// The chrome of a page at `at`: sidebar with the current trail open, the
@@ -664,7 +656,7 @@ fn chrome(
     at: &str,
     title: &str,
     body: String,
-    breadcrumbs: Vec<PageLink>,
+    breadcrumbs: Vec<Crumb>,
     outline: String,
     prev: Option<PageLink>,
     next: Option<PageLink>,
@@ -797,6 +789,7 @@ mod tests {
             vault_ids: &vault_ids,
             views: &views,
             options,
+            query: None,
             fallback_title: "Vault",
             vault_root: vault,
             theme: None,
@@ -1142,6 +1135,7 @@ mod tests {
             vault_ids: &vault_ids,
             views: &[],
             options: &SiteOptions::default(),
+            query: None,
             fallback_title: "Vault",
             vault_root: vault.path(),
             theme: Some((&theme, &theme_dir)),
@@ -1211,6 +1205,7 @@ mod tests {
             vault_ids: &vault_ids,
             views: &[],
             options: &SiteOptions::default(),
+            query: None,
             fallback_title: "Docs",
             vault_root: vault,
             theme: None,
@@ -1287,6 +1282,116 @@ mod tests {
                 "\"id\":\"{A}\",\"page\":\"tags/docs/start/index.html\""
             )),
             "{data}"
+        );
+    }
+
+    #[test]
+    fn a_root_starts_every_breadcrumb_there_and_a_query_can_be_the_root() {
+        let vault = vault();
+        let notes = docs_notes(vault.path());
+        let vault_ids = ids(&notes);
+        let options = SiteOptions {
+            root: Some("tags/docs".to_string()),
+            ..SiteOptions::default()
+        };
+        let built = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &options,
+            query: None,
+            fallback_title: "Docs",
+            vault_root: vault.path(),
+            theme: None,
+        })
+        .expect("the site builds");
+        // A note page, a landing page, and a plain group page below the
+        // root all start at the root, which links to its page.
+        let install = text(&built, "notes/install.html");
+        assert!(
+            install.contains("<nav class=\"breadcrumbs\" aria-label=\"You are here\"><ol>\n<li><a href=\"../tags/docs/index.html\">docs</a></li>\n<li><svg class=\"icon sep\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/start/index.html\">Getting Started</a></li>\n</ol></nav>"),
+            "{install}"
+        );
+        let start = text(&built, "tags/docs/start/index.html");
+        assert!(
+            start.contains(
+                "<ol>\n<li><a href=\"../../../tags/docs/index.html\">docs</a></li>\n</ol>"
+            ),
+            "{start}"
+        );
+        let gadgets = text(&built, "tags/docs/start/gadgets/index.html");
+        assert!(
+            gadgets.contains("<li><a href=\"../../../../tags/docs/index.html\">docs</a></li>\n<li><svg class=\"icon sep\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../../../../tags/docs/start/index.html\">Getting Started</a></li>"),
+            "{gadgets}"
+        );
+        // The root's own page has no breadcrumb above it but the section.
+        let docs = text(&built, "tags/docs/index.html");
+        assert!(
+            docs.contains("<ol>\n<li><a href=\"../../tags/index.html\">tags</a></li>\n</ol>"),
+            "{docs}"
+        );
+        assert!(
+            install.contains("<a class=\"nav-all\" href=\"../tags/docs/index.html\">Overview</a>"),
+            "{install}"
+        );
+
+        // The export query stands in for the root.
+        let query = crate::query::parse("tag:docs/start").expect("parses");
+        let built = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &SiteOptions::default(),
+            query: Some(&query),
+            fallback_title: "Docs",
+            vault_root: vault.path(),
+            theme: None,
+        })
+        .expect("the site builds");
+        let install = text(&built, "notes/install.html");
+        assert!(
+            install.contains(
+                "<a class=\"nav-all\" href=\"../tags/docs/start/index.html\">Overview</a>"
+            ),
+            "{install}"
+        );
+        assert!(
+            install.contains("<ol>\n<li><a href=\"../tags/docs/start/index.html\">Getting Started</a></li>\n</ol>"),
+            "{install}"
+        );
+    }
+
+    #[test]
+    fn a_nav_table_gives_hand_made_crumbs_without_links() {
+        let vault = vault();
+        let notes = docs_notes(vault.path());
+        let vault_ids = ids(&notes);
+        let options: SiteOptions = toml::from_str(&format!(
+            "[[nav]]\nlabel = \"Guide\"\nitems = [{{ label = \"Setup\", items = [{{ note = \"{B}\" }}] }}]\n"
+        ))
+        .expect("nav parses");
+        let built = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &options,
+            query: None,
+            fallback_title: "Docs",
+            vault_root: vault.path(),
+            theme: None,
+        })
+        .expect("the site builds");
+        let install = text(&built, "notes/install.html");
+        assert!(
+            install.contains("<ol>\n<li><span>Guide</span></li>\n<li><svg class=\"icon sep\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><span>Setup</span></li>\n</ol>"),
+            "{install}"
+        );
+        assert!(!install.contains("class=\"pager\""), "{install}");
+        // A group the table never reaches keeps its section's breadcrumb.
+        let start = text(&built, "tags/docs/start/index.html");
+        assert!(
+            start.contains("<li><a href=\"../../../tags/index.html\">tags</a></li>"),
+            "{start}"
         );
     }
 

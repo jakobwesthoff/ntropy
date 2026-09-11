@@ -56,6 +56,14 @@ theme = "corporate"                  # .ntropy/themes/site/corporate/
 index = "01ARZ3NDEKTSV4RRFFQ69G5FAV" # the note that becomes the front page
 title = "Team Docs"                  # defaults to the vault directory name
 lang = "en"                          # the html lang attribute, default en
+root = "tags/docs"                   # the sidebar starts at this tag page
+
+[[site.nav]]                         # a hand-assembled sidebar section
+label = "Getting Started"
+items = [
+  { note = "01ARZ3NDEKTSV4RRFFQ69G5FAV" },
+  { label = "Gadgets", tag = "docs/start/gadgets" },
+]
 ```
 
 Every key of both tables is optional, and an entirely default table is

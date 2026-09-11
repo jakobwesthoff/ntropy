@@ -81,12 +81,19 @@ fn note_context(note: &NoteFragment) -> Value {
     }
 }
 
-/// A link the page template renders: a breadcrumb, a previous or next
-/// neighbour.
+/// A link the page template renders: a previous or next neighbour.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PageLink {
     pub label: String,
     pub href: String,
+}
+
+/// One step of a page's breadcrumb; a step without a page of its own (a
+/// hand-assembled nav group, ADR 0056) has no `href` and renders as text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct Crumb {
+    pub label: String,
+    pub href: Option<String>,
 }
 
 /// A page of the exported site: the chrome around a content fragment
@@ -107,7 +114,7 @@ pub struct Page {
     pub icons: String,
     /// The sidebar, an HTML fragment.
     pub sidebar: String,
-    pub breadcrumbs: Vec<PageLink>,
+    pub breadcrumbs: Vec<Crumb>,
     /// The outline, an HTML fragment, or empty.
     pub outline: String,
     pub prev: Option<PageLink>,
@@ -298,13 +305,17 @@ mod tests {
             icons: "<svg hidden><symbol id=\"icon-menu\"/></svg>".to_string(),
             sidebar: "<nav class=\"sidebar\">S</nav>\n".to_string(),
             breadcrumbs: vec![
-                PageLink {
-                    label: "by-status".to_string(),
-                    href: "../views/by-status/index.html".to_string(),
+                Crumb {
+                    label: "Reference".to_string(),
+                    href: None,
                 },
-                PageLink {
+                Crumb {
+                    label: "by-status".to_string(),
+                    href: Some("../views/by-status/index.html".to_string()),
+                },
+                Crumb {
                     label: "done".to_string(),
-                    href: "../views/by-status/done/index.html".to_string(),
+                    href: Some("../views/by-status/done/index.html".to_string()),
                 },
             ],
             outline: "<nav class=\"outline\">O</nav>\n".to_string(),
@@ -373,8 +384,12 @@ mod tests {
             "{out}"
         );
         assert!(
-            out.contains("<li><a href=\"../views/by-status/index.html\">by-status</a></li>"),
-            "the first crumb has no separator: {out}"
+            out.contains("<li><span>Reference</span></li>"),
+            "the first crumb has no separator, and a crumb without a page is text: {out}"
+        );
+        assert!(
+            out.contains("<li><svg class=\"icon sep\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../views/by-status/index.html\">by-status</a></li>"),
+            "{out}"
         );
     }
 

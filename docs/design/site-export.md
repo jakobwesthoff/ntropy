@@ -62,6 +62,21 @@ The `[site]` table of the vault's `config.toml`:
 | `index` | ULID of the note that becomes the front page | a generated overview |
 | `title` | site title | the vault directory name |
 | `lang` | the `html` `lang` attribute | `en` |
+| `root` | the page the sidebar is rooted at, `tags/<path>` or `views/<name>/<group>` | the vault root, or the tag of a single `tag:` export query |
+| `[[site.nav]]` | the hand-assembled sidebar, one table per section | the sidebar built from the root |
+
+A `[[site.nav]]` table has a `label` and `items`, each item one of
+`{ note = "<ulid>" }`, `{ tag = "<path>" }` (the tag's subtree as a
+group), `{ view = "<name>" }` or `{ view = "<name>", group = "<value>" }`
+(a view, or one of its groups), `{ tags = true }` (the whole tag tree),
+or `{ label = "…", items = [ … ] }` (a group assembled by hand); every
+item takes an optional `label`, which wins over a landing note's. A key
+outside that set does not parse. An item that names a note that is not
+exported or is hidden, a tag or view group the site has no page for, a
+view that is not configured, a group of items without a label, or
+nothing or several things at once, is an export warning and is left
+out. A `root` that names no tag or view group page of the site is a
+warning, and the sidebar is the default.
 
 ## Pages
 
@@ -157,20 +172,38 @@ descendants in reading order, a child's landing note before the child's
 own entries, each note once. The front page's newest notes are newest
 first.
 
-**Sidebar.** Each configured view is a collapsible section whose groups
-nest as above, each group's entries in reading order, notes and child
-groups interleaved, a note shown by its label when it has one; a
-section starts open only when it holds the current page, and so does
-every group on the page's trail. The tag section lists the top-level
-tags with their note counts, the one holding the current page marked;
-the tree below lives on the tag pages. A note's first placement in
-sidebar order defines its breadcrumb, statically, regardless of how the
-reader arrived; its previous and next links follow the reading order
-through the whole tree of that top-level section, across group
-boundaries, a landing note before its group's entries, and name the
-neighbours by their labels. On narrow screens the sidebar is a drawer
-the header's menu button opens by targeting it, which needs no script;
-Escape and following a link inside close it.
+**Sidebar.** The sidebar is a list of sections, each a collapsible tree
+of items: notes, groups with their subtrees, and hand-assembled groups.
+A group shows its entries in reading order, notes and child groups
+interleaved, a note by its label when it has one; a section starts open
+only when it holds the current page, and so does every group on the
+page's trail. Which sections there are depends on the configuration
+([ADR 0056](../adr/0056-sidebar-order-labels-landing-notes-and-a-nav-table.md)):
+
+- Without a root or a nav table, one section per configured view, its
+  top-level groups as items and an "All groups" link to its index, then
+  the tag section drawn as a cloud of the top-level tags with their note
+  counts, the one holding the current page marked; the tree below lives
+  on the tag pages.
+- With a root, `[site] root` or the tag of a single `tag:` export
+  query, one section: the root group's entries, under the group's label,
+  with an "Overview" link to the group's page.
+- With a nav table, exactly its sections, under their labels, with the
+  items as written; a hand-assembled group is a summary without a link.
+
+A note's first placement in sidebar order, sections then items in
+order, defines its breadcrumb, statically, regardless of how the reader
+arrived: the section (linking to its page when it has one), each
+hand-assembled group as plain text, each group as a link, down to the
+group holding the note; a landing note's breadcrumb stops above its
+group. A group page's breadcrumb is the one above the group where the
+sidebar first reaches it, or its section and the groups above it when
+the sidebar never does. Previous and next follow the reading order
+through the whole tree of the sidebar section, across group boundaries,
+a landing note before its group's entries, and name the neighbours by
+their labels. On narrow screens the sidebar is a drawer the header's
+menu button opens by targeting it, which needs no script; Escape and
+following a link inside close it.
 
 ## Assets
 

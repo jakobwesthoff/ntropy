@@ -13,7 +13,7 @@
 use crate::render::html::writer::escape;
 use crate::render::markdown::Heading;
 
-use super::model::{Entry, Group, Model, SectionKind};
+use super::model::{Entry, Group, Model, NavItem};
 
 /// The tag glyph before a tag link, from the page's icon sprite.
 const TAG_ICON: &str = "<svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-tag\"/></svg>";
@@ -28,69 +28,132 @@ pub fn prefix_for(page: &str) -> String {
     "../".repeat(page.matches('/').count())
 }
 
-/// The sidebar: one section per configured view and one for the tags. A
-/// view section is a collapsible tree of groups holding their entries in
-/// reading order; it starts open only when it holds the current page, and
-/// so does every group on the page's trail, so a reader lands with the
-/// neighbourhood of the page in view and nothing else unfolded. The tag
-/// section lists the top-level tags with their note counts; the tag pages
-/// carry the tree below.
+/// The sidebar (ADR 0054, ADR 0056): the model's sidebar sections, each
+/// either a cloud of groups with counts (the tag section) or a collapsible
+/// tree of items. A tree section starts open only when it holds the
+/// current page, and so does every group on the page's trail, so a reader
+/// lands with the neighbourhood of the page in view and nothing else
+/// unfolded.
 pub fn sidebar(model: &Model, prefix: &str, current: &str) -> String {
     let mut out = String::from("<nav class=\"sidebar\">\n");
-    for section in &model.sections {
-        let href = escape(&format!("{prefix}{}", section.page));
-        let title = escape(&section.title);
-        match section.kind {
-            SectionKind::Tags => {
-                out.push_str("<section class=\"nav-section nav-tags\">\n");
-                out.push_str(&format!(
-                    "<h2 class=\"nav-title\"><a href=\"{href}\">{title}</a></h2>\n"
-                ));
-                tag_cloud(&mut out, model, &section.groups, prefix, current);
-                out.push_str("</section>\n");
+    for section in &model.sidebar {
+        let label = escape(&section.label);
+        if section.cloud {
+            out.push_str("<section class=\"nav-section nav-tags\">\n");
+            match &section.page {
+                Some((page, _)) => out.push_str(&format!(
+                    "<h2 class=\"nav-title\"><a href=\"{}\">{label}</a></h2>\n",
+                    escape(&format!("{prefix}{page}"))
+                )),
+                None => out.push_str(&format!("<h2 class=\"nav-title\">{label}</h2>\n")),
             }
-            SectionKind::View { .. } => {
-                let open = if section
-                    .groups
-                    .iter()
-                    .any(|group| contains_page(group, model, current))
-                    || section.page == current
-                {
-                    " open"
-                } else {
-                    ""
-                };
-                out.push_str(&format!(
-                    "<details class=\"nav-section\"{open}>\n<summary class=\"nav-title\">{CHEVRON}{title}</summary>\n"
-                ));
-                out.push_str(&format!(
-                    "<a class=\"nav-all\" href=\"{href}\">All groups</a>\n"
-                ));
-                groups(&mut out, model, &section.groups, prefix, current);
-                out.push_str("</details>\n");
-            }
+            tag_cloud(&mut out, model, &section.items, prefix, current);
+            out.push_str("</section>\n");
+            continue;
         }
+        let open = if section
+            .items
+            .iter()
+            .any(|item| contains_item(item, model, current))
+            || section
+                .page
+                .as_ref()
+                .is_some_and(|(page, _)| page == current)
+        {
+            " open"
+        } else {
+            ""
+        };
+        out.push_str(&format!(
+            "<details class=\"nav-section\"{open}>\n<summary class=\"nav-title\">{CHEVRON}{label}</summary>\n"
+        ));
+        if let Some((page, text)) = &section.page {
+            out.push_str(&format!(
+                "<a class=\"nav-all\" href=\"{}\">{text}</a>\n",
+                escape(&format!("{prefix}{page}"))
+            ));
+        }
+        nav_items(&mut out, model, &section.items, prefix, current);
+        out.push_str("</details>\n");
     }
     out.push_str("</nav>\n");
     out
 }
 
-/// The top-level groups of a section as a list of collapsible groups.
-fn groups(out: &mut String, model: &Model, groups: &[Group], prefix: &str, current: &str) {
-    if groups.is_empty() {
+/// A list of nav items: notes, groups with their subtrees, and
+/// hand-assembled groups.
+fn nav_items(out: &mut String, model: &Model, items: &[NavItem], prefix: &str, current: &str) {
+    if items.is_empty() {
         return;
     }
     out.push_str("<ul class=\"nav-entries\">\n");
-    for group in groups {
-        group_item(out, model, group, prefix, current);
+    for item in items {
+        match item {
+            NavItem::Note { index, label } => {
+                let note = &model.notes[*index];
+                note_item(
+                    out,
+                    note.page.as_str(),
+                    label.as_deref().unwrap_or(note.name()),
+                    prefix,
+                    current,
+                );
+            }
+            NavItem::Group {
+                section,
+                path,
+                label,
+            } => {
+                let group = model.group_at(*section, path);
+                group_item(out, model, group, label.as_deref(), prefix, current);
+            }
+            NavItem::Curated {
+                label,
+                items: inner,
+            } => {
+                let open = if inner.iter().any(|item| contains_item(item, model, current)) {
+                    " open"
+                } else {
+                    ""
+                };
+                out.push_str(&format!(
+                    "<li class=\"nav-group\"><details{open}><summary>{CHEVRON}<span>{}</span></summary>\n",
+                    escape(label)
+                ));
+                nav_items(out, model, inner, prefix, current);
+                out.push_str("</details></li>\n");
+            }
+        }
     }
     out.push_str("</ul>\n");
 }
 
-/// One group as a collapsible item: its label linking to its page (marked
-/// current when the page is the group's own, as a landing note's is), then
-/// its entries, notes and child groups interleaved in reading order.
-fn group_item(out: &mut String, model: &Model, group: &Group, prefix: &str, current: &str) {
+/// One note as a list item, marked current on its own page.
+fn note_item(out: &mut String, page: &str, name: &str, prefix: &str, current: &str) {
+    let current_attr = if page == current {
+        " aria-current=\"page\""
+    } else {
+        ""
+    };
+    out.push_str(&format!(
+        "<li class=\"nav-note\"><a href=\"{}\"{current_attr}>{}</a></li>\n",
+        escape(&format!("{prefix}{page}")),
+        escape(name)
+    ));
+}
+
+/// One group as a collapsible item: its label (or the override) linking to
+/// its page, marked current when the page is the group's own, as a landing
+/// note's is, then its entries, notes and child groups interleaved in
+/// reading order.
+fn group_item(
+    out: &mut String,
+    model: &Model,
+    group: &Group,
+    label: Option<&str>,
+    prefix: &str,
+    current: &str,
+) {
     let open = if contains_page(group, model, current) {
         " open"
     } else {
@@ -104,7 +167,7 @@ fn group_item(out: &mut String, model: &Model, group: &Group, prefix: &str, curr
     out.push_str(&format!(
         "<li class=\"nav-group\"><details{open}><summary>{CHEVRON}<a href=\"{}\"{current_attr}>{}</a></summary>\n",
         escape(&format!("{prefix}{}", group.page)),
-        escape(&group.label)
+        escape(label.unwrap_or(&group.label))
     ));
     if !group.entries.is_empty() {
         out.push_str("<ul class=\"nav-entries\">\n");
@@ -112,19 +175,10 @@ fn group_item(out: &mut String, model: &Model, group: &Group, prefix: &str, curr
             match *entry {
                 Entry::Note(index) => {
                     let note = &model.notes[index];
-                    let current_attr = if note.page == current {
-                        " aria-current=\"page\""
-                    } else {
-                        ""
-                    };
-                    out.push_str(&format!(
-                        "<li class=\"nav-note\"><a href=\"{}\"{current_attr}>{}</a></li>\n",
-                        escape(&format!("{prefix}{}", note.page)),
-                        escape(note.name())
-                    ));
+                    note_item(out, &note.page, note.name(), prefix, current);
                 }
                 Entry::Child(child) => {
-                    group_item(out, model, &group.children[child], prefix, current);
+                    group_item(out, model, &group.children[child], None, prefix, current);
                 }
             }
         }
@@ -135,12 +189,23 @@ fn group_item(out: &mut String, model: &Model, group: &Group, prefix: &str, curr
 
 /// The top-level tags as a wrapped list of links with counts; the one whose
 /// tree holds the current page is marked current.
-fn tag_cloud(out: &mut String, model: &Model, groups: &[Group], prefix: &str, current: &str) {
+fn tag_cloud(out: &mut String, model: &Model, items: &[NavItem], prefix: &str, current: &str) {
+    let groups: Vec<(&Group, Option<&str>)> = items
+        .iter()
+        .filter_map(|item| match item {
+            NavItem::Group {
+                section,
+                path,
+                label,
+            } => Some((model.group_at(*section, path), label.as_deref())),
+            _ => None,
+        })
+        .collect();
     if groups.is_empty() {
         return;
     }
     out.push_str("<ul class=\"tag-cloud\">\n");
-    for group in groups {
+    for (group, label) in groups {
         let current_attr = if contains_page(group, model, current) {
             " aria-current=\"true\""
         } else {
@@ -149,11 +214,24 @@ fn tag_cloud(out: &mut String, model: &Model, groups: &[Group], prefix: &str, cu
         out.push_str(&format!(
             "<li><a href=\"{}\"{current_attr}>{}<span class=\"count\">{}</span></a></li>\n",
             escape(&format!("{prefix}{}", group.page)),
-            escape(&group.label),
+            escape(label.unwrap_or(&group.label)),
             group.descendants().len()
         ));
     }
     out.push_str("</ul>\n");
+}
+
+/// Whether the current page lies under a nav item.
+fn contains_item(item: &NavItem, model: &Model, current: &str) -> bool {
+    match item {
+        NavItem::Note { index, .. } => model.notes[*index].page == current,
+        NavItem::Group { section, path, .. } => {
+            contains_page(model.group_at(*section, path), model, current)
+        }
+        NavItem::Curated { items, .. } => {
+            items.iter().any(|item| contains_item(item, model, current))
+        }
+    }
 }
 
 /// Whether the current page is this group's page (a landing note's page is
@@ -448,6 +526,76 @@ mod tests {
         // The parent group opens too, since the page lies below it.
         assert!(
             out.contains("<li class=\"nav-group\"><details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../../../../views/by-area/docs/index.html\">docs</a>"),
+            "{out}"
+        );
+    }
+
+    fn docs_model(options: SiteOptions) -> Model {
+        const C: &str = "01CRZ3NDEKTSV4RRFFQ69G5FAV";
+        let notes = [
+            note(
+                A,
+                "Basics",
+                "tags: [docs/start]\nsite:\n  index: true\n  label: Getting Started\n",
+            ),
+            note(B, "Install", "tags: [docs/start]\n"),
+            note(C, "Aside", "tags: [misc]\nstatus: open\n"),
+        ];
+        Model::build(
+            &notes,
+            &[ViewDef::new("by-status", "status")],
+            &options,
+            "V",
+        )
+        .expect("model")
+    }
+
+    #[test]
+    fn a_rooted_sidebar_is_one_tree_with_an_overview_link() {
+        let model = docs_model(SiteOptions {
+            root: Some("tags/docs".to_string()),
+            ..SiteOptions::default()
+        });
+        let out = sidebar(&model, "../", "notes/install.html");
+        assert_eq!(
+            out,
+            "<nav class=\"sidebar\">\n<details class=\"nav-section\" open>\n<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg>docs</summary>\n<a class=\"nav-all\" href=\"../tags/docs/index.html\">Overview</a>\n<ul class=\"nav-entries\">\n<li class=\"nav-group\"><details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/start/index.html\">Getting Started</a></summary>\n<ul class=\"nav-entries\">\n<li class=\"nav-note\"><a href=\"../notes/install.html\" aria-current=\"page\">Install</a></li>\n</ul>\n</details></li>\n</ul>\n</details>\n</nav>\n"
+        );
+        // The root's own page opens the section without marking an item.
+        let own = sidebar(&model, "../../", "tags/docs/index.html");
+        assert!(
+            own.starts_with("<nav class=\"sidebar\">\n<details class=\"nav-section\" open>"),
+            "{own}"
+        );
+        assert!(!own.contains("aria-current"), "{own}");
+    }
+
+    #[test]
+    fn a_curated_sidebar_shows_labels_and_hand_made_groups_without_links() {
+        let model = docs_model(
+            toml::from_str(&format!(
+                "[[nav]]\nlabel = \"Guide\"\nitems = [\n  {{ note = \"{B}\", label = \"Setting up\" }},\n  {{ label = \"Reference\", items = [{{ label = \"Start\", tag = \"docs/start\" }}, {{ tags = true }}] }},\n]\n"
+            ))
+            .expect("nav parses"),
+        );
+        let out = sidebar(&model, "../", "notes/install.html");
+        // The section has no page, so no link under its title; the note
+        // shows its nav label and is current; the hand-made group is a
+        // summary without a link, open because the page lies below it.
+        assert!(
+            out.starts_with("<nav class=\"sidebar\">\n<details class=\"nav-section\" open>\n<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg>Guide</summary>\n<ul class=\"nav-entries\">\n<li class=\"nav-note\"><a href=\"../notes/install.html\" aria-current=\"page\">Setting up</a></li>\n<li class=\"nav-group\"><details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><span>Reference</span></summary>\n<ul class=\"nav-entries\">\n<li class=\"nav-group\"><details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/start/index.html\">Start</a></summary>"),
+            "{out}"
+        );
+        assert!(!out.contains("nav-all"), "{out}");
+        // The whole tag tree as a hand-made group holds the top-level tags
+        // as groups; it opens too, since the page lies under `docs`, while
+        // `misc` stays closed.
+        assert!(
+            out.contains("<li class=\"nav-group\"><details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><span>tags</span></summary>\n<ul class=\"nav-entries\">\n<li class=\"nav-group\"><details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/index.html\">docs</a>"),
+            "{out}"
+        );
+        assert!(
+            out.contains("<li class=\"nav-group\"><details><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/misc/index.html\">misc</a>"),
             "{out}"
         );
     }

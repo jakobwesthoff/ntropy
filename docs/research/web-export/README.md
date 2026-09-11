@@ -27,8 +27,8 @@ The implementation stages (the Markdown walk with the HTML emitter, the
 `html` render format with site themes, the `site` command, the browser
 toolchain with highlighting, scheme switch, and outline, the client-side
 search, and the design pass with the theme layout) are committed on the
-branch `site-generation`. The sidebar definition (Q77 to Q84, ADR 0056)
-is decided and not yet implemented.
+branch `site-generation`, as is the sidebar definition (Q77 to Q84,
+ADR 0056).
 
 ## How to resume
 

@@ -749,6 +749,36 @@ its page and stays searchable; it just appears nowhere in the
 navigation. Previous and next follow the sidebar's reading order across
 groups, so a tag subtree with landing notes reads like a book.
 
+Where the sidebar starts, and what it holds, is the vault config's
+business. `root` starts it at one tag or view group instead of the
+whole vault, which is what a documentation site wants; exporting with a
+single `tag:` query does the same without config. A `[[site.nav]]`
+table assembles the sidebar by hand instead, and is then all of it:
+
+```toml
+[site]
+root = "tags/docs"                   # the sidebar is the docs subtree
+
+[[site.nav]]                         # or: sections listed by hand
+label = "Getting Started"
+items = [
+  { note = "01ARZ3NDEKTSV4RRFFQ69G5FAV" },          # a note, by ULID
+  { label = "Gadgets", tag = "docs/start/gadgets" }, # a tag's subtree
+]
+
+[[site.nav]]
+label = "Reference"
+items = [
+  { view = "by-status", group = "open" },  # one group of a view
+  { view = "by-status" },                  # a whole view
+  { tags = true },                         # the whole tag tree
+  { label = "More", items = [ ] },         # a group made by hand
+]
+```
+
+An item that names something the export does not have is a warning
+and is left out, so the site is still written.
+
 The search is a palette over the page: the header's button, `/`, or
 Ctrl+K opens it, typing searches as you go, the arrow keys and Enter open
 a result. It is made for readers rather than for the query language: a
