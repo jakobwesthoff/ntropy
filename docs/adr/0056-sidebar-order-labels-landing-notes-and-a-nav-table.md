@@ -12,6 +12,11 @@ notes off for the site, and a note's `site.related` overrides it for
 its page; a landing note stands alone on its group's page, and its
 `listing` brings the group's listing back below it.
 
+Amended 2026-09-11 by
+[ADR 0058](0058-theme-templates-overriding-the-built-in-ones-by-name.md):
+the `site` table gains `template`, naming the theme template that
+renders the note's page.
+
 Amends [ADR 0054](0054-site-navigation-and-url-scheme.md), whose
 sidebar had no hand-curated order and whose rejected alternatives
 included a frontmatter order field. The user's answers are recorded in

@@ -888,6 +888,58 @@ is [design-notes.md](design-notes.md).
     table stays hidden and inert, as before.
   - *Decision:* recorded as ADR 0057, amending ADR 0046 and ADR 0051.
 
+- **Q91 to Q98. Templates as part of a theme (2026-09-11).** Opened by
+  the project page effort (`../project-page/`): the user found that a
+  landing page with a hero, a footer, and an impressum need markup a
+  stylesheet cannot produce, and asked (verbatim) "i guess before we can
+  even start we need to implement the template override part into our
+  themes, right? so lets discuss and implement that first". Facts given
+  first: the three templates are compiled into the binary, `page.html`
+  renders every page kind with a `document` flag for the standalone
+  artifact, and a template receives scalars plus pre-rendered HTML
+  strings for the sidebar, the outline, the body, and the icons.
+  - *Q91 granularity:* whole files, built-ins still reachable: a file
+    under the theme's `templates/` replaces the built-in of the same
+    name, and the built-ins stay registered under a prefix so a theme
+    template can extend or include them and override single blocks.
+    Not chosen: whole files only; blocks only.
+  - *Q92 page kinds, first answer:* a kind variable plus optional
+    per-kind templates. The user then asked (verbatim) "i am not sure
+    what a kind specifically is in the end and where the difference
+    between kind and site.template is actually"; answered with Q95.
+  - *Q93 per-note template:* yes, `site.template` names a theme
+    template for one note. Not chosen: the kind alone decides; later.
+  - *Q94 context:* all three offered additions: the note's frontmatter
+    values, a free-form `[site.vars]` config table, and the sidebar as
+    structured data beside the pre-rendered HTML.
+  - *Q95 selection (the clarification of Q92):* `page.html` unless the
+    note's `site.template` names another theme template; every
+    template receives the kind (front, note, group, document) as a
+    variable; no automatic per-kind files. Not chosen: per-kind files
+    without `site.template`; both rules.
+  - *Q96 `site theme init`:* writes the built-in templates into the new
+    theme, always. Not chosen: stylesheet and assets only.
+  - *Q97 footer:* the built-in `page.html` gets an empty footer block.
+    Not chosen: a visible built-in footer; none.
+  - *Q98 seams (the user, unprompted):* "maybe the base theme should get
+    a place where to put further menu entries besides the search button
+    or something, so it could be filled as well. opinions?" Answer: the
+    full set of empty blocks: `head`, `header_nav`, `header_tools`,
+    `before_content`, `after_content`, `footer`, `scripts`. Not chosen:
+    header and footer only; footer and `header_nav` only.
+  - Stated as assumptions before Q96 and not objected to: theme
+    templates also render the `render --to html` artifact, with the
+    kind `document`; a theme's `templates/` directory is not copied
+    under `assets/`, as `icons/` is not copied beside the artifact; a
+    template that fails to parse or render fails the export, as a
+    broken stylesheet does; a `site.template` naming a template the
+    theme does not have is a warning, which `--strict` turns into an
+    error, and the page uses `page.html`; the context fields are
+    documented in the skill's theme reference and the pinning test
+    covers them.
+  - *Decision:* recorded as ADR 0058, amending ADR 0048, ADR 0050, and
+    ADR 0056.
+
 ## Answered but not yet turned into a decision
 
 _Not yet established._
@@ -967,12 +1019,17 @@ Q77 to Q86 decided (see above), after the search rework (Q73 to Q76).
 
 Q87 to Q90 decided (see above).
 
+### Round 24 (templates as part of a theme, 2026-09-11)
+
+Q91 to Q98 decided (see above).
+
 ### Still open
 
 No question is pending. Two small values stay unfixed until
 implementation: the number of newest notes on the generated front
 page (Q48) and the exact curated grammar list file (Q37).
 
-- **Later iterations, noted:** template override by themes (Q9),
-  backlinks (Q17), math and diagrams (Q24b). The frontmatter order
+- **Later iterations, noted:** backlinks (Q17), math and diagrams
+  (Q24b). The template override by themes (Q9) is decided in Q91 to
+  Q98. The frontmatter order
   override (Q27) is decided in Q77 to Q84.

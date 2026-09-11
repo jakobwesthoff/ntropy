@@ -6,6 +6,11 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11 by
+[ADR 0058](0058-theme-templates-overriding-the-built-in-ones-by-name.md):
+the embedded templates are the built-in theme's, a vault theme
+overrides them by name, and the context gains fields.
+
 Produces the page structure of
 [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md)
 that themes of [ADR 0048](0048-site-themes-as-stylesheets-and-assets.md)

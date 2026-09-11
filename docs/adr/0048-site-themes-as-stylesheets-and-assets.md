@@ -7,6 +7,11 @@ Date: 2026-09-11
 Accepted
 
 Amended 2026-09-11 by
+[ADR 0058](0058-theme-templates-overriding-the-built-in-ones-by-name.md):
+a theme may also hold `templates/`, overriding the built-in page
+templates by name.
+
+Amended 2026-09-11 by
 [ADR 0055](0055-theme-directory-layout-with-fonts-icons-and-embedded-assets.md):
 the directory layout a theme has (`style.css`, `icons/`, `fonts/`), the
 icon sprite assembled at export from `icons/`, and how the built-in

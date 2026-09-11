@@ -6,6 +6,10 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11 by
+[ADR 0058](0058-theme-templates-overriding-the-built-in-ones-by-name.md):
+the `document` flag of the page template becomes the kind `document`.
+
 Amends [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md),
 whose `html` format produced one self-contained file, and
 [ADR 0051](0051-browser-side-code-in-typescript-with-committed-build.md),
