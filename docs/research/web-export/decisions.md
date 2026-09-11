@@ -766,6 +766,65 @@ is [design-notes.md](design-notes.md).
     search implies it: two predicates side by side read as `and` in the
     reader's search, where the CLI's grammar refuses them.
   - *Decision:* recorded as an amendment to ADR 0052.
+- **Q77 to Q84. Sidebar definition, ordering, and grouping
+  (2026-09-11).** The user asked (verbatim): "The next thing we want to
+  work on is maybe custom sidebar definition custom ordering and grouping
+  of sorts do you have any ideas on that topic. in the end we want to be
+  able to create a page like [the torchsnap-docs project, a Starlight
+  site] at least nav structure like with our ntropy export. The question
+  is how and what could we do to reach this goal, to make that possible.
+  any ideas?" The analysis set the Starlight sidebar (sections listed by
+  hand with invented labels, an ordered mix of pages, labelled groups,
+  and directories expanded in place; per page a frontmatter `sidebar`
+  table with `order`, `label`, `hidden`; a directory's `index` page at
+  order 0 as its landing page) against the export (sections are the
+  views and the tag tree, groups alphabetical, notes newest first, no
+  labels, no order, no hiding), and observed that a tag subtree already
+  is the directory tree such a site has. The proposal: a nav root, a
+  frontmatter override, group landing notes, and a thin nav table in
+  config reusing the query DSL's notion of a tag path.
+  - *Q77 structure:* order, label, and hidden on the notes, plus a nav
+    root and an optional `[[site.nav]]` table in `config.toml` that
+    assembles the top level from notes, tag subtrees, and view groups.
+    Not chosen: frontmatter and a nav root only; a nav table only; a
+    curated table-of-contents note.
+  - *Q78 group landing:* both, config wins: a landing note in the group
+    gives the group its page content, label, and position by default; a
+    nav table entry overrides label and position. Not chosen: landing
+    note only; config only.
+  - *Q79 frontmatter shape:* a `site` table (`site: { order, label,
+    hidden }`). Not chosen: flat keys; order only for now. The vault at
+    hand has no note with a `site` key and several with a plain
+    `order` key.
+  - *Q80 nav root:* `[site] root` names it; absent, a single `tag:`
+    term as the export query roots the sidebar at that tag; otherwise
+    the vault root as before. Not chosen: config key only; derive from
+    the query only.
+  - *Q81 nav table:* when present it is the whole sidebar, Starlight's
+    rule; a whole tag tree or view returns only through an item. Not
+    chosen: curated sections above the automatic ones; table replaces,
+    tags always appended.
+  - *Q82 hidden:* hidden from the sidebar, from lists, and as a
+    previous/next neighbour; the page is still exported, linkable, and
+    searchable. Not chosen: navigation only; everything but the page.
+  - *Q83 landing page:* the group page renders the landing note's title
+    and body, then the child groups and the remaining notes; the note
+    has no separate page, links to it go to the group page. Not chosen:
+    the note keeps its own page; the note replaces the group page.
+  - *Q84 (the user, unprompted):* before the implementation, a vault
+    holding the torchsnap docs converted to notes and configured to
+    produce the same navigation, as the example to render during
+    development; and the decisions documented first.
+  - Settled during the design without a question, since the answers
+    left them open: a landing note is marked `index = true` rather than
+    by `order = 0`, because one number cannot both mark the landing note
+    and place its group among the parent's entries, so `order` on a
+    landing note places the group; the root is named as a site path,
+    `tags/<path>` or `views/<name>/<group>`; previous and next follow
+    the reading order through the whole tree of a top-level section,
+    crossing group boundaries, as the Starlight sidebar does; a group
+    page lists its descendants in that reading order.
+  - *Decision:* recorded as ADR 0056, amending ADR 0054.
 
 ## Answered but not yet turned into a decision
 
@@ -838,6 +897,10 @@ Q47a, Q47b, Q48, Q49, Q50, Q51 decided (see above).
 Q55 to Q66 decided (see above), interleaved with the user's questions
 on the asset system, recorded there.
 
+### Rounds 21 and 22 (the sidebar, 2026-09-11)
+
+Q77 to Q84 decided (see above), after the search rework (Q73 to Q76).
+
 ### Still open
 
 No question is pending. Two small values stay unfixed until
@@ -845,5 +908,5 @@ implementation: the number of newest notes on the generated front
 page (Q48) and the exact curated grammar list file (Q37).
 
 - **Later iterations, noted:** template override by themes (Q9),
-  frontmatter order override (Q27), backlinks (Q17), math and diagrams
-  (Q24b).
+  backlinks (Q17), math and diagrams (Q24b). The frontmatter order
+  override (Q27) is decided in Q77 to Q84.

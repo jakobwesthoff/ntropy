@@ -6,6 +6,14 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11 by
+[ADR 0056](0056-sidebar-order-labels-landing-notes-and-a-nav-table.md):
+a note's `site` frontmatter table orders, labels, and hides it and can
+make it a group's landing note; `[site] root` roots the sidebar below
+the vault; `[[site.nav]]` assembles the sidebar by hand. The sentences
+"There is no hand-curated order" and the sort rule below describe the
+sidebar without those settings.
+
 Amended 2026-09-11, from the design pass on the exported pages (the
 user's answers are recorded in `docs/research/web-export/decisions.md`,
 Q55 to Q66):
@@ -106,7 +114,7 @@ a file outside the vault is a warning. Remote images stay remote.
 - **A curated table-of-contents note** defining the sidebar, alone or
   winning over views and tags when present; and **a frontmatter order
   field**. The user named an order override as a topic for a later
-  iteration.
+  iteration; ADR 0056 adds the frontmatter override.
 - **`notes/<ulid>.html`**, **`notes/<ulid>-<slug>.html`**, and
   **`notes/<slug>/index.html`**; a full ULID suffix on colliders.
 - **View names at the site root** as in the vault, and **flat
