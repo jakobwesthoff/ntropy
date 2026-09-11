@@ -854,73 +854,91 @@ lang = "en"
 `--theme default` returns to the built-in look.
 
 **Colors and type.** Every color and typeface of the built-in theme is a
-custom property on `:root`. Three grounds, `--bg`, `--surface`,
-`--raised`, and `--border`; three text tones, `--fg-bright` for headings,
-`--fg` for body text, `--muted` for secondary text, plus `--faint` for
-marks; `--accent`, `--accent-soft`, `--link`, `--note-link`, and the five
-`--callout-*` accents; the four stacks `--display`, `--serif`, `--sans`,
-`--mono`. The dark palette redefines them under `prefers-color-scheme: dark` and under
-`:root[data-theme="dark"]`; `data-theme="light"` wins over the system
-preference. A theme that only wants different colors redefines those
-properties and keeps the rest.
+custom property on `:root`. The dark palette redefines them under
+`prefers-color-scheme: dark` and under `:root[data-theme="dark"]`;
+`data-theme="light"` wins over the system preference. A theme that only
+wants different colors redefines these and keeps the rest:
 
-**Sizes.** The sizes are named for their job on these pages, not as a
-generic scale: `--measure` (the reading column), `--page-width`,
-`--gutter`, `--sidebar-width`, `--outline-width`, `--column-gap`, and
-`--header-height` for the layout; `--block-gap` between the blocks of a
-note and `--section-gap` between sections; `--radius-control` for
-buttons and inputs, `--radius-block` for code, quotes, tables, and
-callouts, `--radius-panel` for the search panel, `--radius-pill` for
-chips; `--accent-bar` for the bar on code blocks, quotes, and callouts;
-`--shadow-panel` and `--shadow-raised`; `--motion` for every transition.
-Widen the reading column or flatten the corners by redefining one
-property.
+| Property | Role |
+|----------|------|
+| `--bg`, `--surface`, `--raised` | the page ground, a tinted surface (code, callouts, hover fills), a raised panel |
+| `--border` | rules and outlines |
+| `--fg-bright`, `--fg`, `--muted`, `--faint` | headings, body text, secondary text, marks |
+| `--accent`, `--accent-soft` | the accent and its translucent fill |
+| `--link`, `--note-link` | ordinary links, links to other notes |
+| `--callout-note`, `--callout-tip`, `--callout-important`, `--callout-warning`, `--callout-caution` | the five callout accents |
+| `--display`, `--serif`, `--sans`, `--mono` | the font stacks for page titles, note bodies, the chrome and lists, dates and code |
 
-**Fonts.** The built-in theme ships four faces under `fonts/` (all SIL
-Open Font License, see `fonts/LICENSE`): Fraunces for page titles
-(`--display`), Literata for note bodies and their headings (`--serif`),
-DM Sans for the chrome and lists (`--sans`), DM Mono for dates, counts,
-and code (`--mono`). They are declared with `@font-face` in `style.css`.
+**Sizes.** Named for their job on these pages, not as a generic scale, so
+widening the reading column or flattening the corners is one property:
+
+| Property | Role |
+|----------|------|
+| `--measure` | the reading column's width |
+| `--page-width`, `--gutter` | the layout's outer width and side padding |
+| `--sidebar-width`, `--outline-width`, `--column-gap`, `--header-height` | the chrome's dimensions |
+| `--block-gap`, `--section-gap` | between the blocks of a note, between sections |
+| `--radius-control`, `--radius-block`, `--radius-panel`, `--radius-pill` | buttons and inputs; code, quotes, tables, callouts; the search panel; chips |
+| `--accent-bar` | the bar on code blocks, quotes, and callouts |
+| `--shadow-panel`, `--shadow-raised` | the search panel, raised elements |
+| `--motion` | the length of every transition |
+
+**Fonts.** The built-in theme ships four faces under `fonts/`, all SIL Open
+Font License (see `fonts/LICENSE`), declared with `@font-face` in
+`style.css`:
+
+| Face | Stack | Used for |
+|------|-------|----------|
+| Fraunces | `--display` | page titles |
+| Literata | `--serif` | note bodies and their headings |
+| DM Sans | `--sans` | the chrome and lists |
+| DM Mono | `--mono` | dates, counts, and code |
+
 Put your own files under `fonts/` and declare them the same way; the
-stylesheet's `url()`s resolve relative to itself in the site's
-`assets/`.
+stylesheet's `url()`s resolve relative to itself in the site's `assets/`.
 
 **Icons.** Every `icons/<name>.svg` becomes a `<symbol id="icon-<name>">`
 of a sprite inlined into every page, and the markup shows an icon with
 `<svg class="icon"><use href="#icon-<name>"/></svg>`. Your theme's icons
 are layered by name over the built-in set (Lucide, ISC, see
 `icons/LICENSE`): a file with a built-in name replaces that icon, any
-other name adds one, and a theme without `icons/` keeps them all. The
-names the pages use are `menu`, `x`, `search`, `monitor`, `sun`, `moon`,
-`tag`, `chevron-right`, `chevron-left`, for callouts `info`,
-`lightbulb`, `message-square-warning`, `triangle-alert`, `octagon-alert`,
-and for the search palette's result kinds `file-text`, `folder`, and
-`tag`.
-An icon takes the text color, so the stylesheet sizes and colors it
-through the `.icon` class.
+other name adds one, and a theme without `icons/` keeps them all. An icon
+takes the text color, so the stylesheet sizes and colors it through the
+`.icon` class. The names the pages use:
 
-**Markup.** The page is a `.layout` grid of `.site-header` (with
-`.site-name`, the search mount, and the `.theme-switch` of three
-`.theme-choice` buttons), the `.sidebar-pane` holding `nav.sidebar`,
-`main` with `.breadcrumbs`, `.content`, and the `.pager`, and `aside.side`
-holding `nav.outline`. The sidebar is `.nav-section` blocks: a `details`
-with a `summary.nav-title`, an optional `.nav-all` link to the section's
-page, and `ul.nav-entries` of `li.nav-note` links and `li.nav-group`
-details whose `summary` holds the group's link (a `span` for a group
-made by hand in the nav table) and the `.chevron` icon, nesting with
-another `ul.nav-entries`; the tag section is a `section.nav-tags` with
-an `h2.nav-title` and a `ul.tag-cloud`. A breadcrumb step without a page
-of its own is a `span` instead of a link. A note is a `.note-header` (`.note-title`,
-`.note-meta` with `.note-created` and the `.tags`, the remaining fields
-as a `.frontmatter` list) followed by `article.note-body` and, on the
-site, `section.related`. Lists of notes are `ol.note-rows` of
-`li.note-row` with a `time`, the `.note-row-title` link, and
-`.note-row-tags`; groups are `ul.group-chips` of `.chip` links. Callouts
-are `.callout.callout-<kind>` with a `.callout-title`; highlighted code
-carries Shiki's `--shiki-light`/`--shiki-dark` colors per token, and the
-stylesheet picks one by scheme. The current sidebar note and outline
-entry carry `aria-current`. Read the built-in `style.css` for the rest;
-it is written to be copied.
+- the chrome: `menu`, `x`, `search`, `monitor`, `sun`, `moon`, `tag`,
+  `chevron-right`, `chevron-left`;
+- callouts: `info`, `lightbulb`, `message-square-warning`,
+  `triangle-alert`, `octagon-alert`;
+- the search palette's result kinds: `file-text`, `folder`, `tag`.
+
+**Markup.** The page is a `.layout` grid of four regions:
+
+- `.site-header` with `.site-name`, the `.search-toggle` button, and the
+  `.theme-switch` of three `.theme-choice` buttons;
+- `.sidebar-pane` holding `nav.sidebar`: `.nav-section` blocks, each a
+  `details` with a `summary.nav-title`, an optional `.nav-all` link to the
+  section's page, and `ul.nav-entries` of `li.nav-note` links and
+  `li.nav-group` details whose `summary` holds the group's link (a `span`
+  for a group made by hand in the nav table) and the `.chevron` icon,
+  nesting with another `ul.nav-entries`; the tag section is a
+  `section.nav-tags` with an `h2.nav-title` and a `ul.tag-cloud`;
+- `main` with `.breadcrumbs` (a step without a page is a `span`),
+  `.content`, and the `.pager`;
+- `aside.side` holding `nav.outline`.
+
+Inside the content, a note is a `.note-header` (`.note-title`, `.note-meta`
+with `.note-created` and the `.tags`, the remaining fields as a
+`.frontmatter` list) followed by `article.note-body` and, on the site,
+`section.related`. Lists of notes are `ol.note-rows` of `li.note-row` with
+a `time`, the `.note-row-title` link, and `.note-row-tags`; groups are
+`ul.group-chips` of `.chip` links. Callouts are `.callout.callout-<kind>`
+with a `.callout-title`. Highlighted code carries Shiki's `--shiki-light`
+and `--shiki-dark` colors per token, and the stylesheet picks one by
+scheme. The current sidebar entry and outline entry carry `aria-current`.
+A standalone `render --to html` page has `body.document` and no sidebar
+column; a site page has `body.site`. Read the built-in `style.css` for the
+rest; it is written to be copied.
 
 ## Language server
 
