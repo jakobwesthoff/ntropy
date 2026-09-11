@@ -6,11 +6,13 @@
 //
 // A page includes one script per grammar it needs; each appends its
 // grammar to `window.__ntropyGrammars`. The highlighter is created from
-// that registry with Shiki's JavaScript regex engine and two GitHub themes,
-// and every fenced block whose language has a grammar is replaced by
-// Shiki's markup. Both themes' colors travel as CSS custom properties, and
-// the stylesheet picks one per color scheme; a block whose language has no
-// grammar stays as it is.
+// that registry with Shiki's JavaScript regex engine and the two soft
+// Gruvbox themes, whose warm token colors sit on the built-in theme's
+// paper and warm black; every fenced block whose language has a grammar is
+// replaced by Shiki's markup. Both themes' colors travel as CSS custom
+// properties, and the stylesheet picks one per color scheme and keeps its
+// own block background; a block whose language has no grammar stays as it
+// is.
 
 import {
   createHighlighterCore,
@@ -18,8 +20,8 @@ import {
   type LanguageRegistration,
 } from "@shikijs/core";
 import { createJavaScriptRegexEngine } from "@shikijs/engine-javascript";
-import githubDark from "@shikijs/themes/github-dark";
-import githubLight from "@shikijs/themes/github-light";
+import gruvboxDark from "@shikijs/themes/gruvbox-dark-soft";
+import gruvboxLight from "@shikijs/themes/gruvbox-light-soft";
 
 declare global {
   interface Window {
@@ -62,7 +64,7 @@ export async function highlighterFor(
 ): Promise<HighlighterCore> {
   return createHighlighterCore({
     langs: [grammars],
-    themes: [githubLight, githubDark],
+    themes: [gruvboxLight, gruvboxDark],
     engine: createJavaScriptRegexEngine({ forgiving: true }),
   });
 }
@@ -86,7 +88,7 @@ export async function installHighlighting(
     if (lang === null || pre === null) continue;
     const html = highlighter.codeToHtml(code.textContent ?? "", {
       lang,
-      themes: { light: "github-light", dark: "github-dark" },
+      themes: { light: "gruvbox-light-soft", dark: "gruvbox-dark-soft" },
       defaultColor: false,
     });
     const template = doc.createElement("template");

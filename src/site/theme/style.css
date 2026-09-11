@@ -507,27 +507,26 @@ input[type="checkbox"] {
   text-decoration: none;
 }
 
-/* Highlighted code: Shiki emits both themes' colors as custom properties
- * (--shiki-light, --shiki-dark); the scheme in effect picks one. */
+/* Highlighted code: Shiki emits both themes' token colors as custom
+ * properties (--shiki-light, --shiki-dark); the scheme in effect picks one.
+ * The block keeps this theme's surface as its background rather than the
+ * Shiki theme's, so code sits on the same paper as everything else. */
 
 .shiki,
 .shiki span {
   color: var(--shiki-light);
-  background-color: var(--shiki-light-bg);
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .shiki,
   :root:not([data-theme="light"]) .shiki span {
     color: var(--shiki-dark);
-    background-color: var(--shiki-dark-bg);
   }
 }
 
 :root[data-theme="dark"] .shiki,
 :root[data-theme="dark"] .shiki span {
   color: var(--shiki-dark);
-  background-color: var(--shiki-dark-bg);
 }
 
 /* The site layout: header, navigation, content, and the outline beside it.
