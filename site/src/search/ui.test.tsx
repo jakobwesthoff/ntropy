@@ -238,6 +238,33 @@ describe("Palette", () => {
     expect(navigate).toHaveBeenCalledWith("../notes/garden.html");
   });
 
+  it("lets the pointer select only after it has moved since a keyboard move", async () => {
+    key({ key: "/" });
+    await flush();
+    const input = await type("rust");
+    const rows = document.querySelectorAll<HTMLElement>(".palette-row");
+    const selectedHref = () =>
+      document.querySelector(".is-selected a")?.getAttribute("href");
+    // A row entering under a still pointer, as after a scroll, is ignored.
+    rows[2]?.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }));
+    await flush();
+    expect(selectedHref()).toBe("../tags/work/rust/index.html");
+    // Once the pointer moves, hovering selects.
+    document
+      .querySelector(".palette-results")
+      ?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    rows[2]?.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }));
+    await flush();
+    expect(selectedHref()).toBe("../notes/garden.html");
+    // A keyboard move disarms hover again until the next pointer move.
+    key({ key: "ArrowUp" }, input);
+    await flush();
+    expect(selectedHref()).toBe("../notes/rust-tips.html");
+    rows[0]?.dispatchEvent(new MouseEvent("mouseenter", { bubbles: false }));
+    await flush();
+    expect(selectedHref()).toBe("../notes/rust-tips.html");
+  });
+
   it("opens a result on click and reports a bad query", async () => {
     key({ key: "/" });
     await flush();

@@ -7,6 +7,12 @@
 // by Escape or a click outside. Results come grouped, tags and views before
 // notes, with the matched text marked; the arrow keys move the selection
 // and Enter opens it.
+//
+// Two inputs move the selection, the keys and the pointer, and they must
+// not fight: a keyboard move scrolls the list, which puts a different row
+// under a pointer that has not moved, and the browser reports that as the
+// pointer entering the row. So hover selects only after the pointer has
+// moved since the last keyboard move.
 
 import { render } from "preact";
 import { useEffect, useMemo, useRef, useState } from "preact/hooks";
@@ -92,6 +98,8 @@ export function Palette({
   const [selected, setSelected] = useState(0);
   const box = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  /** Whether the pointer has moved since the last keyboard move. */
+  const pointerMoved = useRef(false);
 
   useEffect(() => {
     if (!open || data !== null) return;
@@ -152,10 +160,23 @@ export function Palette({
       ?.scrollIntoView({ block: "nearest" });
   }, [selected]);
 
+  // The list exists only while the palette is open; watch the pointer on
+  // it from the render that creates it.
+  useEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const onMove = () => {
+      pointerMoved.current = true;
+    };
+    element.addEventListener("mousemove", onMove);
+    return () => element.removeEventListener("mousemove", onMove);
+  }, [open]);
+
   const onInputKey = (event: KeyboardEvent) => {
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       if (flat.length === 0) return;
+      pointerMoved.current = false;
       const step = event.key === "ArrowDown" ? 1 : -1;
       setSelected((current) => (current + step + flat.length) % flat.length);
     } else if (event.key === "Enter") {
@@ -174,7 +195,9 @@ export function Palette({
       <li
         key={hit.href}
         class={`palette-row${at === selected ? " is-selected" : ""}`}
-        onMouseEnter={() => setSelected(at)}
+        onMouseEnter={() => {
+          if (pointerMoved.current) setSelected(at);
+        }}
       >
         <a
           href={hit.href}
