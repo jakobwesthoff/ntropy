@@ -1,11 +1,13 @@
 ---
 name: ntropy
 description: >-
-  Create, search, edit, delete, and render notes to PDF in ntropy Markdown
-  vaults; create and manage vaults, views, and templates. Use for any task
-  involving ntropy, a note vault, or .ntropy-vault files.
+  Create, search, edit, delete, and render notes to PDF or HTML in ntropy
+  Markdown vaults; export a vault or a subset as a static website with a
+  configurable sidebar and theme; create and manage vaults, views, and
+  templates. Use for any task involving ntropy, a note vault, or
+  .ntropy-vault files.
 metadata:
-  tags: ntropy, notes, markdown, vault, cli
+  tags: ntropy, notes, markdown, vault, cli, site, website, html
 ---
 
 # Working with ntropy
