@@ -376,4 +376,79 @@ mod tests {
         let err = write_builtin(&target).expect_err("refused");
         assert_eq!(err.kind(), std::io::ErrorKind::AlreadyExists);
     }
+
+    /// The skill's theme reference carries the built-in theme's token,
+    /// icon, and class names itself, since it is installed outside the
+    /// repository; every name it gives has to exist here, so the copy
+    /// cannot drift silently.
+    #[test]
+    fn the_skill_names_only_tokens_icons_and_classes_the_theme_has() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let skill = std::fs::read_to_string(root.join("skills/ntropy/references/site-themes.md"))
+            .expect("the skill's theme reference exists");
+        let stylesheet = SiteTheme::builtin().stylesheet;
+        let icons: Vec<String> = std::fs::read_dir(root.join("src/site/theme/icons"))
+            .expect("the icons directory exists")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        // Everything that emits page markup, so a class the skill names is
+        // found wherever it is written.
+        let markup: String = [
+            "src/site/templates/page.html",
+            "src/site/templates/note.html",
+            "src/site/nav.rs",
+            "src/render/html/emitter.rs",
+            "site/src/search/ui.tsx",
+        ]
+        .iter()
+        .map(|path| std::fs::read_to_string(root.join(path)).expect(path))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+        let tokens = regex::Regex::new(r"`(--[a-z-]+)`").expect("pattern");
+        for token in tokens.captures_iter(&skill).map(|c| c[1].to_string()) {
+            // The Shiki token colors come from the highlighter, not the theme.
+            if token.starts_with("--shiki-") {
+                continue;
+            }
+            assert!(
+                stylesheet.contains(&format!("{token}:")),
+                "the skill names {token}, which style.css does not declare"
+            );
+        }
+
+        let icon_section = skill
+            .split("## Icons")
+            .nth(1)
+            .and_then(|rest| rest.split("## Markup").next())
+            .expect("the icons section");
+        let names = regex::Regex::new(r"`([a-z][a-z-]*)`").expect("pattern");
+        for name in names.captures_iter(icon_section).map(|c| c[1].to_string()) {
+            if name == "icons" {
+                continue;
+            }
+            assert!(
+                icons.contains(&format!("{name}.svg")),
+                "the skill names the icon {name}, which the theme does not ship"
+            );
+        }
+
+        let markup_section = skill.split("## Markup").nth(1).expect("the markup section");
+        let classes = regex::Regex::new(r"`[a-z0-9]*\.([a-z][a-z0-9-]*)").expect("pattern");
+        for class in classes
+            .captures_iter(markup_section)
+            .map(|c| c[1].to_string())
+        {
+            assert!(
+                markup.contains(&class),
+                "the skill names the class .{class}, which no page carries"
+            );
+        }
+    }
 }

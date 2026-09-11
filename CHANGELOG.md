@@ -33,6 +33,15 @@ and this project adheres to
   entries read in order: ordered ones first, then notes newest first,
   then groups by label; previous and next follow that reading order
   across group boundaries.
+- The agent skill covers the website export: a `site` row and an
+  html-aware `render` row, golden rules for the reserved `site`
+  frontmatter key and for naming notes by ULID in the site config, a
+  publish workflow, and two references, `site.md` (command, warnings,
+  `[site]` and the nav table, the `site` frontmatter keys, the standalone
+  page) and `site-themes.md` (layout, tokens, fonts, icons, markup). A test
+  pins the theme reference's names to the built-in theme.
+- The search palette's note results show their icon: the built-in theme
+  was missing the `file-text` icon the palette uses.
 - `ntropy render --to html` writes the site's page for one note as
   `<stem>.html` plus `<stem>_files/` beside it, holding the theme, the
   fonts, the page script, the grammars the page needs, and the images

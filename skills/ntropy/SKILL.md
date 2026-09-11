@@ -57,20 +57,34 @@ language for filtering, and materialized symlink views for filesystem browsing.
 9. **Delete by ULID, with `-f`.** `delete` requires exactly one match and, in
    non-interactive mode, `--force`. Search first, then
    `ntropy delete -n -f <ulid>`.
-10. **`render` to PDF needs `typst` on `PATH`.** It resolves to exactly one
-   note; pass `-p` to capture the artifact path (`out=$(ntropy render -n -p
-   <ulid>)`). `--to typst` emits the Typst document instead and needs no
-   external tool at all.
-11. **The vault's theme is automatic; never pass `--theme` to get it.** If
-   `.ntropy/config.toml` has `[render] theme`, every `render` already uses it.
-   `--theme <name>` picks a different file from `.ntropy/themes/typst/`, and
-   `--theme default` forces ntropy's built-in look. A theme that is missing or
-   broken fails the render rather than falling back.
+10. **`render` to PDF needs `typst` on `PATH`; `typst` and `html` need no
+   tool.** It resolves to exactly one note; pass `-p` to capture the
+   artifact path (`out=$(ntropy render -n -p <ulid>)`). `--to typst` emits
+   the Typst document. `--to html` writes the note as a web page,
+   `<stem>.html` plus a `<stem>_files/` directory beside it that the page
+   needs; move the two together ([references/site.md](references/site.md)).
+11. **The vault's theme is automatic; never pass `--theme` to get it.** Which
+   theme depends on the format: `pdf` and `typst` use `[render] theme` from
+   `.ntropy/themes/typst/`, `html` and `site` use `[site] theme`, a
+   directory in `.ntropy/themes/site/`. `--theme <name>` picks a different
+   one, `--theme default` forces ntropy's built-in look, and `site theme
+   init <name>` copies the built-in site theme out as a starting point. A
+   theme that is missing or broken fails the render rather than falling
+   back.
 12. **Rendering a linked set: no `-o`, one directory.** A note link becomes a
-   link to `<target-slug>.pdf`, the name `render` gives the target's own
-   artifact by default. Render each note from the same working directory
-   without `-o` and the cross-references find each other; rename an artifact
-   and its incoming links break.
+   link to `<target-slug>.pdf` (or `.html`), the name `render` gives the
+   target's own artifact by default. Render each note from the same working
+   directory without `-o` and the cross-references find each other; rename
+   an artifact and its incoming links break. Rendering again over an
+   existing artifact needs `--force`; `render` never overwrites silently.
+13. **`site` is a reserved frontmatter key.** A note's `site` table shapes
+   the exported website's navigation (`order`, `label`, `hidden`, `index`,
+   `listing`, `related`) and is hidden from the page. Never put content
+   under it, and never invent keys in it.
+14. **The site config names notes by ULID.** `[site] index` and every
+   `{ note = … }` item of a `[[site.nav]]` table take the full 26-character
+   ULID, never a title, slug, or path. Look it up with `ntropy search -n`
+   first.
 
 ## Do / don't
 
@@ -89,6 +103,8 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | Create or edit files inside `by-*/` view directories | edit the canonical file in `all-notes/` |
 | Link notes by title or view path | `[Title](<ulid>-<slug>.md)` |
 | Edit a note's frontmatter and stop there | edit, then `ntropy reconcile` |
+| `ntropy site -o ./public` into a used directory | `--force`, on purpose, or a fresh directory |
+| `index = "Welcome"` in `[site]` | the note's ULID from `ntropy search -n` |
 
 ## Command reference
 
@@ -100,7 +116,8 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy write <id\|filename\|path>` | Replace that note's content with the whole note text read from stdin, then realign the filename and refresh views. Names its target, never searches: a full ULID, the filename, or the path. Refuses text that is not a well-formed note. Prints the resulting path. |
 | `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, or `-P` to print one note's text. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
-| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`) or `typst` for the emitted document, which needs no external tool. Resolves to exactly one note; `-p` prints the artifact path. |
+| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`), `typst` for the emitted document, or `html` for a web page with a `<stem>_files/` directory beside it; the last two need no external tool. Resolves to exactly one note; `-p` prints the artifact path; an existing artifact is refused without `--force`. |
+| `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website: a page per note, a tag tree, a page per view and group, a front page, sidebar, search, works from disk. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `--theme` overrides the site theme. `site theme init <name>` copies the built-in theme into the vault. Warnings name missing files, dangling links, and unresolvable navigation; `--strict` fails on them. Details: [references/site.md](references/site.md). |
 | `ntropy reconcile` | Realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
 | `ntropy tags -n` | Every tag with its note count — check this before inventing new tags. |
@@ -221,3 +238,29 @@ ntropy view add by-status --field status
 ```
 
 View semantics, drift, and git rules: [references/views.md](references/views.md).
+
+**Publish a documentation subtree as a website:** tag the pages as a tree,
+give each section a landing note, order the pages through their `site`
+table, root the sidebar at the tree, and export:
+
+```bash
+path=$(ntropy new --empty -p Welcome)
+ntropy write "$path" <<'EOF'
+---
+title: Welcome
+tags: [handbook/start]
+site: { index: true, label: Getting Started, order: 1 }
+---
+# Welcome
+
+Where to begin.
+EOF
+# .ntropy/config.toml: [site] root = "tags/handbook", related = false,
+# index = "<ulid of the front page note>"
+ntropy site -n -o ./public --strict tag:handbook
+```
+
+The `[site]` table, the nav table, the `site` frontmatter keys, and the
+standalone `render --to html` page: [references/site.md](references/site.md).
+Writing a theme (layout, tokens, fonts, icons, markup):
+[references/site-themes.md](references/site-themes.md).

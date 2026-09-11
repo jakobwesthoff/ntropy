@@ -160,6 +160,10 @@ Body is ordinary Markdown.
 - **NEVER store `id`, `created`, or `modified` in frontmatter.** Identity is
   the filename ULID; the creation date is derived from it. Duplicating them
   creates state that can drift.
+- **`site` is reserved.** A `site` mapping (`order`, `label`, `hidden`,
+  `index`, `listing`, `related`) shapes the exported website's navigation
+  and is hidden from the page; it is not a place for content. See
+  [site.md](site.md).
 
 For clean vaults, reuse field names and values consistently: `field:value`
 queries match exactly (case-sensitive), and views group per distinct value, so

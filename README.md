@@ -876,8 +876,10 @@ are layered by name over the built-in set (Lucide, ISC, see
 `icons/LICENSE`): a file with a built-in name replaces that icon, any
 other name adds one, and a theme without `icons/` keeps them all. The
 names the pages use are `menu`, `x`, `search`, `monitor`, `sun`, `moon`,
-`tag`, `chevron-right`, `chevron-left`, and, for callouts, `info`,
-`lightbulb`, `message-square-warning`, `triangle-alert`, `octagon-alert`.
+`tag`, `chevron-right`, `chevron-left`, for callouts `info`,
+`lightbulb`, `message-square-warning`, `triangle-alert`, `octagon-alert`,
+and for the search palette's result kinds `file-text`, `folder`, and
+`tag`.
 An icon takes the text color, so the stylesheet sizes and colors it
 through the `.icon` class.
 
