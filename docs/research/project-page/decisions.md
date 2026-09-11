@@ -225,7 +225,8 @@ Validated against the repository at the start of the effort:
 - **The user, unprompted (2026-09-11):** the `just` recipe that exports
   the vault is `website`; the old page source under `docs/pages/` stays
   as a reference until the redesign is finished and is removed then,
-  with everything related to it.
+  with everything related to it. Removed on 2026-09-11 once the front
+  page stood.
 - **The user, unprompted (2026-09-11):** when the README is split, the
   pages' contents are audited and validated, and rewritten where they
   do not follow the writing rules (verbatim: "audit and validate their
