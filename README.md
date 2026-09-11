@@ -770,13 +770,27 @@ lang = "en"
 `--theme default` returns to the built-in look.
 
 **Colors and type.** Every color and typeface of the built-in theme is a
-custom property on `:root`: `--bg`, `--surface`, `--raised`, `--border`,
-`--fg`, `--muted`, `--faint`, `--accent`, `--accent-soft`, `--link`,
-`--note-link`, the five `--callout-*` accents, `--shadow`, and the three
-stacks `--serif`, `--sans`, `--mono`. The dark palette redefines them
-under `prefers-color-scheme: dark` and under `:root[data-theme="dark"]`;
-`data-theme="light"` wins over the system preference. A theme that only
-wants different colors redefines those properties and keeps the rest.
+custom property on `:root`. Three grounds, `--bg`, `--surface`,
+`--raised`, and `--border`; three text tones, `--fg-bright` for headings,
+`--fg` for body text, `--muted` for secondary text, plus `--faint` for
+marks; `--accent`, `--accent-soft`, `--link`, `--note-link`, and the five
+`--callout-*` accents; the three stacks `--serif`, `--sans`, `--mono`. The
+dark palette redefines them under `prefers-color-scheme: dark` and under
+`:root[data-theme="dark"]`; `data-theme="light"` wins over the system
+preference. A theme that only wants different colors redefines those
+properties and keeps the rest.
+
+**Sizes.** The sizes are named for their job on these pages, not as a
+generic scale: `--measure` (the reading column), `--page-width`,
+`--gutter`, `--sidebar-width`, `--outline-width`, `--column-gap`, and
+`--header-height` for the layout; `--block-gap` between the blocks of a
+note and `--section-gap` between sections; `--radius-control` for
+buttons and inputs, `--radius-block` for code, quotes, tables, and
+callouts, `--radius-panel` for the search panel, `--radius-pill` for
+chips; `--accent-bar` for the bar on code blocks, quotes, and callouts;
+`--shadow-panel` and `--shadow-raised`; `--motion` for every transition.
+Widen the reading column or flatten the corners by redefining one
+property.
 
 **Fonts.** The built-in theme ships IBM Plex Serif, Sans, and Mono under
 `fonts/` (SIL Open Font License, see `fonts/LICENSE`) and declares them

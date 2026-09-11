@@ -99,9 +99,13 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* Tokens. The light palette is a cool paper with ntropy's teal deepened
- * for contrast; the dark palette is the teal on near-black the project
- * uses everywhere else. */
+/* Tokens. Colors come in three text tones (headings brightest, body one
+ * step down, secondary text muted, marks faint) over three grounds (page,
+ * surface, raised). The light palette is a cool paper with ntropy's teal
+ * deepened for contrast; the dark palette is the teal on near-black the
+ * project uses everywhere else. The sizes are named for their job in
+ * these pages rather than as a generic scale, so a theme can retune the
+ * reading column or the chrome without touching every rule. */
 
 :root {
   color-scheme: light dark;
@@ -109,6 +113,7 @@
   --surface: #efefee;
   --raised: #ffffff;
   --border: #dcdcda;
+  --fg-bright: #0b0b0f;
   --fg: #17171c;
   --muted: #5f5f6a;
   --faint: #9a9aa4;
@@ -121,10 +126,32 @@
   --callout-important: #6e40c9;
   --callout-warning: #9a6700;
   --callout-caution: #cf222e;
-  --shadow: 0 12px 32px rgba(23, 23, 28, 0.14);
+  --shadow-panel: 0 12px 32px rgba(23, 23, 28, 0.14);
+  --shadow-raised: 0 1px 2px rgba(23, 23, 28, 0.12);
   --serif: "IBM Plex Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
   --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Layout: the reading column and the chrome around it. */
+  --measure: 42rem;
+  --page-width: 84rem;
+  --gutter: 1.5rem;
+  --sidebar-width: 15.5rem;
+  --outline-width: 13rem;
+  --column-gap: 3rem;
+  --header-height: 3.5rem;
+
+  /* Rhythm: the space between blocks of a note and between sections. */
+  --block-gap: 1.1em;
+  --section-gap: 2rem;
+
+  /* Shape and motion. */
+  --radius-control: 6px;
+  --radius-block: 8px;
+  --radius-panel: 10px;
+  --radius-pill: 999px;
+  --motion: 0.15s;
+  --accent-bar: 3px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -133,6 +160,7 @@
     --surface: #16161c;
     --raised: #1c1c22;
     --border: #2a2a32;
+    --fg-bright: #ffffff;
     --fg: #e6e6ea;
     --muted: #8e8e9a;
     --faint: #5c5c68;
@@ -145,7 +173,8 @@
     --callout-important: #ab7df8;
     --callout-warning: #d29922;
     --callout-caution: #f85149;
-    --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 }
 
@@ -154,6 +183,7 @@
   --surface: #16161c;
   --raised: #1c1c22;
   --border: #2a2a32;
+  --fg-bright: #ffffff;
   --fg: #e6e6ea;
   --muted: #8e8e9a;
   --faint: #5c5c68;
@@ -166,7 +196,8 @@
   --callout-important: #ab7df8;
   --callout-warning: #d29922;
   --callout-caution: #f85149;
-  --shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* Base. */
@@ -177,7 +208,24 @@ html {
   font-family: var(--serif);
   font-size: 106.25%;
   line-height: 1.65;
+  scroll-behavior: smooth;
+  /* An anchor jump lands the heading below the sticky header. */
+  scroll-padding-top: calc(var(--header-height) + 1rem);
   -webkit-text-size-adjust: 100%;
+}
+
+/* Light text on a dark ground reads crisper with grayscale antialiasing;
+ * dark text on light does not, so only the dark palette sets it. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+html[data-theme="dark"] {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
@@ -186,7 +234,7 @@ body {
 }
 
 main {
-  max-width: 42rem;
+  max-width: var(--measure);
   margin: 0 auto;
 }
 
@@ -323,6 +371,7 @@ a.tag:hover {
 /* Body content. */
 
 h1, h2, h3, h4, h5, h6 {
+  color: var(--fg-bright);
   font-family: var(--serif);
   font-weight: 600;
   letter-spacing: -0.005em;
@@ -338,7 +387,7 @@ h4 { font-size: 1.05rem; }
 h5, h6 { font-size: 1rem; }
 
 p, ul, ol, dl, table, pre, blockquote {
-  margin: 0 0 1.1em;
+  margin: 0 0 var(--block-gap);
 }
 
 li > p:last-child {
@@ -356,9 +405,10 @@ code {
 pre {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-left: var(--accent-bar) solid var(--accent);
+  border-radius: var(--radius-block);
   font-size: 0.85rem;
-  line-height: 1.55;
+  line-height: 1.7;
   overflow-x: auto;
   padding: 0.9rem 1.1rem;
 }
@@ -370,25 +420,44 @@ pre code {
 }
 
 blockquote {
-  border-left: 3px solid var(--border);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: var(--accent-bar) solid var(--muted);
+  border-radius: var(--radius-block);
   color: var(--muted);
-  padding: 0.1rem 0 0.1rem 1.1rem;
+  padding: 0.7rem 1.1rem;
 }
 
+blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* Tables: rules between rows only, inside a rounded card. Separate
+ * borders keep the corners round, which collapsed borders drop. */
+
 table {
-  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-collapse: separate;
+  border-radius: var(--radius-block);
+  border-spacing: 0;
   font-family: var(--sans);
   font-size: 0.9375rem;
+  overflow: hidden;
 }
 
 th, td {
-  border: 1px solid var(--border);
-  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0.85rem;
   text-align: left;
+}
+
+tr:last-child > td {
+  border-bottom: 0;
 }
 
 th {
   background: var(--surface);
+  color: var(--fg-bright);
   font-weight: 600;
 }
 
@@ -401,7 +470,7 @@ hr {
 img {
   max-width: 100%;
   height: auto;
-  border-radius: 4px;
+  border-radius: var(--radius-control);
 }
 
 input[type="checkbox"] {
@@ -414,9 +483,9 @@ input[type="checkbox"] {
 .callout {
   --callout: var(--callout-note);
   background: color-mix(in srgb, var(--callout) 7%, transparent);
-  border-left: 3px solid var(--callout);
-  border-radius: 0 6px 6px 0;
-  margin: 0 0 1.1em;
+  border-left: var(--accent-bar) solid var(--callout);
+  border-radius: 0 var(--radius-block) var(--radius-block) 0;
+  margin: 0 0 var(--block-gap);
   padding: 0.7rem 1.1rem 0.1rem;
 }
 
@@ -486,32 +555,40 @@ input[type="checkbox"] {
 
 .layout {
   display: grid;
-  grid-template-columns: 15.5rem minmax(0, 1fr) 13rem;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--outline-width);
   grid-template-areas:
     "header header header"
     "sidebar main side";
-  column-gap: 3rem;
-  max-width: 84rem;
+  column-gap: var(--column-gap);
+  max-width: var(--page-width);
   margin: 0 auto;
-  padding: 0 1.5rem 3rem;
+  padding: 0 var(--gutter) 3rem;
 }
+
+/* The header stays in view, translucent over the page scrolling under it. */
 
 .site-header {
   grid-area: header;
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
   gap: 1rem;
+  height: var(--header-height);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border);
   font-family: var(--sans);
-  margin-bottom: 2rem;
-  padding: 0.75rem 0;
+  margin-bottom: var(--section-gap);
 }
 
 .site-name {
   display: inline-flex;
   align-items: center;
   gap: 0.55em;
-  color: var(--fg);
+  color: var(--fg-bright);
   font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: -0.01em;
@@ -530,6 +607,10 @@ input[type="checkbox"] {
   height: 0.6em;
   background: var(--accent);
   border-radius: 2px;
+}
+
+.site-name:hover {
+  color: var(--link);
 }
 
 .header-tools {
@@ -558,20 +639,20 @@ input[type="checkbox"] {
   display: inline-flex;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-block);
   padding: 2px;
 }
 
 .theme-choice {
   background: none;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   color: var(--muted);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   padding: 0.3rem 0.5rem;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--motion), color var(--motion);
 }
 
 .theme-choice .icon {
@@ -587,7 +668,7 @@ input[type="checkbox"] {
 .theme-choice[aria-pressed="true"] {
   background: var(--raised);
   color: var(--accent);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-raised);
 }
 
 /* The search button and its panel. */
@@ -602,13 +683,13 @@ input[type="checkbox"] {
   gap: 0.5rem;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-block);
   color: var(--muted);
   cursor: pointer;
   font: inherit;
   font-size: 0.875rem;
   padding: 0.35rem 0.6rem 0.35rem 0.7rem;
-  transition: color 0.15s, border-color 0.15s;
+  transition: color var(--motion), border-color var(--motion);
 }
 
 .search-toggle:hover,
@@ -633,11 +714,11 @@ input[type="checkbox"] {
   right: 0;
   top: calc(100% + 0.6rem);
   z-index: 30;
-  width: min(42rem, calc(100vw - 2rem));
+  width: min(var(--measure), calc(100vw - 2rem));
   background: var(--raised);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  box-shadow: var(--shadow);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
   padding: 0.9rem;
 }
 
@@ -647,7 +728,7 @@ input[type="checkbox"] {
   box-sizing: border-box;
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   color: var(--fg);
   font: inherit;
   font-size: 0.9375rem;
@@ -710,7 +791,7 @@ input[type="checkbox"] {
   margin-right: 0.25em;
   color: var(--faint);
   vertical-align: -0.1em;
-  transition: transform 0.15s;
+  transition: transform var(--motion);
 }
 
 .sidebar details[open] > summary > .chevron {
@@ -722,7 +803,7 @@ input[type="checkbox"] {
 }
 
 .nav-title {
-  color: var(--fg);
+  color: var(--fg-bright);
   font-size: 0.875rem;
   font-weight: 600;
   margin: 0 0 0.35rem;
@@ -815,7 +896,7 @@ input[type="checkbox"] {
 
 .layout > main {
   grid-area: main;
-  max-width: 42rem;
+  max-width: var(--measure);
   min-width: 0;
   width: 100%;
 }
@@ -829,9 +910,9 @@ input[type="checkbox"] {
 .sidebar-pane,
 .side {
   position: sticky;
-  top: 1rem;
+  top: calc(var(--header-height) + 1rem);
   align-self: start;
-  max-height: calc(100vh - 2rem);
+  max-height: calc(100vh - var(--header-height) - 2rem);
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -880,7 +961,7 @@ input[type="checkbox"] {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  color: var(--fg);
+  color: var(--fg-bright);
   max-width: 48%;
   text-decoration: none;
 }
@@ -956,8 +1037,15 @@ input[type="checkbox"] {
   align-items: baseline;
   column-gap: 1rem;
   border-top: 1px solid var(--border);
+  border-radius: var(--radius-control);
   font-family: var(--sans);
-  padding: 0.55rem 0;
+  margin: 0 -0.5rem;
+  padding: 0.55rem 0.5rem;
+  transition: background var(--motion);
+}
+
+.note-row:hover {
+  background: var(--surface);
 }
 
 .note-row-main {
@@ -981,7 +1069,7 @@ input[type="checkbox"] {
 }
 
 .note-row-title {
-  color: var(--fg);
+  color: var(--fg-bright);
   font-weight: 500;
   text-decoration: none;
 }
@@ -1019,13 +1107,13 @@ input[type="checkbox"] {
   align-items: baseline;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   color: var(--fg);
   font-family: var(--sans);
   font-size: 0.875rem;
   padding: 0.2rem 0.8rem;
   text-decoration: none;
-  transition: border-color 0.15s, color 0.15s;
+  transition: border-color var(--motion), color var(--motion);
 }
 
 .chip:hover {
@@ -1055,7 +1143,7 @@ input[type="checkbox"] {
 .section-summary h2,
 .related h2 {
   font-size: 1.25rem;
-  margin: 2rem 0 0.75rem;
+  margin: var(--section-gap) 0 0.75rem;
 }
 
 .section-summary h2 a {
@@ -1078,13 +1166,14 @@ input[type="checkbox"] {
 
 @media (max-width: 60rem) {
   .layout {
+    --gutter: 1rem;
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:
       "header"
       "main"
       "side";
     column-gap: 0;
-    padding: 0 1rem 2rem;
+    padding: 0 var(--gutter) 2rem;
   }
 
   .layout > main {
@@ -1106,7 +1195,7 @@ input[type="checkbox"] {
     max-height: none;
     background: var(--bg);
     border-right: 1px solid var(--border);
-    box-shadow: var(--shadow);
+    box-shadow: var(--shadow-panel);
     padding: 1rem 1.25rem 2rem;
     transform: translateX(-100%);
     transition: transform 0.2s ease-out;
@@ -1148,10 +1237,15 @@ input[type="checkbox"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
   .sidebar-pane,
   .theme-choice,
   .search-toggle,
   .chip,
+  .note-row,
   .sidebar .chevron {
     transition: none;
   }

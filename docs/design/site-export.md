@@ -170,9 +170,12 @@ directory without it is not a theme. The HTML structure of every page is
 ntropy's own, so a theme controls appearance, not markup. A theme
 provides the palettes for both light and dark mode; the page follows the
 system preference by default and remembers a manual choice in the
-browser. The built-in theme keeps every color and typeface in a custom
-property on the root element, so a theme that wants only a palette
-redefines those and keeps the rest.
+browser. The built-in theme keeps every color and typeface, and the
+sizes that shape the pages (the reading column, the chrome's widths, the
+gaps between blocks and sections, the radii, the shadows, the transition
+length), in custom properties on the root element named for their job,
+so a theme that wants only a palette or a wider column redefines those
+and keeps the rest; the README lists them.
 
 The icons are the theme's `icons/` directory. At export every
 `<name>.svg` in it becomes a `<symbol id="icon-<name>">` of a hidden

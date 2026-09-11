@@ -673,6 +673,37 @@ is [design-notes.md](design-notes.md).
   - *Decision:* recorded as an amendment to ADR 0054 (pages and
     navigation) and in ADR 0055 (theme layout, icons, fonts, embedding).
 
+- **Q67 to Q69. Readability decisions from the project page starter
+  (2026-09-11).** The user asked (verbatim) to "analyze the theme basics
+  we defined here in this project /Users/jakob/Development/github/
+  jakobwesthoff/project-page-starter and isolate design and readabilty
+  decisions we made there, that could enhance the look and feel of our
+  template here. because the one in that project was quite heavily
+  iterated on and thought about." Isolated from its stylesheets: a fixed
+  blurred header with `scroll-padding-top` and smooth scrolling; three
+  text tones with antialiasing on the dark ground; a spacing, radius,
+  shadow, and transition scale; tables with row rules only in a card;
+  quotes and code blocks as tinted cards with a left accent bar; hover
+  lift on list items. Not proposed: centered section headings, paragraphs
+  in the muted tone, and underline-free links in running text.
+  - *Q67 header:* the sticky blurred header with anchor offset and
+    smooth scrolling (off under reduced motion). Answer: yes.
+  - *Q68 blocks (multi-select):* all four, rule-only tables in a card,
+    quotes as tinted cards, the accent bar on code blocks, the hover lift
+    on note rows.
+  - *Q69 foundations (multi-select):* the three text tones with
+    antialiasing, and the tokens, with this qualification (verbatim):
+    "the spacing radius and shadow are used from tailwindcss so be
+    careful how you define them and allow usage, maybe we want
+    semantically more fitting tokens for our use case here, to be
+    properly provided and overridable in other themes instead of the
+    generic tailwind ones, as we couldnt really create a complete table
+    of those anyways". Not chosen: smaller inline code in tables.
+  - *Decision:* the tokens are named for their job on the pages
+    (reading column, chrome widths, block and section gaps, radii by
+    element kind, two shadows, one motion length, the accent bar) and
+    listed in the README's theme section, not a generic scale.
+
 ## Answered but not yet turned into a decision
 
 _Not yet established._
