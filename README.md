@@ -718,9 +718,10 @@ nested like its directory. Each page carries a sidebar of those sections
 with the current note's groups opened, breadcrumbs, an outline of the
 note's headings, and previous/next links inside the note's first group.
 Note links point at the target's page; images and linked files from the
-vault are copied under `files/`. The front page is the note named by
-`[site] index` in the vault config, or a generated overview of the newest
-notes, the top-level tags, and the views.
+vault are copied under `files/`, a linked directory with its whole tree.
+The front page is the note named by `[site] index` in the vault config,
+or a generated overview of the newest notes, the top-level tags, and the
+views.
 
 The header's search button opens a panel that speaks the same
 [query language](#query-language) as `ntropy search`, so `tag:work and

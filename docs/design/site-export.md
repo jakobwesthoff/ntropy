@@ -76,7 +76,8 @@ One directory per node:
                                  the page script app.js, and under
                                  assets/grammars/ the highlighting grammars
                                  the site's code blocks need
-    files/<vault path>           vault files the notes reference
+    files/<vault path>           vault files and directories the notes
+                                 reference
 
 The `views/` and `tags/` prefixes keep a view named `notes` or `tags`
 from colliding with the note pages. Every link in a page is relative to
@@ -121,10 +122,13 @@ arrived.
 ## Assets
 
 The export copies the files inside the vault that exported notes
-reference through images or links, plus the theme's files. Local asset
-paths in note bodies are rewritten relative to the page. A reference to a
-file outside the vault is a warning and the file is not copied. Remote
-images stay remote.
+reference through images or links, plus the theme's files. A link to a
+directory inside the vault copies the directory with its whole tree, so
+the link resolves in the site as it does in the vault; an empty directory
+is a warning. Local asset paths in note bodies are rewritten relative to
+the page. A reference to a file outside the vault is a warning and the
+file is not copied, as is a reference to a path that does not exist.
+Remote images stay remote.
 
 ## Themes
 

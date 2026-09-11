@@ -17,5 +17,7 @@ views/by-status/done/index.html
 views/by-status/index.html
 views/by-status/open/index.html
 --
+files/all-notes/assets/gallery/a.jpg <- all-notes/assets/gallery/a.jpg
+files/all-notes/assets/gallery/sub/b.jpg <- all-notes/assets/gallery/sub/b.jpg
 files/all-notes/diagram.png <- all-notes/diagram.png
 files/assets/logo.svg <- assets/logo.svg

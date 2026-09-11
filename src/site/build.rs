@@ -313,7 +313,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     // The theme's files under `assets/`, the stylesheet among them.
     match input.theme {
         Some((_, dir)) => {
-            for (relative, from) in theme_files(dir)? {
+            for (relative, from) in files_under(dir)? {
                 copies.push(Copy {
                     from,
                     to: format!("{ASSETS_DIR}/{relative}"),
@@ -330,7 +330,9 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         }
     }
 
-    // Referenced vault files, mirrored under `files/`.
+    // Referenced vault paths, mirrored under `files/`. A linked directory
+    // is mirrored with its whole tree, so the link resolves in the site the
+    // way it does in the vault.
     for path in referenced {
         let from = input.vault_root.join(path.trim_start_matches('/'));
         if from.is_file() {
@@ -338,6 +340,20 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                 from,
                 to: format!("{FILES_DIR}{path}"),
             });
+        } else if from.is_dir() {
+            let inside = files_under(&from)?;
+            if inside.is_empty() {
+                warnings.push(format!(
+                    "referenced directory is empty, nothing to copy: {}",
+                    from.display()
+                ));
+            }
+            for (relative, file) in inside {
+                copies.push(Copy {
+                    from: file,
+                    to: format!("{FILES_DIR}{path}/{relative}"),
+                });
+            }
         } else {
             warnings.push(format!(
                 "referenced file not found in the vault: {}",
@@ -587,9 +603,9 @@ fn chrome(
     }
 }
 
-/// Every file under a theme directory as `(relative path, absolute path)`,
+/// Every file under `dir`, recursively, as `(relative path, absolute path)`,
 /// sorted, with `/` separators in the relative part.
-fn theme_files(dir: &Path) -> Result<Vec<(String, PathBuf)>, crate::fsutil::FsError> {
+fn files_under(dir: &Path) -> Result<Vec<(String, PathBuf)>, crate::fsutil::FsError> {
     fn walk(
         base: &Path,
         dir: &Path,
@@ -628,13 +644,17 @@ mod tests {
     /// In the vault but not exported.
     const D: &str = "01DRZ3NDEKTSV4RRFFQ69G5FAV";
 
-    /// A vault directory holding a diagram beside the notes and a shared
-    /// asset outside `all-notes/`.
+    /// A vault directory holding a diagram beside the notes, a shared
+    /// asset outside `all-notes/`, a gallery directory with a nested file,
+    /// and an empty directory.
     fn vault() -> tempfile::TempDir {
         let dir = tempfile::tempdir().expect("temp dir");
-        std::fs::create_dir_all(dir.path().join("all-notes")).expect("all-notes");
+        std::fs::create_dir_all(dir.path().join("all-notes/assets/gallery/sub")).expect("gallery");
+        std::fs::create_dir_all(dir.path().join("all-notes/assets/empty")).expect("empty");
         std::fs::create_dir_all(dir.path().join("assets")).expect("assets");
         std::fs::write(dir.path().join("all-notes/diagram.png"), b"png").expect("diagram");
+        std::fs::write(dir.path().join("all-notes/assets/gallery/a.jpg"), b"a").expect("a");
+        std::fs::write(dir.path().join("all-notes/assets/gallery/sub/b.jpg"), b"b").expect("b");
         std::fs::write(dir.path().join("assets/logo.svg"), b"svg").expect("logo");
         dir
     }
@@ -657,7 +677,7 @@ mod tests {
                 "Rust Tips",
                 "tags: [programming/rust]\nstatus: done\n",
                 &format!(
-                    "## Intro\n\nSee [the plain one]({B}-plain.md) and [gone]({D}-gone.md).\n\n![d](diagram.png) ![l](../assets/logo.svg) ![o](../../outside.png) ![m](missing.png)\n\n```rust\nfn x() {{}}\n```\n\n```cobol\nDISPLAY.\n```\n"
+                    "## Intro\n\nSee [the plain one]({B}-plain.md) and [gone]({D}-gone.md).\n\n![d](diagram.png) ![l](../assets/logo.svg) ![o](../../outside.png) ![m](missing.png)\n\n[gallery](assets/gallery) [empty](assets/empty)\n\n```rust\nfn x() {{}}\n```\n\n```cobol\nDISPLAY.\n```\n"
                 ),
             ),
             note(vault, B, "Plain", "status: open\n", "Nothing much.\n"),
@@ -735,7 +755,42 @@ mod tests {
             joined.contains("no highlighting grammar for `cobol`"),
             "{joined}"
         );
-        assert_eq!(built.warnings.len(), 4, "{joined}");
+        assert!(
+            joined.contains("referenced directory is empty, nothing to copy")
+                && joined.contains("assets/empty"),
+            "{joined}"
+        );
+        assert_eq!(built.warnings.len(), 5, "{joined}");
+    }
+
+    #[test]
+    fn a_linked_directory_is_mirrored_with_its_tree() {
+        let vault = vault();
+        let built = build_site(vault.path(), &SiteOptions::default());
+        let page = text(&built, "notes/rust-tips.html");
+        assert!(
+            page.contains("<a href=\"../files/all-notes/assets/gallery\">gallery</a>"),
+            "{page}"
+        );
+        let mut gallery: Vec<&str> = built
+            .copies
+            .iter()
+            .filter(|c| c.to.starts_with("files/all-notes/assets/gallery/"))
+            .map(|c| c.to.as_str())
+            .collect();
+        gallery.sort();
+        assert_eq!(
+            gallery,
+            [
+                "files/all-notes/assets/gallery/a.jpg",
+                "files/all-notes/assets/gallery/sub/b.jpg",
+            ]
+        );
+        assert!(
+            !built.warnings.iter().any(|w| w.contains("gallery")),
+            "{}",
+            built.warnings.join("\n")
+        );
     }
 
     #[test]
