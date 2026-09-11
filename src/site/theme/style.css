@@ -85,21 +85,21 @@
 /* Tokens. Colors come in three text tones (headings brightest, body one
  * step down, secondary text muted, marks faint) over three grounds (page,
  * surface, raised). The light palette is warm paper with amber-brown ink
- * for links and rules; the dark palette is a warm black with a gold
+ * for links and rules; the dark palette is a brown-black with a gold
  * accent. The sizes are named for their job in these pages rather than as
  * a generic scale, so a theme can retune the reading column or the chrome
  * without touching every rule. */
 
 :root {
   color-scheme: light dark;
-  --bg: #fbf9f4;
-  --surface: #f1ede4;
+  --bg: #fbf7ef;
+  --surface: #f3ecdf;
   --raised: #ffffff;
-  --border: #dcd4c4;
+  --border: #ddd2bd;
   --fg-bright: #1b160f;
   --fg: #2c2518;
   --muted: #6e6553;
-  --faint: #a79d8a;
+  --faint: #a89b85;
   --accent: #8c5a10;
   --accent-soft: rgba(140, 90, 16, 0.1);
   --link: #8c5a10;
@@ -140,19 +140,19 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #15130f;
-    --surface: #1e1b15;
-    --raised: #262219;
-    --border: #36302a;
-    --fg-bright: #f5f0e6;
-    --fg: #e2dccf;
-    --muted: #9d9486;
-    --faint: #635b4f;
-    --accent: #e0b35a;
-    --accent-soft: rgba(224, 179, 90, 0.12);
-    --link: #e8c26f;
-    --note-link: #e8c26f;
-    --callout-note: #e0b35a;
+    --bg: #1a1510;
+    --surface: #241d16;
+    --raised: #2d251b;
+    --border: #3f3428;
+    --fg-bright: #f8f2e4;
+    --fg: #e7dfcd;
+    --muted: #a69a88;
+    --faint: #6d6151;
+    --accent: #e4b45a;
+    --accent-soft: rgba(228, 180, 90, 0.12);
+    --link: #edc670;
+    --note-link: #edc670;
+    --callout-note: #e4b45a;
     --callout-tip: #7fcb7a;
     --callout-important: #c39cf5;
     --callout-warning: #f0a05a;
@@ -163,19 +163,19 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #15130f;
-  --surface: #1e1b15;
-  --raised: #262219;
-  --border: #36302a;
-  --fg-bright: #f5f0e6;
-  --fg: #e2dccf;
-  --muted: #9d9486;
-  --faint: #635b4f;
-  --accent: #e0b35a;
-  --accent-soft: rgba(224, 179, 90, 0.12);
-  --link: #e8c26f;
-  --note-link: #e8c26f;
-  --callout-note: #e0b35a;
+  --bg: #1a1510;
+  --surface: #241d16;
+  --raised: #2d251b;
+  --border: #3f3428;
+  --fg-bright: #f8f2e4;
+  --fg: #e7dfcd;
+  --muted: #a69a88;
+  --faint: #6d6151;
+  --accent: #e4b45a;
+  --accent-soft: rgba(228, 180, 90, 0.12);
+  --link: #edc670;
+  --note-link: #edc670;
+  --callout-note: #e4b45a;
   --callout-tip: #7fcb7a;
   --callout-important: #c39cf5;
   --callout-warning: #f0a05a;
