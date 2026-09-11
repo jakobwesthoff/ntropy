@@ -69,41 +69,48 @@ already); the export inflates on demand with the same crate.
 
 ## Search
 
-The search mirrors the CLI's two layers: the query DSL filters the note
-set, then a fuzzy layer narrows over titles and tags, the rows the CLI's
-picker shows.
+The search is a command palette: one box in an overlay over the dimmed
+page, opened by the header's search button, by `/` outside a field, or
+by Ctrl+K and Cmd+K anywhere, closed by Escape or a click outside. It is
+a search made for readers, and reads a query under its own semantics,
+not the CLI's ([ADR 0052](../adr/0052-client-side-search-as-a-typescript-query-dsl.md),
+amended):
 
-The DSL ([query-and-search.md](query-and-search.md)) is reimplemented in
-TypeScript over the embedded note data: id, title, tags, frontmatter,
-body. `tag:`, `field:`, `and`, `or`, `not`, and parentheses mirror the
-Rust semantics. `text:` maps to JavaScript `RegExp`; a pattern using a
-construct Rust `regex` rejects, lookaround and backreferences among them,
-is refused with a message naming the construct, so a query that works on
-the site also works in the CLI. Where both engines accept a pattern,
-their semantics can still differ: `\b` is Unicode-aware in Rust and
-ASCII-based in JavaScript, and the two recognize different line
-terminators. Rust's brace-less `\pL` is not JavaScript syntax.
+- A bare word or quoted phrase matches as a case-insensitive substring of
+  the title, a tag, any frontmatter value, or the body.
+- Two predicates side by side are joined by `and`, so `entrance anim`
+  finds what holds both.
+- `tag:` matches a whole segment as in the CLI or any part of a tag, so
+  `tag:wis` finds `wisdome`; `field:` matches a substring of a value.
+- `text:` is a regex over the body, as in the CLI, with the same refusal
+  of constructs Rust's `regex` lacks. `and`, `or`, `not`, and parentheses
+  are the CLI's.
 
-One hand-maintained JSON file under `tests/fixtures/` holds the
-conformance cases: a query, note fixtures as frontmatter plus body, and
-the expected matching ids or expected error. The Rust tests and the
-Vitest tests both load it, so a drift on either side fails a test.
+The parser is shared with a CLI-faithful evaluator, in which a bare term
+is a smart-case body regex and `tag:` and `field:` are exact; the
+conformance corpus under `tests/fixtures/` runs against that evaluator
+in Rust and in Vitest, so the two readings cannot drift on the parser,
+the operators, or the `text:` translation. Where both engines accept a
+pattern, their regex semantics can still differ: `\b` is Unicode-aware
+in Rust and ASCII-based in JavaScript, and the two recognize different
+line terminators. Rust's brace-less `\pL` is not JavaScript syntax.
 
-The panel is a Preact component mounted into the header's `[data-search]`
-element, whose attributes name the search data script and the page's
-`../` prefix. Nothing loads until the reader opens the panel; the first
-opening injects the data script into the document, which works over
-`file://` where `fetch()` of a local file does not. The panel has two
-boxes. The first takes the query; a syntax error or a refused regex
-construct shows under it as the message the parser produced. The second
-narrows the query's results fuzzily over the text the CLI's picker shows
-for a row, date, title, and tags, with matches ordered by score and
-ties keeping the newest-first order. Each result links to the note's page
-and to the page of each of its tags. The list shows at most 50 results.
-Escape closes the panel.
+The search data carries the site's own pages beside the notes: each
+section's index, every tag page, and every view group page, with the
+count of notes under it. A bare term matches a page by its name, `tag:`
+selects tag pages, `field:` the group pages of the view over that field;
+`text:` never selects a page.
 
-`/` anywhere on a page opens the panel with the query box focused, and
-Escape closes it; the search button shows the key.
+Results come grouped, tags first, then view groups, then notes, each
+group with its count, the notes ranked by where the hits fall (title
+before tag before frontmatter before body) and newest first among equals,
+pages by note count. A note row shows the title, the date, its tags, and
+one line of body around the first hit; everything the query matched is
+marked, the positive parts of it, since what a `not` names is what is
+absent. At most 8 tags, 8 groups, and 50 notes are shown. The arrow keys
+move the selection, wrapping at the ends, Enter opens it, the mouse
+selects and opens too, and a footer carries the count and the keys. The
+page behind the overlay does not scroll while it is up.
 
 No search library and no WebAssembly are involved.
 

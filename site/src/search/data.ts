@@ -7,23 +7,28 @@
 // `file://`, where `fetch()` of a local file does not, and nothing is loaded
 // until a reader searches.
 
-import type { SearchNote } from "./eval";
+import type { SearchNote, SearchPage } from "./eval";
+
+/** What the export writes: the notes, and the site's own pages. */
+export interface SearchData {
+  notes: SearchNote[];
+  pages: SearchPage[];
+}
 
 declare global {
   interface Window {
-    __ntropySearch?: { notes: SearchNote[] };
+    __ntropySearch?: SearchData;
   }
 }
 
-let pending: Promise<SearchNote[]> | null = null;
+let pending: Promise<SearchData> | null = null;
 
-/** The exported notes, loaded once from `src` on first use. */
+/** The search data, loaded once from `src` on first use. */
 export function loadSearchData(
   src: string,
   doc: Document = document,
-): Promise<SearchNote[]> {
-  if (window.__ntropySearch)
-    return Promise.resolve(window.__ntropySearch.notes);
+): Promise<SearchData> {
+  if (window.__ntropySearch) return Promise.resolve(window.__ntropySearch);
   if (pending) return pending;
   pending = new Promise((resolve, reject) => {
     const script = doc.createElement("script");
@@ -31,7 +36,7 @@ export function loadSearchData(
     script.async = true;
     script.onload = () => {
       const data = window.__ntropySearch;
-      if (data) resolve(data.notes);
+      if (data) resolve(data);
       else reject(new Error("the search data did not load"));
     };
     script.onerror = () => {

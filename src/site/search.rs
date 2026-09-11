@@ -11,10 +11,15 @@
 //! only string keys, since a `field:` predicate looks a field up by its
 //! string name and a non-string key can never match; tagged values as
 //! `null`, since they have no scalar form and never match either.
+//!
+//! Beside the notes, the data lists the site's own pages a search can land
+//! on: each section's index, every tag page, and every view group page,
+//! with the note count under it, so a search for a tag finds the tag's
+//! page as well as the notes carrying it.
 
 use serde_yaml_ng::Value as Yaml;
 
-use super::model::Model;
+use super::model::{Group, Model, SectionKind};
 use crate::note::Note;
 
 /// The file name of the search data within the site's `assets/`.
@@ -38,10 +43,66 @@ pub fn script(model: &Model, notes: &[&Note]) -> String {
             })
         })
         .collect();
-    let data = serde_json::json!({ "notes": entries });
+    let data = serde_json::json!({ "notes": entries, "pages": pages(model) });
     // `</` inside the JSON would end the script element that carries it.
     let json = data.to_string().replace("</", "<\\/");
     format!("window.__ntropySearch={json};\n")
+}
+
+/// The section, tag, and group pages, in sidebar order, each with the
+/// number of notes it lists.
+fn pages(model: &Model) -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    for section in &model.sections {
+        let (kind, field) = match &section.kind {
+            SectionKind::Tags => ("tag", None),
+            SectionKind::View { field } => ("group", Some(field.as_str())),
+        };
+        let total: usize = section
+            .groups
+            .iter()
+            .map(|group| group.descendants(model).len())
+            .sum();
+        out.push(serde_json::json!({
+            "kind": "section",
+            "section": section.title,
+            "field": field,
+            "value": section.title,
+            "label": section.title,
+            "page": section.page,
+            "count": total,
+        }));
+        fn walk(
+            out: &mut Vec<serde_json::Value>,
+            model: &Model,
+            groups: &[Group],
+            kind: &str,
+            section: &str,
+            field: Option<&str>,
+        ) {
+            for group in groups {
+                out.push(serde_json::json!({
+                    "kind": kind,
+                    "section": section,
+                    "field": field,
+                    "value": group.value,
+                    "label": group.label,
+                    "page": group.page,
+                    "count": group.descendants(model).len(),
+                }));
+                walk(out, model, &group.children, kind, section, field);
+            }
+        }
+        walk(
+            &mut out,
+            model,
+            &section.groups,
+            kind,
+            &section.title,
+            field,
+        );
+    }
+    out
 }
 
 /// A note's frontmatter as the evaluator's JSON.
@@ -139,5 +200,73 @@ mod tests {
         assert_eq!(first["tags"], serde_json::json!(["x"]));
         assert_eq!(first["frontmatter"]["title"], "Danger");
         assert!(first["body"].as_str().expect("body").contains("</script>"));
+    }
+
+    #[test]
+    fn the_pages_list_sections_tags_and_groups_with_counts() {
+        let notes = vec![
+            note(
+                "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+                "One",
+                "tags: [work/rust]\nstatus: open\n",
+                "",
+            ),
+            note("01BRZ3NDEKTSV4RRFFQ69G5FAV", "Two", "tags: [work]\n", ""),
+        ];
+        let views = [crate::view::ViewDef::new("by-status", "status")];
+        let model = Model::build(&notes, &views, &SiteOptions::default(), "V").expect("model");
+        let refs: Vec<&Note> = notes.iter().collect();
+        let script = script(&model, &refs);
+        let json: serde_json::Value = serde_json::from_str(
+            script
+                .trim_start_matches("window.__ntropySearch=")
+                .trim_end_matches(";\n"),
+        )
+        .expect("the payload is JSON");
+        let pages: Vec<(String, String, String, u64)> = json["pages"]
+            .as_array()
+            .expect("pages")
+            .iter()
+            .map(|p| {
+                (
+                    p["kind"].as_str().expect("kind").to_string(),
+                    p["value"].as_str().expect("value").to_string(),
+                    p["page"].as_str().expect("page").to_string(),
+                    p["count"].as_u64().expect("count"),
+                )
+            })
+            .collect();
+        assert_eq!(
+            pages,
+            [
+                (
+                    "section".into(),
+                    "by-status".into(),
+                    "views/by-status/index.html".into(),
+                    1
+                ),
+                (
+                    "group".into(),
+                    "open".into(),
+                    "views/by-status/open/index.html".into(),
+                    1
+                ),
+                ("section".into(), "tags".into(), "tags/index.html".into(), 2),
+                (
+                    "tag".into(),
+                    "work".into(),
+                    "tags/work/index.html".into(),
+                    2
+                ),
+                (
+                    "tag".into(),
+                    "work/rust".into(),
+                    "tags/work/rust/index.html".into(),
+                    1
+                ),
+            ]
+        );
+        assert_eq!(json["pages"][1]["field"], "status");
+        assert_eq!(json["pages"][3]["field"], serde_json::Value::Null);
     }
 }

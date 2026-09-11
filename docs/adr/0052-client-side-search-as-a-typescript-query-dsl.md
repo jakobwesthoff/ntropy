@@ -6,6 +6,19 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11, on the user's request for a search made for readers
+(research log, Q73 to Q76): the site's search reads a query under its
+own semantics rather than the CLI's. A bare term is a case-insensitive
+substring of the title, a tag, a frontmatter value, or the body; two
+predicates side by side are `and`; `tag:` and `field:` match partially;
+`text:` stays the regex it is in the CLI. The search also lists the
+site's own pages, a tag page or a view group page whose name the query
+matches, before the notes. The one-box command palette replaces the
+popover and the fuzzy narrowing layer. The parser and the `text:`
+translation are shared with the CLI-faithful evaluator the conformance
+corpus keeps exercising, so the two readings cannot drift on what they
+share.
+
 Gives the site of
 [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md)
 the search of [ADR 0012](0012-query-dsl-with-hand-rolled-parser.md) and
@@ -49,7 +62,7 @@ over embedded note data: id, title, tags, frontmatter, body.
   matching ids or expected error. The Rust tests and the Vitest tests both
   load it.
 - A fuzzy narrowing layer over titles and tags, the picker's rows, is
-  written in TypeScript.
+  written in TypeScript. (Replaced by the palette of the amendment above.)
 
 No JavaScript search library and no WebAssembly.
 

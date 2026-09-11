@@ -726,13 +726,15 @@ by `[site] index` in the vault config, or a generated overview of the
 newest notes, the top-level tags, and the views. On a phone the sidebar
 is a drawer behind the menu button.
 
-The header's search button opens a panel that speaks the same
-[query language](#query-language) as `ntropy search`, so `tag:work and
-not status:done` works there too, and a second box narrows the results
-the way the [picker](#the-interactive-picker) does. The search runs in
-the browser over data exported with the site, so it works from disk. A
-`text:` pattern that the CLI would reject, lookaround or backreferences
-for instance, is refused in the browser as well.
+The search is a palette over the page: the header's button, `/`, or
+Ctrl+K opens it, typing searches as you go, the arrow keys and Enter open
+a result. It is made for readers rather than for the query language: a
+word matches titles, tags, frontmatter values, and text, two words need
+both, `tag:wis` finds `wisdome`, and a matching tag or view page appears
+above the notes. The typed terms of the [query language](#query-language)
+still narrow, `tag:work and not status:done` works, and `text:` is the
+same regex as in the CLI. The search runs in the browser over data
+exported with the site, so it works from disk.
 
 A non-empty output directory is refused unless you pass `--force`, which
 empties it first. A single note renders to one self-contained page with

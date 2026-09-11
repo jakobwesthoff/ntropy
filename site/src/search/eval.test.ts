@@ -7,7 +7,10 @@ import { describe, expect, it } from "vitest";
 import {
   compile,
   matches,
+  matchesPage,
   noteFrom,
+  type SearchPage,
+  scalarValues,
   smartCaseInsensitive,
   textRegex,
 } from "./eval";
@@ -116,6 +119,77 @@ describe("matches", () => {
   it("ignores prototype properties as fields", () => {
     expect(matches(compile("constructor:x"), note)).toBe(false);
     expect(matches(compile("toString:x"), note)).toBe(false);
+  });
+
+  it("reads a bare term as a body regex under the CLI's semantics", () => {
+    expect(matches(compile("rust"), note)).toBe(false);
+    expect(matches(compile('"to.ens"'), note)).toBe(true);
+    expect(() => compile("(")).toThrow();
+    expect(() => compile('"("')).toThrow();
+  });
+
+  it("reads a bare term as a substring of anything under the reader's", () => {
+    const reader = (q: string) => matches(compile(q, "reader"), note, "reader");
+    expect(reader("rust")).toBe(true);
+    expect(reader("RUST TIPS")).toBe(true);
+    expect(reader("programming")).toBe(true);
+    expect(reader("draft")).toBe(true);
+    expect(reader("second line")).toBe(true);
+    expect(reader('"to.ens"')).toBe(false);
+    expect(reader('"c++ ("')).toBe(false);
+    expect(reader("tag:rus")).toBe(true);
+    expect(reader("tag:gramm")).toBe(true);
+    expect(reader("tag:Programming/Rust")).toBe(true);
+    expect(reader("status:raf")).toBe(true);
+    expect(reader("list:b")).toBe(true);
+    expect(reader("n:2")).toBe(true);
+    expect(reader('text:"^second"')).toBe(true);
+    expect(reader("not rust")).toBe(false);
+  });
+});
+
+describe("matchesPage", () => {
+  const tag: SearchPage = {
+    kind: "tag",
+    section: "tags",
+    field: null,
+    value: "programming/rust",
+    label: "rust",
+    page: "tags/programming/rust/index.html",
+    count: 3,
+  };
+  const group: SearchPage = {
+    ...tag,
+    kind: "group",
+    section: "by-status",
+    field: "status",
+    value: "open",
+    label: "open",
+    page: "views/by-status/open/index.html",
+  };
+
+  it("selects tag pages by tag, group pages by field, any page by term", () => {
+    const q = (s: string) => compile(s, "reader");
+    expect(matchesPage(q("tag:rust"), tag)).toBe(true);
+    expect(matchesPage(q("tag:gram"), tag)).toBe(true);
+    expect(matchesPage(q("tag:rust"), group)).toBe(false);
+    expect(matchesPage(q("status:op"), group)).toBe(true);
+    expect(matchesPage(q("STATUS:open"), group)).toBe(true);
+    expect(matchesPage(q("status:open"), tag)).toBe(false);
+    expect(matchesPage(q("other:open"), group)).toBe(false);
+    expect(matchesPage(q("rust"), tag)).toBe(true);
+    expect(matchesPage(q("open"), group)).toBe(true);
+    expect(matchesPage(q("text:rust"), tag)).toBe(false);
+    expect(matchesPage(q("rust and not tag:home"), tag)).toBe(true);
+    expect(matchesPage(q("rust or open"), group)).toBe(true);
+  });
+});
+
+describe("scalarValues", () => {
+  it("flattens scalars from lists and maps, skipping nulls", () => {
+    expect(scalarValues({ a: "x", b: [1, true, null], c: { d: "y" } })).toEqual(
+      ["x", "1", "true", "y"],
+    );
   });
 });
 

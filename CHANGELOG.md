@@ -47,15 +47,15 @@ and this project adheres to
   page inlines; a vault theme's icons replace or add to the built-in
   ones by file name. `site theme init` writes the complete built-in
   theme, fonts and icons included.
-- Exported sites search in the browser. The header's search panel takes
-  a query in the same language as `ntropy search` (`tag:`, `field:`,
-  `text:`, bare terms, `and`/`or`/`not`, parentheses) and a second box
-  that narrows the results fuzzily over date, title, and tags, like the
-  interactive picker. A `text:` pattern using a construct the CLI's
-  regex engine rejects, lookaround or backreferences among them, is
-  refused with a message, so a query that works on the site also works
-  in the CLI. The search data is one script under `assets/`, loaded the
-  first time the panel opens.
+- Exported sites search in the browser, in a palette over the page that
+  the header's button, `/`, or Ctrl+K opens. A word matches titles,
+  tags, frontmatter values, and text; two words need both; `tag:`,
+  `field:`, and `text:` narrow, `tag:` and `field:` partially, `text:`
+  as the same regex as in the CLI; `and`, `or`, `not`, and parentheses
+  combine. Results come grouped, tag and view pages before notes, with
+  the matches marked and a line of context per note; the arrow keys and
+  Enter open one. The search data is one script under `assets/`, loaded
+  the first time the palette opens.
 - `render --to html` writes a note as one self-contained web page: the
   site theme's stylesheet inlined, the title, tags, and remaining
   frontmatter as a header, the converted body with heading anchors, and

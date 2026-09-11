@@ -21,7 +21,7 @@ expression: page().render()
 <a class="nav-open" href="#sidebar" aria-label="Open navigation"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></a>
 <a class="site-name" href="../index.html">Vault &amp; Co</a>
 <div class="header-tools">
-<div data-search="../assets/search-data.js" data-prefix="../"></div>
+<button class="search-toggle" type="button" aria-haspopup="dialog" data-search="../assets/search-data.js" data-prefix="../"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><span>Search</span><kbd>/</kbd></button>
 <div class="theme-switch" role="group" aria-label="Color scheme">
 <button class="theme-choice" type="button" data-theme-choice="system" aria-pressed="true" title="Follow the system"><svg class="icon" aria-hidden="true"><use href="#icon-monitor"/></svg><span class="visually-hidden">System</span></button>
 <button class="theme-choice" type="button" data-theme-choice="light" aria-pressed="false" title="Light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg><span class="visually-hidden">Light</span></button>

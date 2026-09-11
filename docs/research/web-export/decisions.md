@@ -740,6 +740,33 @@ is [design-notes.md](design-notes.md).
     mode and `kanagawa-dragon` in dark mode; the code background stays
     the theme's surface.
 
+- **Q73 to Q76. The search rework (2026-09-11).** The user asked
+  (verbatim) for "a commandpalette like overlay not a popover", "one omni
+  search box, that takes search strings, which are then applied to
+  everything", partial tag matches ("tag matching is currently not
+  matching partial tags, which i think we are doing on the cli but i am
+  not sure"), a cursor-selectable result list, and entries for the tag
+  and view pages ("if we search wisdome or tag:wisdome there should be an
+  entry matching the tag overview on its own"). Facts given first: in the
+  CLI a bare term is `text:` over the body only, and `tag:` is a
+  whole-segment match, so the site had been faithful.
+  - *Q73 semantics:* a reader's search that diverges on purpose (bare
+    terms against everything, `tag:` and `field:` partial, `text:` a
+    regex, operators as in the CLI). Not chosen: omni bare terms with
+    the CLI's exact fielded rules.
+  - *Q74 matching:* case-insensitive substring. Not chosen: fuzzy
+    subsequence like the picker; substring first with fuzzy filling in.
+  - *Q75 results:* grouped by kind, Tags, Views, Notes, with counts and a
+    snippet per note. Not chosen: one ranked list with kind badges; a
+    list with a preview pane.
+  - *Q76 extras (multi-select):* Ctrl+K and Cmd+K beside `/`; matches
+    marked in titles and snippets; a footer with the count and the keys.
+    Not chosen: recent searches remembered in the browser.
+  - Added during implementation without a question, since a one-box
+    search implies it: two predicates side by side read as `and` in the
+    reader's search, where the CLI's grammar refuses them.
+  - *Decision:* recorded as an amendment to ADR 0052.
+
 ## Answered but not yet turned into a decision
 
 _Not yet established._

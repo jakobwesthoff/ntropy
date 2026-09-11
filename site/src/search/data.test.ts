@@ -34,8 +34,11 @@ describe("loadSearchData", () => {
   });
 
   it("returns present data without injecting a script", async () => {
-    window.__ntropySearch = { notes: [] };
-    await expect(loadSearchData(src, doc)).resolves.toEqual([]);
+    window.__ntropySearch = { notes: [], pages: [] };
+    await expect(loadSearchData(src, doc)).resolves.toEqual({
+      notes: [],
+      pages: [],
+    });
     expect(injected()).toHaveLength(0);
   });
 
@@ -44,9 +47,9 @@ describe("loadSearchData", () => {
     const second = loadSearchData(src, doc);
     expect(second).toBe(first);
     expect(injected()).toHaveLength(1);
-    window.__ntropySearch = { notes: [] };
+    window.__ntropySearch = { notes: [], pages: [] };
     injected()[0]?.onload?.(new Event("load"));
-    await expect(first).resolves.toEqual([]);
+    await expect(first).resolves.toEqual({ notes: [], pages: [] });
   });
 
   it("rejects when the loaded script assigned nothing", async () => {

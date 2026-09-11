@@ -6,7 +6,11 @@
 // and `src/query/parser.rs` (ADR 0012, ADR 0052). Precedence is
 // `not > and > or`, parentheses override, and a keyword acts as an operator
 // only in operator position and when no `:` follows it, so `or:x` is the
-// field predicate `or`.
+// field predicate `or`. A bare word or quoted phrase is a `term`, kept apart
+// from `text:` because the two evaluators read it differently: the CLI as
+// a body regex, the site as a match against everything. The CLI's grammar
+// refuses two predicates side by side; the reader's search reads them as
+// `and`, so typing two words finds what holds both.
 
 export type Query =
   | { kind: "and"; left: Query; right: Query }
@@ -14,7 +18,8 @@ export type Query =
   | { kind: "not"; operand: Query }
   | { kind: "tag"; value: string }
   | { kind: "field"; name: string; value: string }
-  | { kind: "text"; pattern: string };
+  | { kind: "text"; pattern: string }
+  | { kind: "term"; text: string };
 
 /** A syntax error at a character position, or a pattern that does not compile. */
 export class QueryError extends Error {
@@ -114,11 +119,16 @@ function lexString(chars: string[], open: number): [string, number] {
   throw QueryError.parse(open, "unterminated quoted string");
 }
 
-export function parse(input: string): Query {
+/** Parse options; `implicitAnd` joins adjacent predicates with `and`. */
+export interface ParseOptions {
+  implicitAnd?: boolean;
+}
+
+export function parse(input: string, options: ParseOptions = {}): Query {
   const tokens = tokenize(input);
   const eof = Array.from(input).length;
   if (tokens.length === 0) throw QueryError.parse(0, "expected a query");
-  const parser = new Parser(tokens, eof);
+  const parser = new Parser(tokens, eof, options.implicitAnd ?? false);
   const query = parser.parseOr();
   const trailing = parser.peek();
   if (trailing !== undefined) {
@@ -133,6 +143,7 @@ class Parser {
   constructor(
     private readonly tokens: Token[],
     private readonly eof: number,
+    private readonly implicitAnd: boolean,
   ) {}
 
   peek(offset = 0): Token | undefined {
@@ -164,12 +175,24 @@ class Parser {
 
   private parseAnd(): Query {
     let left = this.parseUnary();
-    while (this.atOperator("and")) {
-      this.advance();
+    for (;;) {
+      if (this.atOperator("and")) {
+        this.advance();
+      } else if (!(this.implicitAnd && this.startsPredicate())) {
+        break;
+      }
       const right = this.parseUnary();
       left = { kind: "and", left, right };
     }
     return left;
+  }
+
+  /** Whether the next token opens a predicate rather than an operator. */
+  private startsPredicate(): boolean {
+    const token = this.peek();
+    if (token === undefined) return false;
+    if (token.kind === "lparen" || token.kind === "string") return true;
+    return token.kind === "word" && !this.atOperator("or");
   }
 
   private parseUnary(): Query {
@@ -197,7 +220,7 @@ class Parser {
     const token = this.advance();
     if (token === undefined)
       throw QueryError.parse(this.eof, "expected a predicate");
-    if (token.kind === "string") return { kind: "text", pattern: token.value };
+    if (token.kind === "string") return { kind: "term", text: token.value };
     if (token.kind !== "word") {
       throw QueryError.parse(
         token.pos,
@@ -205,7 +228,7 @@ class Parser {
       );
     }
     const word = token.value;
-    if (this.peek()?.kind !== "colon") return { kind: "text", pattern: word };
+    if (this.peek()?.kind !== "colon") return { kind: "term", text: word };
     this.advance();
     const valueToken = this.advance();
     if (valueToken === undefined)

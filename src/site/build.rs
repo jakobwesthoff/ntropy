@@ -902,13 +902,13 @@ mod tests {
         let page = text(&built, "notes/rust-tips.html");
         assert!(
             page.contains(
-                "<div data-search=\"../assets/search-data.js\" data-prefix=\"../\"></div>"
+                "<button class=\"search-toggle\" type=\"button\" aria-haspopup=\"dialog\" data-search=\"../assets/search-data.js\" data-prefix=\"../\">"
             ),
             "{page}"
         );
         let index = text(&built, "index.html");
         assert!(
-            index.contains("<div data-search=\"assets/search-data.js\" data-prefix=\"\"></div>"),
+            index.contains("data-search=\"assets/search-data.js\" data-prefix=\"\">"),
             "{index}"
         );
         // The data lists the exported notes newest first, with the page
@@ -935,6 +935,15 @@ mod tests {
             ]
         );
         assert_eq!(json["notes"][2]["frontmatter"]["status"], "done");
+        // The site's own pages ride along, so a search finds a tag page.
+        let tag_pages: Vec<&str> = json["pages"]
+            .as_array()
+            .expect("pages")
+            .iter()
+            .filter(|p| p["kind"] == "tag")
+            .map(|p| p["value"].as_str().expect("value"))
+            .collect();
+        assert_eq!(tag_pages, ["programming", "programming/rust"]);
     }
 
     #[test]

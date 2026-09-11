@@ -59,8 +59,8 @@ describe("parse", () => {
       name: "status",
       value: "draft",
     });
-    expect(parse("bare")).toEqual({ kind: "text", pattern: "bare" });
-    expect(parse('"a phrase"')).toEqual({ kind: "text", pattern: "a phrase" });
+    expect(parse("bare")).toEqual({ kind: "term", text: "bare" });
+    expect(parse('"a phrase"')).toEqual({ kind: "term", text: "a phrase" });
     expect(parse('status:"in progress"')).toEqual({
       kind: "field",
       name: "status",
@@ -71,21 +71,49 @@ describe("parse", () => {
   it("applies precedence not > and > or with parentheses overriding", () => {
     expect(parse("a or b and not c")).toEqual({
       kind: "or",
-      left: { kind: "text", pattern: "a" },
+      left: { kind: "term", text: "a" },
       right: {
         kind: "and",
-        left: { kind: "text", pattern: "b" },
-        right: { kind: "not", operand: { kind: "text", pattern: "c" } },
+        left: { kind: "term", text: "b" },
+        right: { kind: "not", operand: { kind: "term", text: "c" } },
       },
     });
     expect(parse("(a or b) and c")).toEqual({
       kind: "and",
       left: {
         kind: "or",
-        left: { kind: "text", pattern: "a" },
-        right: { kind: "text", pattern: "b" },
+        left: { kind: "term", text: "a" },
+        right: { kind: "term", text: "b" },
       },
-      right: { kind: "text", pattern: "c" },
+      right: { kind: "term", text: "c" },
+    });
+  });
+
+  it("joins adjacent predicates with and only when asked", () => {
+    expect(() => parse("a b")).toThrow(QueryError);
+    expect(parse("a b", { implicitAnd: true })).toEqual({
+      kind: "and",
+      left: { kind: "term", text: "a" },
+      right: { kind: "term", text: "b" },
+    });
+    expect(parse("a b or c d", { implicitAnd: true })).toEqual({
+      kind: "or",
+      left: {
+        kind: "and",
+        left: { kind: "term", text: "a" },
+        right: { kind: "term", text: "b" },
+      },
+      right: {
+        kind: "and",
+        left: { kind: "term", text: "c" },
+        right: { kind: "term", text: "d" },
+      },
+    });
+    expect(parse('tag:x "a b" (c)', { implicitAnd: true }).kind).toBe("and");
+    expect(parse("a not b", { implicitAnd: true })).toEqual({
+      kind: "and",
+      left: { kind: "term", text: "a" },
+      right: { kind: "not", operand: { kind: "term", text: "b" } },
     });
   });
 

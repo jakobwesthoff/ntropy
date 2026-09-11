@@ -198,8 +198,10 @@ theme author writes against.
 
 The search runs in the browser over data embedded in the site: for every
 exported note its id, title, page, creation date, tags, frontmatter, and
-body, as `assets/search-data.js`, a classic script that assigns
-`window.__ntropySearch`. The notes come in the model's order, newest
+body, and for every page of the site itself (each section's index, every
+tag page, every view group page) its kind, section, value, label, page,
+and note count, as `assets/search-data.js`, a classic script that
+assigns `window.__ntropySearch`. The notes come in the model's order, newest
 first. Frontmatter travels as JSON with string keys only; a tagged YAML
 value becomes `null`. Every `</` inside the JSON is written as `<\/`, so
 a note whose body contains `</script>` cannot end the script that carries

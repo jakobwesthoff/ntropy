@@ -2,17 +2,20 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-// Query evaluation over the notes the site embeds, mirroring
-// `src/query/eval.rs` and `src/query/text_search.rs` (ADR 0052).
+// Query evaluation over the notes and pages the site embeds (ADR 0052).
 //
-// `tag:` uses the sub-path rule, `field:` compares a scalar or list member
-// exactly, and `text:` is a regular expression over the body with smart case:
-// case-insensitive unless the pattern holds an uppercase literal. A pattern
-// using a construct Rust's `regex` rejects (lookaround, backreferences) is
-// refused here too, so a query that works on the site works in the CLI.
+// Two semantics share one parser and one evaluator. The CLI's, mirroring
+// `src/query/eval.rs` and `src/query/text_search.rs`: a bare term is a
+// smart-case regex over the body, `tag:` uses the sub-path rule, `field:`
+// compares a scalar or list member exactly. The reader's, which the site
+// uses: a bare term is a case-insensitive substring of the title, a tag, a
+// frontmatter value, or the body, and `tag:` and `field:` match partially.
+// `text:` is a regular expression over the body in both; a pattern using a
+// construct Rust's `regex` rejects (lookaround, backreferences) is refused
+// here too, so a `text:` query that works on the site works in the CLI.
 
 import { parse, type Query, QueryError } from "./query";
-import { tagMatches, tagsOf } from "./tag";
+import { normalizeTag, tagMatches, tagsOf } from "./tag";
 
 /** A note as the site's search data carries it. */
 export interface SearchNote {
@@ -27,6 +30,26 @@ export interface SearchNote {
   frontmatter: Record<string, unknown>;
   body: string;
 }
+
+/** A page of the site itself: a section index, a tag page, a group page. */
+export interface SearchPage {
+  kind: "section" | "tag" | "group";
+  /** The section's title: `tags` or the view's name. */
+  section: string;
+  /** The view's field for a group of a view; null for tags. */
+  field: string | null;
+  /** The full grouping value, `programming/rust`; the title for a section. */
+  value: string;
+  /** The last segment, what the sidebar shows. */
+  label: string;
+  /** Site-relative page path. */
+  page: string;
+  /** The notes the page lists. */
+  count: number;
+}
+
+/** Which reading of the query applies. */
+export type Semantics = "cli" | "reader";
 
 /** A note built from frontmatter and body the way the note parser does it. */
 export function noteFrom(
@@ -54,57 +77,150 @@ export type Compiled =
   | { kind: "not"; operand: Compiled }
   | { kind: "tag"; value: string }
   | { kind: "field"; name: string; value: string }
-  | { kind: "text"; regex: RegExp };
+  | { kind: "text"; regex: RegExp }
+  | { kind: "term"; text: string; regex: RegExp | null };
 
-/** Parse and compile a query; throws a `QueryError`. */
-export function compile(input: string): Compiled {
-  return lower(parse(input));
+/**
+ * Parse and compile a query; throws a `QueryError`. Under the CLI's
+ * semantics a bare term is a regex and an invalid one is an error, as in
+ * the CLI; under the reader's it is plain text and never fails.
+ */
+export function compile(input: string, semantics: Semantics = "cli"): Compiled {
+  return lower(
+    parse(input, { implicitAnd: semantics === "reader" }),
+    semantics,
+  );
 }
 
-function lower(query: Query): Compiled {
+function lower(query: Query, semantics: Semantics): Compiled {
   switch (query.kind) {
     case "and":
       return {
         kind: "and",
-        left: lower(query.left),
-        right: lower(query.right),
+        left: lower(query.left, semantics),
+        right: lower(query.right, semantics),
       };
     case "or":
-      return { kind: "or", left: lower(query.left), right: lower(query.right) };
+      return {
+        kind: "or",
+        left: lower(query.left, semantics),
+        right: lower(query.right, semantics),
+      };
     case "not":
-      return { kind: "not", operand: lower(query.operand) };
+      return { kind: "not", operand: lower(query.operand, semantics) };
     case "tag":
     case "field":
       return query;
     case "text":
       return { kind: "text", regex: textRegex(query.pattern) };
+    case "term":
+      return {
+        kind: "term",
+        text: query.text,
+        regex: semantics === "cli" ? textRegex(query.text) : null,
+      };
   }
 }
 
-export function matches(query: Compiled, note: SearchNote): boolean {
+export function matches(
+  query: Compiled,
+  note: SearchNote,
+  semantics: Semantics = "cli",
+): boolean {
   switch (query.kind) {
     case "and":
-      return matches(query.left, note) && matches(query.right, note);
+      return (
+        matches(query.left, note, semantics) &&
+        matches(query.right, note, semantics)
+      );
     case "or":
-      return matches(query.left, note) || matches(query.right, note);
+      return (
+        matches(query.left, note, semantics) ||
+        matches(query.right, note, semantics)
+      );
     case "not":
-      return !matches(query.operand, note);
+      return !matches(query.operand, note, semantics);
     case "tag":
-      return note.tags.some((tag) => tagMatches(query.value, tag));
+      return note.tags.some((tag) =>
+        semantics === "cli"
+          ? tagMatches(query.value, tag)
+          : tagMatches(query.value, tag) ||
+            tag.includes(normalizeTag(query.value)),
+      );
     case "field":
-      return fieldMatches(note, query.name, query.value);
+      return fieldMatches(note, query.name, query.value, semantics);
     case "text":
       return query.regex.test(note.body);
+    case "term":
+      if (semantics === "cli") return query.regex?.test(note.body) ?? false;
+      return (
+        contains(note.title, query.text) ||
+        note.tags.some((tag) => contains(tag, query.text)) ||
+        scalarValues(note.frontmatter).some((value) =>
+          contains(value, query.text),
+        ) ||
+        contains(note.body, query.text)
+      );
   }
 }
 
-/** Exact frontmatter match: scalar equality, or membership for a list. */
-function fieldMatches(note: SearchNote, name: string, value: string): boolean {
+/**
+ * Whether a page of the site answers the query, under the reader's
+ * semantics: a term against its value and label, `tag:` against a tag
+ * page, `field:` against a group page of the view over that field. A
+ * `text:` pattern is about bodies and never selects a page.
+ */
+export function matchesPage(query: Compiled, page: SearchPage): boolean {
+  switch (query.kind) {
+    case "and":
+      return matchesPage(query.left, page) && matchesPage(query.right, page);
+    case "or":
+      return matchesPage(query.left, page) || matchesPage(query.right, page);
+    case "not":
+      return !matchesPage(query.operand, page);
+    case "tag":
+      return (
+        page.kind === "tag" &&
+        (tagMatches(query.value, page.value) ||
+          page.value.includes(normalizeTag(query.value)))
+      );
+    case "field":
+      return (
+        page.kind === "group" &&
+        page.field !== null &&
+        page.field.toLowerCase() === query.name.toLowerCase() &&
+        contains(page.value, query.value)
+      );
+    case "text":
+      return false;
+    case "term":
+      return (
+        contains(page.value, query.text) || contains(page.label, query.text)
+      );
+  }
+}
+
+/** Case-insensitive substring test. */
+export function contains(haystack: string, needle: string): boolean {
+  return needle !== "" && haystack.toLowerCase().includes(needle.toLowerCase());
+}
+
+/** Exact frontmatter match in the CLI's reading, substring in the reader's. */
+function fieldMatches(
+  note: SearchNote,
+  name: string,
+  value: string,
+  semantics: Semantics,
+): boolean {
   if (!Object.hasOwn(note.frontmatter, name)) return false;
   const field = note.frontmatter[name];
-  if (Array.isArray(field))
-    return field.some((item) => scalarText(item) === value);
-  return scalarText(field) === value;
+  const test = (item: unknown) => {
+    const text = scalarText(item);
+    if (text === null) return false;
+    return semantics === "cli" ? text === value : contains(text, value);
+  };
+  if (Array.isArray(field)) return field.some(test);
+  return test(field);
 }
 
 /** A scalar's text as the CLI compares it; non-scalars have none. */
@@ -113,6 +229,23 @@ function scalarText(value: unknown): string | null {
   if (typeof value === "boolean") return value ? "true" : "false";
   if (typeof value === "number") return String(value);
   return null;
+}
+
+/** Every scalar in the frontmatter, lists and nested maps included. */
+export function scalarValues(frontmatter: unknown): string[] {
+  const out: string[] = [];
+  const visit = (value: unknown) => {
+    const text = scalarText(value);
+    if (text !== null) {
+      out.push(text);
+    } else if (Array.isArray(value)) {
+      value.forEach(visit);
+    } else if (value !== null && typeof value === "object") {
+      Object.values(value as Record<string, unknown>).forEach(visit);
+    }
+  };
+  visit(frontmatter);
+  return out;
 }
 
 // ---------------------------------------------------------------------------
