@@ -6,6 +6,14 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11: the built-in theme's faces are Fraunces (titles),
+Literata (note bodies), DM Sans (chrome), and DM Mono (data), and its
+palette is warm paper with amber-brown ink by day and warm black with
+gold at night, chosen from six proposed looks (research log, Q70 and
+Q71). The layout, the icon mechanism, and the embedding are unchanged;
+the font files under `fonts/` are those four families, all under the SIL
+Open Font License.
+
 Extends [ADR 0048](0048-site-themes-as-stylesheets-and-assets.md), which
 it amends, and the embedding of built output in
 [ADR 0051](0051-browser-side-code-in-typescript-with-committed-build.md).

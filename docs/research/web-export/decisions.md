@@ -704,6 +704,28 @@ is [design-notes.md](design-notes.md).
     element kind, two shadows, one motion length, the accent bar) and
     listed in the README's theme section, not a generic scale.
 
+- **Q70 and Q71. Palette and typefaces (2026-09-11).** The user asked
+  (verbatim) "lets discuss possible alternative colorschemes as well as
+  typographie, get creative develop different working concepts and
+  present them for me to compare and decide". Six looks were shown as
+  the same note page in both schemes on a comparison page: Plex (the
+  look of the time), Ledger, Blueprint, Plum, Moss, Graphite. Palette
+  and type were asked separately, since either half can be taken alone.
+  - *Q70 palette:* Ledger, warm paper with amber-brown ink by day and
+    warm black with gold at night. Not chosen: Blueprint (blue-black
+    with a sky accent), Plum (white with plum, plum-black with rose),
+    Moss (green-grey grounds with moss and sage), keeping the teal.
+  - *Q71 type:* Fraunces for titles, Literata for note bodies, DM Sans
+    and DM Mono for the chrome and data. Not chosen: the Source family;
+    Atkinson Hyperlegible with JetBrains Mono; Lora with Nunito Sans and
+    Fira Code; keeping IBM Plex. The first showing of the page had
+    every face falling back to the system sans (the font names carried
+    double quotes inside a double-quoted style attribute); the user
+    noticed, the page was fixed, and the type question was asked again.
+  - *Decision:* recorded as an amendment to ADR 0055. The two halves
+    were chosen from different proposals (Ledger's palette, Plum's
+    type), which the proposals allowed for.
+
 ## Answered but not yet turned into a decision
 
 _Not yet established._

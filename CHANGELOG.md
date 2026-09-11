@@ -29,10 +29,11 @@ and this project adheres to
   for 72 languages; a page loads only the grammars its code blocks need,
   and a fence language without a grammar is reported as an export
   warning.
-- The exported site's look: IBM Plex Serif for note bodies and titles,
-  Plex Sans for the chrome, Plex Mono for dates and counts, all shipped
-  with the site; ntropy's teal on near-black in dark mode and on paper
-  in light mode; Lucide icons in the chrome, on tags, and in callouts.
+- The exported site's look: Fraunces for titles, Literata for note
+  bodies, DM Sans for the chrome, DM Mono for dates and counts, all
+  shipped with the site; warm paper with amber-brown ink in light mode,
+  warm black with gold in dark mode; Lucide icons in the chrome, on
+  tags, and in callouts.
   Note lists are one row per note with the date, the title, and the
   tags as links. The sidebar keeps view sections collapsed away from
   their pages and lists the top-level tags with counts; on narrow

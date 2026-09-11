@@ -8,129 +8,113 @@
  * an explicit data-theme="dark" on the root element; data-theme="light"
  * wins over the system preference.
  *
- * The fonts are the three IBM Plex families shipped beside this file under
- * fonts/ (SIL Open Font License, see fonts/LICENSE): the serif for note
- * bodies and titles, the sans for the chrome, the mono for dates, counts,
- * and code. The standalone document inlines this stylesheet and has no
- * fonts/ beside it; there the stacks fall back to the system faces.
+ * The fonts ship beside this file under fonts/ (all under the SIL Open
+ * Font License, see fonts/LICENSE): Fraunces for the titles, Literata for
+ * note bodies and their headings, DM Sans for the chrome, DM Mono for
+ * dates, counts, and code. The standalone document inlines this stylesheet
+ * and has no fonts/ beside it; there the stacks fall back to the system
+ * faces.
  *
  * Icons are inline SVG `<use>` references into the sprite every page
  * carries, built from icons/; they take the text color, so a theme sizes,
  * colors, or hides them here. */
 
 @font-face {
-  font-family: "IBM Plex Sans";
+  font-family: "Fraunces";
   font-style: normal;
-  font-weight: 100 700;
+  font-weight: 100 900;
   font-display: swap;
-  src: url(fonts/ibm-plex-sans-latin-ext-wght-normal.woff2) format("woff2-variations");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-
-@font-face {
-  font-family: "IBM Plex Sans";
-  font-style: normal;
-  font-weight: 100 700;
-  font-display: swap;
-  src: url(fonts/ibm-plex-sans-latin-wght-normal.woff2) format("woff2-variations");
+  src: url(fonts/fraunces-latin-standard-normal.woff2) format("woff2-variations");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: "IBM Plex Sans";
+  font-family: "Literata";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url(fonts/literata-latin-standard-normal.woff2) format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Literata";
   font-style: italic;
-  font-weight: 100 700;
+  font-weight: 200 900;
   font-display: swap;
-  src: url(fonts/ibm-plex-sans-latin-wght-italic.woff2) format("woff2-variations");
+  src: url(fonts/literata-latin-standard-italic.woff2) format("woff2-variations");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: "IBM Plex Serif";
+  font-family: "DM Sans";
   font-style: normal;
-  font-weight: 400;
+  font-weight: 100 1000;
   font-display: swap;
-  src: url(fonts/ibm-plex-serif-latin-ext-400-normal.woff2) format("woff2");
-  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-}
-
-@font-face {
-  font-family: "IBM Plex Serif";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(fonts/ibm-plex-serif-latin-400-normal.woff2) format("woff2");
+  src: url(fonts/dm-sans-latin-wght-normal.woff2) format("woff2-variations");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: "IBM Plex Serif";
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/dm-mono-latin-400-normal.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "DM Mono";
   font-style: italic;
   font-weight: 400;
   font-display: swap;
-  src: url(fonts/ibm-plex-serif-latin-400-italic.woff2) format("woff2");
+  src: url(fonts/dm-mono-latin-400-italic.woff2) format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 @font-face {
-  font-family: "IBM Plex Serif";
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(fonts/ibm-plex-serif-latin-600-normal.woff2) format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(fonts/ibm-plex-mono-latin-400-normal.woff2) format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "IBM Plex Mono";
+  font-family: "DM Mono";
   font-style: normal;
   font-weight: 500;
   font-display: swap;
-  src: url(fonts/ibm-plex-mono-latin-500-normal.woff2) format("woff2");
+  src: url(fonts/dm-mono-latin-500-normal.woff2) format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
 /* Tokens. Colors come in three text tones (headings brightest, body one
  * step down, secondary text muted, marks faint) over three grounds (page,
- * surface, raised). The light palette is a cool paper with ntropy's teal
- * deepened for contrast; the dark palette is the teal on near-black the
- * project uses everywhere else. The sizes are named for their job in
- * these pages rather than as a generic scale, so a theme can retune the
- * reading column or the chrome without touching every rule. */
+ * surface, raised). The light palette is warm paper with amber-brown ink
+ * for links and rules; the dark palette is a warm black with a gold
+ * accent. The sizes are named for their job in these pages rather than as
+ * a generic scale, so a theme can retune the reading column or the chrome
+ * without touching every rule. */
 
 :root {
   color-scheme: light dark;
-  --bg: #f8f8f7;
-  --surface: #efefee;
+  --bg: #fbf9f4;
+  --surface: #f1ede4;
   --raised: #ffffff;
-  --border: #dcdcda;
-  --fg-bright: #0b0b0f;
-  --fg: #17171c;
-  --muted: #5f5f6a;
-  --faint: #9a9aa4;
-  --accent: #0f766e;
-  --accent-soft: rgba(15, 118, 110, 0.1);
-  --link: #0f766e;
-  --note-link: #0f766e;
-  --callout-note: #0f766e;
-  --callout-tip: #1a7f37;
+  --border: #dcd4c4;
+  --fg-bright: #1b160f;
+  --fg: #2c2518;
+  --muted: #6e6553;
+  --faint: #a79d8a;
+  --accent: #8c5a10;
+  --accent-soft: rgba(140, 90, 16, 0.1);
+  --link: #8c5a10;
+  --note-link: #8c5a10;
+  --callout-note: #8c5a10;
+  --callout-tip: #2f7a3a;
   --callout-important: #6e40c9;
-  --callout-warning: #9a6700;
-  --callout-caution: #cf222e;
-  --shadow-panel: 0 12px 32px rgba(23, 23, 28, 0.14);
-  --shadow-raised: 0 1px 2px rgba(23, 23, 28, 0.12);
-  --serif: "IBM Plex Serif", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
-  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --callout-warning: #b5541a;
+  --callout-caution: #c0392b;
+  --shadow-panel: 0 12px 32px rgba(27, 22, 15, 0.16);
+  --shadow-raised: 0 1px 2px rgba(27, 22, 15, 0.14);
+  --display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --serif: "Literata", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --sans: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Layout: the reading column and the chrome around it. */
   --measure: 42rem;
@@ -156,46 +140,46 @@
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f0f12;
-    --surface: #16161c;
-    --raised: #1c1c22;
-    --border: #2a2a32;
-    --fg-bright: #ffffff;
-    --fg: #e6e6ea;
-    --muted: #8e8e9a;
-    --faint: #5c5c68;
-    --accent: #2dd4bf;
-    --accent-soft: rgba(45, 212, 191, 0.12);
-    --link: #5eead4;
-    --note-link: #5eead4;
-    --callout-note: #2dd4bf;
-    --callout-tip: #3fb950;
-    --callout-important: #ab7df8;
-    --callout-warning: #d29922;
-    --callout-caution: #f85149;
+    --bg: #15130f;
+    --surface: #1e1b15;
+    --raised: #262219;
+    --border: #36302a;
+    --fg-bright: #f5f0e6;
+    --fg: #e2dccf;
+    --muted: #9d9486;
+    --faint: #635b4f;
+    --accent: #e0b35a;
+    --accent-soft: rgba(224, 179, 90, 0.12);
+    --link: #e8c26f;
+    --note-link: #e8c26f;
+    --callout-note: #e0b35a;
+    --callout-tip: #7fcb7a;
+    --callout-important: #c39cf5;
+    --callout-warning: #f0a05a;
+    --callout-caution: #f28b7d;
     --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.5);
     --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3);
   }
 }
 
 :root[data-theme="dark"] {
-  --bg: #0f0f12;
-  --surface: #16161c;
-  --raised: #1c1c22;
-  --border: #2a2a32;
-  --fg-bright: #ffffff;
-  --fg: #e6e6ea;
-  --muted: #8e8e9a;
-  --faint: #5c5c68;
-  --accent: #2dd4bf;
-  --accent-soft: rgba(45, 212, 191, 0.12);
-  --link: #5eead4;
-  --note-link: #5eead4;
-  --callout-note: #2dd4bf;
-  --callout-tip: #3fb950;
-  --callout-important: #ab7df8;
-  --callout-warning: #d29922;
-  --callout-caution: #f85149;
+  --bg: #15130f;
+  --surface: #1e1b15;
+  --raised: #262219;
+  --border: #36302a;
+  --fg-bright: #f5f0e6;
+  --fg: #e2dccf;
+  --muted: #9d9486;
+  --faint: #635b4f;
+  --accent: #e0b35a;
+  --accent-soft: rgba(224, 179, 90, 0.12);
+  --link: #e8c26f;
+  --note-link: #e8c26f;
+  --callout-note: #e0b35a;
+  --callout-tip: #7fcb7a;
+  --callout-important: #c39cf5;
+  --callout-warning: #f0a05a;
+  --callout-caution: #f28b7d;
   --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.5);
   --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
@@ -286,10 +270,10 @@ a.note-link {
 }
 
 .note-title {
-  font-family: var(--serif);
+  font-family: var(--display);
   font-size: 2.4rem;
   font-weight: 600;
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
   line-height: 1.15;
   margin: 0 0 0.7rem;
   text-wrap: balance;
@@ -1128,8 +1112,17 @@ input[type="checkbox"] {
 }
 
 .site-title {
+  font-family: var(--display);
   font-size: 2.75rem;
   margin: 0 0 0.5rem;
+}
+
+/* The title of a tag or group page, the one heading a page has outside a
+ * note body. */
+.content > h1 {
+  font-family: var(--display);
+  font-size: 2.2rem;
+  margin-top: 0;
 }
 
 .note-count {
@@ -1142,7 +1135,8 @@ input[type="checkbox"] {
 .recent h2,
 .section-summary h2,
 .related h2 {
-  font-size: 1.25rem;
+  font-family: var(--display);
+  font-size: 1.35rem;
   margin: var(--section-gap) 0 0.75rem;
 }
 

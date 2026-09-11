@@ -184,8 +184,9 @@ sprite inlined into every page, and the markup shows an icon with
 `file://`. A vault theme's icons are layered by name over the built-in
 ones, so one file replaces one icon and a theme without the directory
 keeps them all. A file under `icons/` without an `<svg>` root fails the
-export naming it. The built-in theme's icons are Lucide's, its fonts the
-three IBM Plex families, each committed with its license.
+export naming it. The built-in theme's icons are Lucide's, its fonts
+Fraunces, Literata, DM Sans, and DM Mono, each committed with its
+license.
 
 Selection is `--theme`, then `[site] theme`, then the built-in theme. The
 binary embeds exactly one built-in theme, every file under

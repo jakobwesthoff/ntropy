@@ -774,8 +774,8 @@ custom property on `:root`. Three grounds, `--bg`, `--surface`,
 `--raised`, and `--border`; three text tones, `--fg-bright` for headings,
 `--fg` for body text, `--muted` for secondary text, plus `--faint` for
 marks; `--accent`, `--accent-soft`, `--link`, `--note-link`, and the five
-`--callout-*` accents; the three stacks `--serif`, `--sans`, `--mono`. The
-dark palette redefines them under `prefers-color-scheme: dark` and under
+`--callout-*` accents; the four stacks `--display`, `--serif`, `--sans`,
+`--mono`. The dark palette redefines them under `prefers-color-scheme: dark` and under
 `:root[data-theme="dark"]`; `data-theme="light"` wins over the system
 preference. A theme that only wants different colors redefines those
 properties and keeps the rest.
@@ -792,11 +792,14 @@ chips; `--accent-bar` for the bar on code blocks, quotes, and callouts;
 Widen the reading column or flatten the corners by redefining one
 property.
 
-**Fonts.** The built-in theme ships IBM Plex Serif, Sans, and Mono under
-`fonts/` (SIL Open Font License, see `fonts/LICENSE`) and declares them
-with `@font-face` in `style.css`. Put your own files under `fonts/` and
-declare them the same way; the stylesheet's `url()`s resolve relative to
-itself in the site's `assets/`.
+**Fonts.** The built-in theme ships four faces under `fonts/` (all SIL
+Open Font License, see `fonts/LICENSE`): Fraunces for page titles
+(`--display`), Literata for note bodies and their headings (`--serif`),
+DM Sans for the chrome and lists (`--sans`), DM Mono for dates, counts,
+and code (`--mono`). They are declared with `@font-face` in `style.css`.
+Put your own files under `fonts/` and declare them the same way; the
+stylesheet's `url()`s resolve relative to itself in the site's
+`assets/`.
 
 **Icons.** Every `icons/<name>.svg` becomes a `<symbol id="icon-<name>">`
 of a sprite inlined into every page, and the markup shows an icon with
