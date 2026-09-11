@@ -57,7 +57,6 @@ function Marked({ fragments }: { fragments: Fragment[] }) {
     <>
       {fragments.map((fragment, index) =>
         fragment.mark ? (
-          // biome-ignore lint/suspicious/noArrayIndexKey: fragments never reorder
           <mark key={index}>{fragment.text}</mark>
         ) : (
           fragment.text
@@ -145,7 +144,6 @@ export function Palette({
     [results],
   );
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a new query starts at the top
   useEffect(() => setSelected(0), [query]);
 
   useEffect(() => {
@@ -200,7 +198,6 @@ export function Palette({
                 <span class="palette-meta">
                   <time dateTime={hit.created}>{hit.created}</time>
                   {hit.tags?.map((tag, i) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: tags never reorder
                     <span class="palette-tag" key={i}>
                       <Marked fragments={tag} />
                     </span>
@@ -234,13 +231,16 @@ export function Palette({
     );
 
   return (
-    <div class="palette-backdrop" onClick={() => setOpen(false)}>
-      <div
-        class="palette"
-        role="dialog"
-        aria-label="Search"
-        onClick={(event) => event.stopPropagation()}
-      >
+    // The backdrop is a button, so closing by a click outside is a real
+    // control: focusable, labelled, and reachable without a pointer.
+    <div class="palette-layer">
+      <button
+        type="button"
+        class="palette-backdrop"
+        aria-label="Close search"
+        onClick={() => setOpen(false)}
+      />
+      <div class="palette" role="dialog" aria-label="Search">
         <div class="palette-box">
           <svg class="icon" aria-hidden="true">
             <use href="#icon-search" />
