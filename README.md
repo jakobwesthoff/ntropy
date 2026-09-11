@@ -912,32 +912,79 @@ takes the text color, so the stylesheet sizes and colors it through the
   `triangle-alert`, `octagon-alert`;
 - the search palette's result kinds: `file-text`, `folder`, `tag`.
 
-**Markup.** The page is a `.layout` grid of four regions:
+**Markup.** The skeleton of a page, with the classes a stylesheet targets
+(`body.document` and no sidebar column for a `render --to html` page):
 
-- `.site-header` with `.site-name`, the `.search-toggle` button, and the
-  `.theme-switch` of three `.theme-choice` buttons;
-- `.sidebar-pane` holding `nav.sidebar`: `.nav-section` blocks, each a
-  `details` with a `summary.nav-title`, an optional `.nav-all` link to the
-  section's page, and `ul.nav-entries` of `li.nav-note` links and
-  `li.nav-group` details whose `summary` holds the group's link (a `span`
-  for a group made by hand in the nav table) and the `.chevron` icon,
-  nesting with another `ul.nav-entries`; the tag section is a
-  `section.nav-tags` with an `h2.nav-title` and a `ul.tag-cloud`;
-- `main` with `.breadcrumbs` (a step without a page is a `span`),
-  `.content`, and the `.pager`;
-- `aside.side` holding `nav.outline`.
+```html
+<body class="site">
+  <div class="layout">
+    <header class="site-header">
+      <a class="site-name">…</a>
+      <button class="search-toggle">…</button>
+      <div class="theme-switch">            <!-- three buttons -->
+        <button class="theme-choice">…</button>
+      </div>
+    </header>
+    <div class="sidebar-pane">
+      <nav class="sidebar">
+        <details class="nav-section">        <!-- one per view, or per nav table section -->
+          <summary class="nav-title">…</summary>
+          <a class="nav-all">…</a>           <!-- the section's own page, when it has one -->
+          <ul class="nav-entries">
+            <li class="nav-note"><a>…</a></li>
+            <li class="nav-group">
+              <details>
+                <summary><svg class="icon chevron"/><a>…</a></summary>  <!-- a span for a hand-made group -->
+                <ul class="nav-entries">…</ul>  <!-- nesting repeats -->
+              </details>
+            </li>
+          </ul>
+        </details>
+        <section class="nav-section nav-tags"> <!-- the tag section -->
+          <h2 class="nav-title"><a>…</a></h2>
+          <ul class="tag-cloud"><li><a>… <span class="count">…</span></a></li></ul>
+        </section>
+      </nav>
+    </div>
+    <main>
+      <nav class="breadcrumbs"><ol><li><a>…</a></li></ol></nav>  <!-- a span for a step without a page -->
+      <div class="content">
+        <header class="note-header">
+          <h1 class="note-title">…</h1>
+          <p class="note-meta">
+            <time class="note-created">…</time>
+            <span class="tags"><a class="tag"><svg class="icon"/>…</a></span>
+          </p>
+          <dl class="frontmatter">…</dl>     <!-- the remaining fields -->
+        </header>
+        <article class="note-body">…</article>
+        <section class="related">
+          <ol class="note-rows">              <!-- every list of notes -->
+            <li class="note-row">
+              <time>…</time>
+              <span class="note-row-main">
+                <a class="note-row-title">…</a>
+                <span class="note-row-tags"><a class="tag">…</a></span>
+              </span>
+            </li>
+          </ol>
+        </section>
+      </div>
+      <nav class="pager"><a class="prev">…</a><a class="next">…</a></nav>
+    </main>
+    <aside class="side">
+      <nav class="outline"><ul><li class="depth-2"><a>…</a></li></ul></nav>
+    </aside>
+  </div>
+</body>
+```
 
-Inside the content, a note is a `.note-header` (`.note-title`, `.note-meta`
-with `.note-created` and the `.tags`, the remaining fields as a
-`.frontmatter` list) followed by `article.note-body` and, on the site,
-`section.related`. Lists of notes are `ol.note-rows` of `li.note-row` with
-a `time`, the `.note-row-title` link, and `.note-row-tags`; groups are
-`ul.group-chips` of `.chip` links. Callouts are `.callout.callout-<kind>`
-with a `.callout-title`. Highlighted code carries Shiki's `--shiki-light`
-and `--shiki-dark` colors per token, and the stylesheet picks one by
-scheme. The current sidebar entry and outline entry carry `aria-current`.
-A standalone `render --to html` page has `body.document` and no sidebar
-column; a site page has `body.site`. Read the built-in `style.css` for the
+Tag and group pages list their child groups as `ul.group-chips` of `.chip`
+links, each with a `.count`. In the body, callouts are
+`.callout.callout-<kind>` with a `.callout-title`, and highlighted code
+carries Shiki's `--shiki-light` and `--shiki-dark` colors per token, one
+of which the stylesheet picks by scheme. The current sidebar entry and
+outline entry carry `aria-current`. Read the built-in `style.css` for the
 rest; it is written to be copied.
 
 ## Language server
