@@ -72,7 +72,10 @@ One directory per node:
     tags/<a>/<b>/index.html
     views/<name>/index.html
     views/<name>/<group>/<sub>/index.html
-    assets/                      the theme's files, style.css among them
+    assets/                      the theme's files, style.css among them,
+                                 the page script app.js, and under
+                                 assets/grammars/ the highlighting grammars
+                                 the site's code blocks need
     files/<vault path>           vault files the notes reference
 
 The `views/` and `tags/` prefixes keep a view named `notes` or `tags`

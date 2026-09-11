@@ -565,6 +565,44 @@ is [design-notes.md](design-notes.md).
     frontend toolchain, running Vite and Vitest (Q40); Node is not used.
     Recorded as an amendment to ADR 0051.
 
+- **Q53. Frontend linting.** Raised by the user during the implementation
+  (verbatim): "do we want something like eslint? or are there more modern
+  alternatives? Or dont we want that?". Options offered: Biome
+  (recommended); oxlint with Biome formatting; ESLint with
+  typescript-eslint and Prettier; no linter.
+  - *Answer:* Biome.
+  - *Decision:* Biome lints and formats the frontend sources in `site/`,
+    run through Bun; it is part of the frontend check.
+
+- **Q54. Grammar packaging.** Raised by the measured sizes during the
+  implementation: the 72 curated grammars built as self-contained files
+  total 19 MB because Shiki's per-language modules carry every grammar a
+  language embeds; crates.io refuses crates over 10 MB. Facts put to the
+  user: on their own the grammars are 3.3 MB, the closure of 110 grammars
+  4.0 MB, gzipped per file 549 KB, gzipped solid 514 KB, zstd solid
+  306 KB, xz solid 296 KB, brotli solid 291 KB. The user asked (verbatim)
+  "cant we download them as part of the build process, so that we dont
+  have them directly in the repository? And why do we need to uncompress
+  them? cant we load the gz compressed version in the browser?", then
+  "what exactly do we need/use the build script for decompression wise?",
+  then "can we maximize compression even more?". Answers given: the
+  frontend build already downloads Shiki from npm and commits only its
+  output; a browser inflates compressed scripts only behind an HTTP
+  server's `Content-Encoding`, never from `file://`; a build script is
+  not needed at all with one solid blob whose grammar list and
+  embedded-language lists are read from the data. Codec options: brotli
+  (recommended), zstd, xz.
+  - *Answer:* the solid-blob route ("sounds like a manageble idea") with
+    zstd.
+  - *Decision:* the frontend build writes the dependency closure of the
+    curated grammars as one JSON array compressed with zstd into
+    `src/site/dist/grammars.zst`, committed and embedded in the binary.
+    At export the blob is inflated with the pure-Rust `ruzstd` crate, the
+    grammars a site's fence languages need (with their embedded
+    languages) are written as plain scripts under `assets/grammars/`,
+    and each page includes only its own. Supersedes the per-grammar
+    files of ADR 0053, which is amended.
+
 ## Answered but not yet turned into a decision
 
 _Not yet established._

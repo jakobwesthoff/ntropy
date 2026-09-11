@@ -23,6 +23,11 @@ and this project adheres to
   export warnings.
 - `ntropy site theme init <name>` copies the built-in site theme into
   `.ntropy/themes/site/<name>/` as the starting point for a custom one.
+- Exported pages carry a light/dark toggle that remembers the choice in
+  the browser, an outline that follows the reader's position, and code
+  blocks highlighted by Shiki in the browser for 72 languages; a page
+  loads only the grammars its code blocks need, and a fence language
+  without a grammar is reported as an export warning.
 - `render --to html` writes a note as one self-contained web page: the
   site theme's stylesheet inlined, the title, tags, and remaining
   frontmatter as a header, the converted body with heading anchors, and

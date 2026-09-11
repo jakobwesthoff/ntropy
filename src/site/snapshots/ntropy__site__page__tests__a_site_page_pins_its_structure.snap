@@ -9,10 +9,15 @@ expression: page().render()
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rust &lt;Tips&gt; · Vault &amp; Co</title>
 <link rel="stylesheet" href="../assets/style.css">
+<script>try{var t=localStorage.getItem("ntropy-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<script defer src="../assets/app.js"></script>
+<script defer src="../assets/grammars/rust.js"></script>
+
 </head>
 <body class="site">
 <div class="layout">
-<header class="site-header"><a class="site-name" href="../index.html">Vault &amp; Co</a></header>
+<header class="site-header"><a class="site-name" href="../index.html">Vault &amp; Co</a>
+<button class="theme-toggle" type="button" aria-pressed="false" title="Switch between light and dark">Theme</button></header>
 <nav class="sidebar">S</nav>
 <main>
 <nav class="breadcrumbs"><ol>

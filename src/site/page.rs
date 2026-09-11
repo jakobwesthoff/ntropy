@@ -80,6 +80,9 @@ pub struct Page {
     pub prefix: String,
     /// The stylesheet's `href`, relative to this page.
     pub stylesheet: String,
+    /// The `src` of every script the page loads, relative to this page: the
+    /// page script and the grammars its code blocks need.
+    pub scripts: Vec<String>,
     /// The sidebar, an HTML fragment.
     pub sidebar: String,
     pub breadcrumbs: Vec<PageLink>,
@@ -107,6 +110,7 @@ impl Page {
             title => self.title,
             prefix => self.prefix,
             stylesheet => self.stylesheet,
+            scripts => self.scripts,
             sidebar => Value::from_safe_string(self.sidebar.clone()),
             breadcrumbs => self.breadcrumbs,
             outline => Value::from_safe_string(self.outline.clone()),
@@ -249,6 +253,10 @@ mod tests {
             title: "Rust <Tips>".to_string(),
             prefix: "../".to_string(),
             stylesheet: "../assets/style.css".to_string(),
+            scripts: vec![
+                "../assets/app.js".to_string(),
+                "../assets/grammars/rust.js".to_string(),
+            ],
             sidebar: "<nav class=\"sidebar\">S</nav>\n".to_string(),
             breadcrumbs: vec![
                 PageLink {
@@ -294,6 +302,19 @@ mod tests {
             "{out}"
         );
         assert!(!out.contains("class=\"next\""), "{out}");
+        assert!(
+            out.contains("<script defer src=\"../assets/app.js\"></script>"),
+            "{out}"
+        );
+        assert!(
+            out.contains("<script defer src=\"../assets/grammars/rust.js\"></script>"),
+            "{out}"
+        );
+        assert!(
+            out.contains("localStorage.getItem(\"ntropy-theme\")"),
+            "the early theme script is inlined: {out}"
+        );
+        assert!(out.contains("<button class=\"theme-toggle\""), "{out}");
         assert!(
             out.contains("<li><a href=\"../views/by-status/done/index.html\">done</a></li>"),
             "{out}"

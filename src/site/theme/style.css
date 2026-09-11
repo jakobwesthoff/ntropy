@@ -250,3 +250,220 @@ input[type="checkbox"] {
 .footnote-backref {
   text-decoration: none;
 }
+
+/* The site layout: header, sidebar, content, and the outline beside it.
+ * The single-note document has none of these. */
+
+.site {
+  padding: 0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 16rem minmax(0, 1fr) 14rem;
+  grid-template-areas:
+    "header header header"
+    "sidebar main side";
+  gap: 0 2rem;
+  max-width: 80rem;
+  margin: 0 auto;
+  padding: 0 1rem 2rem;
+}
+
+.site-header {
+  grid-area: header;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+  padding: 0.8rem 0;
+  margin-bottom: 1.5rem;
+}
+
+.site-name {
+  color: var(--fg);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.theme-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--fg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.7rem;
+}
+
+.sidebar {
+  grid-area: sidebar;
+  font-size: 0.9rem;
+}
+
+.layout > main {
+  grid-area: main;
+  min-width: 0;
+}
+
+.side {
+  grid-area: side;
+  font-size: 0.85rem;
+}
+
+.sidebar,
+.side {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+@media (max-width: 60rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "header"
+      "sidebar"
+      "main"
+      "side";
+  }
+
+  .sidebar,
+  .side {
+    position: static;
+    max-height: none;
+  }
+}
+
+.nav-title {
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  margin: 1rem 0 0.4rem;
+  text-transform: uppercase;
+}
+
+.nav-title a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.nav-groups,
+.nav-notes {
+  list-style: none;
+  margin: 0;
+  padding-left: 0.8rem;
+}
+
+.sidebar > .nav-section > .nav-groups {
+  padding-left: 0;
+}
+
+.nav-group > details > summary {
+  cursor: pointer;
+  padding: 0.15rem 0;
+}
+
+.nav-group a,
+.nav-notes a {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.nav-notes a[aria-current="page"] {
+  color: var(--link);
+  font-weight: 600;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.breadcrumbs li + li::before {
+  content: "›";
+  margin-right: 0.3rem;
+}
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  margin-top: 2rem;
+  padding-top: 1rem;
+}
+
+.pager .next {
+  margin-left: auto;
+}
+
+.outline ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-left: 1px solid var(--border);
+}
+
+.outline a {
+  color: var(--muted);
+  display: block;
+  padding: 0.15rem 0.6rem;
+  text-decoration: none;
+}
+
+.outline a[aria-current="true"] {
+  color: var(--link);
+  border-left: 2px solid var(--link);
+  margin-left: -1px;
+}
+
+.outline .depth-3 a { padding-left: 1.2rem; }
+.outline .depth-4 a { padding-left: 1.8rem; }
+.outline .depth-5 a,
+.outline .depth-6 a { padding-left: 2.4rem; }
+
+.note-list {
+  list-style: none;
+  padding: 0;
+}
+
+.note-list li {
+  margin: 0.3rem 0;
+}
+
+.note-list time,
+.group-list .count {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* Highlighted code: Shiki emits both themes' colors as custom properties
+ * (`--shiki-light`, `--shiki-dark`); the scheme in effect picks one. */
+
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+  background-color: var(--shiki-light-bg);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .shiki,
+  :root:not([data-theme="light"]) .shiki span {
+    color: var(--shiki-dark);
+    background-color: var(--shiki-dark-bg);
+  }
+}
+
+:root[data-theme="dark"] .shiki,
+:root[data-theme="dark"] .shiki span {
+  color: var(--shiki-dark);
+  background-color: var(--shiki-dark-bg);
+}

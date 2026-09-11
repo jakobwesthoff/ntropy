@@ -36,6 +36,7 @@ use crate::render::{LinkTarget, ResolvedLink};
 use crate::view::ViewDef;
 
 use super::SiteOptions;
+use super::frontend::{self, Grammars};
 use super::model::{Front, Model, Placement};
 use super::nav;
 use super::page::{NoteFragment, Page, PageLink};
@@ -119,6 +120,11 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     let mut files = Vec::new();
     let mut copies = Vec::new();
 
+    // The grammars every page's code blocks need, written once under
+    // `assets/grammars/` beside the page script.
+    let grammars = frontend::grammars()?;
+    let mut used_grammars: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
     // Links resolve against the exported set only, so a link to a note the
     // query left out renders as its display text rather than pointing at a
     // page that does not exist.
@@ -136,11 +142,21 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         let links = resolve_links(note, &by_id, input.vault_ids, &mut warnings);
         let note_dir = root_absolute_dir(input.vault_root, &note.path);
 
-        let rendered = render_note(&model, index, note, &links, &note_dir, &entry.page);
+        let rendered = render_note(
+            &model,
+            index,
+            note,
+            &links,
+            &note_dir,
+            &entry.page,
+            &grammars,
+            &mut warnings,
+        );
         files.push(OutputFile {
             path: entry.page.clone(),
             contents: rendered.page.into_bytes(),
         });
+        used_grammars.extend(rendered.grammars);
         for dest in rendered.assets {
             match resolve_root_relative(&note_dir, &dest) {
                 Some(path) => {
@@ -156,12 +172,42 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         }
 
         if model.front == Front::Note(index) {
-            let rendered = render_note(&model, index, note, &links, &note_dir, INDEX_PAGE);
+            // The unknown-language warnings were raised by the note's own
+            // page; the front-page copy raises none twice.
+            let mut repeated = Vec::new();
+            let rendered = render_note(
+                &model,
+                index,
+                note,
+                &links,
+                &note_dir,
+                INDEX_PAGE,
+                &grammars,
+                &mut repeated,
+            );
             files.push(OutputFile {
                 path: INDEX_PAGE.to_string(),
                 contents: rendered.page.into_bytes(),
             });
         }
+    }
+
+    files.push(OutputFile {
+        path: format!("{ASSETS_DIR}/{}", frontend::APP_SCRIPT),
+        contents: frontend::APP_JS.as_bytes().to_vec(),
+    });
+    for name in &used_grammars {
+        let grammar = grammars
+            .get(name)
+            .expect("used grammar names come from the blob");
+        files.push(OutputFile {
+            path: format!(
+                "{ASSETS_DIR}/{}/{}",
+                frontend::GRAMMARS_DIR,
+                grammar.file_name()
+            ),
+            contents: grammar.script().into_bytes(),
+        });
     }
 
     if model.front == Front::Overview {
@@ -175,6 +221,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             String::new(),
             None,
             None,
+            &[],
         );
         files.push(OutputFile {
             path: INDEX_PAGE.to_string(),
@@ -199,6 +246,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             String::new(),
             None,
             None,
+            &[],
         );
         files.push(OutputFile {
             path: section.page.clone(),
@@ -237,6 +285,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                 String::new(),
                 None,
                 None,
+                &[],
             );
             files.push(OutputFile {
                 path: group.page.clone(),
@@ -387,10 +436,18 @@ struct RenderedNote {
     page: String,
     /// Local paths the body references, as written.
     assets: Vec<String>,
+    /// The grammars the page's code blocks need, their embedded grammars
+    /// included, by name.
+    grammars: Vec<String>,
 }
 
 /// Render one note as a site page at `at` (its own page, or `index.html`
-/// when it is the front page).
+/// when it is the front page). A fence language without a grammar is a
+/// warning; its block stays plain.
+///
+/// Every argument is a distinct input of the page; bundling them into a
+/// struct would name the same eight things one level down.
+#[allow(clippy::too_many_arguments)]
 fn render_note(
     model: &Model,
     index: usize,
@@ -398,6 +455,8 @@ fn render_note(
     links: &[ResolvedLink],
     note_dir: &str,
     at: &str,
+    grammars: &Grammars,
+    warnings: &mut Vec<String>,
 ) -> RenderedNote {
     let prefix = nav::prefix_for(at);
     let targets = PageTargets {
@@ -407,6 +466,22 @@ fn render_note(
     };
     let emitted = html::emit(&note.body, links, &targets);
     let entry = &model.notes[index];
+
+    let mut wanted: Vec<&str> = Vec::new();
+    for language in &emitted.languages {
+        match grammars.resolve(language) {
+            Some(grammar) => wanted.push(grammar.name.as_str()),
+            None => warnings.push(format!(
+                "{}: no highlighting grammar for `{language}`; the block stays plain",
+                note.path.display()
+            )),
+        }
+    }
+    let needed: Vec<String> = grammars
+        .closure(wanted)
+        .into_iter()
+        .map(|grammar| grammar.name.clone())
+        .collect();
 
     let body = NoteFragment {
         title: entry.title.clone(),
@@ -439,10 +514,12 @@ fn render_note(
         nav::outline(&emitted.headings),
         prev,
         next,
+        &needed,
     );
     RenderedNote {
         page: page.render(),
         assets: emitted.assets,
+        grammars: needed,
     }
 }
 
@@ -464,7 +541,8 @@ fn breadcrumbs(model: &Model, placement: &Placement, prefix: &str) -> Vec<PageLi
 }
 
 /// The chrome of a page at `at`: sidebar with the current trail open, the
-/// stylesheet relative to the page, and the given navigation.
+/// stylesheet and scripts relative to the page (the page script always, one
+/// script per grammar in `grammars`), and the given navigation.
 #[allow(clippy::too_many_arguments)]
 fn chrome(
     model: &Model,
@@ -475,13 +553,22 @@ fn chrome(
     outline: String,
     prev: Option<PageLink>,
     next: Option<PageLink>,
+    grammars: &[String],
 ) -> Page {
     let prefix = nav::prefix_for(at);
+    let mut scripts = vec![format!("{prefix}{ASSETS_DIR}/{}", frontend::APP_SCRIPT)];
+    for grammar in grammars {
+        scripts.push(format!(
+            "{prefix}{ASSETS_DIR}/{}/{grammar}.js",
+            frontend::GRAMMARS_DIR
+        ));
+    }
     Page {
         lang: model.lang.clone(),
         site_title: model.title.clone(),
         title: title.to_string(),
         stylesheet: format!("{prefix}{ASSETS_DIR}/{}", theme::STYLESHEET),
+        scripts,
         sidebar: nav::sidebar(model, &prefix, at),
         prefix,
         breadcrumbs,
@@ -562,7 +649,7 @@ mod tests {
                 "Rust Tips",
                 "tags: [programming/rust]\nstatus: done\n",
                 &format!(
-                    "## Intro\n\nSee [the plain one]({B}-plain.md) and [gone]({D}-gone.md).\n\n![d](diagram.png) ![l](../assets/logo.svg) ![o](../../outside.png) ![m](missing.png)\n"
+                    "## Intro\n\nSee [the plain one]({B}-plain.md) and [gone]({D}-gone.md).\n\n![d](diagram.png) ![l](../assets/logo.svg) ![o](../../outside.png) ![m](missing.png)\n\n```rust\nfn x() {{}}\n```\n\n```cobol\nDISPLAY.\n```\n"
                 ),
             ),
             note(vault, B, "Plain", "status: open\n", "Nothing much.\n"),
@@ -636,7 +723,11 @@ mod tests {
                 && joined.contains("missing.png"),
             "{joined}"
         );
-        assert_eq!(built.warnings.len(), 3, "{joined}");
+        assert!(
+            joined.contains("no highlighting grammar for `cobol`"),
+            "{joined}"
+        );
+        assert_eq!(built.warnings.len(), 4, "{joined}");
     }
 
     #[test]
@@ -682,6 +773,33 @@ mod tests {
             ),
             "{page}"
         );
+    }
+
+    #[test]
+    fn pages_load_the_page_script_and_only_their_grammars() {
+        let vault = vault();
+        let built = build_site(vault.path(), &SiteOptions::default());
+        let page = text(&built, "notes/rust-tips.html");
+        assert!(
+            page.contains("<script defer src=\"../assets/app.js\"></script>"),
+            "{page}"
+        );
+        assert!(
+            page.contains("<script defer src=\"../assets/grammars/rust.js\"></script>"),
+            "{page}"
+        );
+        assert!(!page.contains("grammars/cobol.js"), "{page}");
+        // A page without code loads the page script alone.
+        let plain = text(&built, "notes/plain.html");
+        assert!(plain.contains("assets/app.js"), "{plain}");
+        assert!(!plain.contains("assets/grammars/"), "{plain}");
+        // The used grammar is written once, as a registering script; the
+        // page script is the embedded one.
+        let script = text(&built, "assets/grammars/rust.js");
+        assert!(script.contains("w.__ntropyGrammars.push({"), "{script}");
+        assert!(script.contains("\"name\":\"rust\""), "{script}");
+        assert!(built.file("assets/grammars/cobol.js").is_none());
+        assert_eq!(text(&built, "assets/app.js"), frontend::APP_JS);
     }
 
     #[test]

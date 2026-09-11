@@ -6,6 +6,17 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11: the grammars ship as one solid zstd-compressed blob
+inside the binary rather than as one script file per grammar. Shiki's
+per-language modules carry every grammar a language embeds, so 72
+self-contained files measured 19 MB, over the 10 MB crates.io limit;
+the dependency closure of the curated list is 110 grammars, 4.0 MB
+uncompressed and 306 KB as a solid zstd blob. The export inflates the
+blob with the pure-Rust `ruzstd` crate, resolves each page's fence
+languages to grammars and their embedded languages using the lists
+inside the data, and writes only the grammars a site uses as plain
+scripts under `assets/grammars/`. Nothing else in this decision changes.
+
 Highlights the code blocks the converter of
 [ADR 0049](0049-shared-markdown-walk-with-typst-and-html-emitters.md) marks
 with their language, using the toolchain of

@@ -31,8 +31,9 @@ ESM-only with no classic-script build, and the site must work over
 ### Language and tools
 
 Browser-side code is TypeScript with Preact, built with Vite, tested with
-Vitest. Bun is the runtime and package manager that installs dependencies
-and runs both; Node is not used anywhere in the toolchain.
+Vitest, linted and formatted with Biome. Bun is the runtime and package
+manager that installs dependencies and runs all three; Node is not used
+anywhere in the toolchain.
 
 ### Repository layout
 
@@ -60,6 +61,8 @@ both.
 - **A separate prebuilt frontend crate** the main crate depends on.
 - **esbuild with Node's test runner**, and **Bun's own bundler and test
   runner** in place of Vite and Vitest.
+- **oxlint with a separate formatter**, **ESLint with typescript-eslint
+  and Prettier**, and **no linter** in place of Biome.
 - **Solid** as the framework, and **no framework**.
 - **`web/` as the source directory**, and `src/site/assets/` or
   `src/site/build/` as the output directory.

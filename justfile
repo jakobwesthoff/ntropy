@@ -20,6 +20,22 @@ fmt:
 check: clippy test
     cargo fmt --check
 
+# Install the frontend's dependencies with Bun (site/)
+site-install:
+    cd site && bun install --frozen-lockfile
+
+# Build the browser-side files into src/site/dist/ (commit the result)
+site-build: site-install
+    cd site && bun run build
+
+# Type-check, lint, format-check, and test the frontend
+site-test: site-install
+    cd site && bun run typecheck && bunx biome ci && bun run test
+
+# Verify the committed src/site/dist/ matches the frontend sources (CI gate)
+site-check: site-build site-test
+    git diff --exit-code -- src/site/dist
+
 # Run the tests that need the real typst binary: the kitchen-sink fixture,
 # whose pdf/png/typ artifacts land under target/verify-render/ for optical
 # inspection, and the note-link annotation check

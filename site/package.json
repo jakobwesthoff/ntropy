@@ -1,0 +1,28 @@
+{
+  "name": "ntropy-site",
+  "private": true,
+  "type": "module",
+  "license": "MPL-2.0",
+  "scripts": {
+    "build": "bun run build.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@shikijs/core": "^4.4.3",
+    "@shikijs/engine-javascript": "^4.4.3",
+    "@shikijs/langs": "^4.4.3",
+    "@shikijs/themes": "^4.4.3",
+    "preact": "^10.29.8",
+    "shiki": "^4.4.3"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.13",
+    "@preact/preset-vite": "^2.10.6",
+    "@types/bun": "^1.4.2",
+    "happy-dom": "^20.14.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.0",
+    "vitest": "^5.0.0"
+  }
+}

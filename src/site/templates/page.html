@@ -1,9 +1,13 @@
 {% extends "base.html" %}
 {% block title %}{{ title }} · {{ site_title }}{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ stylesheet }}">{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ stylesheet }}">
+<script>try{var t=localStorage.getItem("ntropy-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+{% for script in scripts %}<script defer src="{{ script }}"></script>
+{% endfor %}{% endblock %}
 {% block body_class %}site{% endblock %}
 {% block body %}<div class="layout">
-<header class="site-header"><a class="site-name" href="{{ prefix }}index.html">{{ site_title }}</a></header>
+<header class="site-header"><a class="site-name" href="{{ prefix }}index.html">{{ site_title }}</a>
+<button class="theme-toggle" type="button" aria-pressed="false" title="Switch between light and dark">Theme</button></header>
 {{ sidebar | trim }}
 <main>
 {% if breadcrumbs %}<nav class="breadcrumbs"><ol>
