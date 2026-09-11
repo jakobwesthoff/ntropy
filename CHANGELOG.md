@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## v2.0.0 - 2026-09-11
 
 ### Added
 
@@ -48,8 +48,6 @@ and this project adheres to
   and files the note references, so highlighting, the scheme switch,
   the outline, the type, and the images all work as on the site. The
   page has no sidebar, search, breadcrumbs, pager, or related notes.
-  `render` now refuses an existing artifact of any format, or a
-  non-empty files directory, unless `--force` replaces them.
 - `[site] root` roots the sidebar at a tag or view group page
   (`tags/docs`, `views/by-status/open`), and an export whose query is a
   single `tag:` predicate is rooted at that tag; `[[site.nav]]` tables
@@ -105,6 +103,10 @@ and this project adheres to
 
 ### Changed
 
+- `render` refuses an existing artifact of any format, and for `html` a
+  non-empty `<stem>_files/` directory, unless `--force` replaces them;
+  it used to overwrite the artifact in place. A script that re-renders
+  into the same path needs the flag.
 - Typst themes live in `<vault>/.ntropy/themes/typst/`, one subdirectory
   per theme type under `themes/`. A theme still at
   `.ntropy/themes/<name>.typ` fails the render with a message naming both
