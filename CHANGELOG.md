@@ -30,6 +30,11 @@ and this project adheres to
 
 - `site theme init` writes the built-in templates into the new theme
   beside the stylesheet, icons, and fonts.
+- A sidebar rooted at a tag or view group (`[site] root`, or a single
+  `tag:` export query) shows the root's child groups as its sections
+  instead of one section wrapping them; breadcrumbs start at the
+  section. Every section's title now links to the section's page, in
+  place of the "All groups" and "Overview" rows.
 
 ## v2.0.0 - 2026-09-11
 

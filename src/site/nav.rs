@@ -30,10 +30,10 @@ pub fn prefix_for(page: &str) -> String {
 
 /// The sidebar (ADR 0054, ADR 0056): the model's sidebar sections, each
 /// either a cloud of groups with counts (the tag section) or a collapsible
-/// tree of items. A tree section starts open only when it holds the
-/// current page, and so does every group on the page's trail, so a reader
-/// lands with the neighbourhood of the page in view and nothing else
-/// unfolded.
+/// tree of items whose title links to the section's page when it has one.
+/// A tree section starts open only when it holds the current page, and so
+/// does every group on the page's trail, so a reader lands with the
+/// neighbourhood of the page in view and nothing else unfolded.
 pub fn sidebar(model: &Model, prefix: &str, current: &str) -> String {
     let mut out = String::from("<nav class=\"sidebar\">\n");
     for section in &model.sidebar {
@@ -41,7 +41,7 @@ pub fn sidebar(model: &Model, prefix: &str, current: &str) -> String {
         if section.cloud {
             out.push_str("<section class=\"nav-section nav-tags\">\n");
             match &section.page {
-                Some((page, _)) => out.push_str(&format!(
+                Some(page) => out.push_str(&format!(
                     "<h2 class=\"nav-title\"><a href=\"{}\">{label}</a></h2>\n",
                     escape(&format!("{prefix}{page}"))
                 )),
@@ -55,24 +55,31 @@ pub fn sidebar(model: &Model, prefix: &str, current: &str) -> String {
             .items
             .iter()
             .any(|item| contains_item(item, model, current))
-            || section
-                .page
-                .as_ref()
-                .is_some_and(|(page, _)| page == current)
+            || section.page.as_deref() == Some(current)
         {
             " open"
         } else {
             ""
         };
+        // The title is the link to the section's page; the caret beside it
+        // toggles the section, as it does on a group row.
+        let title = match &section.page {
+            Some(page) => {
+                let current_attr = if page == current {
+                    " aria-current=\"page\""
+                } else {
+                    ""
+                };
+                format!(
+                    "<a href=\"{}\"{current_attr}>{label}</a>",
+                    escape(&format!("{prefix}{page}"))
+                )
+            }
+            None => label,
+        };
         out.push_str(&format!(
-            "<details class=\"nav-section\"{open}>\n<summary class=\"nav-title\">{CHEVRON}{label}</summary>\n"
+            "<details class=\"nav-section\"{open}>\n<summary class=\"nav-title\">{CHEVRON}{title}</summary>\n"
         ));
-        if let Some((page, text)) = &section.page {
-            out.push_str(&format!(
-                "<a class=\"nav-all\" href=\"{}\">{text}</a>\n",
-                escape(&format!("{prefix}{page}"))
-            ));
-        }
         nav_items(&mut out, model, &section.items, prefix, current);
         out.push_str("</details>\n");
     }
@@ -123,19 +130,13 @@ pub fn sidebar_data(model: &Model, prefix: &str, current: &str) -> Vec<NavSectio
         .iter()
         .map(|section| NavSectionData {
             label: section.label.clone(),
-            href: section
-                .page
-                .as_ref()
-                .map(|(page, _)| format!("{prefix}{page}")),
+            href: section.page.as_ref().map(|page| format!("{prefix}{page}")),
             cloud: section.cloud,
             open: section
                 .items
                 .iter()
                 .any(|item| contains_item(item, model, current))
-                || section
-                    .page
-                    .as_ref()
-                    .is_some_and(|(page, _)| page == current),
+                || section.page.as_deref() == Some(current),
             items: items_data(model, &section.items, prefix, current),
         })
         .collect()
@@ -611,7 +612,7 @@ mod tests {
         // The section and the `done` group hold the current note and open;
         // `open` stays closed.
         assert!(
-            out.contains("<details class=\"nav-section\" open>\n<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg>by-status</summary>"),
+            out.contains("<details class=\"nav-section\" open>\n<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../views/by-status/index.html\">by-status</a></summary>"),
             "{out}"
         );
         assert!(
@@ -725,7 +726,7 @@ mod tests {
     }
 
     #[test]
-    fn a_rooted_sidebar_is_one_tree_with_an_overview_link() {
+    fn a_rooted_sidebar_makes_the_root_groups_its_sections_with_linked_titles() {
         let model = docs_model(SiteOptions {
             root: Some("tags/docs".to_string()),
             ..SiteOptions::default()
@@ -733,15 +734,15 @@ mod tests {
         let out = sidebar(&model, "../", "notes/install.html");
         assert_eq!(
             out,
-            "<nav class=\"sidebar\">\n<details class=\"nav-section\" open>\n<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg>docs</summary>\n<a class=\"nav-all\" href=\"../tags/docs/index.html\">Overview</a>\n<ul class=\"nav-entries\">\n<li class=\"nav-group\"><details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/start/index.html\">Getting Started</a></summary>\n<ul class=\"nav-entries\">\n<li class=\"nav-note\"><a href=\"../notes/install.html\" aria-current=\"page\">Install</a></li>\n</ul>\n</details></li>\n</ul>\n</details>\n</nav>\n"
+            "<nav class=\"sidebar\">\n<details class=\"nav-section\" open>\n<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/start/index.html\">Getting Started</a></summary>\n<ul class=\"nav-entries\">\n<li class=\"nav-note\"><a href=\"../notes/install.html\" aria-current=\"page\">Install</a></li>\n</ul>\n</details>\n</nav>\n"
         );
-        // The root's own page opens the section without marking an item.
-        let own = sidebar(&model, "../../", "tags/docs/index.html");
+        // The section's own page opens the section and marks its title.
+        let own = sidebar(&model, "../../../", "tags/docs/start/index.html");
         assert!(
-            own.starts_with("<nav class=\"sidebar\">\n<details class=\"nav-section\" open>"),
+            own.starts_with("<nav class=\"sidebar\">\n<details class=\"nav-section\" open>\n<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../../../tags/docs/start/index.html\" aria-current=\"page\">Getting Started</a></summary>"),
             "{own}"
         );
-        assert!(!own.contains("aria-current"), "{own}");
+        assert_eq!(own.matches("aria-current").count(), 1, "{own}");
     }
 
     #[test]

@@ -921,7 +921,6 @@ body.palette-open {
 }
 
 .nav-title,
-.nav-all,
 .nav-note > a,
 .nav-group > details > summary {
   display: flex;
@@ -936,7 +935,6 @@ body.palette-open {
 }
 
 .nav-title:hover,
-.nav-all:hover,
 .nav-note > a:hover,
 .nav-group > details > summary:hover {
   background: var(--surface);
@@ -944,7 +942,6 @@ body.palette-open {
 }
 
 .nav-title:focus-visible,
-.nav-all:focus-visible,
 .nav-note > a:focus-visible,
 .nav-group > details > summary:focus-visible {
   outline: 2px solid var(--accent);
@@ -989,11 +986,6 @@ body.palette-open {
   flex: 1;
   color: inherit;
   text-decoration: none;
-}
-
-.nav-all {
-  color: var(--muted);
-  font-size: 0.8125rem;
 }
 
 .nav-entries {

@@ -124,8 +124,8 @@ The page is a `.layout` grid of:
 - `.site-header` with `.site-name`, the `.search-toggle` button, and the
   `.theme-switch` of three `.theme-choice` buttons;
 - `.sidebar-pane` holding `nav.sidebar`: `.nav-section` blocks, each a
-  `details` with a `summary.nav-title`, an optional `.nav-all` link to the
-  section's page, and `ul.nav-entries` of `li.nav-note` links and
+  `details` with a `summary.nav-title` holding the section's link, and
+  `ul.nav-entries` of `li.nav-note` links and
   `li.nav-group` details whose `summary` holds the group's link (a `span`
   for a group made by hand in the nav table) and the `.chevron` icon,
   nesting with another `ul.nav-entries`; the tag section is a

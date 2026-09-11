@@ -95,10 +95,11 @@ copyright = "Acme, 2026"
 ```
 
 **`root`** names a page of the site, `tags/<path>` or
-`views/<name>/<group>`, and the sidebar shows that group's entries as its top
-level, with breadcrumbs starting there. Without it, an export whose query is
-a single `tag:` term is rooted at that tag; otherwise the sidebar lists every
-configured view and the tag tree.
+`views/<name>/<group>`, and the sidebar shows that group's child groups as
+its sections, each titled by the group and linking to its page, with the
+root's own notes first; breadcrumbs start at the section. Without it, an
+export whose query is a single `tag:` term is rooted at that tag; otherwise
+the sidebar lists every configured view and the tag tree.
 
 **`[[site.nav]]`** assembles the sidebar by hand instead. When present it is
 the whole sidebar; views and tags appear only through items:

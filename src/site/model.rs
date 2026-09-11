@@ -297,9 +297,12 @@ pub enum NavItem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SidebarSection {
     pub label: String,
-    /// The section's own page and the text of the link to it, when it has
-    /// one.
-    pub page: Option<(String, &'static str)>,
+    /// The section's own page, which its title links to, when it has one.
+    pub page: Option<String>,
+    /// The group the section is, by section and path, when it is one: a
+    /// child of the sidebar's root. Its breadcrumb is then empty, nothing
+    /// in the sidebar being above it.
+    pub group: Option<(usize, Vec<usize>)>,
     /// Drawn as a cloud of the items' groups with counts, the tag section's
     /// shape, rather than as a tree.
     pub cloud: bool,
@@ -732,10 +735,10 @@ fn tree(root: &str, values_per_note: &[Vec<String>], notes: &[NoteEntry]) -> Vec
 }
 
 /// The sidebar (ADR 0056): the nav table when the options hold one, else
-/// the root group's entries when a root is configured or the query is a
-/// single `tag:` predicate, else one section per section of the site. A
-/// root that names no group of the site is a warning, and the sidebar is
-/// the default.
+/// the root group's child groups as sections when a root is configured or
+/// the query is a single `tag:` predicate, else one section per section of
+/// the site. A root that names no group of the site is a warning, and the
+/// sidebar is the default.
 fn sidebar(
     options: &SiteOptions,
     query: Option<&Query>,
@@ -752,7 +755,7 @@ fn sidebar(
     });
     if let Some(root) = root {
         match find_page(sections, &root) {
-            Some((section, path)) => return vec![root_section(sections, section, path)],
+            Some((section, path)) => return root_sections(sections, section, path),
             None => warnings.push(format!(
                 "the sidebar root `{root}` is not a tag or view group page of the site; the sidebar shows the views and the tags"
             )),
@@ -769,22 +772,52 @@ fn default_sidebar(sections: &[Section]) -> Vec<SidebarSection> {
         .enumerate()
         .map(|(index, section)| SidebarSection {
             label: section.title.clone(),
-            page: Some((section.page.clone(), "All groups")),
+            page: Some(section.page.clone()),
+            group: None,
             cloud: section.kind == SectionKind::Tags,
             items: group_items(section, index, &[]),
         })
         .collect()
 }
 
-/// The root group's entries as the sidebar's one section.
-fn root_section(sections: &[Section], section: usize, path: Vec<usize>) -> SidebarSection {
-    let group = group_at_path(sections, section, &path);
-    SidebarSection {
-        label: group.label.clone(),
-        page: Some((group.page.clone(), "Overview")),
-        cloud: false,
-        items: entry_items(group, section, &path),
+/// The rooted sidebar: one section per child group of the root, titled by
+/// the group and holding its entries, so the root itself never wraps the
+/// navigation. The root's own notes come first under the root's label, and
+/// a root without child groups is that one section.
+fn root_sections(sections: &[Section], section: usize, path: Vec<usize>) -> Vec<SidebarSection> {
+    let root = group_at_path(sections, section, &path);
+    let mut sidebar = Vec::new();
+    if !root.notes.is_empty() || root.children.is_empty() {
+        sidebar.push(SidebarSection {
+            label: root.label.clone(),
+            page: Some(root.page.clone()),
+            group: Some((section, path.clone())),
+            cloud: false,
+            items: root
+                .entries
+                .iter()
+                .filter_map(|entry| match *entry {
+                    Entry::Note(index) => Some(NavItem::Note { index, label: None }),
+                    Entry::Child(_) => None,
+                })
+                .collect(),
+        });
     }
+    for entry in &root.entries {
+        let Entry::Child(child) = *entry else {
+            continue;
+        };
+        let child_path = [path.as_slice(), &[child]].concat();
+        let group = &root.children[child];
+        sidebar.push(SidebarSection {
+            label: group.label.clone(),
+            page: Some(group.page.clone()),
+            group: Some((section, child_path.clone())),
+            cloud: false,
+            items: entry_items(group, section, &child_path),
+        });
+    }
+    sidebar
 }
 
 /// A group's entries as nav items: its notes, and its children as groups.
@@ -871,6 +904,7 @@ fn curated_sidebar(
         .map(|section| SidebarSection {
             label: section.label.clone(),
             page: None,
+            group: None,
             cloud: false,
             items: nav_items(&section.items, notes, sections, warnings),
         })
@@ -1052,10 +1086,13 @@ fn placements(
     }
 
     for section in sidebar {
+        if let Some(group) = &section.group {
+            group_trails.entry(group.clone()).or_default();
+        }
         let mut order = Vec::new();
         let mut trail = vec![Crumb {
             label: section.label.clone(),
-            page: section.page.as_ref().map(|(page, _)| page.clone()),
+            page: section.page.clone(),
         }];
         visit(
             &section.items,
@@ -1734,7 +1771,7 @@ mod tests {
         );
         assert_eq!(
             model.sidebar[0].page,
-            Some(("views/by-status/index.html".to_string(), "All groups"))
+            Some("views/by-status/index.html".to_string())
         );
         assert!(!model.sidebar[0].cloud);
         assert!(model.sidebar[1].cloud);
@@ -1750,19 +1787,19 @@ mod tests {
             ..SiteOptions::default()
         };
         let model = model(&notes, &views, options);
+        // The root's child groups are the sections; the root itself, which
+        // holds no note of its own, wraps nothing.
         assert_eq!(
             sidebar_labels(&model),
-            [
-                "# docs",
-                "[Getting Started]",
-                "  Install",
-                "[dev]",
-                "  Manifest",
-            ]
+            ["# Getting Started", "Install", "# dev", "Manifest"]
         );
         assert_eq!(
             model.sidebar[0].page,
-            Some(("tags/docs/index.html".to_string(), "Overview"))
+            Some("tags/docs/start/index.html".to_string())
+        );
+        assert_eq!(
+            model.sidebar[1].page,
+            Some("tags/docs/dev/index.html".to_string())
         );
         assert!(model.warnings.is_empty(), "{:?}", model.warnings);
         // Placements come from the rooted sidebar, so Install's breadcrumb
@@ -1775,10 +1812,10 @@ mod tests {
             .expect("install")]
         .as_ref()
         .expect("placed");
-        assert_eq!(labels(&install.trail), ["docs", "Getting Started"]);
+        assert_eq!(labels(&install.trail), ["Getting Started"]);
         assert_eq!(
             install.trail[0].page.as_deref(),
-            Some("tags/docs/index.html")
+            Some("tags/docs/start/index.html")
         );
         let aside = model
             .notes
@@ -1786,9 +1823,9 @@ mod tests {
             .position(|n| n.title == "Aside")
             .expect("aside");
         assert_eq!(model.placements[aside], None);
-        // A group page below the root starts its breadcrumb at the root too;
-        // one outside the root keeps its section's.
-        assert_eq!(labels(&model.group_trail(1, &[0, 0])), ["docs"]);
+        // A section's own group page has nothing above it; one outside the
+        // root keeps its section's chain.
+        assert!(labels(&model.group_trail(1, &[0, 0])).is_empty());
         assert_eq!(labels(&model.group_trail(1, &[1])), ["tags"]);
         assert_eq!(labels(&model.group_trail(0, &[0])), ["by-status"]);
     }
@@ -1825,7 +1862,7 @@ mod tests {
             ..SiteOptions::default()
         };
         let model = Model::build_for(&notes, &[], &options, Some(&query), "V").expect("model");
-        assert_eq!(sidebar_labels(&model)[0], "# docs");
+        assert_eq!(sidebar_labels(&model)[0], "# Getting Started");
     }
 
     #[test]

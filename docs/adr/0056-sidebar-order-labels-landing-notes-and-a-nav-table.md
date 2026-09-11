@@ -17,6 +17,16 @@ Amended 2026-09-11 by
 the `site` table gains `template`, naming the theme template that
 renders the note's page.
 
+Amended 2026-09-11, after the first export of ntropy's own
+documentation (research log, `docs/research/project-page/`, Q22): a
+rooted sidebar shows the root group's child groups as its sections,
+each titled by the group and linking to the group's page, the root's
+own notes first under the root's label; the root itself wraps nothing.
+A root without child groups is that one section. Every section's title
+links to the section's page where it has one, in place of the "All
+groups" and "Overview" rows. Breadcrumbs start at the section, so a
+section's own page has none.
+
 Amends [ADR 0054](0054-site-navigation-and-url-scheme.md), whose
 sidebar had no hand-curated order and whose rejected alternatives
 included a frontmatter order field. The user's answers are recorded in

@@ -4,8 +4,7 @@ expression: "sidebar(&model, \"../\", \"notes/rust-tips.html\")"
 ---
 <nav class="sidebar">
 <details class="nav-section" open>
-<summary class="nav-title"><svg class="icon chevron" aria-hidden="true"><use href="#icon-chevron-right"/></svg>by-status</summary>
-<a class="nav-all" href="../views/by-status/index.html">All groups</a>
+<summary class="nav-title"><svg class="icon chevron" aria-hidden="true"><use href="#icon-chevron-right"/></svg><a href="../views/by-status/index.html">by-status</a></summary>
 <ul class="nav-entries">
 <li class="nav-group"><details open><summary><svg class="icon chevron" aria-hidden="true"><use href="#icon-chevron-right"/></svg><a href="../views/by-status/done/index.html">done</a></summary>
 <ul class="nav-entries">

@@ -1626,34 +1626,35 @@ mod tests {
             theme: None,
         })
         .expect("the site builds");
-        // A note page, a landing page, and a plain group page below the
-        // root all start at the root, which links to its page.
+        // The root's child groups are the sidebar's sections, so a note
+        // page starts its breadcrumb at its section, a section's landing
+        // page has none, and a group below the section starts there.
         let install = text(&built, "notes/install.html");
         assert!(
-            install.contains("<nav class=\"breadcrumbs\" aria-label=\"You are here\"><ol>\n<li><a href=\"../tags/docs/index.html\">docs</a></li>\n<li><svg class=\"icon sep\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/start/index.html\">Getting Started</a></li>\n</ol></nav>"),
+            install.contains("<nav class=\"breadcrumbs\" aria-label=\"You are here\"><ol>\n<li><a href=\"../tags/docs/start/index.html\">Getting Started</a></li>\n</ol></nav>"),
             "{install}"
         );
         let start = text(&built, "tags/docs/start/index.html");
-        assert!(
-            start.contains(
-                "<ol>\n<li><a href=\"../../../tags/docs/index.html\">docs</a></li>\n</ol>"
-            ),
-            "{start}"
-        );
+        assert!(!start.contains("class=\"breadcrumbs\""), "{start}");
         let gadgets = text(&built, "tags/docs/start/gadgets/index.html");
         assert!(
-            gadgets.contains("<li><a href=\"../../../../tags/docs/index.html\">docs</a></li>\n<li><svg class=\"icon sep\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../../../../tags/docs/start/index.html\">Getting Started</a></li>"),
+            gadgets.contains("<ol>\n<li><a href=\"../../../../tags/docs/start/index.html\">Getting Started</a></li>\n</ol>"),
             "{gadgets}"
         );
-        // The root's own page has no breadcrumb above it but the section.
+        // The root's own page is outside the sidebar and keeps the tag
+        // tree's chain above it.
         let docs = text(&built, "tags/docs/index.html");
         assert!(
             docs.contains("<ol>\n<li><a href=\"../../tags/index.html\">tags</a></li>\n</ol>"),
             "{docs}"
         );
         assert!(
-            install.contains("<a class=\"nav-all\" href=\"../tags/docs/index.html\">Overview</a>"),
+            install.contains("<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/start/index.html\">Getting Started</a></summary>"),
             "{install}"
+        );
+        assert!(
+            !install.contains(">docs<"),
+            "the root wraps nothing: {install}"
         );
 
         // The export query stands in for the root.
@@ -1669,11 +1670,15 @@ mod tests {
             theme: None,
         })
         .expect("the site builds");
+        // The rooted group holds a note of its own, so it is the first
+        // section, its child group the second.
         let install = text(&built, "notes/install.html");
         assert!(
-            install.contains(
-                "<a class=\"nav-all\" href=\"../tags/docs/start/index.html\">Overview</a>"
-            ),
+            install.contains("<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/start/index.html\">Getting Started</a></summary>"),
+            "{install}"
+        );
+        assert!(
+            install.contains("<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/docs/start/gadgets/index.html\">gadgets</a></summary>"),
             "{install}"
         );
         assert!(

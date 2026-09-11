@@ -1948,14 +1948,16 @@ fn site_roots_the_sidebar_by_config_or_by_a_tag_query_and_takes_a_nav_table() {
     assert!(output.status.success());
     let page =
         fs::read_to_string(dir.path().join("by-query/notes/rust-tips.html")).expect("note page");
+    // `work` holds no note of its own, so its one child is the section.
     assert!(
-        page.contains("<a class=\"nav-all\" href=\"../tags/work/index.html\">Overview</a>"),
+        page.contains("<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/work/rust/index.html\">rust</a></summary>"),
         "{page}"
     );
     assert!(
-        page.contains("<li><a href=\"../tags/work/index.html\">work</a></li>"),
-        "the breadcrumb starts at the root: {page}"
+        page.contains("<li><a href=\"../tags/work/rust/index.html\">rust</a></li>"),
+        "the breadcrumb starts at the section: {page}"
     );
+    assert!(!page.contains(">work<"), "the root wraps nothing: {page}");
 
     // A configured root wins over the query, and a bad one warns.
     set_site(dir.path(), "root = \"tags/work/rust\"\n");
@@ -1963,8 +1965,9 @@ fn site_roots_the_sidebar_by_config_or_by_a_tag_query_and_takes_a_nav_table() {
     assert!(output.status.success());
     let page =
         fs::read_to_string(dir.path().join("by-root/notes/rust-tips.html")).expect("note page");
+    // A root without child groups is the one section itself.
     assert!(
-        page.contains("<a class=\"nav-all\" href=\"../tags/work/rust/index.html\">Overview</a>"),
+        page.contains("<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/work/rust/index.html\">rust</a></summary>"),
         "{page}"
     );
     set_site(dir.path(), "root = \"tags/no-such-tag\"\n");

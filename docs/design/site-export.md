@@ -205,13 +205,16 @@ page's trail. Which sections there are depends on the configuration
 ([ADR 0056](../adr/0056-sidebar-order-labels-landing-notes-and-a-nav-table.md)):
 
 - Without a root or a nav table, one section per configured view, its
-  top-level groups as items and an "All groups" link to its index, then
+  top-level groups as items and its title linking to its index, then
   the tag section drawn as a cloud of the top-level tags with their note
   counts, the one holding the current page marked; the tree below lives
   on the tag pages.
 - With a root, `[site] root` or the tag of a single `tag:` export
-  query, one section: the root group's entries, under the group's label,
-  with an "Overview" link to the group's page.
+  query, one section per child group of the root, titled by the group,
+  linking to its page, and holding its entries; the root's own notes
+  come first under the root's label, and a root without child groups is
+  that one section. The root itself wraps nothing, and breadcrumbs start
+  at the section.
 - With a nav table, exactly its sections, under their labels, with the
   items as written; a hand-assembled group is a summary without a link.
 
