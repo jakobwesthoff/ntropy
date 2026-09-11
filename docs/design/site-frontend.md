@@ -34,9 +34,10 @@ embedded in script files.
 The build produces two files. `app.js` is the page script, one
 self-contained IIFE holding the scheme switch, the drawer handling, the
 outline tracking, search, and the highlighter runtime with Shiki's core,
-its JavaScript regex engine, and the two soft Gruvbox themes, whose warm
-token colors sit on the built-in theme's paper and warm black; the block
-background is the theme's own surface, not the Shiki theme's. `grammars.zst` holds every
+its JavaScript regex engine, and two Kanagawa themes, Lotus for light and
+Dragon for dark, whose muted warm token colors sit on the built-in
+theme's paper and brown-black; the block background is the theme's own
+surface, not the Shiki theme's. `grammars.zst` holds every
 grammar the curated languages need, their embedded languages included
 (110 grammars for the 72 curated ones), as one JSON array compressed with
 zstd; the curated list itself is `site/grammars.json`. The build is

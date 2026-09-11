@@ -726,6 +726,20 @@ is [design-notes.md](design-notes.md).
     were chosen from different proposals (Ledger's palette, Plum's
     type), which the proposals allowed for.
 
+- **Q72. Code highlighting colors (2026-09-11).** After the palette was
+  warmed and browned at the user's request, the user found the soft
+  Gruvbox pair chosen for the code blocks a poor match and asked
+  (verbatim) for "something with more contrast or even really a
+  contrasting cooler variant", with options to compare. Eleven Shiki
+  theme pairs were rendered by Shiki inside the current pages, in both
+  schemes, with the contrast of each theme's default code text on the
+  code background. Offered: Gruvbox hard, Kanagawa, Solarized, Rosé
+  Pine, and the other seven by name.
+  - *Answer:* Kanagawa.
+  - *Decision:* the page script highlights with `kanagawa-lotus` in light
+    mode and `kanagawa-dragon` in dark mode; the code background stays
+    the theme's surface.
+
 ## Answered but not yet turned into a decision
 
 _Not yet established._
