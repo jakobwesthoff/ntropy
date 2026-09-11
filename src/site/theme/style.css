@@ -891,7 +891,10 @@ body.palette-open {
   gap: 0.35rem;
 }
 
-/* The navigation pane: collapsible view sections, the tag cloud. */
+/* The navigation pane. Every clickable thing is a row of one geometry
+   (padding, radius, hover fill), labels of notes and groups share the left
+   edge of their level, the disclosure caret sits at the right end of a row,
+   and each nested level steps in by a rail. */
 
 .sidebar-pane {
   grid-area: sidebar;
@@ -908,12 +911,44 @@ body.palette-open {
   display: none;
 }
 
+.nav-title,
+.nav-all,
+.nav-note > a,
+.nav-group > details > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-control);
+  padding: 0.3rem 0.5rem;
+  line-height: 1.35;
+  color: var(--fg);
+  text-decoration: none;
+  transition: background-color var(--motion), color var(--motion);
+}
+
+.nav-title:hover,
+.nav-all:hover,
+.nav-note > a:hover,
+.nav-group > details > summary:hover {
+  background: var(--surface);
+  color: var(--fg-bright);
+}
+
+.nav-title:focus-visible,
+.nav-all:focus-visible,
+.nav-note > a:focus-visible,
+.nav-group > details > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .sidebar .chevron {
-  width: 0.9em;
-  height: 0.9em;
-  margin-right: 0.25em;
+  flex: none;
+  order: 1;
+  width: 0.85em;
+  height: 0.85em;
+  margin-left: auto;
   color: var(--faint);
-  vertical-align: -0.1em;
   transition: transform var(--motion);
 }
 
@@ -921,76 +956,67 @@ body.palette-open {
   transform: rotate(90deg);
 }
 
-.nav-section {
-  margin: 0 0 1.25rem;
+/* A group row is a link with the caret beside it: the label navigates, the
+   caret toggles. */
+.nav-group > details > summary > a,
+.nav-group > details > summary > span {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.nav-section + .nav-section {
+  margin-top: 0.75rem;
 }
 
 .nav-title {
   color: var(--fg-bright);
-  font-size: 0.875rem;
   font-weight: 600;
-  margin: 0 0 0.35rem;
-  padding: 0.2rem 0;
+  margin: 0;
 }
 
 .nav-title a {
+  flex: 1;
   color: inherit;
   text-decoration: none;
 }
 
 .nav-all {
   color: var(--muted);
-  display: block;
-  margin: 0.1rem 0 0.3rem 1.15em;
-  text-decoration: none;
-}
-
-.nav-all:hover {
-  color: var(--link);
+  font-size: 0.8125rem;
 }
 
 .nav-entries {
   list-style: none;
   margin: 0;
-  padding-left: 1.15em;
+  padding: 0;
 }
 
-.nav-section > .nav-entries {
-  padding-left: 0.2rem;
+.nav-entries .nav-entries {
+  margin-left: 0.85rem;
+  padding-left: 0.4rem;
+  border-left: 1px solid var(--border);
 }
 
-.nav-group > details > summary {
-  padding: 0.15rem 0;
-}
-
-.nav-group a,
-.nav-note a {
-  color: var(--fg);
-  text-decoration: none;
-}
-
-.nav-note {
-  padding: 0.12rem 0;
-}
-
-.nav-note a:hover,
-.nav-group a:hover {
-  color: var(--link);
-}
-
-.nav-note a[aria-current="page"],
-.nav-group > details > summary > a[aria-current="page"] {
+.nav-note > a[aria-current="page"],
+.nav-group > details > summary:has(> a[aria-current="page"]) {
+  background: var(--accent-soft);
   color: var(--accent);
   font-weight: 500;
+}
+
+.nav-group > details > summary > a[aria-current="page"] {
+  color: var(--accent);
 }
 
 .tag-cloud {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem 0.9rem;
+  gap: 0.2rem 0.85rem;
   list-style: none;
   margin: 0;
-  padding: 0 0 0 0.2rem;
+  padding: 0.2rem 0.5rem 0;
 }
 
 .tag-cloud a {
