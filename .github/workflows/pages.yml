@@ -32,7 +32,11 @@ jobs:
     if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      # After a release, the page is the documentation of that release:
+      # the vault at the tagged commit. Otherwise the pushed main.
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
 
       # The exporter is the newest release, so the page always renders
       # with a binary users can install.
