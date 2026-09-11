@@ -1,29 +1,30 @@
 {% extends "base.html" %}
-{% block title %}{{ title }} · {{ site_title }}{% endblock %}
+{% block title %}{% if document %}{{ title }}{% else %}{{ title }} · {{ site_title }}{% endif %}{% endblock %}
 {% block head %}<link rel="stylesheet" href="{{ stylesheet }}">
 <script>try{var t=localStorage.getItem("ntropy-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
 {% for script in scripts %}<script defer src="{{ script }}"></script>
 {% endfor %}{% endblock %}
-{% block body_class %}site{% endblock %}
+{% block body_class %}{% if document %}document{% else %}site{% endif %}{% endblock %}
 {% block body %}{{ icons }}
 <div class="layout">
 <header class="site-header">
-<a class="nav-open" href="#sidebar" aria-label="Open navigation"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></a>
+{% if document %}<span class="site-name">{{ site_title }}</span>
+{% else %}<a class="nav-open" href="#sidebar" aria-label="Open navigation"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></a>
 <a class="site-name" href="{{ prefix }}index.html">{{ site_title }}</a>
-<div class="header-tools">
-<button class="search-toggle" type="button" aria-haspopup="dialog" data-search="{{ prefix }}assets/search-data.js" data-prefix="{{ prefix }}"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><span>Search</span><kbd>/</kbd></button>
-<div class="theme-switch" role="group" aria-label="Color scheme">
+{% endif %}<div class="header-tools">
+{% if not document %}<button class="search-toggle" type="button" aria-haspopup="dialog" data-search="{{ prefix }}assets/search-data.js" data-prefix="{{ prefix }}"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><span>Search</span><kbd>/</kbd></button>
+{% endif %}<div class="theme-switch" role="group" aria-label="Color scheme">
 <button class="theme-choice" type="button" data-theme-choice="system" aria-pressed="true" title="Follow the system"><svg class="icon" aria-hidden="true"><use href="#icon-monitor"/></svg><span class="visually-hidden">System</span></button>
 <button class="theme-choice" type="button" data-theme-choice="light" aria-pressed="false" title="Light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg><span class="visually-hidden">Light</span></button>
 <button class="theme-choice" type="button" data-theme-choice="dark" aria-pressed="false" title="Dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg><span class="visually-hidden">Dark</span></button>
 </div>
 </div>
 </header>
-<div class="sidebar-pane" id="sidebar">
+{% if not document %}<div class="sidebar-pane" id="sidebar">
 <a class="nav-close" href="#" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="#icon-x"/></svg></a>
 {{ sidebar | trim }}
 </div>
-<main>
+{% endif %}<main>
 {% if breadcrumbs %}<nav class="breadcrumbs" aria-label="You are here"><ol>
 {% for crumb in breadcrumbs %}<li>{% if not loop.first %}<svg class="icon sep" aria-hidden="true"><use href="#icon-chevron-right"/></svg>{% endif %}{% if crumb.href %}<a href="{{ crumb.href }}">{{ crumb.label }}</a>{% else %}<span>{{ crumb.label }}</span>{% endif %}</li>
 {% endfor %}</ol></nav>

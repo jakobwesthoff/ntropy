@@ -530,10 +530,19 @@ input[type="checkbox"] {
 }
 
 /* The site layout: header, navigation, content, and the outline beside it.
- * The standalone document has none of these. */
+ * A standalone rendered note is the same page without the navigation
+ * column. */
 
-.site {
+.site,
+.document {
   padding: 0;
+}
+
+.document .layout {
+  grid-template-columns: minmax(0, 1fr) var(--outline-width);
+  grid-template-areas:
+    "header header"
+    "main side";
 }
 
 .layout {

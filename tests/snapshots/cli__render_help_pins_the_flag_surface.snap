@@ -62,6 +62,9 @@ Options:
           
           Supplies the passphrase wherever one would otherwise be typed: creating an encrypted vault, unlocking one, or converting one. On `vault passphrase` it is the *current* passphrase.
 
+      --force
+          Replace an existing artifact, and for `html` a non-empty files directory beside it; without it either is refused
+
   -h, --help
           Print help (see a summary with '-h')
 

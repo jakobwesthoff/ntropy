@@ -9,9 +9,11 @@
 // where module scripts and lazily loaded chunks are refused. The outputs
 // land in `src/site/dist/` and are committed; `cargo build` never runs this.
 //
-//   app.js        the page script: theme switch, outline tracking, search,
+//   app.js        the page script: theme switch, drawer, outline tracking,
 //                 and the highlighter runtime (Shiki's core, its JavaScript
 //                 regex engine, the two themes), one self-contained IIFE
+//   search.js     the search palette, one self-contained IIFE; a site page
+//                 loads it beside app.js, a rendered note does not
 //   grammars.zst  every grammar the curated languages need, their embedded
 //                 languages included, as one zstd-compressed JSON array; the
 //                 export inflates it and writes the grammars a site uses
@@ -26,7 +28,12 @@ import grammars from "./grammars.json";
 const HERE = import.meta.dirname;
 const OUT = resolve(HERE, "../src/site/dist");
 
-async function bundleApp(): Promise<void> {
+/** Bundle one entry as a self-contained classic script named `fileName`. */
+async function bundle(
+  entry: string,
+  fileName: string,
+  name: string,
+): Promise<void> {
   await build({
     configFile: false,
     logLevel: "warn",
@@ -37,10 +44,10 @@ async function bundleApp(): Promise<void> {
       minify: true,
       sourcemap: false,
       lib: {
-        entry: resolve(HERE, "src/app.ts"),
-        name: "ntropy",
+        entry: resolve(HERE, entry),
+        name,
         formats: ["iife"],
-        fileName: () => "app.js",
+        fileName: () => fileName,
       },
     },
   });
@@ -77,6 +84,9 @@ async function writeGrammars(): Promise<number> {
 
 await rm(OUT, { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
-await bundleApp();
+await bundle("src/app.ts", "app.js", "ntropy");
+await bundle("src/search.ts", "search.js", "ntropySearch");
 const count = await writeGrammars();
-console.log(`built app.js and grammars.zst (${count} grammars) into ${OUT}`);
+console.log(
+  `built app.js, search.js, and grammars.zst (${count} grammars) into ${OUT}`,
+);

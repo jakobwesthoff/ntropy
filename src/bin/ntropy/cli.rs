@@ -199,6 +199,10 @@ pub enum Command {
         /// Print the artifact's path to stdout on success.
         #[arg(short = 'p', long)]
         print: bool,
+        /// Replace an existing artifact, and for `html` a non-empty files
+        /// directory beside it; without it either is refused.
+        #[arg(long)]
+        force: bool,
     },
 
     /// Export the vault as a static website.

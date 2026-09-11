@@ -1189,7 +1189,7 @@ fn render_scan_warnings_print_and_strict_fails() {
         assert_cmd_snapshot!("render_warnings_lenient", lenient);
 
         let mut strict = ntropy(dir.path());
-        strict.args(["render", ULID_A, "-p", "-n", "--strict"]);
+        strict.args(["render", ULID_A, "-p", "-n", "--strict", "--force"]);
         strict.env("PATH", STUB_BIN);
         assert_cmd_snapshot!("render_warnings_strict", strict);
     });
@@ -1264,8 +1264,9 @@ fn render_output_flag_is_honored() {
 }
 
 #[test]
-fn render_overwrites_an_existing_artifact() {
-    // A pre-existing file at the target is replaced silently (ADR 0037).
+fn render_keeps_an_existing_artifact_unless_forced() {
+    // A pre-existing file at the target is a render target of an earlier
+    // run: refused without `--force`, replaced with it (ADR 0057).
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -1279,6 +1280,22 @@ fn render_overwrites_an_existing_artifact() {
 
     let mut cmd = ntropy(dir.path());
     cmd.args(["render", ULID_A, "-n"]);
+    cmd.env("PATH", STUB_BIN);
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("`wanted.pdf` exists; pass --force to replace it"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(&target).expect("read artifact"),
+        "stale content"
+    );
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-n", "--force"]);
     cmd.env("PATH", STUB_BIN);
     let status = cmd.status().expect("run render");
     assert!(status.success());
@@ -1434,7 +1451,9 @@ fn marker_theme(marker: &str) -> String {
 /// involved, so the emitted document is inspectable without a compiler.
 fn render_to_typst(vault: &Path, id: &str, extra: &[&str]) -> String {
     let mut cmd = ntropy(vault);
-    cmd.args(["render", id, "--to", "typst", "-o", "out.typ", "-n"]);
+    cmd.args([
+        "render", id, "--to", "typst", "-o", "out.typ", "-n", "--force",
+    ]);
     cmd.args(extra);
     cmd.current_dir(vault);
     cmd.env("PATH", "no-such-bin");
@@ -1477,7 +1496,7 @@ fn render_to_html(vault: &Path, id: &str, extra: &[&str]) -> std::process::Outpu
 }
 
 #[test]
-fn render_to_html_writes_a_self_contained_page_without_any_tool() {
+fn render_to_html_writes_the_page_and_its_files_beside_it_without_any_tool() {
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -1509,15 +1528,92 @@ fn render_to_html_writes_a_self_contained_page_without_any_tool() {
     assert!(page.starts_with("<!doctype html>"), "{page}");
     assert!(page.contains("<title>Report</title>"), "{page}");
     assert!(
-        page.contains("--callout-note"),
-        "the built-in stylesheet is inlined: {page}"
+        page.contains("<link rel=\"stylesheet\" href=\"report_files/style.css\">"),
+        "{page}"
+    );
+    assert!(
+        page.contains("<script defer src=\"report_files/app.js\"></script>"),
+        "{page}"
+    );
+    assert!(!page.contains("search.js"), "{page}");
+    assert!(
+        page.contains("<span class=\"site-name\">Report</span>"),
+        "{page}"
     );
     assert!(page.contains("<h2 id=\"findings\">Findings</h2>"), "{page}");
     assert!(
-        page.contains("<a class=\"note-link\" href=\"other.html\">The Other One</a>"),
+        page.contains("<a class=\"note-link\" href=\"other.html\">The Guide</a>")
+            || page.contains("<a class=\"note-link\" href=\"other.html\">The Other One</a>"),
         "{page}"
     );
     assert!(page.contains("<dt>status</dt>"), "{page}");
+    let files = dir.path().join("report_files");
+    let css = fs::read_to_string(files.join("style.css")).expect("the stylesheet is a file");
+    assert!(css.contains("--callout-note"), "{css}");
+    assert!(files.join("app.js").is_file());
+    assert!(files.join("fonts/LICENSE").is_file());
+    assert!(
+        !files.join("icons").exists(),
+        "the sprite is inline, so the icon files stay out"
+    );
+    assert!(
+        !files.join("grammars").exists(),
+        "no code block, no grammar"
+    );
+}
+
+#[test]
+fn render_refuses_an_existing_artifact_or_files_directory_unless_forced() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\n```rust\nfn main() {}\n```\n",
+    );
+    assert!(render_to_html(dir.path(), ULID_A, &[]).status.success());
+    assert!(dir.path().join("report_files/grammars/rust.js").is_file());
+
+    let again = render_to_html(dir.path(), ULID_A, &[]);
+    assert!(!again.status.success(), "a second render must refuse");
+    let stderr = String::from_utf8_lossy(&again.stderr);
+    assert!(
+        stderr.contains("report.html") && stderr.contains("--force"),
+        "{stderr}"
+    );
+
+    // The directory alone blocks too, and `--force` replaces both, leaving
+    // nothing stale behind.
+    fs::remove_file(dir.path().join("report.html")).expect("remove artifact");
+    fs::write(dir.path().join("report_files/stale.txt"), "old").expect("stale file");
+    let blocked = render_to_html(dir.path(), ULID_A, &[]);
+    assert!(!blocked.status.success());
+    assert!(
+        String::from_utf8_lossy(&blocked.stderr).contains("report_files"),
+        "{}",
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+    let forced = render_to_html(dir.path(), ULID_A, &["--force"]);
+    assert!(
+        forced.status.success(),
+        "{}",
+        String::from_utf8_lossy(&forced.stderr)
+    );
+    assert!(dir.path().join("report.html").is_file());
+    assert!(!dir.path().join("report_files/stale.txt").exists());
+
+    // Every format refuses an existing artifact, before any tool runs.
+    fs::write(dir.path().join("report.pdf"), "not a pdf").expect("existing pdf");
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-n", "-o", "report.pdf"]);
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("--force"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 }
 
 #[test]
@@ -1552,7 +1648,8 @@ fn render_to_html_takes_the_site_theme_from_config_and_the_flag() {
     configure_site(dir.path(), "theme = \"corporate\"\nlang = \"de\"\n");
 
     let read = |suffix: &str| {
-        fs::read_to_string(dir.path().join(format!("report{suffix}.html"))).expect("artifact")
+        fs::read_to_string(dir.path().join(format!("report{suffix}_files/style.css")))
+            .expect("the artifact's stylesheet")
     };
 
     assert!(
@@ -1560,15 +1657,16 @@ fn render_to_html_takes_the_site_theme_from_config_and_the_flag() {
             .status
             .success()
     );
-    let page = read("");
+    let css = read("");
     assert!(
-        page.contains("CORPORATE-SITE-THEME"),
-        "config theme applies: {page}"
+        css.contains("CORPORATE-SITE-THEME"),
+        "config theme applies: {css}"
     );
     assert!(
-        !page.contains("--callout-note"),
+        !css.contains("--callout-note"),
         "the built-in stylesheet is replaced"
     );
+    let page = fs::read_to_string(dir.path().join("report.html")).expect("artifact");
     assert!(
         page.contains("<html lang=\"de\">"),
         "the configured language applies: {page}"
@@ -1597,12 +1695,12 @@ fn render_to_html_takes_the_site_theme_from_config_and_the_flag() {
         .status
         .success()
     );
-    let page = read("-default");
+    let css = read("-default");
     assert!(
-        page.contains("--callout-note"),
+        css.contains("--callout-note"),
         "`default` restores the built-in stylesheet"
     );
-    assert!(!page.contains("CORPORATE-SITE-THEME"));
+    assert!(!css.contains("CORPORATE-SITE-THEME"));
 }
 
 #[test]
@@ -1628,8 +1726,8 @@ fn render_to_html_ignores_the_typst_theme_and_typst_ignores_the_site_theme() {
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
-        fs::read_to_string(dir.path().join("report.html"))
-            .expect("artifact")
+        fs::read_to_string(dir.path().join("report_files/style.css"))
+            .expect("the artifact's stylesheet")
             .contains("CORPORATE-SITE-THEME")
     );
 }
@@ -2721,7 +2819,9 @@ fn render_to_typst_raw_html_warns_and_strict_fails() {
         assert_cmd_snapshot!("render_typst_html_lenient", lenient);
 
         let mut strict = ntropy(dir.path());
-        strict.args(["render", ULID_A, "--to", "typst", "-p", "-n", "--strict"]);
+        strict.args([
+            "render", ULID_A, "--to", "typst", "-p", "-n", "--strict", "--force",
+        ]);
         strict.current_dir(dir.path());
         strict.env("PATH", "no-such-bin");
         assert_cmd_snapshot!("render_typst_html_strict", strict);

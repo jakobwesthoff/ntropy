@@ -34,12 +34,15 @@ pub use build::{Built, Input, build, write};
 pub use options::SiteOptions;
 pub use theme::SiteTheme;
 
-/// What the `html` render format needs from the site layer: the theme whose
-/// stylesheet a document inlines, and the page language.
+/// What the `html` render format needs from the site layer: the theme
+/// whose files the artifact carries beside it, and the page language.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DocumentSettings {
     /// The selected site theme, or `None` for the built-in one.
     pub theme: Option<SiteTheme>,
+    /// The directory a vault theme's files live in, copied beside the
+    /// artifact; `None` for the built-in theme, whose files are embedded.
+    pub theme_dir: Option<std::path::PathBuf>,
     /// The `lang` attribute of the page.
     pub lang: String,
 }
@@ -48,6 +51,7 @@ impl Default for DocumentSettings {
     fn default() -> Self {
         DocumentSettings {
             theme: None,
+            theme_dir: None,
             lang: options::DEFAULT_LANG.to_string(),
         }
     }
@@ -78,11 +82,14 @@ mod tests {
                 path.display()
             );
         }
-        let app = std::fs::read_to_string(root.join("src/site/dist/app.js")).expect("dist");
-        assert!(
-            !app.contains("Mozilla Public"),
-            "the built page script is generated and carries no header"
-        );
+        for built in ["app.js", "search.js"] {
+            let script =
+                std::fs::read_to_string(root.join("src/site/dist").join(built)).expect("dist");
+            assert!(
+                !script.contains("Mozilla Public"),
+                "the built {built} is generated and carries no header"
+            );
+        }
     }
 
     fn collect(dir: &Path, out: &mut Vec<PathBuf>) {

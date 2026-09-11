@@ -22,7 +22,6 @@ use crate::render::html::writer::escape;
 const TEMPLATES: &[(&str, &str)] = &[
     ("base.html", include_str!("templates/base.html")),
     ("note.html", include_str!("templates/note.html")),
-    ("document.html", include_str!("templates/document.html")),
     ("page.html", include_str!("templates/page.html")),
 ];
 
@@ -97,10 +96,15 @@ pub struct Crumb {
 }
 
 /// A page of the exported site: the chrome around a content fragment
-/// (ADR 0054).
+/// (ADR 0054); or, with `document` set, the standalone page of one
+/// rendered note (ADR 0057), which keeps the header, the scheme switch, and
+/// the outline and has no navigation column, search, breadcrumbs, or
+/// pager.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Page {
     pub lang: String,
+    /// What the header shows: the site's title, or for a standalone page the
+    /// note's.
     pub site_title: String,
     pub title: String,
     /// The `../` prefix reaching the site root from this page.
@@ -121,6 +125,8 @@ pub struct Page {
     pub next: Option<PageLink>,
     /// The page content, an HTML fragment.
     pub body: String,
+    /// Whether this is a standalone rendered note rather than a site page.
+    pub document: bool,
 }
 
 impl Page {
@@ -147,53 +153,11 @@ impl Page {
             prev => link(&self.prev),
             next => link(&self.next),
             body => Value::from_safe_string(self.body.clone()),
+            document => self.document,
         };
         environment()
             .get_template("page.html")
             .expect("the embedded page template is registered")
-            .render(context)
-            .expect("the embedded templates render any well-typed context")
-    }
-}
-
-/// A standalone single-note page, the artifact of `render --to html`
-/// (ADR 0046): the stylesheet inlined, the note's header and body, no site
-/// chrome.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-pub struct Document {
-    pub lang: String,
-    pub title: String,
-    /// The creation date as the CLI shows it.
-    pub created: String,
-    pub tags: Vec<String>,
-    pub fields: Vec<Field>,
-    /// The theme's stylesheet, inlined into the page.
-    pub stylesheet: String,
-    /// The theme's icon sprite, inlined into the page.
-    pub icons: String,
-    /// The converted note body, an HTML fragment.
-    pub body: String,
-}
-
-impl Document {
-    /// Render the page.
-    pub fn render(&self) -> String {
-        let note = NoteFragment {
-            title: self.title.clone(),
-            created: self.created.clone(),
-            tags: TagLink::plain(&self.tags),
-            fields: self.fields.clone(),
-            body: self.body.clone(),
-        };
-        let context = minijinja::context! {
-            lang => self.lang,
-            stylesheet => Value::from_safe_string(self.stylesheet.clone()),
-            icons => Value::from_safe_string(self.icons.clone()),
-            ..note_context(&note)
-        };
-        environment()
-            .get_template("document.html")
-            .expect("the embedded document template is registered")
             .render(context)
             .expect("the embedded templates render any well-typed context")
     }
@@ -234,63 +198,6 @@ fn formatter(
 mod tests {
     use super::*;
 
-    fn document() -> Document {
-        Document {
-            lang: "en".to_string(),
-            title: "Quarterly <Review>".to_string(),
-            created: "2026-06-24".to_string(),
-            tags: vec!["area/work".to_string(), "a&b".to_string()],
-            fields: vec![Field {
-                key: "status".to_string(),
-                html: "<ul><li>draft</li></ul>".to_string(),
-            }],
-            stylesheet: "body { color: red }".to_string(),
-            icons: "<svg hidden><symbol id=\"icon-tag\"/></svg>".to_string(),
-            body: "<p>Hello <em>there</em></p>\n".to_string(),
-        }
-    }
-
-    #[test]
-    fn a_document_page_pins_its_structure() {
-        insta::assert_snapshot!(document().render());
-    }
-
-    #[test]
-    fn text_values_are_escaped_and_html_values_are_not() {
-        let page = document().render();
-        assert!(page.contains("<title>Quarterly &lt;Review&gt;</title>"));
-        assert!(page.contains("<h1 class=\"note-title\">Quarterly &lt;Review&gt;</h1>"));
-        assert!(
-            page.contains("<use href=\"#icon-tag\"/></svg>area/work</span>"),
-            "{page}"
-        );
-        assert!(
-            page.contains("<use href=\"#icon-tag\"/></svg>a&amp;b</span>"),
-            "{page}"
-        );
-        assert_eq!(
-            page.matches("<symbol id=\"icon-tag\"").count(),
-            1,
-            "the document carries the sprite its icons use: {page}"
-        );
-        assert!(page.contains("<dd><ul><li>draft</li></ul></dd>"));
-        assert!(page.contains("<p>Hello <em>there</em></p>"));
-        assert!(page.contains("<style>\nbody { color: red }\n</style>"));
-        assert!(page.contains("<html lang=\"en\">"));
-    }
-
-    #[test]
-    fn empty_tags_and_fields_leave_no_list_behind() {
-        let page = Document {
-            tags: Vec::new(),
-            fields: Vec::new(),
-            ..document()
-        }
-        .render();
-        assert!(!page.contains("class=\"tags\""), "{page}");
-        assert!(!page.contains("class=\"frontmatter\""), "{page}");
-    }
-
     fn page() -> Page {
         Page {
             lang: "en".to_string(),
@@ -325,7 +232,50 @@ mod tests {
             }),
             next: None,
             body: "<article>B</article>\n".to_string(),
+            document: false,
         }
+    }
+
+    fn document() -> Page {
+        Page {
+            site_title: "Quarterly <Review>".to_string(),
+            title: "Quarterly <Review>".to_string(),
+            prefix: String::new(),
+            stylesheet: "quarterly-review_files/style.css".to_string(),
+            scripts: vec!["quarterly-review_files/app.js".to_string()],
+            sidebar: String::new(),
+            breadcrumbs: Vec::new(),
+            prev: None,
+            next: None,
+            document: true,
+            ..page()
+        }
+    }
+
+    #[test]
+    fn a_standalone_page_pins_its_structure() {
+        insta::assert_snapshot!(document().render());
+    }
+
+    #[test]
+    fn a_standalone_page_keeps_the_header_switch_and_outline_and_drops_the_rest() {
+        let out = document().render();
+        assert!(out.contains("<body class=\"document\">"), "{out}");
+        assert!(
+            out.contains("<span class=\"site-name\">Quarterly &lt;Review&gt;</span>"),
+            "{out}"
+        );
+        assert!(out.contains("class=\"theme-switch\""), "{out}");
+        assert!(out.contains("<nav class=\"outline\">O</nav>"), "{out}");
+        assert!(!out.contains("nav-open"), "{out}");
+        assert!(!out.contains("search-toggle"), "{out}");
+        assert!(!out.contains("sidebar-pane"), "{out}");
+        assert!(!out.contains("class=\"breadcrumbs\""), "{out}");
+        assert!(!out.contains("class=\"pager\""), "{out}");
+        assert!(
+            out.contains("<link rel=\"stylesheet\" href=\"quarterly-review_files/style.css\">"),
+            "{out}"
+        );
     }
 
     #[test]

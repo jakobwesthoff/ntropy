@@ -23,12 +23,22 @@ const DIST_FILES: &[Asset] = include!(concat!(env!("OUT_DIR"), "/site_dist_files
 
 /// The file name of the page script within the site's `assets/`.
 pub const APP_SCRIPT: &str = "app.js";
+/// The file name of the search script within the site's `assets/`
+/// (ADR 0057); a standalone rendered note never loads it.
+pub const SEARCH_SCRIPT: &str = "search.js";
 
 /// The directory of grammar scripts within the site's `assets/`.
 pub const GRAMMARS_DIR: &str = "grammars";
 
 fn dist(path: &str) -> &'static Asset {
     embedded::find(DIST_FILES, path).expect("the frontend build writes every embedded file")
+}
+
+/// The search script, served as `assets/search.js`. Inflated once per
+/// process.
+pub fn search_js() -> &'static str {
+    static SEARCH_JS: OnceLock<String> = OnceLock::new();
+    SEARCH_JS.get_or_init(|| dist(SEARCH_SCRIPT).text())
 }
 
 /// The page script, served as `assets/app.js`. Inflated once per process.

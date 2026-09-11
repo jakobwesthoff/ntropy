@@ -199,10 +199,13 @@ correctly, and is a successful no-op without it, like `delete`.
   arrive.
 - `--output <path>` / `-o` names the artifact; the default is
   `./<slug>.<ext>` in the current directory, from the slug component of the
-  note's filename and the format's extension. An existing file at the target
-  is overwritten. That default name is what a note link in another artifact
-  points at (ADR 0044), so a set of notes rendered without `-o` into one
-  directory cross-references itself.
+  note's filename and the format's extension. The `html` format also writes
+  `<stem>_files/` beside the artifact (ADR 0057). That default name is what
+  a note link in another artifact points at (ADR 0044), so a set of notes
+  rendered without `-o` into one directory cross-references itself.
+- `--force` replaces an existing artifact, and for `html` a non-empty files
+  directory beside it; without the flag either is refused before the
+  engine runs.
 - `--theme <name>` renders with a named theme, overriding the vault's
   configured one for this invocation. Which kind follows the format: for
   `pdf` and `typst` it names `<vault>/.ntropy/themes/typst/<name>.typ` and

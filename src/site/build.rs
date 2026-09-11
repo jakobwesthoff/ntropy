@@ -246,6 +246,10 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         path: format!("{ASSETS_DIR}/{}", frontend::APP_SCRIPT),
         contents: frontend::app_js().as_bytes().to_vec(),
     });
+    files.push(OutputFile {
+        path: format!("{ASSETS_DIR}/{}", frontend::SEARCH_SCRIPT),
+        contents: frontend::search_js().as_bytes().to_vec(),
+    });
     // The search data covers the exported set; the page script loads it
     // the first time a reader opens the search.
     files.push(OutputFile {
@@ -371,11 +375,27 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         }
     }
 
-    // Referenced vault paths, mirrored under `files/`. A linked directory
-    // is mirrored with its whole tree, so the link resolves in the site the
-    // way it does in the vault.
+    copies.extend(mirrored(input.vault_root, &referenced, &mut warnings)?);
+
+    Ok(Built {
+        files,
+        copies,
+        warnings,
+    })
+}
+
+/// The copies that mirror `referenced`, root-absolute vault paths, under
+/// `files/`. A linked directory is mirrored with its whole tree, so the
+/// link resolves in the site the way it does in the vault; an empty
+/// directory and a path that does not exist are warnings.
+pub(crate) fn mirrored(
+    vault_root: &Path,
+    referenced: &[String],
+    warnings: &mut Vec<String>,
+) -> Result<Vec<Copy>, crate::fsutil::FsError> {
+    let mut copies = Vec::new();
     for path in referenced {
-        let from = input.vault_root.join(path.trim_start_matches('/'));
+        let from = vault_root.join(path.trim_start_matches('/'));
         if from.is_file() {
             copies.push(Copy {
                 from,
@@ -402,12 +422,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             ));
         }
     }
-
-    Ok(Built {
-        files,
-        copies,
-        warnings,
-    })
+    Ok(copies)
 }
 
 /// Write a built site into `dir`, creating directories as needed.
@@ -463,7 +478,7 @@ fn resolve_links(
 
 /// The note's directory as a root-absolute path within the vault, `/all-notes`
 /// for a standard layout.
-fn root_absolute_dir(vault_root: &Path, note_path: &Path) -> String {
+pub(crate) fn root_absolute_dir(vault_root: &Path, note_path: &Path) -> String {
     let dir = note_path.parent().unwrap_or(vault_root);
     match dir.strip_prefix(vault_root) {
         Ok(relative) if !relative.as_os_str().is_empty() => {
@@ -655,7 +670,8 @@ fn crumbs(trail: &[model::Crumb], prefix: &str) -> Vec<Crumb> {
 
 /// The chrome of a page at `at`: sidebar with the current trail open, the
 /// stylesheet and scripts relative to the page (one script per grammar in
-/// `grammars`, then the page script), and the given navigation.
+/// `grammars`, then the page script and the search script), and the given
+/// navigation.
 #[allow(clippy::too_many_arguments)]
 fn chrome(
     model: &Model,
@@ -682,6 +698,7 @@ fn chrome(
         })
         .collect();
     scripts.push(format!("{prefix}{ASSETS_DIR}/{}", frontend::APP_SCRIPT));
+    scripts.push(format!("{prefix}{ASSETS_DIR}/{}", frontend::SEARCH_SCRIPT));
     Page {
         lang: model.lang.clone(),
         site_title: model.title.clone(),
@@ -696,12 +713,13 @@ fn chrome(
         prev,
         next,
         body,
+        document: false,
     }
 }
 
 /// Every file under `dir`, recursively, as `(relative path, absolute path)`,
 /// sorted, with `/` separators in the relative part.
-fn files_under(dir: &Path) -> Result<Vec<(String, PathBuf)>, crate::fsutil::FsError> {
+pub(crate) fn files_under(dir: &Path) -> Result<Vec<(String, PathBuf)>, crate::fsutil::FsError> {
     fn walk(
         base: &Path,
         dir: &Path,
@@ -954,10 +972,17 @@ mod tests {
         let app_at = page.find("assets/app.js").expect("page script");
         assert!(grammar_at < app_at, "{page}");
         assert!(!page.contains("grammars/cobol.js"), "{page}");
-        // A page without code loads the page script alone.
+        // The search script follows the page script; a page without code
+        // loads those two alone.
+        assert!(
+            page.contains("<script defer src=\"../assets/app.js\"></script>\n<script defer src=\"../assets/search.js\"></script>"),
+            "{page}"
+        );
         let plain = text(&built, "notes/plain.html");
         assert!(plain.contains("assets/app.js"), "{plain}");
+        assert!(plain.contains("assets/search.js"), "{plain}");
         assert!(!plain.contains("assets/grammars/"), "{plain}");
+        assert_eq!(text(&built, "assets/search.js"), frontend::search_js());
         // The used grammar is written once, as a registering script; the
         // page script is the embedded one.
         let script = text(&built, "assets/grammars/rust.js");

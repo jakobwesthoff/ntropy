@@ -63,6 +63,15 @@ pub trait RenderContext {
     /// bytes itself rather than delegating to an external tool.
     fn write_output(&mut self, contents: &[u8]) -> Result<(), RenderError>;
 
+    /// Write a file into the artifact's files directory (ADR 0057),
+    /// `<stem>_files/` beside the artifact, at `relative` inside it with `/`
+    /// separators, creating directories as needed.
+    fn write_file(&mut self, relative: &str, contents: &[u8]) -> Result<(), RenderError>;
+
+    /// Copy `from` into the artifact's files directory at `relative`, as
+    /// [`RenderContext::write_file`] would write it.
+    fn copy_file(&mut self, from: &Path, relative: &str) -> Result<(), RenderError>;
+
     /// Report a non-fatal degradation: content the engine could not carry
     /// faithfully into the artifact. The host surfaces the message and, under
     /// `--strict`, counts it toward a failing exit like a scan warning.
@@ -70,6 +79,17 @@ pub trait RenderContext {
 
     /// The path the final artifact must land at.
     fn output_path(&self) -> &Path;
+}
+
+/// The directory an artifact's files live in (ADR 0057): `<stem>_files/`
+/// beside the artifact, the stem being its file name without the
+/// extension.
+pub fn files_dir(artifact: &Path) -> PathBuf {
+    let stem = artifact
+        .file_stem()
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    artifact.with_file_name(format!("{stem}_files"))
 }
 
 /// An engine: a strategy that turns a [`PreparedDocument`] into an artifact by
@@ -254,6 +274,23 @@ pub enum RenderError {
         #[source]
         source: io::Error,
     },
+
+    /// Writing or copying a file into the artifact's files directory failed.
+    #[error("while writing `{name}` beside the artifact")]
+    WriteFile {
+        name: String,
+        #[source]
+        source: io::Error,
+    },
+
+    /// Reading the files the artifact carries beside it (a referenced
+    /// directory, a vault theme's directory) failed.
+    #[error(transparent)]
+    Files(#[from] crate::fsutil::FsError),
+
+    /// The embedded highlighting grammars could not be read.
+    #[error(transparent)]
+    Grammars(#[from] crate::site::frontend::GrammarError),
 
     /// Launching the external tool failed for a reason other than absence.
     #[error("while spawning `{program}`")]

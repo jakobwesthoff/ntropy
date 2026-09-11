@@ -242,6 +242,14 @@ mod tests {
             Ok(())
         }
 
+        fn write_file(&mut self, _relative: &str, _contents: &[u8]) -> Result<(), RenderError> {
+            panic!("the typst engine writes nothing beside the artifact");
+        }
+
+        fn copy_file(&mut self, _from: &Path, _relative: &str) -> Result<(), RenderError> {
+            panic!("the typst engine copies nothing beside the artifact");
+        }
+
         fn warn(&mut self, message: &str) {
             self.warnings.push(message.to_string());
         }

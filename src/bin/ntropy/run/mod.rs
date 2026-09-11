@@ -121,6 +121,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             output,
             theme,
             print,
+            force,
         } => render::cmd_render(
             &cli.global,
             &session,
@@ -129,6 +130,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             engine,
             output,
             theme,
+            force,
             print,
             interactive,
         ),
