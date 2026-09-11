@@ -6,6 +6,10 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11, after the first export of a documentation vault
+(research log, Q85): `[site] related` switches the related notes off
+for the site, and a note's `site.related` overrides it for its page.
+
 Amends [ADR 0054](0054-site-navigation-and-url-scheme.md), whose
 sidebar had no hand-curated order and whose rejected alternatives
 included a frontmatter order field. The user's answers are recorded in
@@ -42,7 +46,9 @@ A note may carry a `site` mapping with these keys, each optional:
   page, tag and group pages, related notes), and as nobody's previous or
   next; its page is exported, linkable, and in the search data.
 - `index`, a boolean: the note is the landing note of every group it is
-  a member of. The group's page renders the note's title and body, then
+  a member of.
+- `related`, a boolean: whether the note's page ends with its related
+  notes, whatever the site's setting. The group's page renders the note's title and body, then
   the child groups and the remaining notes; the note has no page of its
   own, and links to it go to the group page (the first such group in
   sidebar order when there are several). The note's `label` names the
@@ -61,6 +67,11 @@ lists the entries in that order, and previous and next follow the
 reading order through the whole tree of a top-level section, crossing
 group boundaries, hidden notes skipped. A group page lists its
 descendants in the same reading order.
+
+### Related notes
+
+`[site] related`, `true` by default, says whether note pages end with
+their related notes; a note's `site.related` overrides it.
 
 ### The nav root
 
@@ -100,5 +111,7 @@ warnings and the item is left out.
   always appended** under a nav table.
 - **Hiding from the navigation only**, and **hiding from search and
   related notes too**.
+- **Dropping the related notes automatically** under a root or a nav
+  table, and **hiding them by theme CSS only**.
 - **A landing note keeping its own page**, and **the note replacing the
   group page** without the listing.

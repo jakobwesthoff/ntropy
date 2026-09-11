@@ -18,7 +18,7 @@ Started 2026-09-10.
 
 ## State on 2026-09-11
 
-Every question round is decided (Q1 to Q84); no question is pending.
+Every question round is decided (Q1 to Q85); no question is pending.
 `design-notes.md` is the consolidated result of Q1 to Q54; the design
 pass on the pages (Q55 to Q66) is recorded in `decisions.md` alone. The
 settled design lives in ADRs 0046 to 0055 and in

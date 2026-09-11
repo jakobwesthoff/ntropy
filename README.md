@@ -738,6 +738,7 @@ site:
   label: Getting Started # what the sidebar calls it (and its group)
   order: 1               # its position; on a landing note, the group's
   hidden: false          # true keeps a note out of the sidebar and lists
+  related: false         # no related notes under this page
 ---
 ```
 
@@ -758,6 +759,7 @@ table assembles the sidebar by hand instead, and is then all of it:
 ```toml
 [site]
 root = "tags/docs"                   # the sidebar is the docs subtree
+related = false                      # no related notes under the pages
 
 [[site.nav]]                         # or: sections listed by hand
 label = "Getting Started"
@@ -777,7 +779,10 @@ items = [
 ```
 
 An item that names something the export does not have is a warning
-and is left out, so the site is still written.
+and is left out, so the site is still written. `related = false` drops
+the related notes from every page, which a documentation tree wants,
+since its pages all share the same tags; a note's own `site.related`
+wins over it either way.
 
 The search is a palette over the page: the header's button, `/`, or
 Ctrl+K opens it, typing searches as you go, the arrow keys and Enter open

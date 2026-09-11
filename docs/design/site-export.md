@@ -62,6 +62,7 @@ The `[site]` table of the vault's `config.toml`:
 | `index` | ULID of the note that becomes the front page | a generated overview |
 | `title` | site title | the vault directory name |
 | `lang` | the `html` `lang` attribute | `en` |
+| `related` | whether note pages end with their related notes; a note's `site.related` overrides it | `true` |
 | `root` | the page the sidebar is rooted at, `tags/<path>` or `views/<name>/<group>` | the vault root, or the tag of a single `tag:` export query |
 | `[[site.nav]]` | the hand-assembled sidebar, one table per section | the sidebar built from the root |
 
@@ -114,8 +115,10 @@ sidebar and the pager show instead of the title; `hidden`, a boolean,
 which keeps the note out of the sidebar, every list, and the pager while
 its page is still exported, linkable, and in the search data; and
 `index`, a boolean, which makes the note the landing note of every group
-it is a member of. The table is not shown as a frontmatter field on the
-page. A `site` value that is no mapping, and a key of the wrong type,
+it is a member of; and `related`, a boolean, which switches the related
+notes at the end of the page on or off for this note, whatever
+`[site] related` says. The table is not shown as a frontmatter field on
+the page. A `site` value that is no mapping, and a key of the wrong type,
 are export warnings naming the note, and are ignored.
 
 **Landing notes.** A group with a landing note shows, on its page, the
@@ -142,7 +145,9 @@ the note's headings that highlights the current section while
 scrolling, previous and next links, breadcrumbs, and, after the body,
 the related notes: the notes sharing the most tags with it, a tag's
 ancestors counted (`a/b` shares `a` with `a/c`), at most eight, ties
-newest first, none when nothing is shared. There are no backlinks.
+newest first, none when nothing is shared, and none at all when
+`[site] related = false` or the note's `site.related` switches them off.
+There are no backlinks.
 
 **Tag pages.** `tags/index.html` is the tag tree. A tag's page lists the
 notes carrying the tag or any descendant tag, the sub-path rule of the

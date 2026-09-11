@@ -52,6 +52,9 @@ pub struct SiteMeta {
     pub hidden: bool,
     /// The landing note of every group it is a member of.
     pub index: bool,
+    /// Whether the note's page ends with its related notes, overriding the
+    /// site's setting.
+    pub related: Option<bool>,
 }
 
 impl SiteMeta {
@@ -78,8 +81,9 @@ impl SiteMeta {
                 ("label", Value::String(s)) => meta.label = Some(s.clone()),
                 ("hidden", Value::Bool(b)) => meta.hidden = *b,
                 ("index", Value::Bool(b)) => meta.index = *b,
-                ("order" | "label" | "hidden" | "index", _) => warn(format!(
-                    "`{SITE_FIELD}.{key}` has the wrong type and is ignored (order takes an integer, label a string, hidden and index a boolean)"
+                ("related", Value::Bool(b)) => meta.related = Some(*b),
+                ("order" | "label" | "hidden" | "index" | "related", _) => warn(format!(
+                    "`{SITE_FIELD}.{key}` has the wrong type and is ignored (order takes an integer, label a string, hidden, index, and related a boolean)"
                 )),
                 _ => {}
             }
@@ -344,6 +348,9 @@ pub struct Model {
     /// breadcrumb above it.
     group_trails: BTreeMap<(usize, Vec<usize>), Vec<Crumb>>,
     pub front: Front,
+    /// Whether note pages end with their related notes, unless a note says
+    /// otherwise.
+    pub related: bool,
     /// Non-fatal findings while building: a configured index note that is
     /// not in the exported set, a `site` table that does not parse.
     pub warnings: Vec<String>,
@@ -479,8 +486,15 @@ impl Model {
             placements,
             group_trails,
             front,
+            related: options.related(),
             warnings,
         })
+    }
+
+    /// Whether the page of the note at `index` ends with its related notes:
+    /// the note's own `site.related`, else the site's setting.
+    pub fn shows_related(&self, index: usize) -> bool {
+        self.notes[index].site.related.unwrap_or(self.related)
     }
 
     /// The notes most related to the note at `index`, by the number of tags
@@ -1332,7 +1346,7 @@ mod tests {
         let full = note(
             A,
             "Full",
-            "site:\n  order: 2\n  label: Start here\n  hidden: true\n  index: true\n  extra: ignored\n",
+            "site:\n  order: 2\n  label: Start here\n  hidden: true\n  index: true\n  related: false\n  extra: ignored\n",
         );
         assert_eq!(
             SiteMeta::read(&full.frontmatter, warn),
@@ -1341,13 +1355,18 @@ mod tests {
                 label: Some("Start here".to_string()),
                 hidden: true,
                 index: true,
+                related: Some(false),
             }
         );
         let none = note(B, "None", "status: open\n");
         assert_eq!(SiteMeta::read(&none.frontmatter, warn), SiteMeta::default());
         assert!(warnings.borrow().is_empty(), "{warnings:?}");
 
-        let wrong = note(C, "Wrong", "site:\n  order: two\n  hidden: yes please\n");
+        let wrong = note(
+            C,
+            "Wrong",
+            "site:\n  order: two\n  hidden: yes please\n  related: sometimes\n",
+        );
         assert_eq!(
             SiteMeta::read(&wrong.frontmatter, warn),
             SiteMeta::default()
@@ -1358,7 +1377,7 @@ mod tests {
             SiteMeta::default()
         );
         let warnings = warnings.into_inner();
-        assert_eq!(warnings.len(), 3, "{warnings:?}");
+        assert_eq!(warnings.len(), 4, "{warnings:?}");
         assert!(
             warnings[0].contains("`site.order` has the wrong type"),
             "{}",
@@ -1369,7 +1388,12 @@ mod tests {
             "{}",
             warnings[1]
         );
-        assert!(warnings[2].contains("not a table"), "{}", warnings[2]);
+        assert!(
+            warnings[2].contains("`site.related` has the wrong type"),
+            "{}",
+            warnings[2]
+        );
+        assert!(warnings[3].contains("not a table"), "{}", warnings[3]);
     }
 
     #[test]
@@ -1902,6 +1926,37 @@ mod tests {
         assert!(joined.contains("needs a `label`"), "{joined}");
         assert!(joined.contains("only one of"), "{joined}");
         assert!(joined.contains("needs one of"), "{joined}");
+    }
+
+    #[test]
+    fn related_notes_follow_the_site_setting_unless_a_note_overrides_it() {
+        let notes = [
+            note(A, "Plain", "tags: [t]\n"),
+            note(B, "Off", "tags: [t]\nsite:\n  related: false\n"),
+            note(C, "On", "tags: [t]\nsite:\n  related: true\n"),
+        ];
+        let by_title = |model: &Model, title: &str| {
+            model
+                .notes
+                .iter()
+                .position(|n| n.title == title)
+                .expect("the note exists")
+        };
+        let on = model(&notes, &[], SiteOptions::default());
+        assert!(on.shows_related(by_title(&on, "Plain")));
+        assert!(!on.shows_related(by_title(&on, "Off")));
+        assert!(on.shows_related(by_title(&on, "On")));
+        let off = model(
+            &notes,
+            &[],
+            SiteOptions {
+                related: Some(false),
+                ..SiteOptions::default()
+            },
+        );
+        assert!(!off.shows_related(by_title(&off, "Plain")));
+        assert!(!off.shows_related(by_title(&off, "Off")));
+        assert!(off.shows_related(by_title(&off, "On")));
     }
 
     #[test]

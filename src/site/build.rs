@@ -528,7 +528,8 @@ fn group_page(model: &Model, section: usize, path: &[usize]) -> GroupPage {
 /// Render one note as a site page at `at`: its own page, `index.html` when
 /// it is the front page, or a group's page when it is that group's landing
 /// note, in which case `group` supplies the listing that follows the body
-/// and the breadcrumb, and the related notes are left out. A fence language
+/// and the breadcrumb, and the related notes are left out; they are also
+/// left out where the site or the note switches them off. A fence language
 /// without a grammar is a warning; its block stays plain.
 ///
 /// Every argument is a distinct input of the page; bundling them into a
@@ -595,7 +596,9 @@ fn render_note(
             group.crumbs
         }
         None => {
-            body.push_str(&nav::related(model, &model.related(index), &prefix));
+            if model.shows_related(index) {
+                body.push_str(&nav::related(model, &model.related(index), &prefix));
+            }
             placement
                 .map(|placement| breadcrumbs(placement, &prefix))
                 .unwrap_or_default()
@@ -1393,6 +1396,41 @@ mod tests {
             start.contains("<li><a href=\"../../../tags/index.html\">tags</a></li>"),
             "{start}"
         );
+    }
+
+    #[test]
+    fn related_notes_can_be_switched_off_for_the_site_or_for_one_note() {
+        let vault = vault();
+        let mut notes = docs_notes(vault.path());
+        notes.push(note(
+            vault.path(),
+            "01FRZ3NDEKTSV4RRFFQ69G5FAV",
+            "Insists",
+            "tags: [docs/start]\nsite:\n  related: true\n",
+            "Wants its related notes.\n",
+        ));
+        let vault_ids = ids(&notes);
+        let build_with = |options: &SiteOptions| {
+            build(&Input {
+                notes: &notes,
+                vault_ids: &vault_ids,
+                views: &[],
+                options,
+                query: None,
+                fallback_title: "Docs",
+                vault_root: vault.path(),
+                theme: None,
+            })
+            .expect("the site builds")
+        };
+        let on = build_with(&SiteOptions::default());
+        assert!(text(&on, "notes/install.html").contains("class=\"related\""));
+        let off = build_with(&SiteOptions {
+            related: Some(false),
+            ..SiteOptions::default()
+        });
+        assert!(!text(&off, "notes/install.html").contains("class=\"related\""));
+        assert!(text(&off, "notes/insists.html").contains("class=\"related\""));
     }
 
     #[test]

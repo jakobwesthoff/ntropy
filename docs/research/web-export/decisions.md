@@ -825,6 +825,14 @@ is [design-notes.md](design-notes.md).
     crossing group boundaries, as the Starlight sidebar does; a group
     page lists its descendants in that reading order.
   - *Decision:* recorded as ADR 0056, amending ADR 0054.
+- **Q85. Switching the related notes off (2026-09-11).** After the first
+  export of the docs vault the user asked (verbatim): "maybe we should
+  allow the related notes section to be disabled so that we dont render
+  that in our page export do you have an opinion on that matter?"
+  - *Answer:* a config key plus a per-note override. Not chosen:
+    `[site] related = false` alone; automatically off with a nav table
+    or root; keep it and hide it by theme CSS only.
+  - *Decision:* recorded as an amendment to ADR 0056.
 
 ## Answered but not yet turned into a decision
 
@@ -899,7 +907,7 @@ on the asset system, recorded there.
 
 ### Rounds 21 and 22 (the sidebar, 2026-09-11)
 
-Q77 to Q84 decided (see above), after the search rework (Q73 to Q76).
+Q77 to Q85 decided (see above), after the search rework (Q73 to Q76).
 
 ### Still open
 

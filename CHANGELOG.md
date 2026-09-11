@@ -37,7 +37,9 @@ and this project adheres to
   single `tag:` predicate is rooted at that tag; `[[site.nav]]` tables
   assemble the sidebar by hand from notes, tag subtrees, views and their
   groups, the whole tag tree, and labelled groups of items, and are then
-  the whole sidebar. Breadcrumbs follow the sidebar.
+  the whole sidebar. Breadcrumbs follow the sidebar. `[site] related =
+  false` drops the related notes from the note pages, and a note's
+  `site.related` overrides that for its own page.
 - Exported pages carry a scheme switch (system, light, dark) that
   remembers the choice in the browser, an outline that follows the
   reader's position, and code blocks highlighted by Shiki in the browser

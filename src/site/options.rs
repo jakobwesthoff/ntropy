@@ -28,6 +28,10 @@ pub struct SiteOptions {
     /// The `lang` attribute of every page; [`DEFAULT_LANG`] when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
+    /// Whether note pages end with their related notes (ADR 0056); on
+    /// when absent. A note's `site.related` overrides it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub related: Option<bool>,
     /// The page the sidebar is rooted at, `tags/<path>` or
     /// `views/<name>/<group>` (ADR 0056); the vault root when absent.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -135,6 +139,12 @@ impl SiteOptions {
     pub fn lang(&self) -> &str {
         self.lang.as_deref().unwrap_or(DEFAULT_LANG)
     }
+
+    /// Whether note pages list their related notes unless a note says
+    /// otherwise.
+    pub fn related(&self) -> bool {
+        self.related.unwrap_or(true)
+    }
 }
 
 #[cfg(test)]
@@ -151,9 +161,11 @@ mod tests {
     #[test]
     fn every_key_parses() {
         let options: SiteOptions = toml::from_str(
-            "theme = \"corporate\"\nindex = \"01ARZ3NDEKTSV4RRFFQ69G5FAV\"\ntitle = \"Docs\"\nlang = \"de\"\n",
+            "theme = \"corporate\"\nindex = \"01ARZ3NDEKTSV4RRFFQ69G5FAV\"\ntitle = \"Docs\"\nlang = \"de\"\nrelated = false\n",
         )
         .expect("parse");
+        assert!(!options.related());
+        assert!(SiteOptions::default().related());
         assert_eq!(options.theme.as_deref(), Some("corporate"));
         assert_eq!(options.index.as_deref(), Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
         assert_eq!(options.title.as_deref(), Some("Docs"));

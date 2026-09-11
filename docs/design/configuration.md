@@ -56,6 +56,7 @@ theme = "corporate"                  # .ntropy/themes/site/corporate/
 index = "01ARZ3NDEKTSV4RRFFQ69G5FAV" # the note that becomes the front page
 title = "Team Docs"                  # defaults to the vault directory name
 lang = "en"                          # the html lang attribute, default en
+related = false                      # no related notes under the pages
 root = "tags/docs"                   # the sidebar starts at this tag page
 
 [[site.nav]]                         # a hand-assembled sidebar section
