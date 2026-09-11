@@ -134,10 +134,11 @@ cargo insta accept   # accept all pending snapshots
 
 The project page at <https://ntropy.westhoffswelt.de> is the documentation
 vault under `docs/website/`, exported by ntropy itself. A push to `main` that
-touches `docs/website/` rebuilds and deploys it through
+touches `docs/website/`, and every release, rebuilds and deploys it through
 [`.github/workflows/pages.yml`](https://github.com/jakobwesthoff/ntropy/blob/main/.github/workflows/pages.yml),
-which exports the vault with the newest released binary. To build it with
-your working copy:
+which exports the vault with the newest released binary; CI exports it with
+the commit's own build, so a change that breaks the export fails there
+first. To build it with your working copy:
 
 ```bash
 just website         # exports docs/website into ./dist

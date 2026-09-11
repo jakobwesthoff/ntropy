@@ -1,5 +1,7 @@
 # Deploys the project page: the documentation vault under docs/website,
-# exported as a static site by the latest released ntropy binary.
+# exported as a static site by the latest released ntropy binary. Runs
+# when the vault changes on main and after every release, since a
+# release is what brings the exporter the vault may rely on.
 
 name: Deploy Pages
 
@@ -9,6 +11,9 @@ on:
     paths:
       - 'docs/website/**'
       - '.github/workflows/pages.yml'
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
 
 permissions:
@@ -23,6 +28,8 @@ concurrency:
 
 jobs:
   build:
+    # A failed release deploys nothing.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
