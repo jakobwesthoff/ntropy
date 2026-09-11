@@ -842,6 +842,51 @@ is [design-notes.md](design-notes.md).
     Not chosen: keep the listing and allow switching it off; chips
     only; keep it as it is.
   - *Decision:* recorded as an amendment to ADR 0056.
+- **Q87 to Q90. The html artifact as the site's page (2026-09-11).**
+  The user asked what `render --to html` loses against the site
+  export, then what images do, then (verbatim): "so would it make sense
+  to output the html not as a single file but as an html file slug.html
+  and a slug_assets/ directory beside it, that holds all needed assets,
+  icons, scripts and fonts (it should of course only contain what is
+  needed)? opinions?" Facts given first: the artifact inlines the
+  stylesheet and the sprite and nothing else, so it has no highlighting,
+  no scheme switch, no outline, no tag links, no related notes, its
+  fonts fall back to system faces, and image paths are written as the
+  author typed them and so break unless the artifact sits beside the
+  note; the fonts are 373 KB, the page script 228 KB, a page's grammars
+  6 KB to 164 KB each, the docs vault's screenshots a few hundred KB
+  each.
+  - *Q87 shape:* `slug.html` plus `slug_files/`, the browser's "webpage,
+    complete" convention. Not chosen: `slug_assets/`; one
+    self-contained file with data URLs and inline scripts; scripts
+    inline and fonts as fallbacks; leave the artifact as it is.
+  - *Q88 chrome:* the header, the scheme switch, and the outline; no
+    sidebar, search, breadcrumbs, or pager. The header shows the note's
+    title where a site page shows the site name. Not chosen: the site
+    title in the header; switch and outline without a header; body
+    only.
+  - *Q89 overwrite (the user's own wording):* "refuse existing
+    slug.html or non empty slug_files and only override with force, as
+    both a render targets essentially", and, asked where the rule
+    applies, every render format: `render` refuses an existing artifact
+    of any format or a non-empty files directory unless `--force`. Not
+    chosen: replace the directory silently; the html format only.
+  - *Q90 bundle (the user's own wording):* "split it and use both parts
+    for the site, so that nothing is duplicated, but we do not include
+    code we dont need". Not chosen: reuse `app.js` whole.
+  - Settled during the design without a question: the directory mirrors
+    the site's `assets/` layout, so the theme's stylesheet works
+    unchanged; the sprite stays inline, since Chrome refuses a `<use>`
+    across files over `file://`, and the theme's `icons/` directory is
+    the one theme part not copied; the fonts are every file the theme
+    holds, since glyph usage is not knowable without laying the page
+    out; grammars are those the page's code blocks need; images are
+    copied under `files/<vault path>` as the site does, a missing or
+    out-of-vault file being a warning; the directory's name is the
+    artifact's file stem plus `_files`, so `-o report.html` writes
+    `report_files/`; tags stay plain text and the `site` frontmatter
+    table stays hidden and inert, as before.
+  - *Decision:* recorded as ADR 0057, amending ADR 0046 and ADR 0051.
 
 ## Answered but not yet turned into a decision
 
@@ -917,6 +962,10 @@ on the asset system, recorded there.
 ### Rounds 21 and 22 (the sidebar, 2026-09-11)
 
 Q77 to Q86 decided (see above), after the search rework (Q73 to Q76).
+
+### Round 23 (the html artifact, 2026-09-11)
+
+Q87 to Q90 decided (see above).
 
 ### Still open
 

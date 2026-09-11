@@ -97,8 +97,9 @@ One directory per node:
     views/<name>/<group>/<sub>/index.html
     assets/                      the theme's files (style.css, icons/,
                                  fonts/, and whatever else it holds), the
-                                 page script app.js, the search data, and
-                                 under assets/grammars/ the highlighting
+                                 page script app.js, the search script
+                                 search.js, the search data, and under
+                                 assets/grammars/ the highlighting
                                  grammars the site's code blocks need
     files/<vault path>           vault files and directories the notes
                                  reference

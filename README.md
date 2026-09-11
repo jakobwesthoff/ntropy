@@ -797,8 +797,14 @@ same regex as in the CLI. The search runs in the browser over data
 exported with the site, so it works from disk.
 
 A non-empty output directory is refused unless you pass `--force`, which
-empties it first. A single note renders to one self-contained page with
-`ntropy render --to html`.
+empties it first. A single note renders to the same page on its own with
+`ntropy render --to html`: `report.html` plus a `report_files/` directory
+beside it holding the theme, the fonts, the scripts, the grammars its
+code needs, and the images it shows, the way a browser saves a page.
+The page keeps the header, the scheme switch, and the outline, and drops
+what needs a site: the sidebar, the search, breadcrumbs, and the pager.
+`render` refuses to overwrite an existing artifact or a non-empty files
+directory unless you pass `--force`.
 
 ### Site themes
 

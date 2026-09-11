@@ -18,7 +18,7 @@ Started 2026-09-10.
 
 ## State on 2026-09-11
 
-Every question round is decided (Q1 to Q86); no question is pending.
+Every question round is decided (Q1 to Q90); no question is pending.
 `design-notes.md` is the consolidated result of Q1 to Q54; the design
 pass on the pages (Q55 to Q66) is recorded in `decisions.md` alone. The
 settled design lives in ADRs 0046 to 0055 and in
@@ -28,7 +28,9 @@ The implementation stages (the Markdown walk with the HTML emitter, the
 toolchain with highlighting, scheme switch, and outline, the client-side
 search, and the design pass with the theme layout) are committed on the
 branch `site-generation`, as is the sidebar definition (Q77 to Q86,
-ADR 0056). The vault the sidebar work is checked against, the
+ADR 0056). The html artifact as the site's page (Q87 to Q90, ADR 0057)
+is decided and documented ahead of its implementation. The vault the
+sidebar work is checked against, the
 torchsnap documentation converted to notes with a `site` table each
 and a config carrying `root` and a nav table (Q84), lives outside the
 repository at `~/ntropy-vaults/torchsnap-docs`.

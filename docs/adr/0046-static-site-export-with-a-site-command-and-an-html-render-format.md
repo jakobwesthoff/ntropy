@@ -6,6 +6,13 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11 by
+[ADR 0057](0057-html-artifact-as-a-page-with-a-files-directory.md):
+the `html` artifact is the site's page with a `<stem>_files/`
+directory beside it, holding the theme, the scripts, the grammars, and
+the referenced files; "one self-contained file" below describes the
+first implementation.
+
 Extends the command surface of [ADR 0018](0018-cli-command-surface.md) as
 amended by [ADR 0037](0037-render-command-surface.md) with a second
 artifact-producing command, and adds a format to the registry of

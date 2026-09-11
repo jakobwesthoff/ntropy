@@ -31,24 +31,31 @@ no lazily loaded chunks, because the site works over
 files. Data the scripts need (the search data, a page's grammars) is
 embedded in script files.
 
-The build produces two files. `app.js` is the page script, one
+The build produces three files. `app.js` is the page script, one
 self-contained IIFE holding the scheme switch, the drawer handling, the
-outline tracking, search, and the highlighter runtime with Shiki's core,
-its JavaScript regex engine, and two Kanagawa themes, Lotus for light and
+outline tracking, and the highlighter runtime with Shiki's core, its
+JavaScript regex engine, and two Kanagawa themes, Lotus for light and
 Dragon for dark, whose muted warm token colors sit on the built-in
 theme's paper and brown-black; the block background is the theme's own
-surface, not the Shiki theme's. `grammars.zst` holds every
+surface, not the Shiki theme's. `search.js` is the search palette with
+its own copy of nothing the page script holds: the two scripts share no
+code, so the `html` artifact, which loads only `app.js`, carries no
+search ([ADR 0057](../adr/0057-html-artifact-as-a-page-with-a-files-directory.md)).
+`grammars.zst` holds every
 grammar the curated languages need, their embedded languages included
 (110 grammars for the 72 curated ones), as one JSON array compressed with
 zstd; the curated list itself is `site/grammars.json`. The build is
 byte-stable, which is what lets CI compare a rebuild with the committed
 output.
 
-Every page of a site loads `assets/app.js` with `defer`; a page whose
-code blocks use a language with a grammar also loads
-`assets/grammars/<name>.js` for that grammar and each grammar it embeds,
-before the page script, since deferred scripts run in document order and
-the page script highlights as soon as it runs.
+Every page of a site loads `assets/app.js` and `assets/search.js` with
+`defer`; a page whose code blocks use a language with a grammar also
+loads `assets/grammars/<name>.js` for that grammar and each grammar it
+embeds, before the page script, since deferred scripts run in document
+order and the page script highlights as soon as it runs. Each script
+installs its features only where their markup exists, which is how the
+`html` artifact, with no sidebar and no search mount, runs the page
+script unchanged.
 The export writes those scripts, inflating the blob with the pure-Rust
 `ruzstd` crate and wrapping each grammar's JSON in a script that appends
 it to `window.__ntropyGrammars`. A fence language without a grammar is

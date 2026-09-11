@@ -41,6 +41,11 @@ skill cannot build or shape a site today.
   names the markup uses, and the page's markup anatomy a stylesheet
   targets. Source: the README's "Site themes" section, which is the
   contract a theme author writes against, and ADR 0055.
+- **One note as a page.** `render --to html` writing `<stem>.html` and
+  `<stem>_files/` (ADR 0057), what the page keeps and drops against a
+  site page, and that `render` refuses an existing artifact or files
+  directory without `--force`; the skill's `render` row and golden rule
+  11 cover only the Typst formats today.
 - **Workflows.** At least: "publish a subset of the vault as a docs
   site" (tag the notes, set the landing notes, configure the root or
   the nav table, export, read the warnings) and "restyle the site"

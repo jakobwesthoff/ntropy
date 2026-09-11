@@ -34,8 +34,8 @@ model.
   keys off the controlling terminal (ADR 0036). A cancelled picker exits
   non-zero under `-p`, so `open "$(ntropy render -p ...)"` branches
   correctly, and is a successful no-op without it, like `delete`.
-- `--to <format>` selects the output format, `pdf` (the default) or
-  `typst`.
+- `--to <format>` selects the output format, `pdf` (the default),
+  `typst`, or `html`.
 - `--engine <name>` overrides the format's default engine. Both shipped
   formats are produced by the typst engine; the flag exists so that
   invocations written today keep working when alternative engines
@@ -43,8 +43,11 @@ model.
 - `--output <path>` / `-o` names the artifact. The default is
   `./<slug>.<ext>` in the current working directory, where `<slug>` is the
   slug component of the note's filename and `<ext>` is the format's
-  extension (`pdf` or `typ`). An existing file at the target is
-  overwritten.
+  extension (`pdf`, `typ`, or `html`). The `html` format also writes
+  `<stem>_files/` beside the artifact
+  ([html-engine.md](html-engine.md)). An existing artifact, or a
+  non-empty files directory, is refused unless `--force` is given,
+  which replaces both.
 - `--print` / `-p` prints the artifact's path to stdout as one line on
   success, so `open "$(ntropy render -p ...)"` composes. Without it, a
   `Rendering <reference>...` line announces the work before the engine

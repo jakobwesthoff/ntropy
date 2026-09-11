@@ -53,13 +53,28 @@ artifact lands relative to other artifacts and to the vault.
 
 ## The `render --to html` artifact
 
-One self-contained file: the site theme's stylesheet and icon sprite
-inlined, the note content and its frontmatter block, and note links
-targeting `<slug>.html` beside the artifact, the HTML counterpart of the
-`<slug>.pdf` convention. The theme's fonts are not inlined; the
-stylesheet's stacks fall back to system faces. No sidebar, no search. The theme is selected as the site selects it,
-`--theme` then `[site] theme`, resolved in `.ntropy/themes/site/`; the
-`pdf` and `typst` formats keep `[render] theme` and `.ntropy/themes/typst/`.
+The site's page for one note, without the parts that need a site
+([ADR 0057](../adr/0057-html-artifact-as-a-page-with-a-files-directory.md)):
+`<stem>.html` and, beside it, `<stem>_files/`, where `<stem>` is the
+artifact's file name without its extension. The page keeps the header,
+with the note's title where a site page shows the site name, the scheme
+switch, and the outline; it has no sidebar, search, breadcrumbs, pager,
+or related notes, its tags are plain text, and the `site` frontmatter
+table is hidden and inert. The icon sprite is inlined as on a site page.
+Note links target `<slug>.html` beside the artifact, the HTML
+counterpart of the `<slug>.pdf` convention.
+
+The directory mirrors the site's `assets/`
+([site-export.md](site-export.md)): `style.css` and every other file of
+the theme except its `icons/`, `app.js`, under `grammars/` the grammars
+the page's code blocks need, and under `files/<vault path>` the images
+and files the note references, resolved against the note's directory
+and copied as the site copies them; a file that is missing or lies
+outside the vault is a warning and stays unresolved, as does a fence
+language without a grammar. The theme is selected as the site selects
+it, `--theme` then `[site] theme`, resolved in `.ntropy/themes/site/`;
+the `pdf` and `typst` formats keep `[render] theme` and
+`.ntropy/themes/typst/`.
 
 ## Testing
 

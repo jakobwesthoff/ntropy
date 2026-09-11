@@ -33,6 +33,14 @@ and this project adheres to
   entries read in order: ordered ones first, then notes newest first,
   then groups by label; previous and next follow that reading order
   across group boundaries.
+- `ntropy render --to html` writes the site's page for one note as
+  `<stem>.html` plus `<stem>_files/` beside it, holding the theme, the
+  fonts, the page script, the grammars the page needs, and the images
+  and files the note references, so highlighting, the scheme switch,
+  the outline, the type, and the images all work as on the site. The
+  page has no sidebar, search, breadcrumbs, pager, or related notes.
+  `render` now refuses an existing artifact of any format, or a
+  non-empty files directory, unless `--force` replaces them.
 - `[site] root` roots the sidebar at a tag or view group page
   (`tags/docs`, `views/by-status/open`), and an export whose query is a
   single `tag:` predicate is rooted at that tag; `[[site.nav]]` tables

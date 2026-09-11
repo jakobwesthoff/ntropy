@@ -11,6 +11,11 @@ the toolchain; Node is not used. The user's rule is "bun over node,
 always".
 
 Amended 2026-09-11 by
+[ADR 0057](0057-html-artifact-as-a-page-with-a-files-directory.md):
+the build produces two page scripts, `app.js` and `search.js`, so the
+`html` artifact carries no search code.
+
+Amended 2026-09-11 by
 [ADR 0055](0055-theme-directory-layout-with-fonts-icons-and-embedded-assets.md):
 the stylesheet lives in the built-in theme under `src/site/theme/`, not
 in `site/`; `src/site/dist/` is embedded by a build script rather than
