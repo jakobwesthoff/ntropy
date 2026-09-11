@@ -115,16 +115,19 @@ sidebar and the pager show instead of the title; `hidden`, a boolean,
 which keeps the note out of the sidebar, every list, and the pager while
 its page is still exported, linkable, and in the search data; and
 `index`, a boolean, which makes the note the landing note of every group
-it is a member of; and `related`, a boolean, which switches the related
-notes at the end of the page on or off for this note, whatever
-`[site] related` says. The table is not shown as a frontmatter field on
+it is a member of; `listing`, a boolean, which makes a landing note's
+group page list the group's contents below the note; and `related`, a
+boolean, which switches the related notes at the end of the page on or
+off for this note, whatever `[site] related` says. The table is not shown as a frontmatter field on
 the page. A `site` value that is no mapping, and a key of the wrong type,
 are export warnings naming the note, and are ignored.
 
 **Landing notes.** A group with a landing note shows, on its page, the
-note's title, date, tags, fields, and body, then the child groups and
-the listing; the note has no page of its own, and links to it go to the
-group page, the first such group in sidebar order when it lands several.
+note's title, date, tags, fields, and body, and nothing else unless the
+note's `listing` is true, in which case the child groups and the
+listing follow; the note has no page of its own, and links to it go to
+the group page, the first such group in sidebar order when it lands
+several.
 The note's `label` names the group wherever the group is named, its
 `order` places the group among the parent's entries, and the note is
 not among the group's entries. The first member marked `index` is the
@@ -158,8 +161,9 @@ page per group nested as the filesystem view nests its directories, with
 the same grouping rules: a list-valued field places a note under each
 value, `/` nests, values are normalized, notes without the field are
 absent. A group's page lists its child groups and, like a tag page, the
-notes of the group and of every group below it, after its landing note
-when it has one. A view whose field is `tags` is no section and gets no
+notes of the group and of every group below it; a group with a landing
+note shows the note instead, and the listing after it only when the
+note asks. A view whose field is `tags` is no section and gets no
 pages: the tag section is that view.
 
 **Lists.** Wherever notes are listed (front page, tag and group pages,

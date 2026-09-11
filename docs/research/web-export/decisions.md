@@ -833,6 +833,15 @@ is [design-notes.md](design-notes.md).
     `[site] related = false` alone; automatically off with a nav table
     or root; keep it and hide it by theme CSS only.
   - *Decision:* recorded as an amendment to ADR 0056.
+- **Q86. The listing under a landing note (2026-09-11).** On the docs
+  vault's Gadgets page the landing note's own list of gadgets was
+  followed by the generated listing of the same notes; the user asked
+  why that was still visible.
+  - *Answer:* nothing by default, listing on request: a landing note
+    replaces the listing, and `site.listing: true` brings it back.
+    Not chosen: keep the listing and allow switching it off; chips
+    only; keep it as it is.
+  - *Decision:* recorded as an amendment to ADR 0056.
 
 ## Answered but not yet turned into a decision
 
@@ -907,7 +916,7 @@ on the asset system, recorded there.
 
 ### Rounds 21 and 22 (the sidebar, 2026-09-11)
 
-Q77 to Q85 decided (see above), after the search rework (Q73 to Q76).
+Q77 to Q86 decided (see above), after the search rework (Q73 to Q76).
 
 ### Still open
 

@@ -7,8 +7,10 @@ Date: 2026-09-11
 Accepted
 
 Amended 2026-09-11, after the first export of a documentation vault
-(research log, Q85): `[site] related` switches the related notes off
-for the site, and a note's `site.related` overrides it for its page.
+(research log, Q85 and Q86): `[site] related` switches the related
+notes off for the site, and a note's `site.related` overrides it for
+its page; a landing note stands alone on its group's page, and its
+`listing` brings the group's listing back below it.
 
 Amends [ADR 0054](0054-site-navigation-and-url-scheme.md), whose
 sidebar had no hand-curated order and whose rejected alternatives
@@ -46,13 +48,15 @@ A note may carry a `site` mapping with these keys, each optional:
   page, tag and group pages, related notes), and as nobody's previous or
   next; its page is exported, linkable, and in the search data.
 - `index`, a boolean: the note is the landing note of every group it is
-  a member of.
+  a member of. The group's page renders the note's title and body; the
+  note has no page of its own, and links to it go to the group page (the
+  first such group in sidebar order when there are several). The note's
+  `label` names the group; its `order` places the group among the
+  parent's entries.
+- `listing`, a boolean: a landing note's group page lists the child
+  groups and the remaining notes below the note.
 - `related`, a boolean: whether the note's page ends with its related
-  notes, whatever the site's setting. The group's page renders the note's title and body, then
-  the child groups and the remaining notes; the note has no page of its
-  own, and links to it go to the group page (the first such group in
-  sidebar order when there are several). The note's `label` names the
-  group; its `order` places the group among the parent's entries.
+  notes, whatever the site's setting.
 
 `site` is reserved by these rules and is not shown as a frontmatter
 field on the page. A key of the wrong type is an export warning and is
@@ -114,4 +118,5 @@ warnings and the item is left out.
 - **Dropping the related notes automatically** under a root or a nav
   table, and **hiding them by theme CSS only**.
 - **A landing note keeping its own page**, and **the note replacing the
-  group page** without the listing.
+  group page** without the listing; then, once seen, **the listing
+  always following the note** and **chips without note rows**.

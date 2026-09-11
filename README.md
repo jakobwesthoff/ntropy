@@ -735,6 +735,7 @@ title: Basics
 tags: [docs/start]
 site:
   index: true            # this note is the landing page of docs/start
+  listing: false         # true lists the group's contents below it
   label: Getting Started # what the sidebar calls it (and its group)
   order: 1               # its position; on a landing note, the group's
   hidden: false          # true keeps a note out of the sidebar and lists
@@ -744,8 +745,9 @@ site:
 
 Inside a group, the entries with an `order` come first, then the notes
 without one newest first, then the child groups by name. A landing
-note's title and body open its group's page, above the listing of what
-the group holds, and links to the note go there. A hidden note keeps
+note's title and body become its group's page, with the listing of
+what the group holds below only when the note asks, and links to the
+note go there. A hidden note keeps
 its page and stays searchable; it just appears nowhere in the
 navigation. Previous and next follow the sidebar's reading order across
 groups, so a tag subtree with landing notes reads like a book.

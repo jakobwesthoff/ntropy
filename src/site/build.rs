@@ -165,11 +165,14 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             landed
                 .iter()
                 .map(|landing| {
+                    // The landing note stands in for the listing unless it
+                    // asks for it.
                     let group = model.group_at(landing.section, &landing.path);
-                    (
-                        group.page.clone(),
-                        Some(group_page(&model, landing.section, &landing.path)),
-                    )
+                    let mut page = group_page(&model, landing.section, &landing.path);
+                    if !entry.site.listing {
+                        page.listing.clear();
+                    }
+                    (group.page.clone(), Some(page))
                 })
                 .collect()
         };
@@ -528,8 +531,9 @@ fn group_page(model: &Model, section: usize, path: &[usize]) -> GroupPage {
 /// Render one note as a site page at `at`: its own page, `index.html` when
 /// it is the front page, or a group's page when it is that group's landing
 /// note, in which case `group` supplies the listing that follows the body
-/// and the breadcrumb, and the related notes are left out; they are also
-/// left out where the site or the note switches them off. A fence language
+/// and the breadcrumb (an empty listing when the note stands alone), and
+/// the related notes are left out; they are also left out where the site or
+/// the note switches them off. A fence language
 /// without a grammar is a warning; its block stays plain.
 ///
 /// Every argument is a distinct input of the page; bundling them into a
@@ -1164,8 +1168,9 @@ mod tests {
         assert!(!page.contains("<symbol id=\"icon-menu\""), "{page}");
     }
 
-    /// A documentation tree: a landing note with a label, an ordered note,
-    /// a hidden note, and a child group with its own landing note.
+    /// A documentation tree: a landing note with a label that asks for the
+    /// group's listing, an ordered note, a hidden note, and a child group
+    /// with a landing note that does not.
     fn docs_notes(vault: &Path) -> Vec<Note> {
         const E: &str = "01ERZ3NDEKTSV4RRFFQ69G5FAV";
         vec![
@@ -1173,7 +1178,7 @@ mod tests {
                 vault,
                 A,
                 "Basics",
-                "tags: [docs/start]\ndescription: Start here.\nsite:\n  index: true\n  label: Getting Started\n  order: 1\n",
+                "tags: [docs/start]\ndescription: Start here.\nsite:\n  index: true\n  label: Getting Started\n  order: 1\n  listing: true\n",
                 "Welcome to the docs.\n\n```rust\nfn main() {}\n```\n",
             ),
             note(
@@ -1278,6 +1283,12 @@ mod tests {
             ),
             "{install}"
         );
+        // A landing note without `listing` stands alone on its page.
+        let gadgets = text(&built, "tags/docs/start/gadgets/index.html");
+        assert!(gadgets.contains("About gadgets."), "{gadgets}");
+        assert!(!gadgets.contains("group-chips"), "{gadgets}");
+        assert!(!gadgets.contains("note-rows"), "{gadgets}");
+        assert!(!gadgets.contains("class=\"empty\""), "{gadgets}");
         // The search data sends the landing note to the group page.
         let data = text(&built, "assets/search-data.js");
         assert!(

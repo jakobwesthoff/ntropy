@@ -28,7 +28,8 @@ and this project adheres to
   sidebar and the pager, `hidden` keeps it out of the sidebar, the lists,
   and the pager while its page stays exported and searchable, and `index`
   makes it the landing note of its groups, whose pages then show the
-  note above the listing and take the note's label and order. Group
+  note in place of the listing (`listing: true` keeps the listing
+  below it) and take the note's label and order. Group
   entries read in order: ordered ones first, then notes newest first,
   then groups by label; previous and next follow that reading order
   across group boundaries.

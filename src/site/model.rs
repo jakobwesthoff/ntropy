@@ -55,6 +55,9 @@ pub struct SiteMeta {
     /// Whether the note's page ends with its related notes, overriding the
     /// site's setting.
     pub related: Option<bool>,
+    /// On a landing note, whether the group's page lists the group's
+    /// contents below the note.
+    pub listing: bool,
 }
 
 impl SiteMeta {
@@ -82,9 +85,12 @@ impl SiteMeta {
                 ("hidden", Value::Bool(b)) => meta.hidden = *b,
                 ("index", Value::Bool(b)) => meta.index = *b,
                 ("related", Value::Bool(b)) => meta.related = Some(*b),
-                ("order" | "label" | "hidden" | "index" | "related", _) => warn(format!(
-                    "`{SITE_FIELD}.{key}` has the wrong type and is ignored (order takes an integer, label a string, hidden, index, and related a boolean)"
-                )),
+                ("listing", Value::Bool(b)) => meta.listing = *b,
+                ("order" | "label" | "hidden" | "index" | "related" | "listing", _) => {
+                    warn(format!(
+                        "`{SITE_FIELD}.{key}` has the wrong type and is ignored (order takes an integer, label a string, the others a boolean)"
+                    ))
+                }
                 _ => {}
             }
         }
@@ -1346,7 +1352,7 @@ mod tests {
         let full = note(
             A,
             "Full",
-            "site:\n  order: 2\n  label: Start here\n  hidden: true\n  index: true\n  related: false\n  extra: ignored\n",
+            "site:\n  order: 2\n  label: Start here\n  hidden: true\n  index: true\n  related: false\n  listing: true\n  extra: ignored\n",
         );
         assert_eq!(
             SiteMeta::read(&full.frontmatter, warn),
@@ -1356,6 +1362,7 @@ mod tests {
                 hidden: true,
                 index: true,
                 related: Some(false),
+                listing: true,
             }
         );
         let none = note(B, "None", "status: open\n");
