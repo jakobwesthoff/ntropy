@@ -10,3 +10,6 @@
 # Frontend dependencies and generated build entries.
 site/node_modules/
 site/.generated/
+
+# The project page built by `just pages`.
+/dist

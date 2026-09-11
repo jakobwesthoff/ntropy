@@ -22,9 +22,10 @@ location, the source of the exporter binary in the pages workflow, the
 organizing principle of the documentation, the extra pages the site
 carries, the starter page's parts, and the six sections with their
 pages (the list stands at the end of the decided questions in
-`decisions.md`). Next is stage 2 of the work order: the vault under
-`docs/website/` and the transfer of the README's content into its
-notes.
+`decisions.md`). Stages 2 and 3 of the work order are done: the vault under
+`docs/website/` holds the documentation, the README is the entry point,
+and the pages workflow exports the vault with the newest release. Stage
+4, the custom template and its design, is next.
 
 The user decided that the template override for site themes has to land
 before the page work starts; that feature belongs to the site export, its

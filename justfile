@@ -49,3 +49,7 @@ coverage:
 # Benchmark access and query patterns against a generated vault (needs hyperfine)
 bench *ARGS:
     ./scripts/benchmark.sh {{ARGS}}
+
+# Export the documentation vault (docs/website) as the project page into ./dist
+pages:
+    cargo run --quiet -- --vault docs/website -n site -o dist --force --strict

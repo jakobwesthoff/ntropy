@@ -1,5 +1,5 @@
-# GitHub Actions workflow for generating project pages
-# Copy this file to your project at .github/workflows/pages.yml
+# Deploys the project page: the documentation vault under docs/website,
+# exported as a static site by the latest released ntropy binary.
 
 name: Deploy Pages
 
@@ -7,9 +7,9 @@ on:
   push:
     branches: [main]
     paths:
-      - 'README.md'
-      - 'docs/pages/**'
-  workflow_dispatch:  # Allow manual trigger
+      - 'docs/website/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -25,42 +25,25 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      # Checkout your project
       - uses: actions/checkout@v6
-        with:
-          path: project
 
-      # Checkout the generator
-      - uses: actions/checkout@v6
-        with:
-          repository: jakobwesthoff/project-page-starter
-          path: generator
-
-      # Setup Bun
-      - uses: oven-sh/setup-bun@v2
-
-      # Install generator dependencies
-      - name: Install dependencies
-        run: cd generator/generator && bun install
-
-      # Create output directories
-      - name: Create output directories
-        run: mkdir -p dist/styles dist/assets
-
-      # Generate the pages
-      - name: Generate pages
+      # The exporter is the newest release, so the page always renders
+      # with a binary users can install.
+      - name: Download the latest ntropy release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          bun run generator/generator/bin/generate.ts \
-            --docs project/docs/pages \
-            --readme project/README.md \
-            --output dist \
-            --templates generator/templates
+          gh release download --repo "$GITHUB_REPOSITORY" \
+            --pattern '*-x86_64-unknown-linux-musl.tar.gz' --output ntropy.tar.gz
+          tar xzf ntropy.tar.gz
+          ./ntropy --version
 
-      # Setup GitHub Pages
+      - name: Export the site
+        run: ./ntropy --vault docs/website -n site -o dist --strict
+
       - name: Setup Pages
         uses: actions/configure-pages@v6
 
-      # Upload artifact
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v5
         with:
