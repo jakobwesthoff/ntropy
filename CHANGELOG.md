@@ -23,6 +23,15 @@ and this project adheres to
   page's path, and `--strict` fails on export warnings.
 - `ntropy site theme init <name>` copies the built-in site theme into
   `.ntropy/themes/site/<name>/` as the starting point for a custom one.
+- A note's `site` frontmatter table shapes the site's navigation: `order`
+  places the note among its group's entries, `label` names it in the
+  sidebar and the pager, `hidden` keeps it out of the sidebar, the lists,
+  and the pager while its page stays exported and searchable, and `index`
+  makes it the landing note of its groups, whose pages then show the
+  note above the listing and take the note's label and order. Group
+  entries read in order: ordered ones first, then notes newest first,
+  then groups by label; previous and next follow that reading order
+  across group boundaries.
 - Exported pages carry a scheme switch (system, light, dark) that
   remembers the choice in the browser, an outline that follows the
   reader's position, and code blocks highlighted by Shiki in the browser

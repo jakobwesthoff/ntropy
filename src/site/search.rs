@@ -61,7 +61,7 @@ fn pages(model: &Model) -> Vec<serde_json::Value> {
         let total: usize = section
             .groups
             .iter()
-            .map(|group| group.descendants(model).len())
+            .map(|group| group.descendants().len())
             .sum();
         out.push(serde_json::json!({
             "kind": "section",
@@ -74,7 +74,6 @@ fn pages(model: &Model) -> Vec<serde_json::Value> {
         }));
         fn walk(
             out: &mut Vec<serde_json::Value>,
-            model: &Model,
             groups: &[Group],
             kind: &str,
             section: &str,
@@ -88,19 +87,12 @@ fn pages(model: &Model) -> Vec<serde_json::Value> {
                     "value": group.value,
                     "label": group.label,
                     "page": group.page,
-                    "count": group.descendants(model).len(),
+                    "count": group.descendants().len(),
                 }));
-                walk(out, model, &group.children, kind, section, field);
+                walk(out, &group.children, kind, section, field);
             }
         }
-        walk(
-            &mut out,
-            model,
-            &section.groups,
-            kind,
-            &section.title,
-            field,
-        );
+        walk(&mut out, &section.groups, kind, &section.title, field);
     }
     out
 }

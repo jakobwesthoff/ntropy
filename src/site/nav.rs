@@ -13,7 +13,7 @@
 use crate::render::html::writer::escape;
 use crate::render::markdown::Heading;
 
-use super::model::{FRONT_PAGE_RECENT, Group, Model, SectionKind};
+use super::model::{Entry, Group, Model, SectionKind};
 
 /// The tag glyph before a tag link, from the page's icon sprite.
 const TAG_ICON: &str = "<svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-tag\"/></svg>";
@@ -29,11 +29,12 @@ pub fn prefix_for(page: &str) -> String {
 }
 
 /// The sidebar: one section per configured view and one for the tags. A
-/// view section is a collapsible tree of groups holding their notes; it
-/// starts open only when it holds the current page, and so does every group
-/// on the page's trail, so a reader lands with the neighbourhood of the page
-/// in view and nothing else unfolded. The tag section lists the top-level
-/// tags with their note counts; the tag pages carry the tree below.
+/// view section is a collapsible tree of groups holding their entries in
+/// reading order; it starts open only when it holds the current page, and
+/// so does every group on the page's trail, so a reader lands with the
+/// neighbourhood of the page in view and nothing else unfolded. The tag
+/// section lists the top-level tags with their note counts; the tag pages
+/// carry the tree below.
 pub fn sidebar(model: &Model, prefix: &str, current: &str) -> String {
     let mut out = String::from("<nav class=\"sidebar\">\n");
     for section in &model.sections {
@@ -74,43 +75,62 @@ pub fn sidebar(model: &Model, prefix: &str, current: &str) -> String {
     out
 }
 
+/// The top-level groups of a section as a list of collapsible groups.
 fn groups(out: &mut String, model: &Model, groups: &[Group], prefix: &str, current: &str) {
     if groups.is_empty() {
         return;
     }
-    out.push_str("<ul class=\"nav-groups\">\n");
+    out.push_str("<ul class=\"nav-entries\">\n");
     for group in groups {
-        let open = if contains_page(group, model, current) {
-            " open"
-        } else {
-            ""
-        };
-        out.push_str(&format!(
-            "<li class=\"nav-group\"><details{open}><summary>{CHEVRON}<a href=\"{}\">{}</a></summary>\n",
-            escape(&format!("{prefix}{}", group.page)),
-            escape(&group.label)
-        ));
-        if !group.notes.is_empty() {
-            out.push_str("<ul class=\"nav-notes\">\n");
-            for &index in &group.notes {
-                let note = &model.notes[index];
-                let current_attr = if note.page == current {
-                    " aria-current=\"page\""
-                } else {
-                    ""
-                };
-                out.push_str(&format!(
-                    "<li><a href=\"{}\"{current_attr}>{}</a></li>\n",
-                    escape(&format!("{prefix}{}", note.page)),
-                    escape(&note.title)
-                ));
-            }
-            out.push_str("</ul>\n");
-        }
-        self::groups(out, model, &group.children, prefix, current);
-        out.push_str("</details></li>\n");
+        group_item(out, model, group, prefix, current);
     }
     out.push_str("</ul>\n");
+}
+
+/// One group as a collapsible item: its label linking to its page (marked
+/// current when the page is the group's own, as a landing note's is), then
+/// its entries, notes and child groups interleaved in reading order.
+fn group_item(out: &mut String, model: &Model, group: &Group, prefix: &str, current: &str) {
+    let open = if contains_page(group, model, current) {
+        " open"
+    } else {
+        ""
+    };
+    let current_attr = if group.page == current {
+        " aria-current=\"page\""
+    } else {
+        ""
+    };
+    out.push_str(&format!(
+        "<li class=\"nav-group\"><details{open}><summary>{CHEVRON}<a href=\"{}\"{current_attr}>{}</a></summary>\n",
+        escape(&format!("{prefix}{}", group.page)),
+        escape(&group.label)
+    ));
+    if !group.entries.is_empty() {
+        out.push_str("<ul class=\"nav-entries\">\n");
+        for entry in &group.entries {
+            match *entry {
+                Entry::Note(index) => {
+                    let note = &model.notes[index];
+                    let current_attr = if note.page == current {
+                        " aria-current=\"page\""
+                    } else {
+                        ""
+                    };
+                    out.push_str(&format!(
+                        "<li class=\"nav-note\"><a href=\"{}\"{current_attr}>{}</a></li>\n",
+                        escape(&format!("{prefix}{}", note.page)),
+                        escape(note.name())
+                    ));
+                }
+                Entry::Child(child) => {
+                    group_item(out, model, &group.children[child], prefix, current);
+                }
+            }
+        }
+        out.push_str("</ul>\n");
+    }
+    out.push_str("</details></li>\n");
 }
 
 /// The top-level tags as a wrapped list of links with counts; the one whose
@@ -130,14 +150,14 @@ fn tag_cloud(out: &mut String, model: &Model, groups: &[Group], prefix: &str, cu
             "<li><a href=\"{}\"{current_attr}>{}<span class=\"count\">{}</span></a></li>\n",
             escape(&format!("{prefix}{}", group.page)),
             escape(&group.label),
-            group.descendants(model).len()
+            group.descendants().len()
         ));
     }
     out.push_str("</ul>\n");
 }
 
-/// Whether the current page is this group's page, one of its notes, or
-/// anything below it.
+/// Whether the current page is this group's page (a landing note's page is
+/// that), one of its notes, or anything below it.
 fn contains_page(group: &Group, model: &Model, current: &str) -> bool {
     group.page == current
         || group
@@ -204,7 +224,7 @@ pub fn listing(model: &Model, notes: &[usize], prefix: &str) -> String {
 
 /// The child groups of a section or a group as chips, each with the number
 /// of notes under it.
-pub fn group_list(model: &Model, groups: &[Group], prefix: &str) -> String {
+pub fn group_list(groups: &[Group], prefix: &str) -> String {
     if groups.is_empty() {
         return String::new();
     }
@@ -214,7 +234,7 @@ pub fn group_list(model: &Model, groups: &[Group], prefix: &str) -> String {
             "<li><a class=\"chip\" href=\"{}\">{}<span class=\"count\">{}</span></a></li>\n",
             escape(&format!("{prefix}{}", group.page)),
             escape(&group.label),
-            group.descendants(model).len()
+            group.descendants().len()
         ));
     }
     out.push_str("</ul>\n");
@@ -234,7 +254,7 @@ pub fn related(model: &Model, notes: &[usize], prefix: &str) -> String {
 }
 
 /// The generated front page: the note count and the span of dates, the
-/// newest notes, and each section's top-level groups.
+/// newest visible notes, and each section's top-level groups.
 pub fn overview(model: &Model, prefix: &str) -> String {
     let mut out = String::new();
     out.push_str(&format!(
@@ -256,8 +276,8 @@ pub fn overview(model: &Model, prefix: &str) -> String {
     }
     out.push_str("</header>\n");
 
-    if count > 0 {
-        let recent: Vec<usize> = (0..count.min(FRONT_PAGE_RECENT)).collect();
+    let recent = model.recent();
+    if !recent.is_empty() {
         out.push_str("<section class=\"recent\">\n<h2>Newest notes</h2>\n");
         out.push_str(&listing(model, &recent, prefix));
         out.push_str("</section>\n");
@@ -272,7 +292,7 @@ pub fn overview(model: &Model, prefix: &str) -> String {
             escape(&format!("{prefix}{}", section.page)),
             escape(&section.title)
         ));
-        out.push_str(&group_list(model, &section.groups, prefix));
+        out.push_str(&group_list(&section.groups, prefix));
         out.push_str("</section>\n");
     }
     out
@@ -381,12 +401,68 @@ mod tests {
     }
 
     #[test]
-    fn sidebar_opens_the_group_of_a_group_page() {
+    fn sidebar_opens_the_group_of_a_group_page_and_marks_its_link() {
         let out = sidebar(&model(), "../../../", "views/by-status/done/index.html");
         assert!(
-            out.contains("<details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../../../views/by-status/done/index.html\">done</a>"),
+            out.contains("<details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../../../views/by-status/done/index.html\" aria-current=\"page\">done</a>"),
             "{out}"
         );
+    }
+
+    #[test]
+    fn sidebar_shows_labels_and_marks_a_landing_page_current() {
+        const C: &str = "01CRZ3NDEKTSV4RRFFQ69G5FAV";
+        let notes = [
+            note(
+                A,
+                "Basics",
+                "area: docs/start\nsite:\n  index: true\n  label: Getting Started\n",
+            ),
+            note(
+                B,
+                "Installation Guide",
+                "area: docs/start\nsite:\n  label: Install\n  order: 1\n",
+            ),
+            note(C, "Later", "area: docs/start\n"),
+        ];
+        let model = Model::build(
+            &notes,
+            &[ViewDef::new("by-area", "area")],
+            &SiteOptions::default(),
+            "V",
+        )
+        .expect("model");
+        // Seen from the landing page: the group link is the current page,
+        // the landing note is no entry, the labelled note shows its label,
+        // ordered before the newer unordered one.
+        let out = sidebar(
+            &model,
+            "../../../../",
+            "views/by-area/docs/start/index.html",
+        );
+        assert!(
+            out.contains("<a href=\"../../../../views/by-area/docs/start/index.html\" aria-current=\"page\">Getting Started</a></summary>\n<ul class=\"nav-entries\">\n<li class=\"nav-note\"><a href=\"../../../../notes/installation-guide.html\">Install</a></li>\n<li class=\"nav-note\"><a href=\"../../../../notes/later.html\">Later</a></li>\n</ul>"),
+            "{out}"
+        );
+        assert!(!out.contains(">Basics<"), "{out}");
+        // The parent group opens too, since the page lies below it.
+        assert!(
+            out.contains("<li class=\"nav-group\"><details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../../../../views/by-area/docs/index.html\">docs</a>"),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn overview_lists_visible_notes_only() {
+        let notes = [
+            note(A, "Shown", "tags: [t]\n"),
+            note(B, "Hidden", "tags: [t]\nsite:\n  hidden: true\n"),
+        ];
+        let model = Model::build(&notes, &[], &SiteOptions::default(), "V").expect("model");
+        let out = overview(&model, "");
+        assert!(out.contains("2 notes"), "{out}");
+        assert!(out.contains("notes/shown.html"), "{out}");
+        assert!(!out.contains("notes/hidden.html"), "{out}");
     }
 
     #[test]
@@ -431,12 +507,12 @@ mod tests {
     fn group_chips_count_descendants() {
         let model = model();
         let tags = &model.sections[1];
-        let out = group_list(&model, &tags.groups, "");
+        let out = group_list(&tags.groups, "");
         assert_eq!(
             out,
             "<ul class=\"group-chips\">\n<li><a class=\"chip\" href=\"tags/programming/index.html\">programming<span class=\"count\">1</span></a></li>\n</ul>\n"
         );
-        assert_eq!(group_list(&model, &[], ""), "");
+        assert_eq!(group_list(&[], ""), "");
     }
 
     #[test]

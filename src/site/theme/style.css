@@ -949,14 +949,13 @@ body.palette-open {
   color: var(--link);
 }
 
-.nav-groups,
-.nav-notes {
+.nav-entries {
   list-style: none;
   margin: 0;
   padding-left: 1.15em;
 }
 
-.nav-section > .nav-groups {
+.nav-section > .nav-entries {
   padding-left: 0.2rem;
 }
 
@@ -965,21 +964,22 @@ body.palette-open {
 }
 
 .nav-group a,
-.nav-notes a {
+.nav-note a {
   color: var(--fg);
   text-decoration: none;
 }
 
-.nav-notes li {
+.nav-note {
   padding: 0.12rem 0;
 }
 
-.nav-notes a:hover,
+.nav-note a:hover,
 .nav-group a:hover {
   color: var(--link);
 }
 
-.nav-notes a[aria-current="page"] {
+.nav-note a[aria-current="page"],
+.nav-group > details > summary > a[aria-current="page"] {
   color: var(--accent);
   font-weight: 500;
 }

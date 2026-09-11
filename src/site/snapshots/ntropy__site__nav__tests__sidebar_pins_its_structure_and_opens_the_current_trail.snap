@@ -6,15 +6,15 @@ expression: "sidebar(&model, \"../\", \"notes/rust-tips.html\")"
 <details class="nav-section" open>
 <summary class="nav-title"><svg class="icon chevron" aria-hidden="true"><use href="#icon-chevron-right"/></svg>by-status</summary>
 <a class="nav-all" href="../views/by-status/index.html">All groups</a>
-<ul class="nav-groups">
+<ul class="nav-entries">
 <li class="nav-group"><details open><summary><svg class="icon chevron" aria-hidden="true"><use href="#icon-chevron-right"/></svg><a href="../views/by-status/done/index.html">done</a></summary>
-<ul class="nav-notes">
-<li><a href="../notes/rust-tips.html" aria-current="page">Rust &lt;Tips&gt;</a></li>
+<ul class="nav-entries">
+<li class="nav-note"><a href="../notes/rust-tips.html" aria-current="page">Rust &lt;Tips&gt;</a></li>
 </ul>
 </details></li>
 <li class="nav-group"><details><summary><svg class="icon chevron" aria-hidden="true"><use href="#icon-chevron-right"/></svg><a href="../views/by-status/open/index.html">open</a></summary>
-<ul class="nav-notes">
-<li><a href="../notes/plain.html">Plain</a></li>
+<ul class="nav-entries">
+<li class="nav-note"><a href="../notes/plain.html">Plain</a></li>
 </ul>
 </details></li>
 </ul>

@@ -24,13 +24,15 @@ pub struct Field {
     pub html: String,
 }
 
-/// The fields a page header shows, in the frontmatter's own order.
+/// The fields a page header shows, in the frontmatter's own order. The
+/// title and the tags have their own place in the header, and the `site`
+/// table is navigation settings (ADR 0056), not content.
 pub fn fields(frontmatter: &Mapping) -> Vec<Field> {
     frontmatter
         .iter()
         .filter(|(key, value)| {
             let key = scalar_text(key);
-            key != "title" && key != "tags" && !is_empty(value)
+            key != "title" && key != "tags" && key != "site" && !is_empty(value)
         })
         .map(|(key, value)| Field {
             key: scalar_text(key),
@@ -109,9 +111,9 @@ mod tests {
     }
 
     #[test]
-    fn title_tags_and_empty_values_are_left_out() {
+    fn title_tags_site_and_empty_values_are_left_out() {
         let fields = fields(&parse(
-            "title: T\ntags: [a]\npriority: 2\nreviewer: null\nblank: \"\"\naliases: []\nmeta: {}\n",
+            "title: T\ntags: [a]\nsite: {order: 1}\npriority: 2\nreviewer: null\nblank: \"\"\naliases: []\nmeta: {}\n",
         ));
         assert_eq!(fields.len(), 1);
         assert_eq!(fields[0].key, "priority");

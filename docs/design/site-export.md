@@ -91,15 +91,37 @@ site title, the note count with the span from the oldest to the newest
 date, the ten newest notes, and for each section its top-level groups
 with counts, each linking into its page.
 
+**The `site` table.** A note's frontmatter may carry a `site` mapping
+([ADR 0056](../adr/0056-sidebar-order-labels-landing-notes-and-a-nav-table.md)),
+every key optional: `order`, an integer, the note's position among the
+entries of every group holding it; `label`, a string, the name the
+sidebar and the pager show instead of the title; `hidden`, a boolean,
+which keeps the note out of the sidebar, every list, and the pager while
+its page is still exported, linkable, and in the search data; and
+`index`, a boolean, which makes the note the landing note of every group
+it is a member of. The table is not shown as a frontmatter field on the
+page. A `site` value that is no mapping, and a key of the wrong type,
+are export warnings naming the note, and are ignored.
+
+**Landing notes.** A group with a landing note shows, on its page, the
+note's title, date, tags, fields, and body, then the child groups and
+the listing; the note has no page of its own, and links to it go to the
+group page, the first such group in sidebar order when it lands several.
+The note's `label` names the group wherever the group is named, its
+`order` places the group among the parent's entries, and the note is
+not among the group's entries. The first member marked `index` is the
+landing note.
+
 **Note page.** `notes/<slug>.html`. Two notes may share a slug with
 different ULIDs; only the colliding notes are named `<slug>-<tail>.html`,
 the tail being the shortest ULID suffix of at least three characters that
 separates them, the rule the view leaves use
 ([vault-layout-and-views.md](vault-layout-and-views.md)). The page shows
 the title, the date, the tags each linking to its tag page, and every
-other frontmatter field as key/value beneath, nested values included;
-hiding a field is a theme's job. A body that opens with a level-one
-heading reading exactly the title has that heading dropped
+other frontmatter field as key/value beneath, nested values included,
+the `site` table excepted; hiding a field is a theme's job. A body that
+opens with a level-one heading reading exactly the title has that
+heading dropped
 ([html-engine.md](html-engine.md)). The page has an outline built from
 the note's headings that highlights the current section while
 scrolling, previous and next links, breadcrumbs, and, after the body,
@@ -116,25 +138,38 @@ page per group nested as the filesystem view nests its directories, with
 the same grouping rules: a list-valued field places a note under each
 value, `/` nests, values are normalized, notes without the field are
 absent. A group's page lists its child groups and, like a tag page, the
-notes of the group and of every group below it. A view whose field is
-`tags` is no section and gets no pages: the tag section is that view.
+notes of the group and of every group below it, after its landing note
+when it has one. A view whose field is `tags` is no section and gets no
+pages: the tag section is that view.
 
 **Lists.** Wherever notes are listed (front page, tag and group pages,
 related notes, search results) each note is one row: the date, the title
-linking to the page, and the tags linking to their pages, newest first.
+linking to the page, and the tags linking to their pages. Hidden notes
+are in no list but the search results.
 
-**Order.** Notes inside a group, on a tag page, and on a group page are
-sorted newest first, ULID descending, as the CLI lists them.
+**Order.** The entries of a group are its notes and its child groups
+together, in reading order: the entries with a `site.order` first,
+ascending; then the notes without one, newest first, ULID descending, as
+the CLI lists them; then the groups without one, by label. A note and a
+group sharing an order keep the note first. The top-level groups of a
+section follow the same rule among themselves. A group page lists its
+descendants in reading order, a child's landing note before the child's
+own entries, each note once. The front page's newest notes are newest
+first.
 
 **Sidebar.** Each configured view is a collapsible section whose groups
-nest as above; it starts open only when it holds the current page, and
-so does every group on the page's trail. The tag section lists the
-top-level tags with their note counts, the one holding the current page
-marked; the tree below lives on the tag pages. There is no hand-curated
-order. A note's first view and group in sidebar order define its
-previous and next links and its breadcrumb, statically, regardless of
-how the reader arrived. On narrow screens the sidebar is a drawer the
-header's menu button opens by targeting it, which needs no script;
+nest as above, each group's entries in reading order, notes and child
+groups interleaved, a note shown by its label when it has one; a
+section starts open only when it holds the current page, and so does
+every group on the page's trail. The tag section lists the top-level
+tags with their note counts, the one holding the current page marked;
+the tree below lives on the tag pages. A note's first placement in
+sidebar order defines its breadcrumb, statically, regardless of how the
+reader arrived; its previous and next links follow the reading order
+through the whole tree of that top-level section, across group
+boundaries, a landing note before its group's entries, and name the
+neighbours by their labels. On narrow screens the sidebar is a drawer
+the header's menu button opens by targeting it, which needs no script;
 Escape and following a link inside close it.
 
 ## Assets

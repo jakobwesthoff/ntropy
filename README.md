@@ -726,6 +726,29 @@ by `[site] index` in the vault config, or a generated overview of the
 newest notes, the top-level tags, and the views. On a phone the sidebar
 is a drawer behind the menu button.
 
+A note shapes its place in the navigation through a `site` table in its
+frontmatter, every key optional:
+
+```yaml
+---
+title: Basics
+tags: [docs/start]
+site:
+  index: true            # this note is the landing page of docs/start
+  label: Getting Started # what the sidebar calls it (and its group)
+  order: 1               # its position; on a landing note, the group's
+  hidden: false          # true keeps a note out of the sidebar and lists
+---
+```
+
+Inside a group, the entries with an `order` come first, then the notes
+without one newest first, then the child groups by name. A landing
+note's title and body open its group's page, above the listing of what
+the group holds, and links to the note go there. A hidden note keeps
+its page and stays searchable; it just appears nowhere in the
+navigation. Previous and next follow the sidebar's reading order across
+groups, so a tag subtree with landing notes reads like a book.
+
 The search is a palette over the page: the header's button, `/`, or
 Ctrl+K opens it, typing searches as you go, the arrow keys and Enter open
 a result. It is made for readers rather than for the query language: a

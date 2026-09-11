@@ -38,7 +38,7 @@ use crate::view::ViewDef;
 
 use super::SiteOptions;
 use super::frontend::{self, Grammars};
-use super::model::{Front, Model, Placement};
+use super::model::{Front, Landing, Model, Placement};
 use super::nav;
 use super::page::{NoteFragment, Page, PageLink, TagLink};
 use super::search;
@@ -141,28 +141,64 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     // Every referenced vault file, root-absolute, each once.
     let mut referenced: Vec<String> = Vec::new();
 
+    // A landing note (ADR 0056) has no page of its own: it is rendered as
+    // the page of every group it lands, above that group's listing.
+    let landings = model.landings();
+
     for (index, note) in ordered.iter().enumerate() {
         let entry = &model.notes[index];
         let links = resolve_links(note, &by_id, input.vault_ids, &mut warnings);
         let note_dir = root_absolute_dir(input.vault_root, &note.path);
 
-        let rendered = render_note(
-            &model,
-            &icons,
-            index,
-            note,
-            &links,
-            &note_dir,
-            &entry.page,
-            &grammars,
-            &mut warnings,
-        );
-        files.push(OutputFile {
-            path: entry.page.clone(),
-            contents: rendered.page.into_bytes(),
-        });
-        used_grammars.extend(rendered.grammars);
-        for dest in rendered.assets {
+        let landed: Vec<&Landing> = landings
+            .iter()
+            .filter(|landing| landing.note == index)
+            .collect();
+        let pages: Vec<(String, Option<GroupPage>)> = if landed.is_empty() {
+            vec![(entry.page.clone(), None)]
+        } else {
+            landed
+                .iter()
+                .map(|landing| {
+                    let trail = model.trail_to(landing.section, &landing.path);
+                    let group = trail.last().expect("a landing path is never empty");
+                    (
+                        group.page.clone(),
+                        Some(group_page(&model, landing.section, &trail)),
+                    )
+                })
+                .collect()
+        };
+
+        let mut rendered_assets: Vec<String> = Vec::new();
+        for (at, (page, extra)) in pages.into_iter().enumerate() {
+            // The unknown-language warnings are raised once, by the first
+            // page of the note; a second rendering raises none twice.
+            let mut repeated = Vec::new();
+            let rendered = render_note(
+                &model,
+                &icons,
+                index,
+                note,
+                &links,
+                &note_dir,
+                &page,
+                &grammars,
+                if at == 0 {
+                    &mut warnings
+                } else {
+                    &mut repeated
+                },
+                extra,
+            );
+            files.push(OutputFile {
+                path: page,
+                contents: rendered.page.into_bytes(),
+            });
+            used_grammars.extend(rendered.grammars);
+            rendered_assets = rendered.assets;
+        }
+        for dest in rendered_assets {
             match resolve_root_relative(&note_dir, &dest) {
                 Some(path) => {
                     if !referenced.contains(&path) {
@@ -190,6 +226,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                 INDEX_PAGE,
                 &grammars,
                 &mut repeated,
+                None,
             );
             files.push(OutputFile {
                 path: INDEX_PAGE.to_string(),
@@ -243,12 +280,12 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     }
 
     // Section indexes and group pages.
-    for section in &model.sections {
+    for (section_index, section) in model.sections.iter().enumerate() {
         let prefix = nav::prefix_for(&section.page);
         let body = format!(
             "<h1>{}</h1>\n{}",
             html::writer::escape(&section.title),
-            nav::group_list(&model, &section.groups, &prefix)
+            nav::group_list(&section.groups, &prefix)
         );
         let page = chrome(
             &model,
@@ -267,28 +304,27 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             contents: page.render().into_bytes(),
         });
 
-        let mut stack: Vec<(&super::model::Group, Vec<PageLink>)> = section
+        // Depth-first over the groups with the trail of groups above each;
+        // a group with a landing note got its page in the notes loop.
+        let mut stack: Vec<(&super::model::Group, Vec<&super::model::Group>)> = section
             .groups
             .iter()
             .map(|group| (group, Vec::new()))
             .collect();
         while let Some((group, parents)) = stack.pop() {
-            let prefix = nav::prefix_for(&group.page);
-            let mut crumbs = vec![PageLink {
-                label: section.title.clone(),
-                href: format!("{prefix}{}", section.page),
-            }];
-            for parent in &parents {
-                crumbs.push(PageLink {
-                    label: parent.label.clone(),
-                    href: format!("{prefix}{}", parent.href),
-                });
+            let mut trail = parents.clone();
+            trail.push(group);
+            for child in &group.children {
+                stack.push((child, trail.clone()));
             }
+            if group.landing.is_some() {
+                continue;
+            }
+            let extra = group_page(&model, section_index, &trail);
             let body = format!(
-                "<h1>{}</h1>\n{}{}",
+                "<h1>{}</h1>\n{}",
                 html::writer::escape(&group.value),
-                nav::group_list(&model, &group.children, &prefix),
-                nav::listing(&model, &group.descendants(&model), &prefix)
+                extra.listing
             );
             let page = chrome(
                 &model,
@@ -296,7 +332,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                 &group.page,
                 &group.value,
                 body,
-                crumbs,
+                extra.crumbs,
                 String::new(),
                 None,
                 None,
@@ -306,14 +342,6 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                 path: group.page.clone(),
                 contents: page.render().into_bytes(),
             });
-            let mut trail = parents.clone();
-            trail.push(PageLink {
-                label: group.label.clone(),
-                href: group.page.clone(),
-            });
-            for child in &group.children {
-                stack.push((child, trail.clone()));
-            }
         }
     }
 
@@ -472,12 +500,47 @@ struct RenderedNote {
     grammars: Vec<String>,
 }
 
-/// Render one note as a site page at `at` (its own page, or `index.html`
-/// when it is the front page). A fence language without a grammar is a
-/// warning; its block stays plain.
+/// What a group's page carries besides a heading or a landing note: the
+/// listing of its child groups and its notes, and its breadcrumb.
+struct GroupPage {
+    listing: String,
+    crumbs: Vec<PageLink>,
+}
+
+/// The listing and breadcrumb of the group at the end of `trail`, a path
+/// of groups from the section's top level down.
+fn group_page(model: &Model, section: usize, trail: &[&super::model::Group]) -> GroupPage {
+    let (group, parents) = trail.split_last().expect("a trail holds the group itself");
+    let prefix = nav::prefix_for(&group.page);
+    let section = &model.sections[section];
+    let mut crumbs = vec![PageLink {
+        label: section.title.clone(),
+        href: format!("{prefix}{}", section.page),
+    }];
+    for parent in parents {
+        crumbs.push(PageLink {
+            label: parent.label.clone(),
+            href: format!("{prefix}{}", parent.page),
+        });
+    }
+    GroupPage {
+        listing: format!(
+            "{}{}",
+            nav::group_list(&group.children, &prefix),
+            nav::listing(model, &group.descendants(), &prefix)
+        ),
+        crumbs,
+    }
+}
+
+/// Render one note as a site page at `at`: its own page, `index.html` when
+/// it is the front page, or a group's page when it is that group's landing
+/// note, in which case `group` supplies the listing that follows the body
+/// and the breadcrumb, and the related notes are left out. A fence language
+/// without a grammar is a warning; its block stays plain.
 ///
 /// Every argument is a distinct input of the page; bundling them into a
-/// struct would name the same nine things one level down.
+/// struct would name the same things one level down.
 #[allow(clippy::too_many_arguments)]
 fn render_note(
     model: &Model,
@@ -489,6 +552,7 @@ fn render_note(
     at: &str,
     grammars: &Grammars,
     warnings: &mut Vec<String>,
+    group: Option<GroupPage>,
 ) -> RenderedNote {
     let prefix = nav::prefix_for(at);
     let targets = PageTargets {
@@ -531,15 +595,23 @@ fn render_note(
         body: emitted.html,
     }
     .render();
-    body.push_str(&nav::related(model, &model.related(index), &prefix));
 
     let placement = model.placements[index].as_ref();
-    let crumbs = placement
-        .map(|placement| breadcrumbs(model, placement, &prefix))
-        .unwrap_or_default();
+    let crumbs = match group {
+        Some(group) => {
+            body.push_str(&group.listing);
+            group.crumbs
+        }
+        None => {
+            body.push_str(&nav::related(model, &model.related(index), &prefix));
+            placement
+                .map(|placement| breadcrumbs(model, placement, &prefix))
+                .unwrap_or_default()
+        }
+    };
     let neighbour = |neighbour: Option<usize>| {
         neighbour.map(|other| PageLink {
-            label: model.notes[other].title.clone(),
+            label: model.notes[other].name().to_string(),
             href: format!("{prefix}{}", model.notes[other].page),
         })
     };
@@ -947,12 +1019,17 @@ mod tests {
     }
 
     #[test]
-    fn neighbours_follow_the_first_group() {
+    fn neighbours_follow_the_reading_order_of_the_first_section() {
         let vault = vault();
         let built = build_site(vault.path(), &SiteOptions::default());
-        // `Plain` is alone in `open`; `Rust Tips` alone in `done`: no pager.
+        // The view section reads `done` (Rust Tips) then `open` (Plain):
+        // the pager crosses the group boundary.
         let page = text(&built, "notes/plain.html");
-        assert!(!page.contains("class=\"pager\""), "{page}");
+        assert!(
+            page.contains("<a class=\"prev\" rel=\"prev\" href=\"../notes/rust-tips.html\">"),
+            "{page}"
+        );
+        assert!(!page.contains("class=\"next\""), "{page}");
         // A note in no group has neither breadcrumb nor pager.
         let loose = text(&built, "notes/untagged.html");
         assert!(!loose.contains("class=\"breadcrumbs\""), "{loose}");
@@ -1088,6 +1165,148 @@ mod tests {
             "{page}"
         );
         assert!(!page.contains("<symbol id=\"icon-menu\""), "{page}");
+    }
+
+    /// A documentation tree: a landing note with a label, an ordered note,
+    /// a hidden note, and a child group with its own landing note.
+    fn docs_notes(vault: &Path) -> Vec<Note> {
+        const E: &str = "01ERZ3NDEKTSV4RRFFQ69G5FAV";
+        vec![
+            note(
+                vault,
+                A,
+                "Basics",
+                "tags: [docs/start]\ndescription: Start here.\nsite:\n  index: true\n  label: Getting Started\n  order: 1\n",
+                "Welcome to the docs.\n\n```rust\nfn main() {}\n```\n",
+            ),
+            note(
+                vault,
+                B,
+                "Install",
+                "tags: [docs/start]\nsite:\n  order: 2\n",
+                &format!("Read [the basics]({A}-basics.md) first.\n"),
+            ),
+            note(
+                vault,
+                C,
+                "Secret",
+                "tags: [docs/start]\nsite:\n  hidden: true\n  order: 3\n",
+                "Not listed.\n",
+            ),
+            note(
+                vault,
+                E,
+                "Gadgets",
+                "tags: [docs/start/gadgets]\nsite:\n  index: true\n  order: 9\n",
+                "About gadgets.\n",
+            ),
+        ]
+    }
+
+    fn build_docs(vault: &Path) -> Built {
+        let notes = docs_notes(vault);
+        let vault_ids = ids(&notes);
+        build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &SiteOptions::default(),
+            fallback_title: "Docs",
+            vault_root: vault,
+            theme: None,
+        })
+        .expect("the site builds")
+    }
+
+    #[test]
+    fn a_landing_note_is_rendered_as_its_group_page() {
+        let vault = vault();
+        let built = build_docs(vault.path());
+        assert!(built.warnings.is_empty(), "{}", built.warnings.join("\n"));
+        // No page of its own; the group page carries the note and then the
+        // listing, without related notes.
+        assert!(built.file("notes/basics.html").is_none());
+        let start = text(&built, "tags/docs/start/index.html");
+        assert!(
+            start.contains("<h1 class=\"note-title\">Basics</h1>"),
+            "{start}"
+        );
+        assert!(start.contains("Welcome to the docs."), "{start}");
+        assert!(start.contains("<dt>description</dt>"), "{start}");
+        assert!(!start.contains("<dt>site</dt>"), "{start}");
+        assert!(
+            start.contains("<a class=\"chip\" href=\"../../../tags/docs/start/gadgets/index.html\">gadgets<span class=\"count\">0</span></a>"),
+            "{start}"
+        );
+        assert!(
+            start.contains(
+                "<a class=\"note-row-title\" href=\"../../../notes/install.html\">Install</a>"
+            ),
+            "{start}"
+        );
+        assert!(!start.contains("notes/secret.html"), "{start}");
+        assert!(!start.contains("class=\"related\""), "{start}");
+        // The breadcrumb stops above the group; the pager continues into
+        // the group's entries.
+        assert!(
+            start.contains("<a href=\"../../../tags/index.html\">tags</a></li>\n<li><svg class=\"icon sep\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../../../tags/docs/index.html\">docs</a></li>\n</ol>"),
+            "{start}"
+        );
+        assert!(
+            start.contains("<a class=\"next\" rel=\"next\" href=\"../../../notes/install.html\">"),
+            "{start}"
+        );
+        // Its grammar is loaded by the group page.
+        assert!(start.contains("grammars/rust.js"), "{start}");
+        // A link to the landing note reaches the group page, and the pager
+        // calls it by its label.
+        let install = text(&built, "notes/install.html");
+        assert!(
+            install.contains(
+                "<a class=\"note-link\" href=\"../tags/docs/start/index.html\">Basics</a>"
+            ),
+            "{install}"
+        );
+        assert!(
+            install.contains("<a class=\"prev\" rel=\"prev\" href=\"../tags/docs/start/index.html\"><svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-chevron-left\"/></svg><span class=\"pager-text\"><span class=\"pager-label\">Previous</span><span class=\"pager-title\">Getting Started</span>"),
+            "{install}"
+        );
+        // The sidebar names the group by the label; the child group's
+        // landing page follows Install in the pager.
+        assert!(install.contains(">Getting Started</a>"), "{install}");
+        assert!(
+            install.contains(
+                "<a class=\"next\" rel=\"next\" href=\"../tags/docs/start/gadgets/index.html\">"
+            ),
+            "{install}"
+        );
+        // The search data sends the landing note to the group page.
+        let data = text(&built, "assets/search-data.js");
+        assert!(
+            data.contains(&format!(
+                "\"id\":\"{A}\",\"page\":\"tags/docs/start/index.html\""
+            )),
+            "{data}"
+        );
+    }
+
+    #[test]
+    fn a_hidden_note_has_a_page_but_no_place() {
+        let vault = vault();
+        let built = build_docs(vault.path());
+        let secret = text(&built, "notes/secret.html");
+        assert!(
+            secret.contains("<h1 class=\"note-title\">Secret</h1>"),
+            "{secret}"
+        );
+        assert!(!secret.contains("class=\"breadcrumbs\""), "{secret}");
+        assert!(!secret.contains("class=\"pager\""), "{secret}");
+        assert!(
+            !secret.contains("notes/secret.html\""),
+            "the sidebar does not list it: {secret}"
+        );
+        let data = text(&built, "assets/search-data.js");
+        assert!(data.contains("\"title\":\"Secret\""), "{data}");
     }
 
     #[test]
