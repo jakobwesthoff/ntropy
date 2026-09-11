@@ -214,7 +214,7 @@ sync.
 | `write <id\|filename\|path>` | Replace one note's content with text read from stdin, then realign and refresh views. Names its target rather than searching for it, never prompts, and works on an encrypted vault including a locked one. |
 | `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Speaks the [query language](#query-language) and opens the [picker](#the-interactive-picker) when several notes match. `--print`/`-p` prints the selected note's path instead of opening it; `--print-content`/`-P` prints the note's text (exactly one note). |
 | `delete <id\|query>` | Remove a note and refresh views (`-f` skips the prompt). Must resolve to exactly one note, erroring on an ambiguous selector when non-interactive. |
-| `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) with ntropy's own typst engine (only `typst` required on `PATH`). Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`, or `typst` for the emitted Typst document), `-o` the output path (default `./<slug>.<ext>`), `--theme` overrides the vault's [configured theme](#theming-rendered-documents), `-p` prints the artifact path. |
+| `render [id\|query]` | [Render one note to a PDF](#rendering-notes-to-pdf) with ntropy's own typst engine (only `typst` required on `PATH`), or with `--to html` to a web page with a `<stem>_files/` directory beside it, needing no tool. Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`, or `typst` for the emitted Typst document), `-o` the output path (default `./<slug>.<ext>`), `--theme` overrides the vault's [configured theme](#theming-rendered-documents), `-p` prints the artifact path. An existing artifact is refused unless `--force` replaces it. |
 | `site -o <dir> [query]` | [Export the vault as a static website](#exporting-the-vault-as-a-website): a page per note, a tag tree, a page per view and group, sidebar, outline, breadcrumbs. Works from disk without a server. `--force` empties a non-empty directory, `--theme` overrides the [site theme](#site-themes), `-p` prints the front page's path. `site theme init <name>` copies the built-in theme into the vault. |
 | `reconcile` | Realign filenames whose slug drifted from the title and re-sync every view (catches up after edits made outside ntropy). |
 | `view list\|add\|remove` | Manage [materialized views](#materialized-views), e.g. `ntropy view add by-status --field status`. |
@@ -518,7 +518,7 @@ re-run `ntropy init` to seed it.)
 
 ## Configuration
 
-There is not much to configure, on purpose. Three things are worth knowing.
+There is not much to configure, on purpose. Four things are worth knowing.
 
 **Your editor.** ntropy opens notes in `$VISUAL`, then `$EDITOR`. It deliberately
 won't guess a default, so set one of those in your shell and ntropy uses it for
@@ -541,6 +541,13 @@ You'll rarely touch it by hand; `--set-default` writes it for you.
 so they travel with the vault rather than your machine. The `ntropy view`
 commands manage this file for you — see [Materialized views](#materialized-views)
 for the whole story.
+
+**Your documents and your site.** The same file holds an optional `[render]`
+table (the Typst theme and paper size, see
+[Theming rendered documents](#theming-rendered-documents)) and an optional
+`[site]` table (the site theme, the front page, the title, the language,
+and the sidebar's root and nav table, see
+[Exporting the vault as a website](#exporting-the-vault-as-a-website)).
 
 ## Linking between notes
 
@@ -579,7 +586,12 @@ yourself — for example via `brew install typst`. ntropy tells you exactly
 what's missing if it isn't on your `PATH`.
 
 `--to typst` writes the emitted Typst document (a `.typ` file) instead of a
-PDF, needing no external tool at all.
+PDF, needing no external tool at all. `--to html` writes the note as a web
+page, the same page the [website export](#exporting-the-vault-as-a-website)
+gives it, with a `<stem>_files/` directory beside it; that needs no tool
+either and is described there. Whatever the format, `render` refuses to
+overwrite an existing artifact (or, for html, a non-empty files directory)
+unless you pass `--force`.
 
 **Links between rendered notes.** A link to another note becomes a real link in
 the PDF, pointing at `<slug>.pdf` — the target note's slug, which is also the
@@ -719,9 +731,13 @@ already are that view). Each page carries a sidebar with the views and
 the top-level tags, breadcrumbs, an outline of the note's headings,
 previous/next links that follow the sidebar's reading order, and, at
 the end of a note, the notes that share the most tags with it. Tags link to their
-pages everywhere they appear. Note links point at the target's page;
-images and linked files from the vault are copied under `files/`, a
-linked directory with its whole tree. The front page is the note named
+pages everywhere they appear. Code blocks are highlighted in the browser
+for 72 languages, each page loading only the grammars its code needs (a
+fence language without one is an export warning, and the block stays
+plain). Every page has a light/dark/system switch that remembers your
+choice, and the outline follows your position while you scroll. Note
+links point at the target's page; images and linked files from the vault
+are copied under `files/`, a linked directory with its whole tree. The front page is the note named
 by `[site] index` in the vault config, or a generated overview of the
 newest notes, the top-level tags, and the views. On a phone the sidebar
 is a drawer behind the menu button.
@@ -1041,7 +1057,8 @@ teaches exactly that:
 [`skills/ntropy/`](https://github.com/jakobwesthoff/ntropy/tree/main/skills/ntropy)
 holds a `SKILL.md`
 with the vault model and those rules, plus reference docs on writing notes,
-querying, vaults, and views. Its description marks it as relevant to any task
+querying, vaults, views, the website export with its navigation settings,
+and site themes. Its description marks it as relevant to any task
 involving ntropy or a note vault, so an agent with the skill installed picks it
 up on its own the moment a task touches one.
 
