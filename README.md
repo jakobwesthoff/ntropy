@@ -717,8 +717,8 @@ each listing the notes carrying the tag or any tag below it. Every
 nested like its directory (a view over `tags` is skipped, the tag pages
 already are that view). Each page carries a sidebar with the views and
 the top-level tags, breadcrumbs, an outline of the note's headings,
-previous/next links inside the note's first group, and, at the end of a
-note, the notes that share the most tags with it. Tags link to their
+previous/next links that follow the sidebar's reading order, and, at
+the end of a note, the notes that share the most tags with it. Tags link to their
 pages everywhere they appear. Note links point at the target's page;
 images and linked files from the vault are copied under `files/`, a
 linked directory with its whole tree. The front page is the note named
@@ -879,7 +879,14 @@ through the `.icon` class.
 `.site-name`, the search mount, and the `.theme-switch` of three
 `.theme-choice` buttons), the `.sidebar-pane` holding `nav.sidebar`,
 `main` with `.breadcrumbs`, `.content`, and the `.pager`, and `aside.side`
-holding `nav.outline`. A note is a `.note-header` (`.note-title`,
+holding `nav.outline`. The sidebar is `.nav-section` blocks: a `details`
+with a `summary.nav-title`, an optional `.nav-all` link to the section's
+page, and `ul.nav-entries` of `li.nav-note` links and `li.nav-group`
+details whose `summary` holds the group's link (a `span` for a group
+made by hand in the nav table) and the `.chevron` icon, nesting with
+another `ul.nav-entries`; the tag section is a `section.nav-tags` with
+an `h2.nav-title` and a `ul.tag-cloud`. A breadcrumb step without a page
+of its own is a `span` instead of a link. A note is a `.note-header` (`.note-title`,
 `.note-meta` with `.note-created` and the `.tags`, the remaining fields
 as a `.frontmatter` list) followed by `article.note-body` and, on the
 site, `section.related`. Lists of notes are `ol.note-rows` of

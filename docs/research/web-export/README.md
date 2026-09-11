@@ -27,8 +27,11 @@ The implementation stages (the Markdown walk with the HTML emitter, the
 `html` render format with site themes, the `site` command, the browser
 toolchain with highlighting, scheme switch, and outline, the client-side
 search, and the design pass with the theme layout) are committed on the
-branch `site-generation`, as is the sidebar definition (Q77 to Q84,
-ADR 0056).
+branch `site-generation`, as is the sidebar definition (Q77 to Q86,
+ADR 0056). The vault the sidebar work is checked against, the
+torchsnap documentation converted to notes with a `site` table each
+and a config carrying `root` and a nav table (Q84), lives outside the
+repository at `~/ntropy-vaults/torchsnap-docs`.
 
 ## How to resume
 

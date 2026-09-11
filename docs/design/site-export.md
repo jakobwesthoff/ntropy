@@ -5,7 +5,10 @@ recorded in
 [ADR 0046](../adr/0046-static-site-export-with-a-site-command-and-an-html-render-format.md)
 (command and architecture),
 [ADR 0054](../adr/0054-site-navigation-and-url-scheme.md) (pages and
-navigation), [ADR 0047](../adr/0047-themes-directory-split-by-type.md)
+navigation),
+[ADR 0056](../adr/0056-sidebar-order-labels-landing-notes-and-a-nav-table.md)
+(the sidebar's order, labels, landing notes, root, and nav table),
+[ADR 0047](../adr/0047-themes-directory-split-by-type.md)
 and [ADR 0048](../adr/0048-site-themes-as-stylesheets-and-assets.md)
 (themes). The converter is described in [html-engine.md](html-engine.md),
 the browser-side code in [site-frontend.md](site-frontend.md), the page
@@ -40,7 +43,10 @@ relative, there is no client-side routing.
   kinds fail the exit code. The site is written either way. Export
   warnings are: a referenced file that is missing or lies outside the
   vault, a fence language without a grammar, a link to a note outside
-  the exported set.
+  the exported set, a configured index note that is not exported, a
+  note's `site` table that is no mapping or holds a key of the wrong
+  type, a `root` that names no page, and a nav item the site cannot
+  resolve.
 - An encrypted vault exports like a plaintext one; every note is
   decrypted in memory as for any read ([encryption.md](encryption.md)).
   When the output directory lies inside the vault, a warning says so, as
@@ -104,8 +110,8 @@ the site works from `file://` and from any path on a host.
 
 **Front page.** The configured index note, or the generated overview:
 site title, the note count with the span from the oldest to the newest
-date, the ten newest notes, and for each section its top-level groups
-with counts, each linking into its page.
+date, the ten newest visible notes, and for each section its top-level
+groups with counts, each linking into its page.
 
 **The `site` table.** A note's frontmatter may carry a `site` mapping
 ([ADR 0056](../adr/0056-sidebar-order-labels-landing-notes-and-a-nav-table.md)),
@@ -113,25 +119,25 @@ every key optional: `order`, an integer, the note's position among the
 entries of every group holding it; `label`, a string, the name the
 sidebar and the pager show instead of the title; `hidden`, a boolean,
 which keeps the note out of the sidebar, every list, and the pager while
-its page is still exported, linkable, and in the search data; and
-`index`, a boolean, which makes the note the landing note of every group
-it is a member of; `listing`, a boolean, which makes a landing note's
-group page list the group's contents below the note; and `related`, a
-boolean, which switches the related notes at the end of the page on or
-off for this note, whatever `[site] related` says. The table is not shown as a frontmatter field on
-the page. A `site` value that is no mapping, and a key of the wrong type,
-are export warnings naming the note, and are ignored.
+its page is still exported, linkable, and in the search data; `index`,
+a boolean, which makes the note the landing note of every group it is a
+member of; `listing`, a boolean, which makes a landing note's group page
+list the group's contents below the note; and `related`, a boolean,
+which switches the related notes at the end of the page on or off for
+this note, whatever `[site] related` says. The table is not shown as a
+frontmatter field on the page. A `site` value that is no mapping, and a
+key of the wrong type, are export warnings naming the note, and are
+ignored.
 
 **Landing notes.** A group with a landing note shows, on its page, the
 note's title, date, tags, fields, and body, and nothing else unless the
 note's `listing` is true, in which case the child groups and the
 listing follow; the note has no page of its own, and links to it go to
 the group page, the first such group in sidebar order when it lands
-several.
-The note's `label` names the group wherever the group is named, its
-`order` places the group among the parent's entries, and the note is
-not among the group's entries. The first member marked `index` is the
-landing note.
+several. The note's `label` names the group wherever the group is
+named, its `order` places the group among the parent's entries, and the
+note is not among the group's entries. The first member marked `index`
+is the landing note.
 
 **Note page.** `notes/<slug>.html`. Two notes may share a slug with
 different ULIDs; only the colliding notes are named `<slug>-<tail>.html`,
@@ -279,7 +285,8 @@ body, and for every page of the site itself (each section's index, every
 tag page, every view group page) its kind, section, value, label, page,
 and note count, as `assets/search-data.js`, a classic script that
 assigns `window.__ntropySearch`. The notes come in the model's order, newest
-first. Frontmatter travels as JSON with string keys only; a tagged YAML
+first, hidden notes among them, and a landing note's page is its
+group's; a group's label is the one the sidebar shows. Frontmatter travels as JSON with string keys only; a tagged YAML
 value becomes `null`. Every `</` inside the JSON is written as `<\/`, so
 a note whose body contains `</script>` cannot end the script that carries
 it. A published site therefore carries each note twice, as its page and

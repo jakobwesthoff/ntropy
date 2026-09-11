@@ -97,10 +97,13 @@ Two values stay unfixed until implementation, listed at the end.
   fixed.
 - **Sidebar.** Built from the configured views and the tag hierarchy:
   each becomes a collapsible section whose groups nest as the
-  filesystem views do. No hand-curated order (Q6).
+  filesystem views do. No hand-curated order (Q6). Superseded by Q77
+  to Q86 and ADR 0056: a `site` frontmatter table, a root, and a nav
+  table shape the sidebar.
 - **Sort order.** Notes inside a group, on a tag page, or on a group
   page are sorted newest first (ULID descending). A frontmatter order
-  override is a topic for a later iteration (Q27).
+  override is a topic for a later iteration (Q27); decided in Q77 to
+  Q84 as `site.order`.
 - **Generated pages.** The front page, a tag tree index, one page per
   tag, one index per configured view, one page per group nested as the
   filesystem view (Q25b). No chronological all-notes page, no
@@ -113,7 +116,8 @@ Two values stay unfixed until implementation, listed at the end.
   the note's headings with the current section highlighted while
   scrolling; previous/next links; breadcrumbs; the light/dark toggle
   (Q25a). A note's first view and group in sidebar order define its
-  previous/next links and its breadcrumb, statically (Q29).
+  previous/next links and its breadcrumb, statically (Q29); since ADR
+  0056 the sidebar's reading order does, across group boundaries.
 - **Backlinks.** None in the first implementation (Q17).
 
 ## Pages, URLs, and files
