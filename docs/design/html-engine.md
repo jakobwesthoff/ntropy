@@ -14,8 +14,10 @@ Typst emitter and the HTML emitter. The walk owns what is independent of
 the output: the frame stack of open containers, note-link classification
 by matching an event's byte span against the resolved link table of the
 `PreparedDocument` ([rendering.md](rendering.md)), bare-URL detection,
-footnote buffering, image alt flattening, callout kinds, and heading ids.
-An emitter owns the markup and the escaping.
+footnote buffering, image alt flattening, callout kinds, heading ids, and
+the skipping of a leading level-one heading that repeats the title an
+emitter says it shows elsewhere. An emitter owns the markup and the
+escaping.
 
 ## Escaping
 

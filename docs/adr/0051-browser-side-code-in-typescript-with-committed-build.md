@@ -10,6 +10,13 @@ Amended 2026-09-11: Bun is the JavaScript runtime and package manager for
 the toolchain; Node is not used. The user's rule is "bun over node,
 always".
 
+Amended 2026-09-11 by
+[ADR 0055](0055-theme-directory-layout-with-fonts-icons-and-embedded-assets.md):
+the stylesheet lives in the built-in theme under `src/site/theme/`, not
+in `site/`; `src/site/dist/` is embedded by a build script rather than
+by hand-written includes; the theme's font and icon files are third
+party and carry their own licenses instead of the MPL-2.0 header.
+
 Provides the browser-side code of
 [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md).
 Search is [ADR 0052](0052-client-side-search-as-a-typescript-query-dsl.md),

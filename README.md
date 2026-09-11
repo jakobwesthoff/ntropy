@@ -1028,7 +1028,12 @@ just clippy    # cargo clippy --all-targets -- -D warnings
 just fmt       # cargo fmt
 just check     # clippy + tests + fmt --check (the CI gate)
 just coverage  # cargo llvm-cov
+just site-check  # rebuild the site frontend with Bun, check, lint, and test it (the CI gate)
 ```
+
+The browser-side code of the site export lives in `site/` and is built
+with [Bun](https://bun.sh); `just site-build` writes the result to
+`src/site/dist/`, which is committed. `cargo build` never runs Bun.
 
 Tests use [`insta`](https://insta.rs) snapshots across all layers (ADR 0021).
 When a change alters output, the snapshot assertions fail and write `.pending-snap`

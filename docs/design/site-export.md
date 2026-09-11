@@ -88,8 +88,8 @@ the site works from `file://` and from any path on a host.
 
 **Front page.** The configured index note, or the generated overview:
 site title, the note count with the span from the oldest to the newest
-date, the newest notes, and for each section its top-level groups with
-counts, each linking into its page.
+date, the ten newest notes, and for each section its top-level groups
+with counts, each linking into its page.
 
 **Note page.** `notes/<slug>.html`. Two notes may share a slug with
 different ULIDs; only the colliding notes are named `<slug>-<tail>.html`,

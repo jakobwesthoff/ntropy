@@ -25,7 +25,8 @@ Q55 to Q66):
 - The scheme switch has three states, system, light, and dark.
 - `/` opens the search with the query box focused; Escape closes it.
 - Note lists are one row per note, date, title, and tag links, newest
-  first, not grouped.
+  first, not grouped. The generated front page lists the ten newest
+  notes.
 
 Defines the pages the export of
 [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md)

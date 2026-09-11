@@ -15,6 +15,12 @@ templates in a second iteration later on".
 - minijinja's `path_loader` loads templates from a directory, so the
   engine already has the loading half; the missing half is the contract.
 
+## Since then
+
+A theme replaces or adds icons by dropping files into its `icons/`
+directory (ADR 0055), so swapping a glyph no longer needs template
+control; changing where an icon appears still does.
+
 ## To decide later
 
 - The template data model as a documented contract: which context fields

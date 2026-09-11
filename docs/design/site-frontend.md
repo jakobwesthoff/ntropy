@@ -15,15 +15,18 @@ highlighting. Decisions are recorded in
 
 The frontend is TypeScript with Preact, built with Vite, tested with
 Vitest, linted and formatted with Biome, all run through Bun, which is
-also the package manager; Node is not used. Its sources (package manifest, TypeScript, CSS, tests) live in
-`site/` at the repository root. Vite writes the built output to
+also the package manager; Node is not used. Its sources (package
+manifest, TypeScript, tests) live in `site/` at the repository root; the
+stylesheet is part of the built-in theme under `src/site/theme/`
+([site-export.md](site-export.md), "Themes"). Vite writes the built output to
 `src/site/dist/`, which is committed and embedded into the binary;
 `cargo build` never runs Bun. A CI job rebuilds `site/` with Bun and fails
-when the result differs from the committed output; a `just` recipe runs
-the same check locally.
+when the result differs from the committed output; `just site-check` runs
+the same check locally (`site-build`, `site-test` for the type check,
+lint, and tests, and `bun run coverage` in `site/` for a coverage report).
 
-Every built file is a classic script or a stylesheet. There are no module
-scripts and no lazily loaded chunks, because the site works over
+Every built script is a classic script. There are no module scripts and
+no lazily loaded chunks, because the site works over
 `file://`, where browsers block module loading and `fetch()` of local
 files. Data the scripts need (the search data, a page's grammars) is
 embedded in script files.
@@ -109,8 +112,8 @@ the scripts run. The page script creates the highlighter from the
 grammars the page registered, resolves each block's fence language by
 grammar name or alias, and replaces the block with Shiki's markup. Both
 themes' colors travel as custom properties on every token, and the
-stylesheet picks one per color scheme, so the toggle switches highlighted
-code with the rest of the page.
+stylesheet picks one per color scheme, so the scheme switch changes
+highlighted code with the rest of the page.
 
 The curated grammar set is Shiki's web bundle languages plus rust, go,
 python, ruby, java, kotlin, swift, c, cpp, csharp, shellscript,

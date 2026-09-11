@@ -18,9 +18,15 @@ files, use line comments:
 
 Adapt the comment syntax to the file's language, keeping the wording verbatim.
 
-The one exception is the vault seed content under `src/vault/seed/` (ADR 0039).
-Those files are copied verbatim into user vaults, so they carry no header. A
-unit test in `vault::seed` enforces this.
+The exceptions carry no header:
+
+- the vault seed content under `src/vault/seed/` (ADR 0039), copied
+  verbatim into user vaults; a unit test in `vault::seed` enforces this;
+- the generated frontend output under `src/site/dist/` (ADR 0051); a unit
+  test in `site` enforces this;
+- the third-party font and icon files of the built-in site theme under
+  `src/site/theme/fonts/` and `src/site/theme/icons/` (ADR 0055), which
+  ship with their own license files.
 
 ## Documentation conventions
 
