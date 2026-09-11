@@ -39,9 +39,10 @@ This will:
 - `demo.webm` — WebM (smaller, modern browsers)
 - `demo.mp4` — MP4 (broader compatibility)
 
-Both land in `docs/website/assets/`, the documentation vault whose front
-page links them. They are committed so the GitHub Pages deploy has the
-video without rendering VHS in CI; re-run `./record.sh` to refresh them.
+Both land in `docs/website/.ntropy/themes/site/ntropy/media/`, the site
+theme of the documentation vault, whose front page template embeds them.
+They are committed so the GitHub Pages deploy has the video without
+rendering VHS in CI; re-run `./record.sh` to refresh them.
 
 ## What the demo shows
 

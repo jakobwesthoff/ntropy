@@ -1,0 +1,20 @@
+{% extends "ntropy/base.html" %}
+{# The legal pages: the header, one reading column, the footer, and none of
+   the navigation. #}
+{% block title %}{{ title }}: {{ site_title }}{% endblock %}
+{% block head %}<link rel="stylesheet" href="{{ stylesheet }}">
+<script>try{var t=localStorage.getItem("ntropy-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+{% for script in scripts %}<script defer src="{{ script }}"></script>
+{% endfor %}{% endblock %}
+{% block body_class %}site plain{% endblock %}
+{% block body %}{{ icons }}
+<div class="layout">
+{% include "partials/header.html" %}
+<main>
+<div class="content">
+{{ body | trim }}
+</div>
+</main>
+</div>
+{% include "partials/footer.html" %}
+{% include "partials/contact.html" %}{% endblock %}

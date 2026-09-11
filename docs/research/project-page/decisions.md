@@ -162,6 +162,66 @@ Validated against the repository at the start of the effort:
 - **Q21. The demo (2026-09-11).**
   - *Answer:* in a terminal window frame, autoplaying muted, as the old
     page had it. Not chosen: a plain video.
+- **Q22 to Q25. The first rendered export (2026-09-11).** The user
+  looked at the export of the terminal teal theme and raised: the
+  sidebar shows everything under a "docs" wrapper; the footer is not
+  nice and should be neater and nerdier than the old one; the video is
+  far too large; installation and download drown among the features and
+  want a section under the why or under the video; the page is oddly
+  overwide; the site name with the teal square in the header looks
+  broken; and whether the impressum and license should have a sidebar
+  at all. Discussed before anything changed.
+  - *Q22 sidebar:* change the exporter: a rooted sidebar shows the root
+    group's child groups as top-level sections whose titles link to
+    their landing pages, the root's loose notes first (ADR 0056
+    amendment). Not chosen: keep the wrapper and rename it.
+  - *Q23 footer:* a status line, the way tmux or vim draw one: one mono
+    bar with the name and version in teal, the license, the impressum,
+    the old tagline as the status message, GitHub and crates.io on the
+    right. Not chosen: the old footer restyled; prompt lines.
+  - *Q24 site name:* `$ ntropy`, the name in mono after a muted teal
+    dollar sign. Not chosen: a small wordmark with a static cursor; the
+    plain name.
+  - *Q25 layout:* install as its own section under the video (cargo,
+    binaries, and source as three columns, the first commands below),
+    the features after it; the front page and its header capped at
+    56rem, the documentation pages keeping 84rem. Not chosen: install
+    under the why; trimming the documentation layout to 78rem.
+  - Proposed and not objected to: the impressum and the license render
+    through a `plain` template of the theme, header, narrow column, and
+    footer, without sidebar, outline, breadcrumbs, or pager.
+- **Q26 to Q29. The second rendered export (2026-09-11).** The user
+  found the status-line footer not nice, the three-column install
+  section unclear and too like the section below, and the highlight
+  strips too much content and not enough advertisement, the old page
+  having been clearer; an artifact with variants for each followed.
+  - *Q26 install:* the one-liner (`cargo install ntropy` at hero size
+    with a copy button), then the binaries as small badge-like buttons
+    with the Apple and Linux marks pointing at the latest release, then
+    a plain "build from source" link; no Windows button, since ntropy
+    has no Windows build. Not chosen: a terminal with tabs; install as
+    a note; three choice buttons; the first five minutes as a sequence.
+  - *Q27 pitch:* the old page's three highlights as they were, centered,
+    no boxes. Not chosen: boxes; manifesto lines; a field of commands;
+    folders versus metadata; an icon grid.
+  - *Q28 footer:* the old page's two lines, the tagline and "Made with
+    ♥ by", with the links, centered. Not chosen: the prompt-line
+    variant.
+  - *Q29 where the front page lives (the user, verbatim): "maybe this
+    page should be build as html in the document, because using this
+    template and frontmatter mixture makes it really hard to control
+    and understand".* Answer: everything in the template: `front.html`
+    holds the page as literal HTML, the index note only selects it.
+    Not chosen: HTML in the template with the essay in the note; raw
+    HTML in the note body; the frontmatter approach.
+  - Asked for along the way and done: the hero's buttons with the
+    download and GitHub marks as on the old page; the sections in the
+    order hero, highlights, recording, install, why; the section
+    dividers and the header's divider running the full viewport while
+    the content stays capped; every other section on the surface tone,
+    as the hero band is; larger section headings; the why centered like
+    the rest; the header keeping its side gutter on a phone.
+- **The user, unprompted (2026-09-11):** a GitHub icon for the theme.
 - **The user, unprompted (2026-09-11):** the `just` recipe that exports
   the vault is `website`; the old page source under `docs/pages/` stays
   as a reference until the redesign is finished and is removed then,

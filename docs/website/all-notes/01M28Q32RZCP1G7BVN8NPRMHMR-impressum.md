@@ -2,6 +2,7 @@
 title: Impressum
 site:
   hidden: true
+  template: plain
 ---
 The following information is required by German law (§ 5 TMG) and is
 therefore given in German.

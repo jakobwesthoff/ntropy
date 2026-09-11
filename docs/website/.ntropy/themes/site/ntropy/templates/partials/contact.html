@@ -1,0 +1,15 @@
+<script>
+(function () {
+  var key = "{{ vars.imprint.key }}".replace(/[a-zA-Z]/g, function (c) {
+    var base = c <= "Z" ? 65 : 97;
+    return String.fromCharCode((c.charCodeAt(0) - base + 13) % 26 + base);
+  });
+  document.querySelectorAll(".contact[data-enc]").forEach(function (el) {
+    var bytes = atob(el.dataset.enc), out = "";
+    for (var i = 0; i < bytes.length; i++) {
+      out += String.fromCharCode(bytes.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+    el.textContent = out;
+  });
+})();
+</script>

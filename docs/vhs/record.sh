@@ -127,4 +127,4 @@ vhs demo.tape
 echo "==> Cleaning up demo vault..."
 rm -rf "$VAULT"
 
-echo "==> Done. Outputs: docs/website/assets/demo.webm and docs/website/assets/demo.mp4"
+echo "==> Done. Outputs: docs/website/.ntropy/themes/site/ntropy/media/demo.webm and demo.mp4"
