@@ -722,6 +722,14 @@ vault are copied under `files/`. The front page is the note named by
 `[site] index` in the vault config, or a generated overview of the newest
 notes, the top-level tags, and the views.
 
+The header's search button opens a panel that speaks the same
+[query language](#query-language) as `ntropy search`, so `tag:work and
+not status:done` works there too, and a second box narrows the results
+the way the [picker](#the-interactive-picker) does. The search runs in
+the browser over data exported with the site, so it works from disk. A
+`text:` pattern that the CLI would reject, lookaround or backreferences
+for instance, is refused in the browser as well.
+
 A non-empty output directory is refused unless you pass `--force`, which
 empties it first. A single note renders to one self-contained page with
 `ntropy render --to html`.
