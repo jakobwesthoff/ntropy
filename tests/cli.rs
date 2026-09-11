@@ -1709,7 +1709,7 @@ fn site_exports_the_vault_into_the_output_directory() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stdout.contains("Exported 9 pages to out (2 notes, 0 warnings)"),
+        stdout.contains("Exported 6 pages to out (2 notes, 0 warnings)"),
         "unexpected report: {stdout}"
     );
 
@@ -1721,12 +1721,14 @@ fn site_exports_the_vault_into_the_output_directory() {
         "tags/index.html",
         "tags/work/index.html",
         "tags/work/rust/index.html",
-        "views/by-tag/index.html",
-        "views/by-tag/work/rust/index.html",
         "assets/style.css",
+        "assets/icons/tag.svg",
+        "assets/fonts/LICENSE",
     ] {
         assert!(out.join(page).is_file(), "missing {page}");
     }
+    // A view over the tags field repeats the tag section and gets no pages.
+    assert!(!out.join("views").exists(), "views/ was written");
     let page = fs::read_to_string(out.join("notes/rust-tips.html")).expect("note page");
     assert!(
         page.contains("<a class=\"note-link\" href=\"../notes/the-guide.html\">The Guide</a>"),

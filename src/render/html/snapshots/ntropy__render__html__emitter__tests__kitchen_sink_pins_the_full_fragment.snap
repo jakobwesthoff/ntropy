@@ -14,27 +14,27 @@ and a dangling one to <strong>bold</strong> ghost.</p>
 an <a href="#table">anchor</a>, and a <a href="mailto:jaw@ekko.io">mail link</a>.</p>
 
 <div class="callout callout-note">
-<p class="callout-title">Note</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-info"/></svg>Note</p>
 <p>A note callout with a <code>code chip</code> inside.</p>
 </div>
 
 <div class="callout callout-tip">
-<p class="callout-title">Tip</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-lightbulb"/></svg>Tip</p>
 <p>Tips look encouraging.</p>
 </div>
 
 <div class="callout callout-important">
-<p class="callout-title">Important</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-message-square-warning"/></svg>Important</p>
 <p>Important stands out.</p>
 </div>
 
 <div class="callout callout-warning">
-<p class="callout-title">Warning</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-triangle-alert"/></svg>Warning</p>
 <p>Careful<sup class="footnote-ref"><a href="#fn-1" id="fnref-1">1</a></sup> with content.</p>
 </div>
 
 <div class="callout callout-caution">
-<p class="callout-title">Caution</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-octagon-alert"/></svg>Caution</p>
 <p>Caution is loud.</p>
 </div>
 

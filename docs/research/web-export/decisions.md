@@ -603,6 +603,76 @@ is [design-notes.md](design-notes.md).
     and each page includes only its own. Supersedes the per-grammar
     files of ADR 0053, which is amended.
 
+- **Q55 to Q66. The design pass (2026-09-11).** Raised by the user after
+  the stages were implemented (verbatim): "please use the frontend-design
+  plugin and develop an awesome design, colorscheme and visually
+  appealing and well formed output for our generated content. take care
+  of the lists of documents with their tags, they are hard to read, make
+  sure we are crosslinking, whereever it makes sense. make the light/dark
+  switch look awesome, maybe integrate an iconset, be creative and
+  maximally awesome." Asked in three rounds; the answer is the option
+  chosen.
+  - *Q55 type:* IBM Plex Serif for note bodies, Plex Sans for the chrome,
+    Plex Mono for dates and ids, shipped inside the export. Not chosen:
+    Plex Sans and Mono only; system stacks only.
+  - *Q56 sidebar:* a compact navigator, view sections collapsed except
+    the current trail, the tags as top-level tags with counts, a drawer
+    on phones. Not chosen: the full tree collapsed harder; no sidebar.
+  - *Q57 icons:* a Lucide subset inlined as an SVG sprite. Not chosen: a
+    hand-drawn set; none.
+  - *Q58 scheme switch:* three-way, system, light, dark. Not chosen: one
+    morphing sun/moon button.
+  - *Q59 note rows:* aligned rows, date, title, tags, one flat list
+    newest first. Not chosen: rows grouped by year; cards with excerpts.
+  - *Q60 duplicate title:* a leading level-one heading equal to the
+    frontmatter title is dropped on the site and in `render --to html`.
+    Not chosen: keep both; hide the header title.
+  - *Q61 tags view:* a view whose field is `tags` is no site section and
+    gets no pages. Not chosen: keep both sections.
+  - *Q62 crosslinks (multi-select):* tags in the note header link to
+    their pages; a related-notes list at the end of a note (up to eight,
+    by shared tags); `/` opens the search and Escape closes it. Not
+    chosen: a "filed under" line listing every placement.
+  - Then, on the asset system, the user asked (verbatim) "does it make
+    sense for us to create an asset compressor so that all embedded
+    assets are automatically compressed before being embedded in the
+    executable and then uncompressed when the site is created?",
+    clarified as "auto asset integration and compression", and "would
+    compression make it worse size wise? otherwise i would like to have
+    it". Facts given: the binary is 7.3 MB; zstd takes `app.js` from
+    210 KB to 62 KB and the stylesheet from 10 KB to 3 KB, while the
+    grammar blob and the woff2 fonts do not shrink. Answer to the size
+    question: no, compressing an already compressed file adds bytes only
+    in the tens. On "can we actually have build dependencies that only
+    exist during build process": yes, Cargo's build dependencies never
+    link into the binary.
+  - On icons, the user asked (verbatim) "does it really make sense to
+    embed the icons into the css", "what do you mean with mask-image?
+    why and for what do we need that. cant we just use svgs?", and
+    stated the aim: "having the structure for our internal theme nearly
+    identical to the ones that would be external, including all the
+    stored icons, fonts and everything", "put them into specific folders
+    and then generate the sheets from there", "keep the writing of themes
+    possible with the minimal knowledge of ntropy itself and as webdev
+    centric as possible", "a dedicated README.md area on writing
+    themes", and "create the sprite sheet during site building not
+    during application building so that we can apply the exact same
+    mechanism to external themes provided". Fact established by
+    screenshot: Chrome renders a CSS mask image from a separate file
+    over http and with `--allow-file-access-from-files`, not from plain
+    `file://`.
+  - *Q63 icon layering:* a vault theme's `icons/` overrides or adds by
+    file name; the rest is inherited. Not chosen: the theme's set as the
+    whole set.
+  - *Q64 sourcing:* the built-in fonts and icons are committed files,
+    updated by hand. Not chosen: copied from npm by the frontend build.
+  - *Q65 standalone document:* the fonts fall back to system faces. Not
+    chosen: fonts inlined as data URIs.
+  - *Q66 icon ids:* `icon-<file stem>`. Not chosen: `i-<stem>`; the stem
+    alone.
+  - *Decision:* recorded as an amendment to ADR 0054 (pages and
+    navigation) and in ADR 0055 (theme layout, icons, fonts, embedding).
+
 ## Answered but not yet turned into a decision
 
 _Not yet established._
@@ -668,6 +738,11 @@ above).
 ### Round 17
 
 Q47a, Q47b, Q48, Q49, Q50, Q51 decided (see above).
+
+### Rounds 18 to 20 (the design pass, 2026-09-11)
+
+Q55 to Q66 decided (see above), interleaved with the user's questions
+on the asset system, recorded there.
 
 ### Still open
 

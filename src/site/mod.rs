@@ -15,9 +15,13 @@
 //! - [`build`]: every file of a site, built in memory, and their writing.
 //! - [`frontend`]: the embedded page script and highlighting grammars.
 //! - [`search`]: the search data every site embeds for the page script.
+//! - [`embedded`]: the assets the build script embeds, inflated on demand.
+//! - [`icons`]: the sprite a theme's `icons/` directory becomes.
 
 pub mod build;
+pub mod embedded;
 pub mod frontend;
+pub mod icons;
 pub mod model;
 pub mod nav;
 pub mod options;

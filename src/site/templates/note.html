@@ -1,10 +1,9 @@
 <header class="note-header">
 <h1 class="note-title">{{ title }}</h1>
-<p class="note-created"><time datetime="{{ created }}">{{ created }}</time></p>
-{% if tags %}<ul class="tags">
-{% for tag in tags %}<li class="tag">{{ tag }}</li>
-{% endfor %}</ul>
-{% endif %}{% if fields %}<dl class="frontmatter">
+<p class="note-meta"><time class="note-created" datetime="{{ created }}">{{ created }}</time>{% if tags %}
+<span class="tags">{% for tag in tags %}{% if tag.href %}<a class="tag" href="{{ tag.href }}"><svg class="icon" aria-hidden="true"><use href="#icon-tag"/></svg>{{ tag.label }}</a>{% else %}<span class="tag"><svg class="icon" aria-hidden="true"><use href="#icon-tag"/></svg>{{ tag.label }}</span>{% endif %}
+{% endfor %}</span>{% endif %}</p>
+{% if fields %}<dl class="frontmatter">
 {% for field in fields %}<dt>{{ field.key }}</dt>
 <dd>{{ field.html }}</dd>
 {% endfor %}</dl>

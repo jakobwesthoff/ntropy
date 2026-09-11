@@ -4,7 +4,7 @@
 
 //! The browser-side files the binary embeds, built from `site/` by Bun and
 //! committed under `src/site/dist/` (ADR 0051, ADR 0053,
-//! `docs/design/site-frontend.md`).
+//! `docs/design/site-frontend.md`), embedded by the build script.
 //!
 //! `app.js` is the page script. `grammars.zst` holds every Shiki grammar
 //! the curated languages need, their embedded languages included, as one
@@ -14,9 +14,12 @@
 
 use std::collections::BTreeMap;
 use std::io::Read;
+use std::sync::OnceLock;
 
-/// The page script, served as `assets/app.js`.
-pub const APP_JS: &str = include_str!("dist/app.js");
+use super::embedded::{self, Asset};
+
+/// Every file under `src/site/dist/`.
+const DIST_FILES: &[Asset] = include!(concat!(env!("OUT_DIR"), "/site_dist_files.rs"));
 
 /// The file name of the page script within the site's `assets/`.
 pub const APP_SCRIPT: &str = "app.js";
@@ -24,7 +27,15 @@ pub const APP_SCRIPT: &str = "app.js";
 /// The directory of grammar scripts within the site's `assets/`.
 pub const GRAMMARS_DIR: &str = "grammars";
 
-const GRAMMARS_ZST: &[u8] = include_bytes!("dist/grammars.zst");
+fn dist(path: &str) -> &'static Asset {
+    embedded::find(DIST_FILES, path).expect("the frontend build writes every embedded file")
+}
+
+/// The page script, served as `assets/app.js`. Inflated once per process.
+pub fn app_js() -> &'static str {
+    static APP_JS: OnceLock<String> = OnceLock::new();
+    APP_JS.get_or_init(|| dist(APP_SCRIPT).text())
+}
 
 /// One TextMate grammar as Shiki ships it.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +61,10 @@ pub enum GrammarError {
 
 /// Every grammar in the embedded blob, by name.
 pub fn grammars() -> Result<Grammars, GrammarError> {
-    let mut decoder = ruzstd::decoding::StreamingDecoder::new(GRAMMARS_ZST).map_err(|e| {
+    // The blob is a zstd frame of its own; the build script stores it raw
+    // since compressing it again gains nothing.
+    let blob = dist("grammars.zst").contents();
+    let mut decoder = ruzstd::decoding::StreamingDecoder::new(&blob[..]).map_err(|e| {
         GrammarError::Inflate(std::io::Error::new(std::io::ErrorKind::InvalidData, e))
     })?;
     let mut json = Vec::new();
@@ -237,7 +251,15 @@ mod tests {
 
     #[test]
     fn the_page_script_is_a_classic_script() {
-        assert!(APP_JS.starts_with("(function(){"), "app.js must be an IIFE");
-        assert!(!APP_JS.contains("import "), "app.js must not be a module");
+        assert!(
+            app_js().starts_with("(function(){"),
+            "app.js must be an IIFE"
+        );
+        assert!(!app_js().contains("import "), "app.js must not be a module");
+        assert_eq!(
+            app_js(),
+            std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/src/site/dist/app.js"))
+                .expect("dist")
+        );
     }
 }

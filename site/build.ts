@@ -9,7 +9,7 @@
 // where module scripts and lazily loaded chunks are refused. The outputs
 // land in `src/site/dist/` and are committed; `cargo build` never runs this.
 //
-//   app.js        the page script: theme toggle, outline tracking, search,
+//   app.js        the page script: theme switch, outline tracking, search,
 //                 and the highlighter runtime (Shiki's core, its JavaScript
 //                 regex engine, the two themes), one self-contained IIFE
 //   grammars.zst  every grammar the curated languages need, their embedded

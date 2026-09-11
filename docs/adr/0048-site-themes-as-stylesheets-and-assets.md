@@ -6,6 +6,12 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11 by
+[ADR 0055](0055-theme-directory-layout-with-fonts-icons-and-embedded-assets.md):
+the directory layout a theme has (`style.css`, `icons/`, `fonts/`), the
+icon sprite assembled at export from `icons/`, and how the built-in
+theme is embedded.
+
 The site-side counterpart of [ADR 0045](0045-vault-render-themes.md),
 located per [ADR 0047](0047-themes-directory-split-by-type.md). The page
 structure a theme styles comes from
@@ -70,6 +76,7 @@ point for a custom theme and refuses to overwrite an existing directory.
 ## Consequences
 
 - A theme cannot change page layout or navigation markup; what a
-  stylesheet can reach is the whole theme contract.
+  stylesheet can reach, plus the icons under `icons/` (ADR 0055), is the
+  whole theme contract.
 - The built-in theme's file layout is what `site theme init` writes, so
   changing it changes what new custom themes start from.

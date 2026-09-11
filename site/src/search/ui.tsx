@@ -5,9 +5,11 @@
 // The search panel (ADR 0052), mirroring the CLI's two layers: a query in
 // the language the CLI speaks selects notes, then a second box narrows the
 // results the way the picker does, fuzzily over date, title, and tags.
+// `/` anywhere on the page opens the panel with the query box focused;
+// Escape closes it.
 
 import { render } from "preact";
-import { useEffect, useMemo, useState } from "preact/hooks";
+import { useEffect, useMemo, useRef, useState } from "preact/hooks";
 
 import { loadSearchData } from "./data";
 import { type Compiled, compile, matches, type SearchNote } from "./eval";
@@ -27,6 +29,18 @@ export function compileQuery(
     if (error instanceof QueryError) return { error: error.message };
     throw error;
   }
+}
+
+/**
+ * Whether a keypress is the `/` shortcut: the bare key, pressed outside a
+ * field where it would be typed.
+ */
+export function isSearchShortcut(event: KeyboardEvent): boolean {
+  if (event.key !== "/" || event.ctrlKey || event.metaKey || event.altKey) {
+    return false;
+  }
+  const target = event.target as Element | null;
+  return !target?.closest("input, textarea, select, [contenteditable]");
 }
 
 /** The notes a query selects, narrowed by the filter, newest first. */
@@ -52,6 +66,7 @@ export function Search({ dataSrc, prefix }: Props) {
   const [filter, setFilter] = useState("");
   const [notes, setNotes] = useState<SearchNote[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const queryBox = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open || notes !== null) return;
@@ -59,6 +74,23 @@ export function Search({ dataSrc, prefix }: Props) {
       setLoadError(error.message),
     );
   }, [open, notes, dataSrc]);
+
+  useEffect(() => {
+    if (open) queryBox.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (isSearchShortcut(event)) {
+        event.preventDefault();
+        setOpen(true);
+      } else if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   const outcome = useMemo(() => compileQuery(query), [query]);
   const hits = useMemo(() => {
@@ -74,11 +106,16 @@ export function Search({ dataSrc, prefix }: Props) {
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
-        Search
+        <svg class="icon" aria-hidden="true">
+          <use href="#icon-search" />
+        </svg>
+        <span>Search</span>
+        <kbd>/</kbd>
       </button>
       {open && (
         <div class="search-panel" role="dialog" aria-label="Search notes">
           <input
+            ref={queryBox}
             class="search-query"
             type="search"
             placeholder="tag:work and text:deadline"
@@ -87,9 +124,6 @@ export function Search({ dataSrc, prefix }: Props) {
             onInput={(event) =>
               setQuery((event.target as HTMLInputElement).value)
             }
-            onKeyDown={(event) => {
-              if (event.key === "Escape") setOpen(false);
-            }}
           />
           <input
             class="search-filter"
@@ -115,27 +149,31 @@ export function Search({ dataSrc, prefix }: Props) {
                   ? "No notes match."
                   : `${hits.length} ${hits.length === 1 ? "note" : "notes"}`}
               </p>
-              <ul class="search-results">
+              <ol class="note-rows search-results">
                 {hits.slice(0, RESULT_LIMIT).map((note) => (
-                  <li key={note.id}>
-                    <time dateTime={note.created}>{note.created}</time>{" "}
-                    <a href={`${prefix}${note.page}`}>{note.title}</a>
-                    {note.tags.length > 0 && (
-                      <span class="tags">
-                        {note.tags.map((tag) => (
-                          <a
-                            class="tag"
-                            key={tag}
-                            href={`${prefix}tags/${tag}/index.html`}
-                          >
-                            {tag}
-                          </a>
-                        ))}
-                      </span>
-                    )}
+                  <li class="note-row" key={note.id}>
+                    <time dateTime={note.created}>{note.created}</time>
+                    <span class="note-row-main">
+                      <a class="note-row-title" href={`${prefix}${note.page}`}>
+                        {note.title}
+                      </a>
+                      {note.tags.length > 0 && (
+                        <span class="note-row-tags">
+                          {note.tags.map((tag) => (
+                            <a
+                              class="tag"
+                              key={tag}
+                              href={`${prefix}tags/${tag}/index.html`}
+                            >
+                              {tag}
+                            </a>
+                          ))}
+                        </span>
+                      )}
+                    </span>
                   </li>
                 ))}
-              </ul>
+              </ol>
             </>
           )}
         </div>

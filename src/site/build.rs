@@ -40,7 +40,7 @@ use super::SiteOptions;
 use super::frontend::{self, Grammars};
 use super::model::{Front, Model, Placement};
 use super::nav;
-use super::page::{NoteFragment, Page, PageLink};
+use super::page::{NoteFragment, Page, PageLink, TagLink};
 use super::search;
 use super::theme::{self, SiteTheme};
 
@@ -121,6 +121,8 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     let mut warnings = model.warnings.clone();
     let mut files = Vec::new();
     let mut copies = Vec::new();
+    // Every page inlines the selected theme's icon sprite.
+    let icons = SiteTheme::selected(input.theme.map(|(theme, _)| theme)).sprite();
 
     // The grammars every page's code blocks need, written once under
     // `assets/grammars/` beside the page script.
@@ -146,6 +148,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
 
         let rendered = render_note(
             &model,
+            &icons,
             index,
             note,
             &links,
@@ -179,6 +182,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             let mut repeated = Vec::new();
             let rendered = render_note(
                 &model,
+                &icons,
                 index,
                 note,
                 &links,
@@ -196,7 +200,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
 
     files.push(OutputFile {
         path: format!("{ASSETS_DIR}/{}", frontend::APP_SCRIPT),
-        contents: frontend::APP_JS.as_bytes().to_vec(),
+        contents: frontend::app_js().as_bytes().to_vec(),
     });
     // The search data covers the exported set; the page script loads it
     // the first time a reader opens the search.
@@ -222,6 +226,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         let body = nav::overview(&model, "");
         let page = chrome(
             &model,
+            &icons,
             INDEX_PAGE,
             &model.title,
             body,
@@ -247,6 +252,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         );
         let page = chrome(
             &model,
+            &icons,
             &section.page,
             &section.title,
             body,
@@ -286,6 +292,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             );
             let page = chrome(
                 &model,
+                &icons,
                 &group.page,
                 &group.value,
                 body,
@@ -321,10 +328,10 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             }
         }
         None => {
-            for (relative, contents) in theme::BUILTIN_FILES {
+            for asset in theme::BUILTIN_FILES {
                 files.push(OutputFile {
-                    path: format!("{ASSETS_DIR}/{relative}"),
-                    contents: contents.to_vec(),
+                    path: format!("{ASSETS_DIR}/{}", asset.path),
+                    contents: asset.contents(),
                 });
             }
         }
@@ -470,10 +477,11 @@ struct RenderedNote {
 /// warning; its block stays plain.
 ///
 /// Every argument is a distinct input of the page; bundling them into a
-/// struct would name the same eight things one level down.
+/// struct would name the same nine things one level down.
 #[allow(clippy::too_many_arguments)]
 fn render_note(
     model: &Model,
+    icons: &str,
     index: usize,
     note: &Note,
     links: &[ResolvedLink],
@@ -488,7 +496,7 @@ fn render_note(
         prefix: prefix.clone(),
         note_dir,
     };
-    let emitted = html::emit(&note.body, links, &targets);
+    let emitted = html::emit(&note.body, links, &targets, Some(&note.title));
     let entry = &model.notes[index];
 
     let mut wanted: Vec<&str> = Vec::new();
@@ -507,14 +515,23 @@ fn render_note(
         .map(|grammar| grammar.name.clone())
         .collect();
 
-    let body = NoteFragment {
+    let tags = entry
+        .tags
+        .iter()
+        .map(|tag| TagLink {
+            label: tag.clone(),
+            href: Some(format!("{prefix}tags/{tag}/index.html")),
+        })
+        .collect();
+    let mut body = NoteFragment {
         title: entry.title.clone(),
         created: entry.created.clone(),
-        tags: entry.tags.clone(),
+        tags,
         fields: frontmatter::fields(&note.frontmatter),
         body: emitted.html,
     }
     .render();
+    body.push_str(&nav::related(model, &model.related(index), &prefix));
 
     let placement = model.placements[index].as_ref();
     let crumbs = placement
@@ -531,6 +548,7 @@ fn render_note(
 
     let page = chrome(
         model,
+        icons,
         at,
         &entry.title,
         body,
@@ -570,6 +588,7 @@ fn breadcrumbs(model: &Model, placement: &Placement, prefix: &str) -> Vec<PageLi
 #[allow(clippy::too_many_arguments)]
 fn chrome(
     model: &Model,
+    icons: &str,
     at: &str,
     title: &str,
     body: String,
@@ -593,6 +612,7 @@ fn chrome(
         title: title.to_string(),
         stylesheet: format!("{prefix}{ASSETS_DIR}/{}", theme::STYLESHEET),
         scripts,
+        icons: icons.to_string(),
         sidebar: nav::sidebar(model, &prefix, at),
         prefix,
         breadcrumbs,
@@ -827,12 +847,12 @@ mod tests {
         // Breadcrumb from the first placement: the view section, then the
         // group; the sidebar opens that group.
         assert!(
-            page.contains("<li><a href=\"../views/by-status/done/index.html\">done</a></li>"),
+            page.contains("<use href=\"#icon-chevron-right\"/></svg><a href=\"../views/by-status/done/index.html\">done</a></li>"),
             "{page}"
         );
         assert!(
             page.contains(
-                "<details open><summary><a href=\"../views/by-status/done/index.html\">done</a>"
+                "<details open><summary><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../views/by-status/done/index.html\">done</a>"
             ),
             "{page}"
         );
@@ -862,7 +882,7 @@ mod tests {
         assert!(script.contains("w.__ntropyGrammars.push({"), "{script}");
         assert!(script.contains("\"name\":\"rust\""), "{script}");
         assert!(built.file("assets/grammars/cobol.js").is_none());
-        assert_eq!(text(&built, "assets/app.js"), frontend::APP_JS);
+        assert_eq!(text(&built, "assets/app.js"), frontend::app_js());
     }
 
     #[test]
@@ -970,7 +990,7 @@ mod tests {
         let tags = text(&built, "tags/index.html");
         assert!(
             tags.contains(
-                "<a href=\"../tags/programming/index.html\">programming</a> <span class=\"count\">1</span>"
+                "<a class=\"chip\" href=\"../tags/programming/index.html\">programming<span class=\"count\">1</span></a>"
             ),
             "{tags}"
         );
@@ -980,11 +1000,15 @@ mod tests {
             "{programming}"
         );
         assert!(
-            programming.contains("<a href=\"../../tags/programming/rust/index.html\">rust</a>"),
+            programming.contains(
+                "<a class=\"chip\" href=\"../../tags/programming/rust/index.html\">rust<span class=\"count\">1</span></a>"
+            ),
             "{programming}"
         );
         assert!(
-            programming.contains("<a href=\"../../notes/rust-tips.html\">Rust Tips</a>"),
+            programming.contains(
+                "<a class=\"note-row-title\" href=\"../../notes/rust-tips.html\">Rust Tips</a>"
+            ),
             "{programming}"
         );
         let rust = text(&built, "tags/programming/rust/index.html");
@@ -994,7 +1018,7 @@ mod tests {
         );
         assert!(
             rust.contains(
-                "<li><a href=\"../../../tags/programming/index.html\">programming</a></li>"
+                "<use href=\"#icon-chevron-right\"/></svg><a href=\"../../../tags/programming/index.html\">programming</a></li>"
             ),
             "{rust}"
         );
@@ -1010,6 +1034,10 @@ mod tests {
         let theme = SiteTheme {
             name: "corporate".to_string(),
             stylesheet: "body{}".to_string(),
+            icons: std::collections::BTreeMap::from([(
+                "x".to_string(),
+                "<symbol id=\"icon-x\"/>".to_string(),
+            )]),
         };
         let notes = notes(vault.path());
         let vault_ids = ids(&notes);
@@ -1034,6 +1062,13 @@ mod tests {
             built.file("assets/style.css").is_none(),
             "the built-in stylesheet is not written"
         );
+        // The pages inline the theme's own sprite.
+        let page = text(&built, "notes/rust-tips.html");
+        assert!(
+            page.contains("aria-hidden=\"true\"><symbol id=\"icon-x\"/></svg>"),
+            "{page}"
+        );
+        assert!(!page.contains("<symbol id=\"icon-menu\""), "{page}");
     }
 
     #[test]

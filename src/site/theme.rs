@@ -6,17 +6,23 @@
 //!
 //! A site theme is a directory `<vault>/.ntropy/themes/site/<name>/` of
 //! stylesheets and static assets over an HTML structure that is ntropy's own.
-//! Its entry point is `style.css`; every file in the directory is shipped
-//! beside the pages. The built-in theme is the same set of files embedded in
-//! the binary, and `site theme init` writes them into a vault as the starting
-//! point for a custom theme.
+//! Its entry point is `style.css`; `icons/*.svg` become the icon sprite
+//! every page inlines ([`super::icons`]), layered by name over the built-in
+//! icons; every file in the directory is shipped beside the pages. The
+//! built-in theme is the same layout, everything under `src/site/theme/`,
+//! embedded in the binary by the build script; `site theme init` writes it
+//! into a vault as the starting point for a custom theme.
 //!
 //! Selection reuses the render themes' rule: `--theme` over `[site] theme`,
 //! with the reserved name `default` meaning the built-in theme from either
 //! source ([`crate::render::theme::select`]).
 
+use std::collections::BTreeMap;
 use std::path::Path;
+use std::sync::OnceLock;
 
+use super::embedded::{self, Asset};
+use super::icons;
 use crate::render::RenderError;
 use crate::render::theme::validate_name;
 use crate::vault::layout::Layout;
@@ -24,59 +30,132 @@ use crate::vault::layout::Layout;
 /// The stylesheet a site theme directory must contain.
 pub const STYLESHEET: &str = "style.css";
 
-/// The files of the built-in theme, as `(relative path, contents)`. The
-/// stylesheet is first.
-pub const BUILTIN_FILES: &[(&str, &[u8])] = &[(STYLESHEET, include_bytes!("theme/style.css"))];
+/// The files of the built-in theme: every file under `src/site/theme/`,
+/// embedded by the build script so a file added there ships without being
+/// listed. The stylesheet, the fonts it declares, and their license.
+pub const BUILTIN_FILES: &[Asset] = include!(concat!(env!("OUT_DIR"), "/site_theme_files.rs"));
 
-/// A site theme ready to use: its name and its stylesheet.
+/// A site theme ready to use: its name, its stylesheet, and its icons.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SiteTheme {
     /// The name as selected, for reports; `default` for the built-in theme.
     pub name: String,
     /// The contents of `style.css`.
     pub stylesheet: String,
+    /// The icons by name, each as its `<symbol>`: the built-in set with the
+    /// theme's own `icons/*.svg` layered over it by name.
+    pub icons: BTreeMap<String, String>,
 }
 
 impl SiteTheme {
     /// The theme embedded in the binary.
     pub fn builtin() -> Self {
-        let (_, css) = BUILTIN_FILES[0];
         SiteTheme {
             name: crate::render::theme::DEFAULT_THEME.to_string(),
-            stylesheet: String::from_utf8(css.to_vec())
-                .expect("the embedded stylesheet is UTF-8 by construction"),
+            stylesheet: embedded::find(BUILTIN_FILES, STYLESHEET)
+                .expect("the built-in theme has a stylesheet")
+                .text(),
+            icons: builtin_icons().clone(),
         }
     }
 
-    /// The stylesheet of `theme`, or of the built-in theme when none is
-    /// selected.
-    pub fn stylesheet_of(theme: Option<&SiteTheme>) -> String {
-        match theme {
-            Some(theme) => theme.stylesheet.clone(),
-            None => SiteTheme::builtin().stylesheet,
-        }
+    /// `theme`, or the built-in theme when none is selected.
+    pub fn selected(theme: Option<&SiteTheme>) -> SiteTheme {
+        theme.cloned().unwrap_or_else(SiteTheme::builtin)
     }
+
+    /// The hidden inline sprite of the theme's icons, what every page
+    /// carries.
+    pub fn sprite(&self) -> String {
+        icons::sprite(&self.icons)
+    }
+}
+
+/// The built-in icons, parsed once per process from the embedded
+/// `icons/*.svg`; a file there that is no icon is a broken build.
+fn builtin_icons() -> &'static BTreeMap<String, String> {
+    static ICONS: OnceLock<BTreeMap<String, String>> = OnceLock::new();
+    ICONS.get_or_init(|| {
+        let prefix = format!("{}/", icons::ICONS_DIR);
+        BUILTIN_FILES
+            .iter()
+            .filter_map(|asset| {
+                let name = icons::name_of(asset.path.strip_prefix(&prefix)?)?;
+                let symbol = icons::symbol(name, &asset.text())
+                    .expect("the built-in icons are SVG files with a root element");
+                Some((name.to_string(), symbol))
+            })
+            .collect()
+    })
 }
 
 /// Load the site theme named `name` from the vault.
 ///
 /// The name is validated as a single path component first. A theme
 /// directory without a `style.css` is reported as a missing theme naming
-/// that path, since the stylesheet is what makes a directory a theme.
+/// that path, since the stylesheet is what makes a directory a theme. The
+/// `.svg` files of an `icons/` directory beside it replace or add icons by
+/// name; one that is no SVG fails the load naming the file.
 pub fn load(layout: &Layout, name: &str) -> Result<SiteTheme, RenderError> {
     validate_name(name)?;
     let path = stylesheet_path(layout, name);
-    match std::fs::read_to_string(&path) {
-        Ok(stylesheet) => Ok(SiteTheme {
-            name: name.to_string(),
-            stylesheet,
-        }),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(RenderError::ThemeNotFound {
-            name: name.to_string(),
-            path,
-        }),
-        Err(source) => Err(RenderError::ThemeRead { path, source }),
+    let stylesheet = match std::fs::read_to_string(&path) {
+        Ok(stylesheet) => stylesheet,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(RenderError::ThemeNotFound {
+                name: name.to_string(),
+                path,
+            });
+        }
+        Err(source) => return Err(RenderError::ThemeRead { path, source }),
+    };
+    let mut icons = builtin_icons().clone();
+    let icons_dir = layout.site_theme_dir(name).join(icons::ICONS_DIR);
+    let entries = match std::fs::read_dir(&icons_dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(SiteTheme {
+                name: name.to_string(),
+                stylesheet,
+                icons,
+            });
+        }
+        Err(source) => {
+            return Err(RenderError::ThemeRead {
+                path: icons_dir,
+                source,
+            });
+        }
+    };
+    for entry in entries {
+        let path = entry
+            .map_err(|source| RenderError::ThemeRead {
+                path: icons_dir.clone(),
+                source,
+            })?
+            .path();
+        let Some(icon) = path
+            .file_name()
+            .and_then(|file| file.to_str())
+            .and_then(icons::name_of)
+        else {
+            continue;
+        };
+        let svg = std::fs::read_to_string(&path).map_err(|source| RenderError::ThemeRead {
+            path: path.clone(),
+            source,
+        })?;
+        let symbol = icons::symbol(icon, &svg).map_err(|reason| RenderError::ThemeIcon {
+            path: path.clone(),
+            reason: reason.to_string(),
+        })?;
+        icons.insert(icon.to_string(), symbol);
     }
+    Ok(SiteTheme {
+        name: name.to_string(),
+        stylesheet,
+        icons,
+    })
 }
 
 /// `<vault>/.ntropy/themes/site/<name>/style.css`.
@@ -93,12 +172,12 @@ pub fn write_builtin(dir: &Path) -> std::io::Result<()> {
         ));
     }
     std::fs::create_dir_all(dir)?;
-    for (relative, contents) in BUILTIN_FILES {
-        let path = dir.join(relative);
+    for asset in BUILTIN_FILES {
+        let path = dir.join(asset.path);
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, contents)?;
+        std::fs::write(path, asset.contents())?;
     }
     Ok(())
 }
@@ -122,11 +201,54 @@ mod tests {
             theme.stylesheet.contains("--"),
             "the stylesheet defines variables"
         );
-        assert_eq!(BUILTIN_FILES[0].0, STYLESHEET);
+        assert!(embedded::find(BUILTIN_FILES, STYLESHEET).is_some());
+    }
+
+    /// The built-in icons are exactly the `.svg` files under `icons/`, and
+    /// every icon the markup references is among them.
+    #[test]
+    fn the_builtin_icons_come_from_the_icons_directory_and_cover_the_markup() {
+        let theme = SiteTheme::builtin();
+        let files = BUILTIN_FILES
+            .iter()
+            .filter(|asset| asset.path.starts_with("icons/") && asset.path.ends_with(".svg"))
+            .count();
+        assert_eq!(theme.icons.len(), files);
+        for name in [
+            "menu",
+            "x",
+            "search",
+            "monitor",
+            "sun",
+            "moon",
+            "tag",
+            "chevron-right",
+            "chevron-left",
+            "info",
+            "lightbulb",
+            "message-square-warning",
+            "triangle-alert",
+            "octagon-alert",
+        ] {
+            assert!(theme.icons.contains_key(name), "{name} is missing");
+        }
+        let sprite = theme.sprite();
+        assert!(
+            sprite.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\" style=\"display:none\"")
+        );
+        assert!(
+            sprite.contains("<symbol id=\"icon-search\" viewBox=\"0 0 24 24\""),
+            "{sprite}"
+        );
+        assert!(
+            BUILTIN_FILES
+                .iter()
+                .any(|asset| asset.path == "icons/LICENSE")
+        );
     }
 
     #[test]
-    fn a_vault_theme_loads_its_stylesheet() {
+    fn a_vault_theme_loads_its_stylesheet_and_inherits_the_builtin_icons() {
         let (_dir, layout) = vault();
         let dir = layout.site_theme_dir("corporate");
         std::fs::create_dir_all(&dir).expect("theme dir");
@@ -134,6 +256,53 @@ mod tests {
         let theme = load(&layout, "corporate").expect("loads");
         assert_eq!(theme.name, "corporate");
         assert_eq!(theme.stylesheet, "body { color: red }");
+        assert_eq!(theme.icons, SiteTheme::builtin().icons);
+    }
+
+    #[test]
+    fn a_vault_theme_layers_its_icons_over_the_builtin_ones_by_name() {
+        let (_dir, layout) = vault();
+        let dir = layout.site_theme_dir("corporate");
+        std::fs::create_dir_all(dir.join("icons")).expect("theme dirs");
+        std::fs::write(dir.join("style.css"), "body {}").expect("write css");
+        std::fs::write(
+            dir.join("icons/tag.svg"),
+            "<svg viewBox=\"0 0 1 1\"><g/></svg>",
+        )
+        .expect("override");
+        std::fs::write(
+            dir.join("icons/brand.svg"),
+            "<svg viewBox=\"0 0 2 2\"><g/></svg>",
+        )
+        .expect("addition");
+        std::fs::write(dir.join("icons/LICENSE"), "MIT").expect("not an icon");
+        let theme = load(&layout, "corporate").expect("loads");
+        assert_eq!(theme.icons.len(), SiteTheme::builtin().icons.len() + 1);
+        assert_eq!(
+            theme.icons["tag"],
+            "<symbol id=\"icon-tag\" viewBox=\"0 0 1 1\"><g/></symbol>"
+        );
+        assert_eq!(
+            theme.icons["brand"],
+            "<symbol id=\"icon-brand\" viewBox=\"0 0 2 2\"><g/></symbol>"
+        );
+        assert_eq!(theme.icons["search"], SiteTheme::builtin().icons["search"]);
+    }
+
+    #[test]
+    fn a_theme_icon_that_is_no_svg_fails_the_load_naming_it() {
+        let (_dir, layout) = vault();
+        let dir = layout.site_theme_dir("corporate");
+        std::fs::create_dir_all(dir.join("icons")).expect("theme dirs");
+        std::fs::write(dir.join("style.css"), "body {}").expect("write css");
+        std::fs::write(dir.join("icons/broken.svg"), "<p>nope</p>").expect("broken");
+        match load(&layout, "corporate") {
+            Err(RenderError::ThemeIcon { path, reason }) => {
+                assert!(path.ends_with("icons/broken.svg"));
+                assert_eq!(reason, "no <svg> root element");
+            }
+            other => panic!("expected ThemeIcon, got {other:?}"),
+        }
     }
 
     #[test]
@@ -170,16 +339,14 @@ mod tests {
     }
 
     #[test]
-    fn stylesheet_of_falls_back_to_the_builtin() {
-        assert_eq!(
-            SiteTheme::stylesheet_of(None),
-            SiteTheme::builtin().stylesheet
-        );
+    fn selected_falls_back_to_the_builtin() {
+        assert_eq!(SiteTheme::selected(None), SiteTheme::builtin());
         let custom = SiteTheme {
             name: "x".to_string(),
             stylesheet: "x".to_string(),
+            icons: BTreeMap::new(),
         };
-        assert_eq!(SiteTheme::stylesheet_of(Some(&custom)), "x");
+        assert_eq!(SiteTheme::selected(Some(&custom)), custom);
     }
 
     #[test]
@@ -188,7 +355,14 @@ mod tests {
         let target = layout.site_theme_dir("mine");
         write_builtin(&target).expect("writes");
         let written = std::fs::read(target.join(STYLESHEET)).expect("stylesheet written");
-        assert_eq!(written, BUILTIN_FILES[0].1);
+        assert_eq!(written, SiteTheme::builtin().stylesheet.as_bytes());
+        for asset in BUILTIN_FILES {
+            assert!(
+                target.join(asset.path).is_file(),
+                "{} is written",
+                asset.path
+            );
+        }
         // The copy is loadable as a vault theme without any edit.
         let theme = load(&layout, "mine").expect("loads");
         assert_eq!(theme.stylesheet, SiteTheme::builtin().stylesheet);

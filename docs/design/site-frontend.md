@@ -2,7 +2,8 @@
 
 The code that runs in the browser inside an exported site
 ([site-export.md](site-export.md)): search, the heading outline, the
-light/dark toggle, syntax highlighting. Decisions are recorded in
+color scheme switch, the drawer's keyboard handling, syntax
+highlighting. Decisions are recorded in
 [ADR 0051](../adr/0051-browser-side-code-in-typescript-with-committed-build.md)
 (toolchain and layout),
 [ADR 0052](../adr/0052-client-side-search-as-a-typescript-query-dsl.md)
@@ -28,9 +29,9 @@ files. Data the scripts need (the search data, a page's grammars) is
 embedded in script files.
 
 The build produces two files. `app.js` is the page script, one
-self-contained IIFE holding the theme toggle, the outline tracking,
-search, and the highlighter runtime with Shiki's core, its JavaScript
-regex engine, and the two GitHub themes. `grammars.zst` holds every
+self-contained IIFE holding the scheme switch, the drawer handling, the
+outline tracking, search, and the highlighter runtime with Shiki's core,
+its JavaScript regex engine, and the two GitHub themes. `grammars.zst` holds every
 grammar the curated languages need, their embedded languages included
 (110 grammars for the 72 curated ones), as one JSON array compressed with
 zstd; the curated list itself is `site/grammars.json`. The build is
@@ -49,6 +50,14 @@ runs under is pinned in `site/.bun-version`, which CI reads.
 Source files under `site/` carry the MPL-2.0 header in their comment
 syntax; the generated files under `src/site/dist/` carry none. A test
 enforces both.
+
+The binary embeds `src/site/dist/` and the built-in theme
+`src/site/theme/` through a build script that walks both directories
+into generated tables, so a file added to either ships without being
+listed. Each file is zstd-compressed with the `ruzstd` encoder, a build
+dependency only, and stored compressed when that is smaller, raw
+otherwise (the fonts and the grammar blob are compressed formats
+already); the export inflates on demand with the same crate.
 
 ## Search
 
@@ -85,6 +94,9 @@ ties keeping the newest-first order. Each result links to the note's page
 and to the page of each of its tags. The list shows at most 50 results.
 Escape closes the panel.
 
+`/` anywhere on a page opens the panel with the query box focused, and
+Escape closes it; the search button shows the key.
+
 No search library and no WebAssembly are involved.
 
 ## Syntax highlighting
@@ -104,15 +116,22 @@ powershell, toml, ini, dockerfile, makefile, sql, diff, lua, typst, latex.
 How the grammars are packaged and reach a page is described under
 "Toolchain and layout" above.
 
-## Outline and theme toggle
+## Outline, scheme switch, drawer
 
 The outline lists the note's headings by their ids and marks the entry of
 the heading the reader is at with `aria-current` while scrolling: the
 last heading whose top has passed the reading line, a fifth of the
 viewport down.
 
-The light/dark toggle sets `data-theme` on the root element and remembers
-the choice in `localStorage` under `ntropy-theme`; the stylesheet follows
-the system preference when the attribute is absent. A one-line inline
-script in the page head applies the stored choice before the first paint,
-so a dark page does not flash light.
+The scheme switch has three choices, system, light, and dark. Light and
+dark set `data-theme` on the root element and are remembered in
+`localStorage` under `ntropy-theme`; system removes both, and the
+stylesheet follows the OS preference when the attribute is absent. A
+one-line inline script in the page head applies the stored choice before
+the first paint, so a dark page does not flash light.
+
+The drawer the sidebar becomes on narrow screens needs no script: the
+menu link targets `#sidebar` and the stylesheet shows the pane while it
+is the target. The script adds what links cannot: Escape closes it, and
+following a link inside closes it so the next page does not open with
+the drawer over it.

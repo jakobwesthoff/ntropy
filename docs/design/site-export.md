@@ -14,7 +14,8 @@ templates' engine in
 
 The export is a classic static-site generator. Rust pre-renders every
 page; the browser-side scripts add search, the heading outline, the
-light/dark toggle, and syntax highlighting, and never construct a page.
+color scheme switch, the drawer's keyboard handling, and syntax
+highlighting, and never construct a page.
 The output is a directory of files that any file host serves, and it
 works when opened straight from disk: data the scripts need is embedded
 in classic script files, every page is a real `.html` file, links are
@@ -72,10 +73,11 @@ One directory per node:
     tags/<a>/<b>/index.html
     views/<name>/index.html
     views/<name>/<group>/<sub>/index.html
-    assets/                      the theme's files, style.css among them,
-                                 the page script app.js, and under
-                                 assets/grammars/ the highlighting grammars
-                                 the site's code blocks need
+    assets/                      the theme's files (style.css, icons/,
+                                 fonts/, and whatever else it holds), the
+                                 page script app.js, the search data, and
+                                 under assets/grammars/ the highlighting
+                                 grammars the site's code blocks need
     files/<vault path>           vault files and directories the notes
                                  reference
 
@@ -85,19 +87,25 @@ that page, climbing to the site root with `../` per directory level, so
 the site works from `file://` and from any path on a host.
 
 **Front page.** The configured index note, or the generated overview:
-site title, note count, the newest notes, the top-level tags with counts,
-the configured views, each linking into its index page.
+site title, the note count with the span from the oldest to the newest
+date, the newest notes, and for each section its top-level groups with
+counts, each linking into its page.
 
 **Note page.** `notes/<slug>.html`. Two notes may share a slug with
 different ULIDs; only the colliding notes are named `<slug>-<tail>.html`,
 the tail being the shortest ULID suffix of at least three characters that
 separates them, the rule the view leaves use
 ([vault-layout-and-views.md](vault-layout-and-views.md)). The page shows
-the title, tags as chips, and every other frontmatter field as key/value
-beneath, nested values included; hiding a field is a theme's job. It has
-an outline built from the note's headings that highlights the current
-section while scrolling, previous and next links, breadcrumbs, and the
-light/dark toggle. There are no backlinks.
+the title, the date, the tags each linking to its tag page, and every
+other frontmatter field as key/value beneath, nested values included;
+hiding a field is a theme's job. A body that opens with a level-one
+heading reading exactly the title has that heading dropped
+([html-engine.md](html-engine.md)). The page has an outline built from
+the note's headings that highlights the current section while
+scrolling, previous and next links, breadcrumbs, and, after the body,
+the related notes: the notes sharing the most tags with it, a tag's
+ancestors counted (`a/b` shares `a` with `a/c`), at most eight, ties
+newest first, none when nothing is shared. There are no backlinks.
 
 **Tag pages.** `tags/index.html` is the tag tree. A tag's page lists the
 notes carrying the tag or any descendant tag, the sub-path rule of the
@@ -108,16 +116,26 @@ page per group nested as the filesystem view nests its directories, with
 the same grouping rules: a list-valued field places a note under each
 value, `/` nests, values are normalized, notes without the field are
 absent. A group's page lists its child groups and, like a tag page, the
-notes of the group and of every group below it.
+notes of the group and of every group below it. A view whose field is
+`tags` is no section and gets no pages: the tag section is that view.
+
+**Lists.** Wherever notes are listed (front page, tag and group pages,
+related notes, search results) each note is one row: the date, the title
+linking to the page, and the tags linking to their pages, newest first.
 
 **Order.** Notes inside a group, on a tag page, and on a group page are
 sorted newest first, ULID descending, as the CLI lists them.
 
-**Sidebar.** Each configured view and the tag hierarchy is a collapsible
-section whose groups nest as above. There is no hand-curated order. A
-note's first view and group in sidebar order define its previous and next
-links and its breadcrumb, statically, regardless of how the reader
-arrived.
+**Sidebar.** Each configured view is a collapsible section whose groups
+nest as above; it starts open only when it holds the current page, and
+so does every group on the page's trail. The tag section lists the
+top-level tags with their note counts, the one holding the current page
+marked; the tree below lives on the tag pages. There is no hand-curated
+order. A note's first view and group in sidebar order define its
+previous and next links and its breadcrumb, statically, regardless of
+how the reader arrived. On narrow screens the sidebar is a drawer the
+header's menu button opens by targeting it, which needs no script;
+Escape and following a link inside close it.
 
 ## Assets
 
@@ -138,19 +156,39 @@ The themes directory has one subdirectory per type:
       typst/<name>.typ     Typst themes ([rendering.md](rendering.md))
       site/<name>/         site themes
 
-A site theme is a directory of stylesheets and static assets. Its entry
-point is `style.css`, which every page links and which `render --to html`
-inlines; a directory without it is not a theme. The HTML structure of
-every page is ntropy's own, so a theme controls appearance, not markup. A
-theme provides the palettes for both light and dark mode; the page follows
-the system preference by default and remembers a manual switch in the
-browser. The built-in theme keeps every color in a custom property on the
-root element, so a theme that wants only a palette redefines those and
-keeps the rest.
+A site theme is a directory with one layout, the built-in theme and a
+vault theme alike
+([ADR 0055](../adr/0055-theme-directory-layout-with-fonts-icons-and-embedded-assets.md)):
+
+    style.css        the entry point, required
+    icons/*.svg      one icon per file
+    fonts/*          files the stylesheet references with url(fonts/...)
+    anything else    copied under assets/ as it is
+
+Every page links `style.css` and `render --to html` inlines it; a
+directory without it is not a theme. The HTML structure of every page is
+ntropy's own, so a theme controls appearance, not markup. A theme
+provides the palettes for both light and dark mode; the page follows the
+system preference by default and remembers a manual choice in the
+browser. The built-in theme keeps every color and typeface in a custom
+property on the root element, so a theme that wants only a palette
+redefines those and keeps the rest.
+
+The icons are the theme's `icons/` directory. At export every
+`<name>.svg` in it becomes a `<symbol id="icon-<name>">` of a hidden
+sprite inlined into every page, and the markup shows an icon with
+`<use href="#icon-<name>">`; inlining is what makes icons work over
+`file://`. A vault theme's icons are layered by name over the built-in
+ones, so one file replaces one icon and a theme without the directory
+keeps them all. A file under `icons/` without an `<svg>` root fails the
+export naming it. The built-in theme's icons are Lucide's, its fonts the
+three IBM Plex families, each committed with its license.
 
 Selection is `--theme`, then `[site] theme`, then the built-in theme. The
-binary embeds exactly one built-in theme, and `site theme init` copies
-its files out as the starting point for a custom one.
+binary embeds exactly one built-in theme, every file under
+`src/site/theme/`, and `site theme init` copies them out as the starting
+point for a custom one. The README's theme section is the contract a
+theme author writes against.
 
 ## Search data
 

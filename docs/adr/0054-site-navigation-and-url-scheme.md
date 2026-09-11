@@ -6,6 +6,27 @@ Date: 2026-09-11
 
 Accepted
 
+Amended 2026-09-11, from the design pass on the exported pages (the
+user's answers are recorded in `docs/research/web-export/decisions.md`,
+Q55 to Q66):
+
+- A view whose field is `tags` is no section and gets no pages; the tag
+  section is that view already.
+- The sidebar's tag section lists the top-level tags with their note
+  counts; the tree below lives on the tag pages. A view section starts
+  collapsed unless it holds the current page. On narrow screens the
+  sidebar is a drawer behind a menu button.
+- A note page's tags link to their tag pages, and the page ends with the
+  notes sharing the most tags with it, ancestors counted, at most eight,
+  ties newest first.
+- A body whose first block is a level-one heading reading exactly the
+  note's title has that heading dropped, on the site and in
+  `render --to html`.
+- The scheme switch has three states, system, light, and dark.
+- `/` opens the search with the query box focused; Escape closes it.
+- Note lists are one row per note, date, title, and tag links, newest
+  first, not grouped.
+
 Defines the pages the export of
 [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md)
 writes. Views come from

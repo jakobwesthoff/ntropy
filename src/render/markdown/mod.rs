@@ -175,6 +175,14 @@ pub trait Output {
 
     fn paragraph(&mut self, body: &str) -> String;
 
+    /// The title the output shows outside the body, if any. A body whose
+    /// first block is a level-one heading reading exactly this text repeats
+    /// that title; the walk skips the heading, spending neither an id nor a
+    /// block separator on it, so the output never sees it.
+    fn dropped_title(&self) -> Option<&str> {
+        None
+    }
+
     /// A heading. `body` is the rendered inline content; `heading` carries
     /// the level, the id, and the plain text.
     fn heading(&mut self, heading: &Heading, body: &str) -> String;
@@ -844,6 +852,13 @@ impl<'a, O: Output> Walker<'a, O> {
                     .heading_text
                     .take()
                     .expect("a heading end closes the heading that set the text");
+                let opens_document = self.stack.len() == 1 && !self.stack[0].nonempty;
+                if opens_document
+                    && level == HeadingLevel::H1
+                    && self.output.dropped_title() == Some(text.trim())
+                {
+                    return;
+                }
                 let id = self.heading_id(&text);
                 let heading = Heading { level, id, text };
                 let rendered = self.output.heading(&heading, &body);
@@ -1053,11 +1068,16 @@ mod tests {
         /// Every footnote content the walk handed over, in call order.
         footnotes: Vec<String>,
         section: bool,
+        /// The title shown outside the body, for the leading-heading drop.
+        title: Option<String>,
     }
 
     impl Output for Trace {
         fn text(&mut self, text: &str) -> String {
             text.to_string()
+        }
+        fn dropped_title(&self) -> Option<&str> {
+            self.title.as_deref()
         }
         fn inline_code(&mut self, code: &str) -> String {
             format!("(code {code})")
@@ -1371,6 +1391,7 @@ mod tests {
         let mut output = Trace {
             footnotes: Vec::new(),
             section: true,
+            title: None,
         };
         let (out, _) = walk("x[^a]\n\n[^a]: sees[^b]\n\n[^b]: B", &[], &mut output);
         assert!(
@@ -1417,6 +1438,29 @@ mod tests {
             trace("## Hello *big* `wide` [world](https://e.org)!"),
             "(h2 #hello-big-wide-world \"Hello big wide world!\" Hello (Emph big) (code wide) (link https://e.org world)!)\n"
         );
+    }
+
+    #[test]
+    fn a_leading_h1_repeating_the_title_is_skipped_before_ids_and_separators() {
+        let mut titled = Trace {
+            title: Some("Intro".to_string()),
+            ..Trace::default()
+        };
+        let (out, _) = walk("# Intro\n\npara\n\n# Intro", &[], &mut titled);
+        // No separator is spent on the skipped heading, and the repeat deeper
+        // in the body takes the first id.
+        assert_eq!(out, "(p para)\n\n(h1 #intro \"Intro\" Intro)\n");
+        // Only the first block qualifies; a lower level or a different text
+        // never does.
+        let (out, _) = walk("## Intro\n\n# Intro", &[], &mut titled);
+        assert_eq!(
+            out,
+            "(h2 #intro \"Intro\" Intro)\n\n(h1 #intro-1 \"Intro\" Intro)\n"
+        );
+        let (out, _) = walk("# intro", &[], &mut titled);
+        assert_eq!(out, "(h1 #intro \"intro\" intro)\n");
+        // Without a title nothing is dropped.
+        assert_eq!(trace("# Intro"), "(h1 #intro \"Intro\" Intro)\n");
     }
 
     #[test]

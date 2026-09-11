@@ -32,13 +32,13 @@ engine's:
 | :--- | :--- |
 | Raw HTML in the body | passed through verbatim (the Typst engine drops it with a warning) |
 | Math, `mermaid` fences | as the Typst engine: literal text, an ordinary code block |
-| Heading | an `id` by GitHub's rule: lowercase, punctuation dropped except hyphens and underscores, spaces to hyphens, Unicode letters kept, duplicates suffixed `-1`, `-2` |
+| Heading | an `id` by GitHub's rule: lowercase, punctuation dropped except hyphens and underscores, spaces to hyphens, Unicode letters kept, duplicates suffixed `-1`, `-2`. A level-one heading that opens the body and reads exactly the note's title is skipped by the walk, before an id is spent on it: the page shows the title in its header already |
 | Note link, resolved | `<a class="note-link">` showing the target's current title, its `href` decided by the caller: `<slug>.html` beside a single-note artifact, the collision-safe page name in the site |
 | Note link, unresolved | the display text, as in the Typst engine |
 | Local image or link to a vault file | `<img>` or `<a>` whose `src`/`href` the caller decides; the path as written is recorded so the export copies the file. Local means no URI scheme, not protocol-relative, not a fragment |
 | Remote image | `<img>` with the URL as written; the browser fetches it, so nothing degrades and nothing warns |
 | Code block | `<pre><code class="language-<tag>">`, the tag being the info string's first token, recorded per body for the highlighter ([site-frontend.md](site-frontend.md)) |
-| Callout | `<div class="callout callout-<kind>">` with a `<p class="callout-title">` naming the kind |
+| Callout | `<div class="callout callout-<kind>">` with a `<p class="callout-title">` naming the kind, opening on a `<use>` of the kind's icon from the page's sprite: `info`, `lightbulb`, `message-square-warning`, `triangle-alert`, `octagon-alert` for note, tip, important, warning, caution |
 | Task checkbox | a disabled `<input type="checkbox">`, checked or not |
 | Footnote | a numbered `<sup class="footnote-ref">` at every reference and a `<section class="footnotes">` after the body listing each definition once with a back-link, numbered in first-reference order |
 
@@ -51,10 +51,11 @@ artifact lands relative to other artifacts and to the vault.
 
 ## The `render --to html` artifact
 
-One self-contained file: the site theme's stylesheet inlined, the note
-content and its frontmatter block, and note links targeting `<slug>.html`
-beside the artifact, the HTML counterpart of the `<slug>.pdf` convention.
-No sidebar, no search. The theme is selected as the site selects it,
+One self-contained file: the site theme's stylesheet and icon sprite
+inlined, the note content and its frontmatter block, and note links
+targeting `<slug>.html` beside the artifact, the HTML counterpart of the
+`<slug>.pdf` convention. The theme's fonts are not inlined; the
+stylesheet's stacks fall back to system faces. No sidebar, no search. The theme is selected as the site selects it,
 `--theme` then `[site] theme`, resolved in `.ntropy/themes/site/`; the
 `pdf` and `typst` formats keep `[render] theme` and `.ntropy/themes/typst/`.
 

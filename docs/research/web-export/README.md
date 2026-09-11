@@ -18,14 +18,16 @@ Started 2026-09-10.
 
 ## State on 2026-09-11
 
-Every question round is decided (Q1 to Q54); no question is pending.
-`design-notes.md` is the consolidated result. The settled design lives
-in ADRs 0046 to 0054 and in `docs/design/site-export.md`,
-`html-engine.md`, and `site-frontend.md`. The implementation stages
-(the Markdown walk with the HTML emitter, the `html` render format with
-site themes, the `site` command, the browser toolchain with
-highlighting, theme toggle, and outline, and the client-side search)
-are committed on the branch `site-generation`.
+Every question round is decided (Q1 to Q66); no question is pending.
+`design-notes.md` is the consolidated result of Q1 to Q54; the design
+pass on the pages (Q55 to Q66) is recorded in `decisions.md` alone. The
+settled design lives in ADRs 0046 to 0055 and in
+`docs/design/site-export.md`, `html-engine.md`, and `site-frontend.md`.
+The implementation stages (the Markdown walk with the HTML emitter, the
+`html` render format with site themes, the `site` command, the browser
+toolchain with highlighting, scheme switch, and outline, the client-side
+search, and the design pass with the theme layout) are committed on the
+branch `site-generation`.
 
 ## How to resume
 

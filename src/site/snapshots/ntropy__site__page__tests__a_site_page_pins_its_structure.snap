@@ -15,21 +15,34 @@ expression: page().render()
 
 </head>
 <body class="site">
+<svg hidden><symbol id="icon-menu"/></svg>
 <div class="layout">
-<header class="site-header"><a class="site-name" href="../index.html">Vault &amp; Co</a>
-<div class="header-tools"><div data-search="../assets/search-data.js" data-prefix="../"></div>
-<button class="theme-toggle" type="button" aria-pressed="false" title="Switch between light and dark">Theme</button></div></header>
+<header class="site-header">
+<a class="nav-open" href="#sidebar" aria-label="Open navigation"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></a>
+<a class="site-name" href="../index.html">Vault &amp; Co</a>
+<div class="header-tools">
+<div data-search="../assets/search-data.js" data-prefix="../"></div>
+<div class="theme-switch" role="group" aria-label="Color scheme">
+<button class="theme-choice" type="button" data-theme-choice="system" aria-pressed="true" title="Follow the system"><svg class="icon" aria-hidden="true"><use href="#icon-monitor"/></svg><span class="visually-hidden">System</span></button>
+<button class="theme-choice" type="button" data-theme-choice="light" aria-pressed="false" title="Light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg><span class="visually-hidden">Light</span></button>
+<button class="theme-choice" type="button" data-theme-choice="dark" aria-pressed="false" title="Dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg><span class="visually-hidden">Dark</span></button>
+</div>
+</div>
+</header>
+<div class="sidebar-pane" id="sidebar">
+<a class="nav-close" href="#" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="#icon-x"/></svg></a>
 <nav class="sidebar">S</nav>
+</div>
 <main>
-<nav class="breadcrumbs"><ol>
+<nav class="breadcrumbs" aria-label="You are here"><ol>
 <li><a href="../views/by-status/index.html">by-status</a></li>
-<li><a href="../views/by-status/done/index.html">done</a></li>
+<li><svg class="icon sep" aria-hidden="true"><use href="#icon-chevron-right"/></svg><a href="../views/by-status/done/index.html">done</a></li>
 </ol></nav>
 <div class="content">
 <article>B</article>
 </div>
 <nav class="pager">
-<a class="prev" rel="prev" href="earlier.html">Earlier &lt;one&gt;</a>
+<a class="prev" rel="prev" href="earlier.html"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg><span class="pager-text"><span class="pager-label">Previous</span><span class="pager-title">Earlier &lt;one&gt;</span></span></a>
 </nav>
 </main>
 <aside class="side">

@@ -714,14 +714,17 @@ The site mirrors the ways you reach a note in the vault. Every note is a
 page under `notes/`. The tag hierarchy is a tree of pages under `tags/`,
 each listing the notes carrying the tag or any tag below it. Every
 [materialized view](#materialized-views) becomes a tree under `views/`,
-nested like its directory. Each page carries a sidebar of those sections
-with the current note's groups opened, breadcrumbs, an outline of the
-note's headings, and previous/next links inside the note's first group.
-Note links point at the target's page; images and linked files from the
-vault are copied under `files/`, a linked directory with its whole tree.
-The front page is the note named by `[site] index` in the vault config,
-or a generated overview of the newest notes, the top-level tags, and the
-views.
+nested like its directory (a view over `tags` is skipped, the tag pages
+already are that view). Each page carries a sidebar with the views and
+the top-level tags, breadcrumbs, an outline of the note's headings,
+previous/next links inside the note's first group, and, at the end of a
+note, the notes that share the most tags with it. Tags link to their
+pages everywhere they appear. Note links point at the target's page;
+images and linked files from the vault are copied under `files/`, a
+linked directory with its whole tree. The front page is the note named
+by `[site] index` in the vault config, or a generated overview of the
+newest notes, the top-level tags, and the views. On a phone the sidebar
+is a drawer behind the menu button.
 
 The header's search button opens a panel that speaks the same
 [query language](#query-language) as `ntropy search`, so `tag:work and
@@ -737,9 +740,18 @@ empties it first. A single note renders to one self-contained page with
 
 ### Site themes
 
-A site theme is a directory `.ntropy/themes/site/<name>/` holding a
-`style.css` and any assets it references; the HTML structure is ntropy's,
-so a theme changes the look, not the layout. Start from the built-in one:
+A site theme is a directory `.ntropy/themes/site/<name>/`. The HTML
+structure is ntropy's, so a theme changes the look, not the layout; what
+it holds is what a web developer expects:
+
+```
+style.css        the entry point, required
+icons/*.svg      one icon per file
+fonts/*          files the stylesheet references with url(fonts/...)
+anything else    copied into the site's assets/ as it is
+```
+
+Start from the built-in theme, which has the same layout:
 
 ```bash
 ntropy site theme init mine          # writes .ntropy/themes/site/mine/
@@ -754,11 +766,51 @@ index = "01ARZ3NDEKTSV4RRFFQ69G5FAV" # the note that becomes the front page
 lang = "en"
 ```
 
-Every color of the built-in theme is a custom property on `:root`, with a
-dark palette under `prefers-color-scheme: dark`, so a theme that only wants
-different colors redefines those properties and keeps the rest. `--theme
-<name>` overrides the configured theme for one export, and `--theme
-default` returns to the built-in look.
+`--theme <name>` overrides the configured theme for one export, and
+`--theme default` returns to the built-in look.
+
+**Colors and type.** Every color and typeface of the built-in theme is a
+custom property on `:root`: `--bg`, `--surface`, `--raised`, `--border`,
+`--fg`, `--muted`, `--faint`, `--accent`, `--accent-soft`, `--link`,
+`--note-link`, the five `--callout-*` accents, `--shadow`, and the three
+stacks `--serif`, `--sans`, `--mono`. The dark palette redefines them
+under `prefers-color-scheme: dark` and under `:root[data-theme="dark"]`;
+`data-theme="light"` wins over the system preference. A theme that only
+wants different colors redefines those properties and keeps the rest.
+
+**Fonts.** The built-in theme ships IBM Plex Serif, Sans, and Mono under
+`fonts/` (SIL Open Font License, see `fonts/LICENSE`) and declares them
+with `@font-face` in `style.css`. Put your own files under `fonts/` and
+declare them the same way; the stylesheet's `url()`s resolve relative to
+itself in the site's `assets/`.
+
+**Icons.** Every `icons/<name>.svg` becomes a `<symbol id="icon-<name>">`
+of a sprite inlined into every page, and the markup shows an icon with
+`<svg class="icon"><use href="#icon-<name>"/></svg>`. Your theme's icons
+are layered by name over the built-in set (Lucide, ISC, see
+`icons/LICENSE`): a file with a built-in name replaces that icon, any
+other name adds one, and a theme without `icons/` keeps them all. The
+names the pages use are `menu`, `x`, `search`, `monitor`, `sun`, `moon`,
+`tag`, `chevron-right`, `chevron-left`, and, for callouts, `info`,
+`lightbulb`, `message-square-warning`, `triangle-alert`, `octagon-alert`.
+An icon takes the text color, so the stylesheet sizes and colors it
+through the `.icon` class.
+
+**Markup.** The page is a `.layout` grid of `.site-header` (with
+`.site-name`, the search mount, and the `.theme-switch` of three
+`.theme-choice` buttons), the `.sidebar-pane` holding `nav.sidebar`,
+`main` with `.breadcrumbs`, `.content`, and the `.pager`, and `aside.side`
+holding `nav.outline`. A note is a `.note-header` (`.note-title`,
+`.note-meta` with `.note-created` and the `.tags`, the remaining fields
+as a `.frontmatter` list) followed by `article.note-body` and, on the
+site, `section.related`. Lists of notes are `ol.note-rows` of
+`li.note-row` with a `time`, the `.note-row-title` link, and
+`.note-row-tags`; groups are `ul.group-chips` of `.chip` links. Callouts
+are `.callout.callout-<kind>` with a `.callout-title`; highlighted code
+carries Shiki's `--shiki-light`/`--shiki-dark` colors per token, and the
+stylesheet picks one by scheme. The current sidebar note and outline
+entry carry `aria-current`. Read the built-in `style.css` for the rest;
+it is written to be copied.
 
 ## Language server
 

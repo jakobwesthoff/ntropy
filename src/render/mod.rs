@@ -218,6 +218,12 @@ pub enum RenderError {
         source: io::Error,
     },
 
+    /// A file in the theme's `icons/` directory is not an SVG the sprite can
+    /// carry (ADR 0055); the export fails naming it rather than shipping
+    /// pages with a hole where the icon goes.
+    #[error("the theme icon {} is not usable: {reason}", path.display())]
+    ThemeIcon { path: PathBuf, reason: String },
+
     /// The theme name is not a single filename component, so it does not name
     /// a file inside the themes directory.
     #[error("invalid theme name `{name}`: a theme is named by a single file, without a path")]

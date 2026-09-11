@@ -36,18 +36,20 @@ impl Renderer for Html {
         // Asset paths stay as written: the artifact is one file wherever
         // `-o` put it, and a path relative to the note is what the author
         // meant. Note links target the sibling artifact by default name.
-        let emitted = emitter::emit(&doc.body, &doc.links, &SiblingArtifacts);
+        let emitted = emitter::emit(&doc.body, &doc.links, &SiblingArtifacts, Some(&doc.title));
         for warning in &emitted.warnings {
             ctx.warn(&warning.message);
         }
 
+        let theme = SiteTheme::selected(self.settings.theme.as_ref());
         let page = Document {
             lang: self.settings.lang.clone(),
             title: doc.title.clone(),
             created: doc.created.clone(),
             tags: doc.tags.clone(),
             fields: frontmatter::fields(&doc.frontmatter),
-            stylesheet: SiteTheme::stylesheet_of(self.settings.theme.as_ref()),
+            icons: theme.sprite(),
+            stylesheet: theme.stylesheet,
             body: emitted.html,
         };
         ctx.write_output(page.render().as_bytes())
@@ -165,7 +167,10 @@ mod tests {
             page.contains(&SiteTheme::builtin().stylesheet),
             "the built-in stylesheet is inlined"
         );
-        assert!(page.contains("<li class=\"tag\">area/work</li>"), "{page}");
+        assert!(
+            page.contains("<use href=\"#icon-tag\"/></svg>area/work</span>"),
+            "{page}"
+        );
         assert!(page.contains("<dt>priority</dt>\n<dd>2</dd>"), "{page}");
         assert!(page.contains("<h1 id=\"heading\">Heading</h1>"), "{page}");
         assert!(page.contains("<em>body</em>"), "{page}");
@@ -178,6 +183,7 @@ mod tests {
             theme: Some(SiteTheme {
                 name: "corporate".to_string(),
                 stylesheet: "body { color: rebeccapurple }".to_string(),
+                icons: std::collections::BTreeMap::new(),
             }),
             lang: "de".to_string(),
         };

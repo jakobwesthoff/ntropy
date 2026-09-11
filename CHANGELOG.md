@@ -23,11 +23,29 @@ and this project adheres to
   page's path, and `--strict` fails on export warnings.
 - `ntropy site theme init <name>` copies the built-in site theme into
   `.ntropy/themes/site/<name>/` as the starting point for a custom one.
-- Exported pages carry a light/dark toggle that remembers the choice in
-  the browser, an outline that follows the reader's position, and code
-  blocks highlighted by Shiki in the browser for 72 languages; a page
-  loads only the grammars its code blocks need, and a fence language
-  without a grammar is reported as an export warning.
+- Exported pages carry a scheme switch (system, light, dark) that
+  remembers the choice in the browser, an outline that follows the
+  reader's position, and code blocks highlighted by Shiki in the browser
+  for 72 languages; a page loads only the grammars its code blocks need,
+  and a fence language without a grammar is reported as an export
+  warning.
+- The exported site's look: IBM Plex Serif for note bodies and titles,
+  Plex Sans for the chrome, Plex Mono for dates and counts, all shipped
+  with the site; ntropy's teal on near-black in dark mode and on paper
+  in light mode; Lucide icons in the chrome, on tags, and in callouts.
+  Note lists are one row per note with the date, the title, and the
+  tags as links. The sidebar keeps view sections collapsed away from
+  their pages and lists the top-level tags with counts; on narrow
+  screens it is a drawer. A note page links its tags to their pages,
+  ends with the notes sharing the most tags with it, and drops a leading
+  heading that repeats its title. A view over the `tags` field is
+  skipped, since the tag section already is that view. `/` opens the
+  search, Escape closes it.
+- A site theme's layout: `style.css`, `icons/*.svg`, `fonts/`, and any
+  other file, copied under `assets/`. The icons become a sprite every
+  page inlines; a vault theme's icons replace or add to the built-in
+  ones by file name. `site theme init` writes the complete built-in
+  theme, fonts and icons included.
 - Exported sites search in the browser. The header's search panel takes
   a query in the same language as `ntropy search` (`tag:`, `field:`,
   `text:`, bare terms, `and`/`or`/`not`, parentheses) and a second box

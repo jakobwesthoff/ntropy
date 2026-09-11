@@ -24,6 +24,12 @@ use super::SiteOptions;
 /// The number of newest notes the generated front page lists.
 pub const FRONT_PAGE_RECENT: usize = 10;
 
+/// The most related notes a note page lists.
+pub const RELATED_LIMIT: usize = 8;
+
+/// The frontmatter field whose view the tag section already is.
+const TAGS_FIELD: &str = "tags";
+
 /// One exported note, as the pages refer to it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NoteEntry {
@@ -162,9 +168,11 @@ impl Model {
             });
         }
 
-        // Sections in sidebar order: the configured views, then the tags.
+        // Sections in sidebar order: the configured views, then the tags. A
+        // view over the tags field would repeat the tag section group for
+        // group, so it is no section and gets no pages.
         let mut sections = Vec::new();
-        for view in views {
+        for view in views.iter().filter(|view| view.field != TAGS_FIELD) {
             let root = format!("views/{}", view.name);
             let values: Vec<Vec<String>> = ordered
                 .iter()
@@ -219,6 +227,37 @@ impl Model {
         })
     }
 
+    /// The notes most related to the note at `index`, by the number of tags
+    /// they share with it, ancestors counted: `a/b` shares `a` with `a/c`.
+    /// Notes sharing nothing are left out; ties keep the newest first. At
+    /// most [`RELATED_LIMIT`] notes.
+    pub fn related(&self, index: usize) -> Vec<usize> {
+        let own = tag_paths(&self.notes[index].tags);
+        if own.is_empty() {
+            return Vec::new();
+        }
+        let mut scored: Vec<(usize, usize)> = self
+            .notes
+            .iter()
+            .enumerate()
+            .filter(|(other, _)| *other != index)
+            .map(|(other, note)| {
+                let shared = tag_paths(&note.tags)
+                    .iter()
+                    .filter(|path| own.contains(path.as_str()))
+                    .count();
+                (shared, other)
+            })
+            .filter(|(shared, _)| *shared > 0)
+            .collect();
+        scored.sort_by_key(|&(shared, other)| (std::cmp::Reverse(shared), other));
+        scored
+            .into_iter()
+            .take(RELATED_LIMIT)
+            .map(|(_, other)| other)
+            .collect()
+    }
+
     /// The page path of the note with `id`, if it is exported.
     pub fn page_of(&self, id: Id) -> Option<&str> {
         self.notes
@@ -250,6 +289,23 @@ impl Model {
         }
         trail
     }
+}
+
+/// Every tag of `tags` and every ancestor of it, each once: `a/b/c` yields
+/// `a`, `a/b`, and `a/b/c`.
+fn tag_paths(tags: &[String]) -> std::collections::BTreeSet<String> {
+    let mut paths = std::collections::BTreeSet::new();
+    for tag in tags {
+        let mut path = String::new();
+        for segment in tag.split('/').filter(|s| !s.is_empty()) {
+            if !path.is_empty() {
+                path.push('/');
+            }
+            path.push_str(segment);
+            paths.insert(path.clone());
+        }
+    }
+    paths
 }
 
 /// Build a section's group tree from each note's grouping values. Every
@@ -465,6 +521,52 @@ mod tests {
         assert_eq!(labels, ["done", "draft"]);
         assert_eq!(status.groups[0].page, "views/by-status/done/index.html");
         assert_eq!(model.sections[1].kind, SectionKind::Tags);
+    }
+
+    #[test]
+    fn a_view_over_the_tags_field_is_no_section() {
+        let notes = [note(A, "Tagged", "tags: [x]\nstatus: open\n")];
+        let views = [
+            ViewDef::new("by-tag", "tags"),
+            ViewDef::new("by-status", "status"),
+        ];
+        let model = model(&notes, &views, SiteOptions::default());
+        let titles: Vec<&str> = model.sections.iter().map(|s| s.title.as_str()).collect();
+        assert_eq!(titles, ["by-status", "tags"]);
+    }
+
+    #[test]
+    fn related_notes_rank_by_shared_tags_with_ancestors_and_keep_newest_first() {
+        const D: &str = "01DRZ3NDEKTSV4RRFFQ69G5FAV";
+        const E: &str = "01ERZ3NDEKTSV4RRFFQ69G5FAV";
+        let notes = [
+            note(A, "Subject", "tags: [work/rust, idea]\n"),
+            note(B, "Twin", "tags: [work/rust, idea]\n"),
+            note(C, "Cousin", "tags: [work/python]\n"),
+            note(D, "Stranger", "tags: [home]\n"),
+            note(E, "Idea", "tags: [idea]\n"),
+        ];
+        let model = model(&notes, &[], SiteOptions::default());
+        let subject = model
+            .notes
+            .iter()
+            .position(|n| n.title == "Subject")
+            .expect("subject");
+        // Twin shares three paths (work, work/rust, idea), Idea and Cousin one
+        // each; Idea is newer than Cousin; Stranger shares nothing.
+        assert_eq!(
+            titles(&model, &model.related(subject)),
+            ["Twin", "Idea", "Cousin"]
+        );
+        let stranger = model
+            .notes
+            .iter()
+            .position(|n| n.title == "Stranger")
+            .expect("stranger");
+        assert!(model.related(stranger).is_empty());
+        let untagged = [note(A, "Loose", "")];
+        let loose = Model::build(&untagged, &[], &SiteOptions::default(), "Vault").expect("model");
+        assert!(loose.related(0).is_empty());
     }
 
     #[test]

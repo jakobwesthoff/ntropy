@@ -3,26 +3,26 @@ source: src/render/html/emitter.rs
 expression: "html(\"> [!NOTE]\\n> n\\n\\n> [!TIP]\\n> t\\n\\n> [!IMPORTANT]\\n> i\\n\\n> [!WARNING]\\n> w\\n\\n> [!CAUTION]\\n> c\")"
 ---
 <div class="callout callout-note">
-<p class="callout-title">Note</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-info"/></svg>Note</p>
 <p>n</p>
 </div>
 
 <div class="callout callout-tip">
-<p class="callout-title">Tip</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-lightbulb"/></svg>Tip</p>
 <p>t</p>
 </div>
 
 <div class="callout callout-important">
-<p class="callout-title">Important</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-message-square-warning"/></svg>Important</p>
 <p>i</p>
 </div>
 
 <div class="callout callout-warning">
-<p class="callout-title">Warning</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-triangle-alert"/></svg>Warning</p>
 <p>w</p>
 </div>
 
 <div class="callout callout-caution">
-<p class="callout-title">Caution</p>
+<p class="callout-title"><svg class="icon" aria-hidden="true"><use href="#icon-octagon-alert"/></svg>Caution</p>
 <p>c</p>
 </div>

@@ -13,14 +13,14 @@ body { color: red }
 </style>
 </head>
 <body class="document">
+<svg hidden><symbol id="icon-tag"/></svg>
 <main>
 <header class="note-header">
 <h1 class="note-title">Quarterly &lt;Review&gt;</h1>
-<p class="note-created"><time datetime="2026-06-24">2026-06-24</time></p>
-<ul class="tags">
-<li class="tag">area/work</li>
-<li class="tag">a&amp;b</li>
-</ul>
+<p class="note-meta"><time class="note-created" datetime="2026-06-24">2026-06-24</time>
+<span class="tags"><span class="tag"><svg class="icon" aria-hidden="true"><use href="#icon-tag"/></svg>area/work</span>
+<span class="tag"><svg class="icon" aria-hidden="true"><use href="#icon-tag"/></svg>a&amp;b</span>
+</span></p>
 <dl class="frontmatter">
 <dt>status</dt>
 <dd><ul><li>draft</li></ul></dd>

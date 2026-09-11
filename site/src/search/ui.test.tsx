@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { resetSearchData } from "./data";
 import { compile, noteFrom } from "./eval";
-import { compileQuery, installSearch, results } from "./ui";
+import { compileQuery, installSearch, isSearchShortcut, results } from "./ui";
 
 const notes = [
   noteFrom(
@@ -33,6 +33,28 @@ describe("compileQuery", () => {
   });
 });
 
+describe("isSearchShortcut", () => {
+  const key = (init: KeyboardEventInit, target?: Element) => {
+    const event = new KeyboardEvent("keydown", init);
+    if (target) {
+      target.dispatchEvent(event);
+    }
+    return event;
+  };
+
+  it("is the bare slash outside a field", () => {
+    expect(isSearchShortcut(key({ key: "/" }))).toBe(true);
+    expect(isSearchShortcut(key({ key: "/", ctrlKey: true }))).toBe(false);
+    expect(isSearchShortcut(key({ key: "a" }))).toBe(false);
+    const input = document.createElement("input");
+    document.body.appendChild(input);
+    expect(isSearchShortcut(key({ key: "/", bubbles: true }, input))).toBe(
+      false,
+    );
+    input.remove();
+  });
+});
+
 describe("results", () => {
   it("selects by query and narrows fuzzily", () => {
     expect(
@@ -50,7 +72,12 @@ describe("results", () => {
 });
 
 describe("installSearch", () => {
-  const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+  // Preact runs effects after the next animation frame; a macrotask after
+  // that frame sees their outcome.
+  const flush = () =>
+    new Promise((resolve) =>
+      requestAnimationFrame(() => setTimeout(resolve, 0)),
+    );
 
   beforeEach(() => {
     resetSearchData();
@@ -94,11 +121,21 @@ describe("installSearch", () => {
       "expected",
     );
 
-    query.dispatchEvent(
+    document.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
     );
     await flush();
     expect(document.querySelector(".search-panel")).toBeNull();
+
+    // The slash shortcut opens the panel again with the query box focused.
+    document.body.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "/", bubbles: true }),
+    );
+    await flush();
+    expect(document.querySelector(".search-panel")).not.toBeNull();
+    expect(document.activeElement?.classList.contains("search-query")).toBe(
+      true,
+    );
   });
 
   it("reports a data script that fails to load", async () => {

@@ -12,7 +12,8 @@
 //! Block constructs: `<p>`, `<h1>` to `<h6>`, `<pre><code>` with a
 //! `language-<tag>` class taken from the fence info string, `<ul>` and
 //! `<ol start="n">`, `<blockquote>`, GFM callouts as
-//! `<div class="callout callout-<kind>">` with a `<p class="callout-title">`,
+//! `<div class="callout callout-<kind>">` with a `<p class="callout-title">`
+//! opening on a `<use>` of the kind's icon from the page's sprite,
 //! `<table>` with `<thead>` and `<tbody>` and per-column `text-align` styles,
 //! `<hr>`.
 //!
@@ -92,9 +93,19 @@ pub struct Emitted {
 
 /// Convert a note body to an HTML body fragment, resolving note links against
 /// `links` (ADR 0028) and pointing links where `targets` says.
-pub fn emit(body: &str, links: &[ResolvedLink], targets: &dyn Targets) -> Emitted {
+///
+/// A page shows the note's title in its header, so a body that opens with a
+/// level-one heading reading exactly `title` would show it twice; the walk
+/// drops that heading from the fragment and the outline never sees it.
+pub fn emit(
+    body: &str,
+    links: &[ResolvedLink],
+    targets: &dyn Targets,
+    title: Option<&str>,
+) -> Emitted {
     let mut output = HtmlOutput {
         targets,
+        title: title.map(|title| title.trim().to_string()),
         assets: Vec::new(),
         languages: Vec::new(),
         headings: Vec::new(),
@@ -116,6 +127,8 @@ pub fn emit(body: &str, links: &[ResolvedLink], targets: &dyn Targets) -> Emitte
 
 struct HtmlOutput<'a> {
     targets: &'a dyn Targets,
+    /// The title a leading level-one heading must equal to be dropped.
+    title: Option<String>,
     assets: Vec<String>,
     languages: Vec<String>,
     headings: Vec<Heading>,
@@ -245,6 +258,10 @@ impl Output for HtmlOutput<'_> {
         format!("<p>{body}</p>\n")
     }
 
+    fn dropped_title(&self) -> Option<&str> {
+        self.title.as_deref()
+    }
+
     fn heading(&mut self, heading: &Heading, body: &str) -> String {
         self.headings.push(heading.clone());
         let level = heading.level as usize;
@@ -261,9 +278,9 @@ impl Output for HtmlOutput<'_> {
         match kind {
             None => format!("<blockquote>\n{body}</blockquote>\n"),
             Some(kind) => {
-                let (class, title) = callout(kind);
+                let (class, title, icon) = callout(kind);
                 format!(
-                    "<div class=\"callout callout-{class}\">\n<p class=\"callout-title\">{title}</p>\n{body}</div>\n"
+                    "<div class=\"callout callout-{class}\">\n<p class=\"callout-title\"><svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-{icon}\"/></svg>{title}</p>\n{body}</div>\n"
                 )
             }
         }
@@ -362,14 +379,15 @@ impl Output for HtmlOutput<'_> {
     }
 }
 
-/// The class suffix and the visible title of a GFM callout kind.
-fn callout(kind: BlockQuoteKind) -> (&'static str, &'static str) {
+/// The class suffix, the visible title, and the sprite icon of a GFM
+/// callout kind (the icon names are files of the theme's `icons/`).
+fn callout(kind: BlockQuoteKind) -> (&'static str, &'static str, &'static str) {
     match kind {
-        BlockQuoteKind::Note => ("note", "Note"),
-        BlockQuoteKind::Tip => ("tip", "Tip"),
-        BlockQuoteKind::Important => ("important", "Important"),
-        BlockQuoteKind::Warning => ("warning", "Warning"),
-        BlockQuoteKind::Caution => ("caution", "Caution"),
+        BlockQuoteKind::Note => ("note", "Note", "info"),
+        BlockQuoteKind::Tip => ("tip", "Tip", "lightbulb"),
+        BlockQuoteKind::Important => ("important", "Important", "message-square-warning"),
+        BlockQuoteKind::Warning => ("warning", "Warning", "triangle-alert"),
+        BlockQuoteKind::Caution => ("caution", "Caution", "octagon-alert"),
     }
 }
 
@@ -422,11 +440,11 @@ mod tests {
     use crate::render::LinkTarget;
 
     fn html(input: &str) -> String {
-        emit(input, &[], &SiblingArtifacts).html
+        emit(input, &[], &SiblingArtifacts, None).html
     }
 
     fn emitted(input: &str) -> Emitted {
-        emit(input, &[], &SiblingArtifacts)
+        emit(input, &[], &SiblingArtifacts, None)
     }
 
     fn note_link(range: Range<usize>, target: Option<(&str, &str)>) -> ResolvedLink {
@@ -468,6 +486,43 @@ mod tests {
         assert_eq!(
             html("# 1\n## 2\n### 3\n#### 4\n##### 5\n###### 6"),
             "<h1 id=\"1\">1</h1>\n\n<h2 id=\"2\">2</h2>\n\n<h3 id=\"3\">3</h3>\n\n<h4 id=\"4\">4</h4>\n\n<h5 id=\"5\">5</h5>\n\n<h6 id=\"6\">6</h6>\n"
+        );
+    }
+
+    #[test]
+    fn a_leading_h1_equal_to_the_title_is_dropped_with_its_outline_entry() {
+        let out = emit(
+            "# Rust Tips\n\nBody.\n\n# Rust Tips\n",
+            &[],
+            &SiblingArtifacts,
+            Some("Rust Tips"),
+        );
+        assert_eq!(
+            out.html,
+            "<p>Body.</p>\n\n<h1 id=\"rust-tips\">Rust Tips</h1>\n"
+        );
+        assert_eq!(out.headings.len(), 1);
+        assert_eq!(out.headings[0].id, "rust-tips");
+    }
+
+    #[test]
+    fn a_title_heading_stays_when_it_differs_or_is_not_first() {
+        let kept = |body: &str| emit(body, &[], &SiblingArtifacts, Some("Rust Tips")).html;
+        assert_eq!(
+            kept("# Rust tips\n"),
+            "<h1 id=\"rust-tips\">Rust tips</h1>\n"
+        );
+        assert_eq!(
+            kept("## Rust Tips\n"),
+            "<h2 id=\"rust-tips\">Rust Tips</h2>\n"
+        );
+        assert_eq!(
+            kept("Intro.\n\n# Rust Tips\n"),
+            "<p>Intro.</p>\n\n<h1 id=\"rust-tips\">Rust Tips</h1>\n"
+        );
+        assert_eq!(
+            emit("# Rust Tips\n", &[], &SiblingArtifacts, None).html,
+            "<h1 id=\"rust-tips\">Rust Tips</h1>\n"
         );
     }
 
@@ -700,7 +755,12 @@ mod tests {
                 format!("assets/{dest}")
             }
         }
-        let out = emit("[spec](docs/spec.pdf) and ![d](d.png)", &[], &Prefixed);
+        let out = emit(
+            "[spec](docs/spec.pdf) and ![d](d.png)",
+            &[],
+            &Prefixed,
+            None,
+        );
         assert_eq!(
             out.html,
             "<p><a href=\"assets/docs/spec.pdf\">spec</a> and <img src=\"assets/d.png\" alt=\"d\"></p>\n"
@@ -742,7 +802,7 @@ mod tests {
             Some(("New <Title>", "new-title")),
         )];
         assert_eq!(
-            emit(input, &links, &SiblingArtifacts).html,
+            emit(input, &links, &SiblingArtifacts, None).html,
             "<p><a class=\"note-link\" href=\"new-title.html\">New &lt;Title&gt;</a></p>\n"
         );
     }
@@ -752,7 +812,7 @@ mod tests {
         let input = "[**bold** ghost](01ARZ3NDEKTSV4RRFFQ69G5FAV-gone.md)";
         let links = [note_link(0..input.len(), None)];
         assert_eq!(
-            emit(input, &links, &SiblingArtifacts).html,
+            emit(input, &links, &SiblingArtifacts, None).html,
             "<p><strong>bold</strong> ghost</p>\n"
         );
     }
@@ -899,7 +959,7 @@ mod tests {
             .collect();
         assert_eq!(links.len(), 2, "the fixture holds two note links");
 
-        let out = emit(body, &links, &SiblingArtifacts);
+        let out = emit(body, &links, &SiblingArtifacts, None);
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
         assert_eq!(out.assets, vec!["notes/other.md", "diagram.png"]);
         assert_eq!(out.languages, vec!["rust"]);

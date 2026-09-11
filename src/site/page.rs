@@ -26,13 +26,33 @@ const TEMPLATES: &[(&str, &str)] = &[
     ("page.html", include_str!("templates/page.html")),
 ];
 
+/// A tag in a note's header: on a site page it links to the tag's page, in
+/// the standalone document it is plain text.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct TagLink {
+    pub label: String,
+    pub href: Option<String>,
+}
+
+impl TagLink {
+    /// The tags of a standalone document: labels without links.
+    pub fn plain(tags: &[String]) -> Vec<TagLink> {
+        tags.iter()
+            .map(|tag| TagLink {
+                label: tag.clone(),
+                href: None,
+            })
+            .collect()
+    }
+}
+
 /// A note's header and body as one fragment, the content of a note page in
 /// the site and of the standalone document alike.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct NoteFragment {
     pub title: String,
     pub created: String,
-    pub tags: Vec<String>,
+    pub tags: Vec<TagLink>,
     pub fields: Vec<Field>,
     /// The converted note body, an HTML fragment.
     pub body: String,
@@ -83,6 +103,8 @@ pub struct Page {
     /// The `src` of every script the page loads, relative to this page: the
     /// page script and the grammars its code blocks need.
     pub scripts: Vec<String>,
+    /// The theme's icon sprite, inlined once per page.
+    pub icons: String,
     /// The sidebar, an HTML fragment.
     pub sidebar: String,
     pub breadcrumbs: Vec<PageLink>,
@@ -111,6 +133,7 @@ impl Page {
             prefix => self.prefix,
             stylesheet => self.stylesheet,
             scripts => self.scripts,
+            icons => Value::from_safe_string(self.icons.clone()),
             sidebar => Value::from_safe_string(self.sidebar.clone()),
             breadcrumbs => self.breadcrumbs,
             outline => Value::from_safe_string(self.outline.clone()),
@@ -139,6 +162,8 @@ pub struct Document {
     pub fields: Vec<Field>,
     /// The theme's stylesheet, inlined into the page.
     pub stylesheet: String,
+    /// The theme's icon sprite, inlined into the page.
+    pub icons: String,
     /// The converted note body, an HTML fragment.
     pub body: String,
 }
@@ -149,13 +174,14 @@ impl Document {
         let note = NoteFragment {
             title: self.title.clone(),
             created: self.created.clone(),
-            tags: self.tags.clone(),
+            tags: TagLink::plain(&self.tags),
             fields: self.fields.clone(),
             body: self.body.clone(),
         };
         let context = minijinja::context! {
             lang => self.lang,
             stylesheet => Value::from_safe_string(self.stylesheet.clone()),
+            icons => Value::from_safe_string(self.icons.clone()),
             ..note_context(&note)
         };
         environment()
@@ -212,6 +238,7 @@ mod tests {
                 html: "<ul><li>draft</li></ul>".to_string(),
             }],
             stylesheet: "body { color: red }".to_string(),
+            icons: "<svg hidden><symbol id=\"icon-tag\"/></svg>".to_string(),
             body: "<p>Hello <em>there</em></p>\n".to_string(),
         }
     }
@@ -226,8 +253,19 @@ mod tests {
         let page = document().render();
         assert!(page.contains("<title>Quarterly &lt;Review&gt;</title>"));
         assert!(page.contains("<h1 class=\"note-title\">Quarterly &lt;Review&gt;</h1>"));
-        assert!(page.contains("<li class=\"tag\">area/work</li>"));
-        assert!(page.contains("<li class=\"tag\">a&amp;b</li>"));
+        assert!(
+            page.contains("<use href=\"#icon-tag\"/></svg>area/work</span>"),
+            "{page}"
+        );
+        assert!(
+            page.contains("<use href=\"#icon-tag\"/></svg>a&amp;b</span>"),
+            "{page}"
+        );
+        assert_eq!(
+            page.matches("<symbol id=\"icon-tag\"").count(),
+            1,
+            "the document carries the sprite its icons use: {page}"
+        );
         assert!(page.contains("<dd><ul><li>draft</li></ul></dd>"));
         assert!(page.contains("<p>Hello <em>there</em></p>"));
         assert!(page.contains("<style>\nbody { color: red }\n</style>"));
@@ -257,6 +295,7 @@ mod tests {
                 "../assets/app.js".to_string(),
                 "../assets/grammars/rust.js".to_string(),
             ],
+            icons: "<svg hidden><symbol id=\"icon-menu\"/></svg>".to_string(),
             sidebar: "<nav class=\"sidebar\">S</nav>\n".to_string(),
             breadcrumbs: vec![
                 PageLink {
@@ -296,9 +335,7 @@ mod tests {
         );
         assert!(out.contains("<nav class=\"sidebar\">S</nav>"), "{out}");
         assert!(
-            out.contains(
-                "<a class=\"prev\" rel=\"prev\" href=\"earlier.html\">Earlier &lt;one&gt;</a>"
-            ),
+            out.contains("<a class=\"prev\" rel=\"prev\" href=\"earlier.html\">"),
             "{out}"
         );
         assert!(!out.contains("class=\"next\""), "{out}");
@@ -314,10 +351,30 @@ mod tests {
             out.contains("localStorage.getItem(\"ntropy-theme\")"),
             "the early theme script is inlined: {out}"
         );
-        assert!(out.contains("<button class=\"theme-toggle\""), "{out}");
         assert!(
-            out.contains("<li><a href=\"../views/by-status/done/index.html\">done</a></li>"),
+            out.contains(
+                "<button class=\"theme-choice\" type=\"button\" data-theme-choice=\"dark\""
+            ),
             "{out}"
+        );
+        assert!(out.starts_with("<!doctype html>"), "{out}");
+        assert_eq!(
+            out.matches("<svg hidden><symbol id=\"icon-menu\"/></svg>")
+                .count(),
+            1,
+            "the given sprite is inlined once: {out}"
+        );
+        assert!(
+            out.contains("<span class=\"pager-title\">Earlier &lt;one&gt;</span>"),
+            "{out}"
+        );
+        assert!(
+            out.contains("<li><svg class=\"icon sep\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../views/by-status/done/index.html\">done</a></li>"),
+            "{out}"
+        );
+        assert!(
+            out.contains("<li><a href=\"../views/by-status/index.html\">by-status</a></li>"),
+            "the first crumb has no separator: {out}"
         );
     }
 
@@ -335,17 +392,36 @@ mod tests {
     }
 
     #[test]
-    fn a_note_fragment_renders_alone() {
+    fn a_note_fragment_renders_alone_and_links_its_tags_when_given_hrefs() {
         let fragment = NoteFragment {
             title: "T".to_string(),
             created: "2026-01-01".to_string(),
-            tags: vec![],
+            tags: vec![
+                TagLink {
+                    label: "a/b".to_string(),
+                    href: Some("../tags/a/b/index.html".to_string()),
+                },
+                TagLink {
+                    label: "plain".to_string(),
+                    href: None,
+                },
+            ],
             fields: vec![],
             body: "<p>b</p>\n".to_string(),
         };
         let out = fragment.render();
         assert!(out.starts_with("<header class=\"note-header\">"), "{out}");
         assert!(out.contains("<p>b</p>"), "{out}");
+        assert!(
+            out.contains(
+                "<a class=\"tag\" href=\"../tags/a/b/index.html\"><svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-tag\"/></svg>a/b</a>"
+            ),
+            "{out}"
+        );
+        assert!(
+            out.contains("<span class=\"tag\"><svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-tag\"/></svg>plain</span>"),
+            "{out}"
+        );
     }
 
     #[test]
