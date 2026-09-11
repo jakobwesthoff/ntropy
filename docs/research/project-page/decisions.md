@@ -145,6 +145,27 @@ Validated against the repository at the start of the effort:
   - Development: landing note (build, contributing), Limitations,
     Design;
   - hidden, linked from the footer: License, Impressum.
+- **Q18. The visual direction (2026-09-11).**
+  - *Answer:* a distinct project-page identity: its own palette and
+    type on the front page, the documentation pages restyled to match.
+    Not chosen: extending the built-in theme unchanged; porting the old
+    starter look.
+- **Q19. Where the front page's structured content lives
+  (2026-09-11).**
+  - *Answer:* in the frontmatter of the index note, read by the
+    template through `note.frontmatter`; the body keeps the prose. Not
+    chosen: `[site.vars]`; raw HTML in the body.
+- **Q20. Header and footer (2026-09-11).**
+  - *Answer:* header links to the docs and to GitHub; the footer holds
+    the license and the impressum with the copyright line, and links to
+    GitHub and crates.io. Not chosen: a crates.io link in the header.
+- **Q21. The demo (2026-09-11).**
+  - *Answer:* in a terminal window frame, autoplaying muted, as the old
+    page had it. Not chosen: a plain video.
+- **The user, unprompted (2026-09-11):** the `just` recipe that exports
+  the vault is `website`; the old page source under `docs/pages/` stays
+  as a reference until the redesign is finished and is removed then,
+  with everything related to it.
 - **The user, unprompted (2026-09-11):** when the README is split, the
   pages' contents are audited and validated, and rewritten where they
   do not follow the writing rules (verbatim: "audit and validate their

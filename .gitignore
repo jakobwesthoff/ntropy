@@ -11,5 +11,5 @@
 site/node_modules/
 site/.generated/
 
-# The project page built by `just pages`.
+# The project website built by `just website`.
 /dist

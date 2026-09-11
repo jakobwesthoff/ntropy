@@ -50,6 +50,6 @@ coverage:
 bench *ARGS:
     ./scripts/benchmark.sh {{ARGS}}
 
-# Export the documentation vault (docs/website) as the project page into ./dist
-pages:
+# Export the documentation vault (docs/website) as the project website into ./dist
+website:
     cargo run --quiet -- --vault docs/website -n site -o dist --force --strict

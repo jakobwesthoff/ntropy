@@ -114,7 +114,7 @@ just fmt       # cargo fmt
 just check     # clippy + tests + fmt --check (the CI gate)
 just coverage  # cargo llvm-cov
 just site-check  # rebuild the site frontend with Bun, check, lint, and test it (the CI gate)
-just pages     # export the documentation vault as the project page into ./dist
+just website   # export the documentation vault as the project website into ./dist
 ```
 
 The browser-side code of the site export lives in `site/` and is built
@@ -140,7 +140,7 @@ which exports the vault with the newest released binary. To build it with
 your working copy:
 
 ```bash
-just pages           # exports docs/website into ./dist
+just website         # exports docs/website into ./dist
 open dist/index.html
 ```
 

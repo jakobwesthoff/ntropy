@@ -1,0 +1,56 @@
+name: ntropy
+tagline: Write Markdown. Query everything. Built for the AI era.
+github: jakobwesthoff/ntropy
+
+author:
+  name: Jakob Westhoff
+  website: https://westhoffswelt.de
+
+navbar_buttons:
+  - label: Quick Start
+    href: "#quickstart"
+    style: primary
+    icon: download
+  - label: GitHub
+    href: https://github.com/jakobwesthoff/ntropy
+    style: secondary
+    icon: github
+
+sections:
+  - id: hero
+    file: sections/hero.html
+    nav: false
+
+  - id: highlights
+    file: sections/highlights.html
+    nav: false
+
+  - id: demo
+    file: sections/demo.html
+    nav: true
+    nav_label: Demo
+
+  - id: quickstart
+    file: sections/quick-start.html
+    nav: true
+    nav_label: Quick Start
+
+  - id: docs
+    source: readme
+    nav: true
+    nav_label: Documentation
+
+  - id: footer
+    file: sections/footer.html
+    nav: false
+
+imprint:
+  enabled: true
+  name: Jakob Westhoff
+  address: |
+    Am Bollwerk 6
+    58300 Wetter
+    Deutschland
+  email_encrypted: "XAcIVzU0FhdERQI9Ng09GSEWIGswVg=="
+  phone_encrypted: "HVJaGGZDUVIAAl5nYlN3"
+  encryption_key: "6sp8Jgne71wECxAaQmGRG3KQJAZpO6Oo"
