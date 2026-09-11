@@ -6,6 +6,7 @@
   "scripts": {
     "build": "bun run build.ts",
     "test": "vitest run",
+    "coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
     "@biomejs/biome": "^2.5.13",
     "@preact/preset-vite": "^2.10.6",
     "@types/bun": "^1.4.2",
+    "@vitest/coverage-v8": "5",
     "happy-dom": "^20.14.3",
     "typescript": "^7.0.2",
     "vite": "^8.3.0",

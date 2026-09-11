@@ -10,7 +10,13 @@
     "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["vite/client", "bun"]
+    "types": ["vite/client", "bun"],
+    "resolveJsonModule": true
   },
-  "include": ["src", "build.ts", "vite.config.ts"]
+  "include": [
+    "src",
+    "build.ts",
+    "vite.config.ts",
+    "../tests/fixtures/query-corpus.json"
+  ]
 }

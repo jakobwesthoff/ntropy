@@ -14,6 +14,7 @@
 //! - [`nav`]: the navigation fragments built from the model.
 //! - [`build`]: every file of a site, built in memory, and their writing.
 //! - [`frontend`]: the embedded page script and highlighting grammars.
+//! - [`search`]: the search data every site embeds for the page script.
 
 pub mod build;
 pub mod frontend;
@@ -21,6 +22,7 @@ pub mod model;
 pub mod nav;
 pub mod options;
 pub mod page;
+pub mod search;
 pub mod theme;
 
 pub use build::{Built, Input, build, write};

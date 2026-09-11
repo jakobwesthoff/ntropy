@@ -17,7 +17,8 @@ expression: page().render()
 <body class="site">
 <div class="layout">
 <header class="site-header"><a class="site-name" href="../index.html">Vault &amp; Co</a>
-<button class="theme-toggle" type="button" aria-pressed="false" title="Switch between light and dark">Theme</button></header>
+<div class="header-tools"><div data-search="../assets/search-data.js" data-prefix="../"></div>
+<button class="theme-toggle" type="button" aria-pressed="false" title="Switch between light and dark">Theme</button></div></header>
 <nav class="sidebar">S</nav>
 <main>
 <nav class="breadcrumbs"><ol>

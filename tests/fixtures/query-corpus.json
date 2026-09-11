@@ -1,0 +1,360 @@
+{
+  "description": "Conformance cases for the query language, run by the Rust tests and the site's TypeScript tests alike (ADR 0052). Each note's frontmatter is JSON as the site's search data carries it; the Rust side serializes it to YAML and parses a note from it. A case expects the ids that match, in any order, or `error` when the query must be refused by both implementations.",
+  "notes": [
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+      "frontmatter": {
+        "title": "Rust Tips",
+        "tags": [
+          "Programming/Rust",
+          "area/work"
+        ],
+        "status": "draft",
+        "priority": 2,
+        "ratio": 1.5,
+        "published": false,
+        "reviewers": [
+          "jakob",
+          "mia"
+        ],
+        "review": {
+          "due": "2026-08-01"
+        },
+        "or": "keyword-field"
+      },
+      "body": "Borrowing rules.\nThe Borrow checker helps.\nfoo-bar and foo.bar\n"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+      "frontmatter": {
+        "title": "Grillen im Garten",
+        "tags": [
+          "Freizeit/Grillen",
+          "Über/Größe"
+        ],
+        "status": "done",
+        "priority": 10,
+        "published": true
+      },
+      "body": "Ein Abend mit Würstchen.\nSecond line mentions Rust the game.\n"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FA3",
+      "frontmatter": {
+        "title": "Untagged",
+        "priority": "2"
+      },
+      "body": "nothing here\nRUST in caps only\n"
+    }
+  ],
+  "cases": [
+    {
+      "query": "tag:programming",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "tag:Programming/Rust",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "tag:rust",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "tag:work",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "tag:area/work",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "tag:area/rust",
+      "expect": []
+    },
+    {
+      "query": "tag:ueber/groesse",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "tag:Über",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "tag:\"grillen\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "tag:missing",
+      "expect": []
+    },
+    {
+      "query": "status:draft",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "status:Draft",
+      "expect": []
+    },
+    {
+      "query": "priority:2",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FA3"
+      ]
+    },
+    {
+      "query": "ratio:\"1.5\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "published:true",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "published:false",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "reviewers:mia",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "review:2026-08-01",
+      "expect": []
+    },
+    {
+      "query": "or:keyword-field",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "nosuchfield:x",
+      "expect": []
+    },
+    {
+      "query": "borrow",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "Borrow",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "rust",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+        "01ARZ3NDEKTSV4RRFFQ69G5FA3"
+      ]
+    },
+    {
+      "query": "RUST",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA3"
+      ]
+    },
+    {
+      "query": "text:\"borrow checker\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "\"the game\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "text:\"^Second\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "text:\"helps\\.$\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "text:\"rules.The\"",
+      "expect": []
+    },
+    {
+      "query": "text:\"foo\\.bar\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "text:\"w.rstchen\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "text:\"foo\\W\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "text:\"[A-Z]UST\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA3"
+      ]
+    },
+    {
+      "query": "text:\"(?i)RUST\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+        "01ARZ3NDEKTSV4RRFFQ69G5FA3"
+      ]
+    },
+    {
+      "query": "tag:rust and status:draft",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "tag:rust and status:done",
+      "expect": []
+    },
+    {
+      "query": "status:draft or status:done",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "not tag:rust",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+        "01ARZ3NDEKTSV4RRFFQ69G5FA3"
+      ]
+    },
+    {
+      "query": "not not tag:rust",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "rust and not tag:rust",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+        "01ARZ3NDEKTSV4RRFFQ69G5FA3"
+      ]
+    },
+    {
+      "query": "(status:done or priority:2) and rust",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2",
+        "01ARZ3NDEKTSV4RRFFQ69G5FA3"
+      ]
+    },
+    {
+      "query": "status:done or priority:2 and tag:work",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "AND",
+      "expect": []
+    },
+    {
+      "query": "tag:rust AND status:draft",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "",
+      "error": true
+    },
+    {
+      "query": "   ",
+      "error": true
+    },
+    {
+      "query": "(tag:rust",
+      "error": true
+    },
+    {
+      "query": "tag:rust)",
+      "error": true
+    },
+    {
+      "query": "tag:",
+      "error": true
+    },
+    {
+      "query": "tag:rust and",
+      "error": true
+    },
+    {
+      "query": "and tag:rust",
+      "error": true
+    },
+    {
+      "query": "\"unterminated",
+      "error": true
+    },
+    {
+      "query": "a!b",
+      "error": true
+    },
+    {
+      "query": "text:\"[\"",
+      "error": true
+    },
+    {
+      "query": "text:\"a(?=b)\"",
+      "error": true
+    },
+    {
+      "query": "text:\"(a)\\1\"",
+      "error": true
+    },
+    {
+      "query": "ratio:1.5",
+      "error": true
+    }
+  ]
+}

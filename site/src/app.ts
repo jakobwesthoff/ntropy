@@ -5,12 +5,14 @@
 // The page script of an exported site, built as one classic script
 // (`docs/design/site-frontend.md`). Everything here is an addition to pages
 // that are complete without it: the theme toggle, the outline tracking,
-// and highlighting.
+// search, and highlighting.
 
 import { installHighlighting } from "./highlight";
 import { installOutline } from "./outline";
+import { installSearch } from "./search/ui";
 import { installThemeToggle } from "./theme";
 
 installThemeToggle();
 installOutline();
+installSearch();
 void installHighlighting();

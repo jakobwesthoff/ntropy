@@ -151,6 +151,12 @@ its files out as the starting point for a custom one.
 ## Search data
 
 The search runs in the browser over data embedded in the site: for every
-exported note its id, title, tags, frontmatter, and body. A published site
-therefore carries each note twice, as its page and inside the search
-data. The search itself is described in [site-frontend.md](site-frontend.md).
+exported note its id, title, page, creation date, tags, frontmatter, and
+body, as `assets/search-data.js`, a classic script that assigns
+`window.__ntropySearch`. The notes come in the model's order, newest
+first. Frontmatter travels as JSON with string keys only; a tagged YAML
+value becomes `null`. Every `</` inside the JSON is written as `<\/`, so
+a note whose body contains `</script>` cannot end the script that carries
+it. A published site therefore carries each note twice, as its page and
+inside the search data. The search itself is described in
+[site-frontend.md](site-frontend.md).

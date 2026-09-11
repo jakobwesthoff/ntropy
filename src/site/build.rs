@@ -20,7 +20,8 @@
 //! tags/<a>/<b>/index.html          one page per tag
 //! views/<name>/index.html          one index per configured view
 //! views/<name>/<group>/index.html  one page per group
-//! assets/                          the theme's files, style.css first
+//! assets/                          the theme's files, style.css first,
+//!                                  the scripts, and the search data
 //! files/<vault path>               vault files the notes reference
 //! ```
 
@@ -40,6 +41,7 @@ use super::frontend::{self, Grammars};
 use super::model::{Front, Model, Placement};
 use super::nav;
 use super::page::{NoteFragment, Page, PageLink};
+use super::search;
 use super::theme::{self, SiteTheme};
 
 /// The directory of the theme's files within the site.
@@ -195,6 +197,12 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     files.push(OutputFile {
         path: format!("{ASSETS_DIR}/{}", frontend::APP_SCRIPT),
         contents: frontend::APP_JS.as_bytes().to_vec(),
+    });
+    // The search data covers the exported set; the page script loads it
+    // the first time a reader opens the search.
+    files.push(OutputFile {
+        path: format!("{ASSETS_DIR}/{}", search::SEARCH_DATA),
+        contents: search::script(&model, &ordered).into_bytes(),
     });
     for name in &used_grammars {
         let grammar = grammars
@@ -800,6 +808,48 @@ mod tests {
         assert!(script.contains("\"name\":\"rust\""), "{script}");
         assert!(built.file("assets/grammars/cobol.js").is_none());
         assert_eq!(text(&built, "assets/app.js"), frontend::APP_JS);
+    }
+
+    #[test]
+    fn every_page_mounts_the_search_over_the_embedded_data() {
+        let vault = vault();
+        let built = build_site(vault.path(), &SiteOptions::default());
+        let page = text(&built, "notes/rust-tips.html");
+        assert!(
+            page.contains(
+                "<div data-search=\"../assets/search-data.js\" data-prefix=\"../\"></div>"
+            ),
+            "{page}"
+        );
+        let index = text(&built, "index.html");
+        assert!(
+            index.contains("<div data-search=\"assets/search-data.js\" data-prefix=\"\"></div>"),
+            "{index}"
+        );
+        // The data lists the exported notes newest first, with the page
+        // each entry links to.
+        let data = text(&built, "assets/search-data.js");
+        assert!(data.starts_with("window.__ntropySearch="), "{data}");
+        let json: serde_json::Value = serde_json::from_str(
+            data.trim_start_matches("window.__ntropySearch=")
+                .trim_end_matches(";\n"),
+        )
+        .expect("the payload is JSON");
+        let pages: Vec<&str> = json["notes"]
+            .as_array()
+            .expect("notes")
+            .iter()
+            .map(|entry| entry["page"].as_str().expect("page"))
+            .collect();
+        assert_eq!(
+            pages,
+            [
+                "notes/untagged.html",
+                "notes/plain.html",
+                "notes/rust-tips.html"
+            ]
+        );
+        assert_eq!(json["notes"][2]["frontmatter"]["status"], "done");
     }
 
     #[test]

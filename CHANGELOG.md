@@ -28,6 +28,15 @@ and this project adheres to
   blocks highlighted by Shiki in the browser for 72 languages; a page
   loads only the grammars its code blocks need, and a fence language
   without a grammar is reported as an export warning.
+- Exported sites search in the browser. The header's search panel takes
+  a query in the same language as `ntropy search` (`tag:`, `field:`,
+  `text:`, bare terms, `and`/`or`/`not`, parentheses) and a second box
+  that narrows the results fuzzily over date, title, and tags, like the
+  interactive picker. A `text:` pattern using a construct the CLI's
+  regex engine rejects, lookaround or backreferences among them, is
+  refused with a message, so a query that works on the site also works
+  in the CLI. The search data is one script under `assets/`, loaded the
+  first time the panel opens.
 - `render --to html` writes a note as one self-contained web page: the
   site theme's stylesheet inlined, the title, tags, and remaining
   frontmatter as a header, the converted body with heading anchors, and

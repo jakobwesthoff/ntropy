@@ -7,7 +7,8 @@
 {% block body_class %}site{% endblock %}
 {% block body %}<div class="layout">
 <header class="site-header"><a class="site-name" href="{{ prefix }}index.html">{{ site_title }}</a>
-<button class="theme-toggle" type="button" aria-pressed="false" title="Switch between light and dark">Theme</button></header>
+<div class="header-tools"><div data-search="{{ prefix }}assets/search-data.js" data-prefix="{{ prefix }}"></div>
+<button class="theme-toggle" type="button" aria-pressed="false" title="Switch between light and dark">Theme</button></div></header>
 {{ sidebar | trim }}
 <main>
 {% if breadcrumbs %}<nav class="breadcrumbs"><ol>

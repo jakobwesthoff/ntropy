@@ -4,6 +4,7 @@ expression: "format!(\"{}\\n--\\n{}\", paths.join(\"\\n\"), copies.join(\"\\n\")
 ---
 assets/app.js
 assets/grammars/rust.js
+assets/search-data.js
 assets/style.css
 index.html
 notes/plain.html

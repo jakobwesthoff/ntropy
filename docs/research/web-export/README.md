@@ -18,10 +18,14 @@ Started 2026-09-10.
 
 ## State on 2026-09-11
 
-Seventeen question rounds are decided (Q1 to Q51); no question is
-pending. `design-notes.md` is the consolidated result. The next step
-is moving the settled design into ADRs and design docs and starting
-implementation with stage one of the converter refactor.
+Every question round is decided (Q1 to Q54); no question is pending.
+`design-notes.md` is the consolidated result. The settled design lives
+in ADRs 0046 to 0054 and in `docs/design/site-export.md`,
+`html-engine.md`, and `site-frontend.md`. The implementation stages
+(the Markdown walk with the HTML emitter, the `html` render format with
+site themes, the `site` command, the browser toolchain with
+highlighting, theme toggle, and outline, and the client-side search)
+are committed on the branch `site-generation`.
 
 ## How to resume
 

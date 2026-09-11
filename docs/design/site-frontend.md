@@ -72,6 +72,19 @@ conformance cases: a query, note fixtures as frontmatter plus body, and
 the expected matching ids or expected error. The Rust tests and the
 Vitest tests both load it, so a drift on either side fails a test.
 
+The panel is a Preact component mounted into the header's `[data-search]`
+element, whose attributes name the search data script and the page's
+`../` prefix. Nothing loads until the reader opens the panel; the first
+opening injects the data script into the document, which works over
+`file://` where `fetch()` of a local file does not. The panel has two
+boxes. The first takes the query; a syntax error or a refused regex
+construct shows under it as the message the parser produced. The second
+narrows the query's results fuzzily over the text the CLI's picker shows
+for a row, date, title, and tags, with matches ordered by score and
+ties keeping the newest-first order. Each result links to the note's page
+and to the page of each of its tags. The list shows at most 50 results.
+Escape closes the panel.
+
 No search library and no WebAssembly are involved.
 
 ## Syntax highlighting
