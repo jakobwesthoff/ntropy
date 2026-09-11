@@ -34,14 +34,14 @@ use crate::note::Note;
 use crate::query::Query;
 use crate::render::html::{self, Targets, frontmatter};
 use crate::render::markdown::resolve_root_relative;
-use crate::render::{LinkTarget, ResolvedLink};
+use crate::render::{LinkTarget, RenderError, ResolvedLink};
 use crate::view::ViewDef;
 
 use super::SiteOptions;
 use super::frontend::{self, Grammars};
 use super::model::{self, Front, Landing, Model, Placement};
 use super::nav;
-use super::page::{Crumb, NoteFragment, Page, PageLink, TagLink};
+use super::page::{Crumb, NoteFragment, Page, PageLink, TagLink, Templates};
 use super::search;
 use super::theme::{self, SiteTheme};
 
@@ -126,8 +126,11 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     let mut warnings = model.warnings.clone();
     let mut files = Vec::new();
     let mut copies = Vec::new();
-    // Every page inlines the selected theme's icon sprite.
-    let icons = SiteTheme::selected(input.theme.map(|(theme, _)| theme)).sprite();
+    // Every page inlines the selected theme's icon sprite and renders with
+    // its templates, parsed once here.
+    let theme = SiteTheme::selected(input.theme.map(|(theme, _)| theme));
+    let icons = theme.sprite();
+    let templates = Templates::new(&theme)?;
 
     // The grammars every page's code blocks need, written once under
     // `assets/grammars/` beside the page script.
@@ -184,6 +187,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             let mut repeated = Vec::new();
             let rendered = render_note(
                 &model,
+                &templates,
                 &icons,
                 index,
                 note,
@@ -197,7 +201,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                     &mut repeated
                 },
                 extra,
-            );
+            )?;
             files.push(OutputFile {
                 path: page,
                 contents: rendered.page.into_bytes(),
@@ -225,6 +229,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             let mut repeated = Vec::new();
             let rendered = render_note(
                 &model,
+                &templates,
                 &icons,
                 index,
                 note,
@@ -234,7 +239,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                 &grammars,
                 &mut repeated,
                 None,
-            );
+            )?;
             files.push(OutputFile {
                 path: INDEX_PAGE.to_string(),
                 contents: rendered.page.into_bytes(),
@@ -286,7 +291,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         );
         files.push(OutputFile {
             path: INDEX_PAGE.to_string(),
-            contents: page.render().into_bytes(),
+            contents: page.render(&templates)?.into_bytes(),
         });
     }
 
@@ -312,7 +317,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         );
         files.push(OutputFile {
             path: section.page.clone(),
-            contents: page.render().into_bytes(),
+            contents: page.render(&templates)?.into_bytes(),
         });
 
         // Depth-first over the groups by path; a group with a landing note
@@ -350,15 +355,19 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             );
             files.push(OutputFile {
                 path: group.page.clone(),
-                contents: page.render().into_bytes(),
+                contents: page.render(&templates)?.into_bytes(),
             });
         }
     }
 
-    // The theme's files under `assets/`, the stylesheet among them.
+    // The theme's files under `assets/`, the stylesheet among them; the
+    // templates were rendered with and are not served.
     match input.theme {
         Some((_, dir)) => {
             for (relative, from) in files_under(dir)? {
+                if theme::is_template(&relative) {
+                    continue;
+                }
                 copies.push(Copy {
                     from,
                     to: format!("{ASSETS_DIR}/{relative}"),
@@ -367,6 +376,9 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         }
         None => {
             for asset in theme::BUILTIN_FILES {
+                if theme::is_template(asset.path) {
+                    continue;
+                }
                 files.push(OutputFile {
                     path: format!("{ASSETS_DIR}/{}", asset.path),
                     contents: asset.contents(),
@@ -556,6 +568,7 @@ fn group_page(model: &Model, section: usize, path: &[usize]) -> GroupPage {
 #[allow(clippy::too_many_arguments)]
 fn render_note(
     model: &Model,
+    templates: &Templates,
     icons: &str,
     index: usize,
     note: &Note,
@@ -565,7 +578,7 @@ fn render_note(
     grammars: &Grammars,
     warnings: &mut Vec<String>,
     group: Option<GroupPage>,
-) -> RenderedNote {
+) -> Result<RenderedNote, RenderError> {
     let prefix = nav::prefix_for(at);
     let targets = PageTargets {
         model,
@@ -606,7 +619,7 @@ fn render_note(
         fields: frontmatter::fields(&note.frontmatter),
         body: emitted.html,
     }
-    .render();
+    .render(templates)?;
 
     let placement = model.placements[index].as_ref();
     let crumbs = match group {
@@ -644,11 +657,11 @@ fn render_note(
         next,
         &needed,
     );
-    RenderedNote {
-        page: page.render(),
+    Ok(RenderedNote {
+        page: page.render(templates)?,
         assets: emitted.assets,
         grammars: needed,
-    }
+    })
 }
 
 /// The breadcrumb of a placed note, relative to its page.
@@ -1152,12 +1165,23 @@ mod tests {
         std::fs::create_dir_all(theme_dir.join("fonts")).expect("theme dirs");
         std::fs::write(theme_dir.join("style.css"), "body{}").expect("css");
         std::fs::write(theme_dir.join("fonts/a.woff2"), b"font").expect("font");
+        std::fs::create_dir_all(theme_dir.join("templates")).expect("templates dir");
+        std::fs::write(
+            theme_dir.join("templates/page.html"),
+            "{% extends \"ntropy/page.html\" %}{% block body_class %}themed{% endblock %}",
+        )
+        .expect("template");
         let theme = SiteTheme {
             name: "corporate".to_string(),
             stylesheet: "body{}".to_string(),
             icons: std::collections::BTreeMap::from([(
                 "x".to_string(),
                 "<symbol id=\"icon-x\"/>".to_string(),
+            )]),
+            templates: std::collections::BTreeMap::from([(
+                "page.html".to_string(),
+                "{% extends \"ntropy/page.html\" %}{% block body_class %}themed{% endblock %}"
+                    .to_string(),
             )]),
         };
         let notes = notes(vault.path());
@@ -1179,18 +1203,88 @@ mod tests {
             .filter(|c| c.to.starts_with("assets/"))
             .map(|c| c.to.as_str())
             .collect();
-        assert_eq!(theme_copies, ["assets/fonts/a.woff2", "assets/style.css"]);
+        assert_eq!(
+            theme_copies,
+            ["assets/fonts/a.woff2", "assets/style.css"],
+            "the templates are not served"
+        );
         assert!(
             built.file("assets/style.css").is_none(),
             "the built-in stylesheet is not written"
         );
-        // The pages inline the theme's own sprite.
+        // The pages inline the theme's own sprite and render with its
+        // template, every page kind alike.
         let page = text(&built, "notes/rust-tips.html");
         assert!(
             page.contains("aria-hidden=\"true\"><symbol id=\"icon-x\"/></svg>"),
             "{page}"
         );
         assert!(!page.contains("<symbol id=\"icon-menu\""), "{page}");
+        for path in ["notes/rust-tips.html", "index.html", "tags/index.html"] {
+            assert!(
+                text(&built, path).contains("<body class=\"themed\">"),
+                "{path} is rendered with the theme's template"
+            );
+        }
+    }
+
+    #[test]
+    fn the_builtin_theme_serves_no_templates() {
+        let vault = vault();
+        let notes = notes(vault.path());
+        let vault_ids = ids(&notes);
+        let built = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &SiteOptions::default(),
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault.path(),
+            theme: None,
+        })
+        .expect("builds");
+        assert!(built.file("assets/style.css").is_some());
+        assert!(
+            built
+                .files
+                .iter()
+                .all(|file| !file.path.starts_with("assets/templates/")),
+            "no template is written under assets/"
+        );
+    }
+
+    #[test]
+    fn a_theme_template_that_fails_to_render_fails_the_build_naming_it() {
+        let vault = vault();
+        let theme_dir = vault.path().join(".ntropy/themes/site/corporate");
+        std::fs::create_dir_all(&theme_dir).expect("theme dir");
+        std::fs::write(theme_dir.join("style.css"), "body{}").expect("css");
+        let theme = SiteTheme {
+            name: "corporate".to_string(),
+            stylesheet: "body{}".to_string(),
+            icons: std::collections::BTreeMap::new(),
+            templates: std::collections::BTreeMap::from([(
+                "page.html".to_string(),
+                "{{ title | no_such_filter }}".to_string(),
+            )]),
+        };
+        let notes = notes(vault.path());
+        let vault_ids = ids(&notes);
+        let err = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &SiteOptions::default(),
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault.path(),
+            theme: Some((&theme, &theme_dir)),
+        })
+        .expect_err("the render error surfaces");
+        let message = err.to_string();
+        assert!(message.contains("page.html"), "{message}");
+        assert!(message.contains("no_such_filter"), "{message}");
     }
 
     /// A documentation tree: a landing note with a label that asks for the

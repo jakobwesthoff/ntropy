@@ -6,10 +6,10 @@
 //! (`docs/design/site-export.md`).
 //!
 //! - [`options`]: the `[site]` table of the vault config.
-//! - [`theme`]: site themes, stylesheets and assets in
+//! - [`theme`]: site themes, stylesheets, assets, and templates in
 //!   `<vault>/.ntropy/themes/site/<name>/`, and the embedded default.
-//! - [`page`]: the minijinja templates embedded in the binary and the typed
-//!   contexts they render from.
+//! - [`page`]: the minijinja templates of a theme, the built-in ones
+//!   overridable by name, and the typed contexts they render from.
 //! - [`model`]: the site's structure, computed from the notes and views.
 //! - [`nav`]: the navigation fragments built from the model.
 //! - [`build`]: every file of a site, built in memory, and their writing.

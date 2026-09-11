@@ -60,13 +60,15 @@ artifact's file name without its extension. The page keeps the header,
 with the note's title where a site page shows the site name, the scheme
 switch, and the outline; it has no sidebar, search, breadcrumbs, pager,
 or related notes, its tags are plain text, and the `site` frontmatter
-table is hidden and inert. The icon sprite is inlined as on a site page.
+table is hidden and inert. The theme's templates render it as they
+render a site page ([site-export.md](site-export.md)). The icon sprite is inlined as on a site page.
 Note links target `<slug>.html` beside the artifact, the HTML
 counterpart of the `<slug>.pdf` convention.
 
 The directory mirrors the site's `assets/`
 ([site-export.md](site-export.md)): `style.css` and every other file of
-the theme except its `icons/`, `app.js`, under `grammars/` the grammars
+the theme except its `icons/` and `templates/`, `app.js`, under
+`grammars/` the grammars
 the page's code blocks need, and under `files/<vault path>` the images
 and files the note references, resolved against the note's directory
 and copied as the site copies them; a file that is missing or lies

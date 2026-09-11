@@ -2,28 +2,104 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Page templates: minijinja templates embedded in the binary and the typed
-//! contexts they render from (ADR 0050).
+//! Page templates: the minijinja templates a theme renders pages with and
+//! the typed contexts they render from (ADR 0050, ADR 0058).
 //!
-//! Templates are real files under `src/site/templates/`, embedded with
-//! `include_str!` like the vault seed content, so they are edited as HTML.
-//! minijinja escapes every value it interpolates; the values that are HTML
-//! already (a converted body, a stylesheet, a frontmatter value) are marked
-//! safe where the context is built, never inside a template.
+//! The built-in templates are real files under `src/site/theme/templates/`,
+//! embedded with the rest of the built-in theme, so they are edited as
+//! HTML and `site theme init` writes them out. A vault theme's
+//! `templates/*.html` replace them by name; every built-in template stays
+//! reachable as `ntropy/<name>` so a theme template can extend one and
+//! override single blocks. minijinja escapes every value it interpolates;
+//! the values that are HTML already (a converted body, a stylesheet, a
+//! frontmatter value) are marked safe where the context is built, never
+//! inside a template.
 
 use minijinja::Environment;
 use minijinja::value::Value;
 use serde::Serialize;
 
+use super::theme::{self, SiteTheme};
+use crate::render::RenderError;
 use crate::render::html::frontmatter::Field;
 use crate::render::html::writer::escape;
 
-/// The embedded templates, by the name templates refer to each other with.
-const TEMPLATES: &[(&str, &str)] = &[
-    ("base.html", include_str!("templates/base.html")),
-    ("note.html", include_str!("templates/note.html")),
-    ("page.html", include_str!("templates/page.html")),
-];
+/// The prefix under which every built-in template is registered beside
+/// its plain name, for a theme template to extend or include.
+pub const BUILTIN_NAMESPACE: &str = "ntropy/";
+
+/// The template every page renders with unless a note names another.
+pub const PAGE_TEMPLATE: &str = "page.html";
+
+/// The template of a note's header and body.
+pub const NOTE_TEMPLATE: &str = "note.html";
+
+/// The templates of one theme, parsed and ready to render: the theme's own
+/// under their names, the built-in ones under the names the theme leaves
+/// free and, all of them, under [`BUILTIN_NAMESPACE`]. Built once per
+/// export; parsing is the whole cost.
+#[derive(Debug)]
+pub struct Templates {
+    env: Environment<'static>,
+}
+
+impl Templates {
+    /// The environment for `theme`. Every template is parsed here, so a
+    /// theme template with a syntax error fails before any page is
+    /// written, naming the template.
+    pub fn new(theme: &SiteTheme) -> Result<Templates, RenderError> {
+        let mut env = Environment::new();
+        env.set_formatter(formatter);
+        let add = |env: &mut Environment<'static>, name: String, source: String| {
+            env.add_template_owned(name.clone(), source)
+                .map_err(|error| RenderError::ThemeTemplate {
+                    name,
+                    reason: error.to_string(),
+                })
+        };
+        for (name, source) in theme::builtin_templates() {
+            add(
+                &mut env,
+                format!("{BUILTIN_NAMESPACE}{name}"),
+                source.clone(),
+            )?;
+            if !theme.templates.contains_key(name) {
+                add(&mut env, name.clone(), source.clone())?;
+            }
+        }
+        for (name, source) in &theme.templates {
+            add(&mut env, name.clone(), source.clone())?;
+        }
+        Ok(Templates { env })
+    }
+
+    /// The built-in theme's templates alone.
+    pub fn builtin() -> Templates {
+        Templates::new(&SiteTheme::builtin()).expect("the built-in templates parse")
+    }
+
+    /// Whether a template of that name exists, the theme's or built-in.
+    pub fn has(&self, name: &str) -> bool {
+        self.env.get_template(name).is_ok()
+    }
+
+    /// Render the template `name` with `context`.
+    fn render(&self, name: &str, context: Value) -> Result<String, RenderError> {
+        let template = self
+            .env
+            .get_template(name)
+            .map_err(|error| RenderError::ThemeTemplate {
+                name: name.to_string(),
+                reason: error.to_string(),
+            })?;
+        template
+            .render(context)
+            .map_err(|error| RenderError::ThemeTemplate {
+                name: name.to_string(),
+                reason: error.to_string(),
+            })
+    }
+}
 
 /// A tag in a note's header: on a site page it links to the tag's page, in
 /// the standalone document it is plain text.
@@ -58,12 +134,8 @@ pub struct NoteFragment {
 }
 
 impl NoteFragment {
-    pub fn render(&self) -> String {
-        environment()
-            .get_template("note.html")
-            .expect("the embedded note template is registered")
-            .render(note_context(self))
-            .expect("the embedded templates render any well-typed context")
+    pub fn render(&self, templates: &Templates) -> Result<String, RenderError> {
+        templates.render(NOTE_TEMPLATE, note_context(self))
     }
 }
 
@@ -130,7 +202,7 @@ pub struct Page {
 }
 
 impl Page {
-    pub fn render(&self) -> String {
+    pub fn render(&self, templates: &Templates) -> Result<String, RenderError> {
         let link = |link: &Option<PageLink>| {
             link.as_ref().map(|link| {
                 minijinja::context! {
@@ -155,25 +227,8 @@ impl Page {
             body => Value::from_safe_string(self.body.clone()),
             document => self.document,
         };
-        environment()
-            .get_template("page.html")
-            .expect("the embedded page template is registered")
-            .render(context)
-            .expect("the embedded templates render any well-typed context")
+        templates.render(PAGE_TEMPLATE, context)
     }
-}
-
-/// The environment holding every embedded template. Built per call: the
-/// templates are static strings, so parsing them is the whole cost, and a
-/// render happens once per page.
-fn environment() -> Environment<'static> {
-    let mut env = Environment::new();
-    env.set_formatter(formatter);
-    for (name, source) in TEMPLATES {
-        env.add_template(name, source)
-            .expect("the embedded templates are valid at build time");
-    }
-    env
 }
 
 /// Interpolation escaping: the same five characters the HTML writer
@@ -254,12 +309,12 @@ mod tests {
 
     #[test]
     fn a_standalone_page_pins_its_structure() {
-        insta::assert_snapshot!(document().render());
+        insta::assert_snapshot!(document().render(&Templates::builtin()).expect("renders"));
     }
 
     #[test]
     fn a_standalone_page_keeps_the_header_switch_and_outline_and_drops_the_rest() {
-        let out = document().render();
+        let out = document().render(&Templates::builtin()).expect("renders");
         assert!(out.contains("<body class=\"document\">"), "{out}");
         assert!(
             out.contains("<span class=\"site-name\">Quarterly &lt;Review&gt;</span>"),
@@ -280,12 +335,12 @@ mod tests {
 
     #[test]
     fn a_site_page_pins_its_structure() {
-        insta::assert_snapshot!(page().render());
+        insta::assert_snapshot!(page().render(&Templates::builtin()).expect("renders"));
     }
 
     #[test]
     fn a_site_page_escapes_text_and_splices_fragments() {
-        let out = page().render();
+        let out = page().render(&Templates::builtin()).expect("renders");
         assert!(
             out.contains("<title>Rust &lt;Tips&gt; · Vault &amp; Co</title>"),
             "{out}"
@@ -351,7 +406,8 @@ mod tests {
             next: None,
             ..page()
         }
-        .render();
+        .render(&Templates::builtin())
+        .expect("renders");
         assert!(!out.contains("class=\"breadcrumbs\""), "{out}");
         assert!(!out.contains("class=\"pager\""), "{out}");
     }
@@ -374,7 +430,7 @@ mod tests {
             fields: vec![],
             body: "<p>b</p>\n".to_string(),
         };
-        let out = fragment.render();
+        let out = fragment.render(&Templates::builtin()).expect("renders");
         assert!(out.starts_with("<header class=\"note-header\">"), "{out}");
         assert!(out.contains("<p>b</p>"), "{out}");
         assert!(
@@ -389,13 +445,118 @@ mod tests {
         );
     }
 
-    #[test]
-    fn every_embedded_template_parses() {
-        // The environment panics on a template that does not parse; building
-        // it is the test.
-        let env = environment();
-        for (name, _) in TEMPLATES {
-            env.get_template(name).expect("registered");
+    /// A theme with the given templates, nothing else of its own.
+    fn theme_with(templates: &[(&str, &str)]) -> SiteTheme {
+        SiteTheme {
+            templates: templates
+                .iter()
+                .map(|(name, source)| (name.to_string(), source.to_string()))
+                .collect(),
+            ..SiteTheme::builtin()
         }
+    }
+
+    #[test]
+    fn the_builtin_templates_are_registered_plain_and_under_the_namespace() {
+        let templates = Templates::builtin();
+        for name in ["base.html", "page.html", "note.html"] {
+            assert!(templates.has(name), "{name}");
+            assert!(templates.has(&format!("ntropy/{name}")), "ntropy/{name}");
+        }
+        assert!(!templates.has("no-such-template.html"));
+    }
+
+    #[test]
+    fn a_theme_template_replaces_the_builtin_of_its_name() {
+        let templates = Templates::new(&theme_with(&[(
+            "page.html",
+            "<p>{{ title }} in {{ site_title }}</p>",
+        )]))
+        .expect("parses");
+        let out = page().render(&templates).expect("renders");
+        assert_eq!(out, "<p>Rust &lt;Tips&gt; in Vault &amp; Co</p>");
+        // The note fragment still comes from the built-in template.
+        assert!(templates.has("note.html"));
+    }
+
+    #[test]
+    fn a_theme_template_extends_the_builtin_and_overrides_one_block() {
+        let templates = Templates::new(&theme_with(&[(
+            "page.html",
+            "{% extends \"ntropy/page.html\" %}{% block title %}Custom · {{ title }}{% endblock %}",
+        )]))
+        .expect("parses");
+        let out = page().render(&templates).expect("renders");
+        assert!(
+            out.contains("<title>Custom · Rust &lt;Tips&gt;</title>"),
+            "{out}"
+        );
+        assert!(
+            out.contains("<nav class=\"sidebar\">S</nav>"),
+            "the rest is the built-in page: {out}"
+        );
+    }
+
+    #[test]
+    fn a_theme_template_includes_another_theme_template() {
+        let templates = Templates::new(&theme_with(&[
+            ("page.html", "{% include \"partials/footer.html\" %}"),
+            ("partials/footer.html", "<footer>{{ site_title }}</footer>"),
+        ]))
+        .expect("parses");
+        let out = page().render(&templates).expect("renders");
+        assert_eq!(out, "<footer>Vault &amp; Co</footer>");
+    }
+
+    #[test]
+    fn a_theme_template_that_does_not_parse_fails_naming_it() {
+        let err = Templates::new(&theme_with(&[("page.html", "{% if %}")]))
+            .expect_err("a syntax error is refused");
+        match err {
+            RenderError::ThemeTemplate { name, reason } => {
+                assert_eq!(name, "page.html");
+                assert!(reason.contains("syntax error"), "{reason}");
+            }
+            other => panic!("expected ThemeTemplate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_theme_template_that_fails_while_rendering_names_itself() {
+        let templates = Templates::new(&theme_with(&[(
+            "page.html",
+            "{{ title | no_such_filter }}",
+        )]))
+        .expect("an unknown filter is found at render time");
+        let err = page()
+            .render(&templates)
+            .expect_err("the unknown filter fails the render");
+        match err {
+            RenderError::ThemeTemplate { name, reason } => {
+                assert_eq!(name, "page.html");
+                assert!(reason.contains("no_such_filter"), "{reason}");
+            }
+            other => panic!("expected ThemeTemplate, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_theme_note_template_renders_the_fragment() {
+        let templates = Templates::new(&theme_with(&[(
+            "note.html",
+            "<h1>{{ title }}</h1>{{ body }}",
+        )]))
+        .expect("parses");
+        let fragment = NoteFragment {
+            title: "T".to_string(),
+            created: "2026-01-01".to_string(),
+            tags: vec![],
+            fields: vec![],
+            body: "<p>b</p>\n".to_string(),
+        };
+        assert_eq!(
+            fragment.render(&templates).expect("renders"),
+            "<h1>T</h1><p>b</p>\n"
+        );
     }
 }

@@ -244,6 +244,13 @@ pub enum RenderError {
     #[error("the theme icon {} is not usable: {reason}", path.display())]
     ThemeIcon { path: PathBuf, reason: String },
 
+    /// A template of the theme's `templates/` directory cannot be used
+    /// (ADR 0058): its name shadows the built-in namespace, it does not
+    /// parse, or it fails while rendering a page. The export fails naming
+    /// the template rather than writing pages from the built-in one.
+    #[error("the theme template `{name}` is not usable: {reason}")]
+    ThemeTemplate { name: String, reason: String },
+
     /// The theme name is not a single filename component, so it does not name
     /// a file inside the themes directory.
     #[error("invalid theme name `{name}`: a theme is named by a single file, without a path")]

@@ -15,7 +15,7 @@ use crate::id::Id;
 use crate::render::markdown::resolve_root_relative;
 use crate::render::{PreparedDocument, RenderContext, RenderError, Renderer, files_dir};
 use crate::site::build::{self, FILES_DIR};
-use crate::site::page::{NoteFragment, Page, TagLink};
+use crate::site::page::{NoteFragment, Page, TagLink, Templates};
 use crate::site::{DocumentSettings, SiteTheme, frontend, nav, theme};
 
 /// The theme directory whose files stay out of the artifact: the icons are
@@ -79,20 +79,21 @@ impl Renderer for Html {
             ctx.warn(&warning.message);
         }
 
-        // The theme's files, the icons excepted: a vault theme's from its
-        // directory, the built-in theme's from the binary.
+        // The theme's files, the icons and the templates excepted: a vault
+        // theme's from its directory, the built-in theme's from the binary.
         let theme = SiteTheme::selected(self.settings.theme.as_ref());
+        let templates = Templates::new(&theme)?;
         match &self.settings.theme_dir {
             Some(dir) => {
                 for (relative, from) in build::files_under(dir)? {
-                    if !relative.starts_with(ICONS_PREFIX) {
+                    if !relative.starts_with(ICONS_PREFIX) && !theme::is_template(&relative) {
                         ctx.copy_file(&from, &relative)?;
                     }
                 }
             }
             None => {
                 for asset in theme::BUILTIN_FILES {
-                    if !asset.path.starts_with(ICONS_PREFIX) {
+                    if !asset.path.starts_with(ICONS_PREFIX) && !theme::is_template(asset.path) {
                         ctx.write_file(asset.path, &asset.contents())?;
                     }
                 }
@@ -151,7 +152,7 @@ impl Renderer for Html {
             fields: frontmatter::fields(&doc.frontmatter),
             body: emitted.html,
         }
-        .render();
+        .render(&templates)?;
         let page = Page {
             lang: self.settings.lang.clone(),
             site_title: doc.title.clone(),
@@ -168,7 +169,7 @@ impl Renderer for Html {
             body,
             document: true,
         };
-        ctx.write_output(page.render().as_bytes())
+        ctx.write_output(page.render(&templates)?.as_bytes())
     }
 }
 
@@ -343,6 +344,11 @@ mod tests {
             ctx.files.keys()
         );
         assert!(
+            ctx.files.keys().all(|file| !file.starts_with("templates/")),
+            "the built-in templates are not written beside the page: {:?}",
+            ctx.files.keys()
+        );
+        assert!(
             ctx.files.keys().all(|name| !name.starts_with("icons/")),
             "the icon files stay out: {:?}",
             ctx.files.keys()
@@ -448,11 +454,22 @@ mod tests {
         .expect("css");
         std::fs::write(theme_dir.path().join("fonts/a.woff2"), b"font").expect("font");
         std::fs::write(theme_dir.path().join("icons/tag.svg"), "<svg/>").expect("icon");
+        std::fs::create_dir_all(theme_dir.path().join("templates")).expect("templates");
+        std::fs::write(
+            theme_dir.path().join("templates/page.html"),
+            "{% extends \"ntropy/page.html\" %}{% block body_class %}themed{% endblock %}",
+        )
+        .expect("template");
         let settings = DocumentSettings {
             theme: Some(SiteTheme {
                 name: "corporate".to_string(),
                 stylesheet: "body { color: rebeccapurple }".to_string(),
                 icons: BTreeMap::from([("x".to_string(), "<symbol id=\"icon-x\"/>".to_string())]),
+                templates: BTreeMap::from([(
+                    "page.html".to_string(),
+                    "{% extends \"ntropy/page.html\" %}{% block body_class %}themed{% endblock %}"
+                        .to_string(),
+                )]),
             }),
             theme_dir: Some(theme_dir.path().to_path_buf()),
             lang: "de".to_string(),
@@ -468,8 +485,16 @@ mod tests {
             page.contains("<symbol id=\"icon-x\"/>"),
             "the theme's sprite: {page}"
         );
+        assert!(
+            page.contains("<body class=\"themed\">"),
+            "the theme's template renders the artifact: {page}"
+        );
         let copies: Vec<&str> = ctx.copies.iter().map(|(_, to)| to.as_str()).collect();
-        assert_eq!(copies, ["fonts/a.woff2", "style.css"]);
+        assert_eq!(
+            copies,
+            ["fonts/a.woff2", "style.css"],
+            "icons and templates stay out of the files directory"
+        );
         assert!(
             !ctx.files.contains_key("style.css"),
             "the built-in stylesheet is not written"

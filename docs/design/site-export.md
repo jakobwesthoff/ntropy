@@ -247,14 +247,26 @@ vault theme alike
     style.css        the entry point, required
     icons/*.svg      one icon per file
     fonts/*          files the stylesheet references with url(fonts/...)
+    templates/*.html the page templates, rendered with and never copied
     anything else    copied under assets/ as it is
 
-Every page links `style.css` and `render --to html` inlines it; a
-directory without it is not a theme. The HTML structure of every page is
-ntropy's own, so a theme controls appearance, not markup. A theme
-provides the palettes for both light and dark mode; the page follows the
-system preference by default and remembers a manual choice in the
-browser. The built-in theme keeps every color and typeface, and the
+Every page links `style.css` and `render --to html` copies it beside the
+artifact; a directory without it is not a theme. A theme provides the
+palettes for both light and dark mode; the page follows the system
+preference by default and remembers a manual choice in the browser.
+
+The pages are rendered by minijinja from the theme's templates
+([ADR 0058](../adr/0058-theme-templates-overriding-the-built-in-ones-by-name.md)).
+The built-in theme's three, `base.html`, `page.html`, and `note.html`,
+are what every page uses unless the theme has a file of the same name
+under `templates/`, named by its path below that directory
+(`partials/footer.html` for a file in a subdirectory). Every built-in
+template is also registered as `ntropy/<name>`, so a theme's
+`page.html` can extend `ntropy/page.html` and override single blocks
+instead of replacing the file; a theme template whose own name starts
+with `ntropy/` fails the load naming it. Every template is parsed
+before the first page is written, and a template that fails to parse
+or to render fails the export naming the template. The built-in theme keeps every color and typeface, and the
 sizes that shape the pages (the reading column, the chrome's widths, the
 gaps between blocks and sections, the radii, the shadows, the transition
 length), in custom properties on the root element named for their job,
@@ -274,9 +286,9 @@ license.
 
 Selection is `--theme`, then `[site] theme`, then the built-in theme. The
 binary embeds exactly one built-in theme, every file under
-`src/site/theme/`, and `site theme init` copies them out as the starting
-point for a custom one. The README's theme section is the contract a
-theme author writes against.
+`src/site/theme/`, templates included, and `site theme init` copies them
+out as the starting point for a custom one. The README's theme section
+is the contract a theme author writes against.
 
 ## Search data
 
