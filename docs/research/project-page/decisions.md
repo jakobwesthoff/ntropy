@@ -57,6 +57,99 @@ Validated against the repository at the start of the effort:
 - **Q6. Sidebar depth (2026-09-11).**
   - *Answer (verbatim):* "unsure maybe lets reevaluate when we get
     there". Deferred.
+- **Q7. The top-level sections (2026-09-11).** Offered: seven topic
+  sections (Getting started; Writing notes; The vault; Finding notes;
+  Publishing; Integrations; About), each a nav section with a landing
+  note; fewer, broader sections; the seven plus a Reference section.
+  - *Answer:* fewer, broader sections: Getting started; Notes and the
+    vault; Finding notes; Publishing; Integrations and About. The pages
+    of each section are discussed one section at a time (Q3).
+- **Q8. The starter page's parts (2026-09-11).** Facts given first: the
+  current page has a hero with the tagline and two buttons, three
+  highlight cards, the demo recording, an install block with three
+  tabs, and the basic commands; the README adds "Why I built this" and
+  a four-command quick start linking into the topics.
+  - *Answer:* all four offered parts: the hero with the tagline and two
+    buttons (into the docs, and GitHub); highlight cards each linking
+    to its topic page; the demo recording; install and the first
+    commands.
+- **Q9. The Getting started section (2026-09-11).**
+  - *Answer:* a landing note holding installation and the quick start,
+    and "A day with ntropy" as the one page under it. Not chosen: a
+    short landing note with Installation, Quick start, and A day with
+    ntropy as three pages; one page only.
+- **Q10. The "Why I built this" essay (2026-09-11).**
+  - *Answer:* on the starter page, a short section below the
+    highlights. Not chosen: a page in Getting started; the About part;
+    dropped.
+- **Q11. The pages of Notes and the vault (2026-09-11).** Facts given
+  first: the section takes over eight README sections, Linking (fifteen
+  lines) and Finding the vault (one list) among them.
+  - *Answer:* seven pages under a landing note that holds the vault
+    layout and the "notes are the database" idea: Note format (with
+    linking folded in), Markdown flavor, Templates and daily notes,
+    Finding the vault, Materialized views, Encrypted vaults,
+    Configuration. Not chosen: eight pages mirroring the README; five
+    pages with one "Writing notes" page.
+- **Q12. Nesting inside the section (2026-09-11).**
+  - *Answer:* flat, the pages directly under the section. Not chosen:
+    two sub-groups, Notes and The vault. This settles Q6 for the
+    largest section.
+- **Q13. The command reference table (2026-09-11).**
+  - *Answer:* in Getting started, after the tour: the landing note,
+    A day with ntropy, then Commands as the lookup page; Finding notes
+    holds its landing note, Query language, and The interactive picker.
+    Not chosen: Commands in Finding notes; Commands beside Scripting.
+- **Q14. The pages of Publishing (2026-09-11).**
+  - *Answer:* four pages under a landing note naming the three outputs:
+    Rendering to PDF and HTML (with cross-references and `--force`),
+    Document themes (Typst), Exporting a website (command, navigation,
+    config, search), Site themes (tokens, fonts, icons, markup,
+    templates). Not chosen: five pages with Templates apart; three
+    pages.
+- **Q15. The pages after Publishing (2026-09-11).** Offered: six pages
+  plus the hidden impressum; the README's nine notes; five pages plus
+  the impressum.
+  - *Answer (verbatim):* "six pages plus hidden impressum, but i think
+    license should be hidden and linked from the footer as well. the
+    quesion is why are those pages part of a section at all? and maybe
+    we should split into a Integration Section covering LSP, neovim,
+    scripting, agents and then another section for the Limitations,
+    development, design, adrs and so on?" Taken as: License is a hidden
+    note linked from the footer like the impressum; two sections
+    instead of one, Integrations (Language server with the Neovim
+    setup, Scripting and the shell, Agent skill) and a last section for
+    Limitations, Development, and Design (the decision records and
+    design documents). This revises Q7 to six sections.
+- **Q16. The label of the Integrations section (2026-09-11).**
+  - *Answer:* Integrations. Not chosen: Integrations and about; More.
+- **Q17. The last section (2026-09-11).**
+  - *Answer:* "Development", two pages: a landing note with the build
+    and contributing instructions, then Limitations and Design (the
+    decision records and design documents). Not chosen: "About" with
+    three pages; "Project" with three pages.
+- **The structure as decided (Q7 to Q17), for reference:**
+  - the starter page as the front page (Q8, Q10);
+  - Getting started: landing note (installation, quick start), A day
+    with ntropy, Commands;
+  - Notes and the vault: landing note (vault layout, notes are the
+    database), Note format (with linking), Markdown flavor, Templates
+    and daily notes, Finding the vault, Materialized views, Encrypted
+    vaults, Configuration;
+  - Finding notes: landing note, Query language, The interactive
+    picker;
+  - Publishing: landing note, Rendering to PDF and HTML, Document
+    themes, Exporting a website, Site themes;
+  - Integrations: landing note, Language server, Scripting and the
+    shell, Agent skill;
+  - Development: landing note (build, contributing), Limitations,
+    Design;
+  - hidden, linked from the footer: License, Impressum.
+- **The user, unprompted (2026-09-11):** when the README is split, the
+  pages' contents are audited and validated, and rewritten where they
+  do not follow the writing rules (verbatim: "audit and validate their
+  contents and make sure they adhere to unslop skill rules and your
+  best writing practices. if they dont rewrite them").
 - **The user, unprompted (2026-09-11):** the template override for site
   themes has to be implemented before the page work can start; the
   ideas and answers so far are documented first, then the template
@@ -65,9 +158,5 @@ Validated against the repository at the start of the effort:
 
 ## Open
 
-- The split of the README into pages and the exact sections (Q3, Q4).
-- The depth of the sidebar (Q6).
-- The structure of the introduction page and its cross-links into the
-  documentation (Q4).
 - The reduced README's content (stage 3 of the work order).
 - The design of the custom template (stage 4 of the work order).

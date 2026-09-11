@@ -17,11 +17,14 @@ Started 2026-09-11 on the branch `new-project-page`.
 
 ## State on 2026-09-11
 
-The request is recorded. Questions Q1 to Q6 are answered: the vault's
+The request is recorded. Questions Q1 to Q17 are answered: the vault's
 location, the source of the exporter binary in the pages workflow, the
-organizing principle of the documentation, and the extra pages the site
-carries. The split of the README into pages and the depth of the
-sidebar are deferred until the overall structure is agreed.
+organizing principle of the documentation, the extra pages the site
+carries, the starter page's parts, and the six sections with their
+pages (the list stands at the end of the decided questions in
+`decisions.md`). Next is stage 2 of the work order: the vault under
+`docs/website/` and the transfer of the README's content into its
+notes.
 
 The user decided that the template override for site themes has to land
 before the page work starts; that feature belongs to the site export, its

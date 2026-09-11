@@ -125,7 +125,7 @@ frontmatter field. The same mechanism serves every axis:
 So `by-tag` is the mechanism applied to `tags`, `by-status` to `status`, and so
 on. Views are configuration entries pairing an output directory with a field,
 not bespoke code. View definitions are managed through the `view`
-CLI commands (`list`/`add`/`edit`/`remove`), not only by hand-editing config.
+CLI commands (`list`/`add`/`remove`), not only by hand-editing config.
 
 ### Leaf links
 

@@ -1,0 +1,8 @@
+view = []
+
+[site]
+title = "ntropy"
+index = "01M28Q3276TZRS3RRYPV8QX8R3"
+lang = "en"
+related = false
+root = "tags/docs"

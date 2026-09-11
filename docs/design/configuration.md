@@ -43,7 +43,7 @@ name = "by-status"
 field = "status"
 ```
 
-`view list|add|edit|remove` (ADR 0018) read and write this file.
+`view list|add|remove` (ADR 0018) read and write this file.
 
 The same file holds an optional `[render]` table for the document formats
 ([rendering.md](rendering.md), "Configuration") and an optional `[site]`

@@ -39,8 +39,8 @@ This will:
 - `demo.webm` — WebM (smaller, modern browsers)
 - `demo.mp4` — MP4 (broader compatibility)
 
-Both land in `docs/pages/assets/`, where the landing page generator picks them
-up. They are committed alongside the page so the GitHub Pages deploy has the
+Both land in `docs/website/assets/`, the documentation vault whose front
+page links them. They are committed so the GitHub Pages deploy has the
 video without rendering VHS in CI; re-run `./record.sh` to refresh them.
 
 ## What the demo shows
