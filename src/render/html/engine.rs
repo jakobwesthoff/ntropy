@@ -15,7 +15,7 @@ use crate::id::Id;
 use crate::render::markdown::resolve_root_relative;
 use crate::render::{PreparedDocument, RenderContext, RenderError, Renderer, files_dir};
 use crate::site::build::{self, FILES_DIR};
-use crate::site::page::{NoteFragment, Page, TagLink, Templates};
+use crate::site::page::{NoteContext, NoteFragment, Page, PageKind, TagLink, Templates};
 use crate::site::{DocumentSettings, SiteTheme, frontend, nav, theme};
 
 /// The theme directory whose files stay out of the artifact: the icons are
@@ -157,7 +157,22 @@ impl Renderer for Html {
             lang: self.settings.lang.clone(),
             site_title: doc.title.clone(),
             title: doc.title.clone(),
+            path: ctx
+                .output_path()
+                .file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default(),
             prefix: String::new(),
+            kind: PageKind::Document,
+            note: Some(NoteContext {
+                id: doc.id.to_string(),
+                title: doc.title.clone(),
+                created: doc.created.clone(),
+                tags: doc.tags.clone(),
+                frontmatter: doc.frontmatter.clone(),
+            }),
+            vars: self.settings.vars.clone(),
+            nav: Vec::new(),
             stylesheet: format!("{files}/{}", theme::STYLESHEET),
             scripts,
             icons: theme.sprite(),
@@ -167,7 +182,6 @@ impl Renderer for Html {
             prev: None,
             next: None,
             body,
-            document: true,
         };
         ctx.write_output(page.render(&templates)?.as_bytes())
     }
@@ -473,6 +487,7 @@ mod tests {
             }),
             theme_dir: Some(theme_dir.path().to_path_buf()),
             lang: "de".to_string(),
+            vars: toml::Table::new(),
         };
         let document = doc("Themed", "{}", "text\n", Vec::new());
         let mut ctx = FakeContext::new();
@@ -500,6 +515,29 @@ mod tests {
             "the built-in stylesheet is not written"
         );
         assert!(ctx.files.contains_key("app.js"));
+    }
+
+    #[test]
+    fn the_artifact_is_a_document_with_its_note_and_the_vars() {
+        let settings = DocumentSettings {
+            theme: Some(SiteTheme {
+                templates: BTreeMap::from([(
+                    "page.html".to_string(),
+                    "{{ kind }}|{{ path }}|{{ note.title }}|{{ note.tags[0] }}|{{ note.frontmatter.priority }}|{{ vars.owner }}|{{ nav | length }}|{{ sidebar }}"
+                        .to_string(),
+                )]),
+                ..SiteTheme::builtin()
+            }),
+            theme_dir: None,
+            lang: "en".to_string(),
+            vars: toml::from_str("owner = \"Acme\"\n").expect("vars"),
+        };
+        let document = doc("My Note", "priority: 2\n", "text\n", Vec::new());
+        let mut ctx = FakeContext::new();
+        Html::new(settings)
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert_eq!(ctx.page(), "document|note.html|My Note|area/work|2|Acme|0|");
     }
 
     #[test]

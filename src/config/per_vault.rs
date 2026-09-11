@@ -20,7 +20,7 @@ use crate::render::RenderOptions;
 use crate::site::SiteOptions;
 
 /// The parsed per-vault configuration.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PerVaultConfig {
     /// View definitions, serialized as `[[view]]` tables.
     #[serde(default, rename = "view")]

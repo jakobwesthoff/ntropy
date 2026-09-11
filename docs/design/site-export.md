@@ -71,6 +71,7 @@ The `[site]` table of the vault's `config.toml`:
 | `related` | whether note pages end with their related notes; a note's `site.related` overrides it | `true` |
 | `root` | the page the sidebar is rooted at, `tags/<path>` or `views/<name>/<group>` | the vault root, or the tag of a single `tag:` export query |
 | `[[site.nav]]` | the hand-assembled sidebar, one table per section | the sidebar built from the root |
+| `[site.vars]` | free-form values the theme's templates read as `vars`; ntropy reads nothing from it | empty |
 
 A `[[site.nav]]` table has a `label` and `items`, each item one of
 `{ note = "<ulid>" }`, `{ tag = "<path>" }` (the tag's subtree as a
@@ -266,7 +267,37 @@ template is also registered as `ntropy/<name>`, so a theme's
 instead of replacing the file; a theme template whose own name starts
 with `ntropy/` fails the load naming it. Every template is parsed
 before the first page is written, and a template that fails to parse
-or to render fails the export naming the template. The built-in theme keeps every color and typeface, and the
+or to render fails the export naming the template.
+
+A template renders from one context. `kind` says what the page is
+rendered from: `front` for the front page, `note` for a note's own
+page, `group` for a tag, view, or group page, a landing note's page
+among them, and a section index, and `document` for the `render --to
+html` artifact. `note` is the note the page is rendered from, with
+`id`, `title`, `created`, `tags`, and `frontmatter`, the raw mapping;
+a page rendered from no note leaves it undefined. `vars` is the
+config's `[site.vars]` table as it stands. `nav` is the sidebar as
+data: one entry per section with `label`, `href`, `cloud`, `open`, and
+`items`, each item with `kind` (`note` or `group`), `label`, `href`
+(none for a group assembled by hand), `current`, `open`, `count` (a
+group's notes), and its own `items`; `sidebar` is the same sidebar
+rendered. The rest is the page's chrome: `lang`, `site_title`,
+`title`, `path` (the page's site-relative path), `prefix` (the `../`
+that reaches the site root), `stylesheet` and `scripts` (relative to
+the page), `icons` (the sprite), `breadcrumbs` (`label`, `href`),
+`outline`, `prev` and `next` (`title`, `href`), and `body`. The
+fragments that are HTML already (`icons`, `sidebar`, `outline`,
+`body`) are spliced as they are; every other value is escaped.
+
+The built-in `page.html` extends `base.html`, whose blocks are
+`title`, `head`, `body_class`, and `body`, and defines an empty block
+at each of its own seams: `head` (after the stylesheet and scripts),
+`header_nav` (after the site name), `header_tools` (between the search
+button and the scheme switch), `before_content` and `after_content`
+(inside `main`, around breadcrumbs, content, and pager), `footer`
+(after the layout), and `scripts` (at the end of the body). A theme
+that extends `ntropy/page.html` fills them; `{{ super() }}` keeps what
+the built-in block renders. The built-in theme keeps every color and typeface, and the
 sizes that shape the pages (the reading column, the chrome's widths, the
 gaps between blocks and sections, the radii, the shadows, the transition
 length), in custom properties on the root element named for their job,

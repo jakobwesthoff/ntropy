@@ -167,20 +167,71 @@ pub struct Crumb {
     pub href: Option<String>,
 }
 
+/// What a page is rendered from, the `kind` every template receives
+/// (ADR 0058).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PageKind {
+    /// The front page: the index note, or the generated overview.
+    Front,
+    /// A note's own page.
+    Note,
+    /// A tag, view, or group page with its listing, a landing note's page
+    /// among them, and a section's index.
+    Group,
+    /// The standalone `render --to html` artifact (ADR 0057), which keeps
+    /// the header, the scheme switch, and the outline and has no navigation
+    /// column, search, breadcrumbs, or pager.
+    Document,
+}
+
+impl PageKind {
+    /// The kind as the template sees it.
+    pub fn name(self) -> &'static str {
+        match self {
+            PageKind::Front => "front",
+            PageKind::Note => "note",
+            PageKind::Group => "group",
+            PageKind::Document => "document",
+        }
+    }
+}
+
+/// The note a page is rendered from, as the template sees it: the raw
+/// frontmatter mapping beside the lifted fields, so a theme template can
+/// read a field of its own (a tagline, a hero image) from the note.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct NoteContext {
+    pub id: String,
+    pub title: String,
+    pub created: String,
+    pub tags: Vec<String>,
+    pub frontmatter: serde_yaml_ng::Mapping,
+}
+
 /// A page of the exported site: the chrome around a content fragment
-/// (ADR 0054); or, with `document` set, the standalone page of one
-/// rendered note (ADR 0057), which keeps the header, the scheme switch, and
-/// the outline and has no navigation column, search, breadcrumbs, or
-/// pager.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// (ADR 0054), or the standalone page of one rendered note (ADR 0057);
+/// `kind` tells the template which.
+#[derive(Debug, Clone, PartialEq)]
 pub struct Page {
     pub lang: String,
     /// What the header shows: the site's title, or for a standalone page the
     /// note's.
     pub site_title: String,
     pub title: String,
+    /// The page's site-relative path, `notes/<slug>.html`; the artifact's
+    /// file name for a standalone page.
+    pub path: String,
     /// The `../` prefix reaching the site root from this page.
     pub prefix: String,
+    pub kind: PageKind,
+    /// The note the page is rendered from, or `None` for a page made of a
+    /// listing alone.
+    pub note: Option<NoteContext>,
+    /// The `[site.vars]` table of the vault config, for the theme's
+    /// templates; the built-in ones read nothing from it.
+    pub vars: toml::Table,
+    /// The sidebar as data, beside its rendered form.
+    pub nav: Vec<super::nav::NavSectionData>,
     /// The stylesheet's `href`, relative to this page.
     pub stylesheet: String,
     /// The `src` of every script the page loads, relative to this page: the
@@ -197,8 +248,6 @@ pub struct Page {
     pub next: Option<PageLink>,
     /// The page content, an HTML fragment.
     pub body: String,
-    /// Whether this is a standalone rendered note rather than a site page.
-    pub document: bool,
 }
 
 impl Page {
@@ -215,7 +264,12 @@ impl Page {
             lang => self.lang,
             site_title => self.site_title,
             title => self.title,
+            path => self.path,
             prefix => self.prefix,
+            kind => self.kind.name(),
+            note => self.note,
+            vars => self.vars,
+            nav => self.nav,
             stylesheet => self.stylesheet,
             scripts => self.scripts,
             icons => Value::from_safe_string(self.icons.clone()),
@@ -225,7 +279,6 @@ impl Page {
             prev => link(&self.prev),
             next => link(&self.next),
             body => Value::from_safe_string(self.body.clone()),
-            document => self.document,
         };
         templates.render(PAGE_TEMPLATE, context)
     }
@@ -258,7 +311,36 @@ mod tests {
             lang: "en".to_string(),
             site_title: "Vault & Co".to_string(),
             title: "Rust <Tips>".to_string(),
+            path: "notes/rust-tips.html".to_string(),
             prefix: "../".to_string(),
+            kind: PageKind::Note,
+            note: Some(NoteContext {
+                id: "01ARZ3NDEKTSV4RRFFQ69G5FAV".to_string(),
+                title: "Rust <Tips>".to_string(),
+                created: "2016-07-31".to_string(),
+                tags: vec!["programming/rust".to_string()],
+                frontmatter: serde_yaml_ng::from_str(
+                    "title: Rust <Tips>\ntags: [programming/rust]\ntagline: Fast & safe\nsite:\n  order: 2\n",
+                )
+                .expect("the fixture frontmatter parses"),
+            }),
+            vars: toml::from_str("github = \"https://github.com/x/y\"\n[links]\nhome = \"/\"\n")
+                .expect("the fixture vars parse"),
+            nav: vec![super::super::nav::NavSectionData {
+                label: "by-status".to_string(),
+                href: Some("../views/by-status/index.html".to_string()),
+                cloud: false,
+                open: true,
+                items: vec![super::super::nav::NavItemData {
+                    kind: "note",
+                    label: "Rust <Tips>".to_string(),
+                    href: Some("../notes/rust-tips.html".to_string()),
+                    current: true,
+                    open: false,
+                    count: None,
+                    items: Vec::new(),
+                }],
+            }],
             stylesheet: "../assets/style.css".to_string(),
             scripts: vec![
                 "../assets/grammars/rust.js".to_string(),
@@ -287,7 +369,6 @@ mod tests {
             }),
             next: None,
             body: "<article>B</article>\n".to_string(),
-            document: false,
         }
     }
 
@@ -295,14 +376,16 @@ mod tests {
         Page {
             site_title: "Quarterly <Review>".to_string(),
             title: "Quarterly <Review>".to_string(),
+            path: "quarterly-review.html".to_string(),
             prefix: String::new(),
+            kind: PageKind::Document,
+            nav: Vec::new(),
             stylesheet: "quarterly-review_files/style.css".to_string(),
             scripts: vec!["quarterly-review_files/app.js".to_string()],
             sidebar: String::new(),
             breadcrumbs: Vec::new(),
             prev: None,
             next: None,
-            document: true,
             ..page()
         }
     }
@@ -538,6 +621,94 @@ mod tests {
             }
             other => panic!("expected ThemeTemplate, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_template_reads_the_kind_path_note_vars_and_nav() {
+        let templates = Templates::new(&theme_with(&[(
+            "page.html",
+            "{{ kind }}|{{ path }}|{{ note.id }}|{{ note.title }}|{{ note.created }}|{{ note.tags[0] }}|{{ note.frontmatter.tagline }}|{{ note.frontmatter.site.order }}|{{ vars.github }}|{{ vars.links.home }}|{{ nav[0].label }}|{{ nav[0].open }}|{{ nav[0].items[0].current }}|{{ nav[0].items[0].kind }}",
+        )]))
+        .expect("parses");
+        assert_eq!(
+            page().render(&templates).expect("renders"),
+            "note|notes/rust-tips.html|01ARZ3NDEKTSV4RRFFQ69G5FAV|Rust &lt;Tips&gt;|2016-07-31|programming/rust|Fast &amp; safe|2|https://github.com/x/y|/|by-status|True|True|note"
+        );
+    }
+
+    #[test]
+    fn a_page_from_no_note_leaves_note_undefined() {
+        let templates = Templates::new(&theme_with(&[(
+            "page.html",
+            "{% if note %}{{ note.title }}{% else %}no note{% endif %}|{{ kind }}",
+        )]))
+        .expect("parses");
+        let listing = Page {
+            note: None,
+            kind: PageKind::Group,
+            ..page()
+        };
+        assert_eq!(
+            listing.render(&templates).expect("renders"),
+            "no note|group"
+        );
+    }
+
+    /// The built-in page exposes one empty block at every seam, in the
+    /// order the seams appear; a theme fills them without copying the file.
+    #[test]
+    fn the_builtin_page_exposes_its_blocks_in_order() {
+        let templates = Templates::new(&theme_with(&[(
+            "page.html",
+            concat!(
+                "{% extends \"ntropy/page.html\" %}",
+                "{% block head %}{{ super() }}<!--HEAD-->{% endblock %}",
+                "{% block header_nav %}<!--HEADER-NAV-->{% endblock %}",
+                "{% block header_tools %}<!--HEADER-TOOLS-->{% endblock %}",
+                "{% block before_content %}<!--BEFORE-->{% endblock %}",
+                "{% block after_content %}<!--AFTER-->{% endblock %}",
+                "{% block footer %}<!--FOOTER-->{% endblock %}",
+                "{% block scripts %}<!--SCRIPTS-->{% endblock %}",
+            ),
+        )]))
+        .expect("parses");
+        let out = page().render(&templates).expect("renders");
+        let at = |needle: &str| {
+            out.find(needle)
+                .unwrap_or_else(|| panic!("{needle} in {out}"))
+        };
+        let order = [
+            "<link rel=\"stylesheet\"",
+            "<!--HEAD-->",
+            "</head>",
+            "class=\"site-name\"",
+            "<!--HEADER-NAV-->",
+            "class=\"search-toggle\"",
+            "<!--HEADER-TOOLS-->",
+            "class=\"theme-switch\"",
+            "<main>",
+            "<!--BEFORE-->",
+            "class=\"breadcrumbs\"",
+            "class=\"content\"",
+            "class=\"pager\"",
+            "<!--AFTER-->",
+            "</main>",
+            "<!--FOOTER-->",
+            "<!--SCRIPTS-->",
+            "</body>",
+        ];
+        for pair in order.windows(2) {
+            assert!(
+                at(pair[0]) < at(pair[1]),
+                "{} comes before {}: {out}",
+                pair[0],
+                pair[1]
+            );
+        }
+        assert_eq!(out.matches("<!--HEAD-->").count(), 1);
+        // The same page without a theme renders no block content at all.
+        let plain = page().render(&Templates::builtin()).expect("renders");
+        assert!(!plain.contains("<!--"), "{plain}");
     }
 
     #[test]

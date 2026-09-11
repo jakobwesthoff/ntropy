@@ -65,6 +65,9 @@ items = [
   { note = "01ARZ3NDEKTSV4RRFFQ69G5FAV" },
   { label = "Gadgets", tag = "docs/start/gadgets" },
 ]
+
+[site.vars]                          # free-form, for the theme's templates
+github = "https://github.com/acme/docs"
 ```
 
 Every key of both tables is optional, and an entirely default table is

@@ -35,8 +35,9 @@ pub use options::SiteOptions;
 pub use theme::SiteTheme;
 
 /// What the `html` render format needs from the site layer: the theme
-/// whose files the artifact carries beside it, and the page language.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// whose files the artifact carries beside it, the page language, and the
+/// config's `[site.vars]` for the theme's templates.
+#[derive(Debug, Clone, PartialEq)]
 pub struct DocumentSettings {
     /// The selected site theme, or `None` for the built-in one.
     pub theme: Option<SiteTheme>,
@@ -45,6 +46,8 @@ pub struct DocumentSettings {
     pub theme_dir: Option<std::path::PathBuf>,
     /// The `lang` attribute of the page.
     pub lang: String,
+    /// The `[site.vars]` table, handed to the templates as `vars`.
+    pub vars: toml::Table,
 }
 
 impl Default for DocumentSettings {
@@ -53,6 +56,7 @@ impl Default for DocumentSettings {
             theme: None,
             theme_dir: None,
             lang: options::DEFAULT_LANG.to_string(),
+            vars: toml::Table::new(),
         }
     }
 }

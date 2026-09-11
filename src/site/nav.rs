@@ -80,6 +80,152 @@ pub fn sidebar(model: &Model, prefix: &str, current: &str) -> String {
     out
 }
 
+/// One sidebar section as a template sees it (ADR 0058): the same
+/// sections, links, and open state the rendered sidebar carries, for a
+/// theme that builds its own navigation markup.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct NavSectionData {
+    pub label: String,
+    /// The section's own page, relative to the current page, when it has
+    /// one.
+    pub href: Option<String>,
+    /// Whether the section is the tag cloud rather than a tree.
+    pub cloud: bool,
+    /// Whether the section holds the current page.
+    pub open: bool,
+    pub items: Vec<NavItemData>,
+}
+
+/// One item of a sidebar section as a template sees it: a note or a
+/// group, the latter with its entries as items of their own.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct NavItemData {
+    /// `note` or `group`.
+    pub kind: &'static str,
+    pub label: String,
+    /// The item's page, relative to the current page; a hand-assembled
+    /// group has none.
+    pub href: Option<String>,
+    /// Whether the item's page is the current page.
+    pub current: bool,
+    /// Whether the current page lies under the item.
+    pub open: bool,
+    /// For a group, the number of notes in its whole tree.
+    pub count: Option<usize>,
+    pub items: Vec<NavItemData>,
+}
+
+/// The sidebar as data: what [`sidebar`] renders, section by section, with
+/// the open state and the current mark computed the same way.
+pub fn sidebar_data(model: &Model, prefix: &str, current: &str) -> Vec<NavSectionData> {
+    model
+        .sidebar
+        .iter()
+        .map(|section| NavSectionData {
+            label: section.label.clone(),
+            href: section
+                .page
+                .as_ref()
+                .map(|(page, _)| format!("{prefix}{page}")),
+            cloud: section.cloud,
+            open: section
+                .items
+                .iter()
+                .any(|item| contains_item(item, model, current))
+                || section
+                    .page
+                    .as_ref()
+                    .is_some_and(|(page, _)| page == current),
+            items: items_data(model, &section.items, prefix, current),
+        })
+        .collect()
+}
+
+/// Nav items as data, one per item, groups carrying their entries.
+fn items_data(model: &Model, items: &[NavItem], prefix: &str, current: &str) -> Vec<NavItemData> {
+    items
+        .iter()
+        .map(|item| match item {
+            NavItem::Note { index, label } => {
+                let note = &model.notes[*index];
+                note_data(
+                    label.as_deref().unwrap_or(note.name()),
+                    &note.page,
+                    prefix,
+                    current,
+                )
+            }
+            NavItem::Group {
+                section,
+                path,
+                label,
+            } => group_data(
+                model,
+                model.group_at(*section, path),
+                label.as_deref(),
+                prefix,
+                current,
+            ),
+            NavItem::Curated {
+                label,
+                items: inner,
+            } => NavItemData {
+                kind: "group",
+                label: label.clone(),
+                href: None,
+                current: false,
+                open: inner.iter().any(|item| contains_item(item, model, current)),
+                count: None,
+                items: items_data(model, inner, prefix, current),
+            },
+        })
+        .collect()
+}
+
+fn note_data(name: &str, page: &str, prefix: &str, current: &str) -> NavItemData {
+    NavItemData {
+        kind: "note",
+        label: name.to_string(),
+        href: Some(format!("{prefix}{page}")),
+        current: page == current,
+        open: false,
+        count: None,
+        items: Vec::new(),
+    }
+}
+
+/// A group as data: its entries, notes and child groups interleaved in
+/// reading order as [`group_item`] renders them.
+fn group_data(
+    model: &Model,
+    group: &Group,
+    label: Option<&str>,
+    prefix: &str,
+    current: &str,
+) -> NavItemData {
+    NavItemData {
+        kind: "group",
+        label: label.unwrap_or(&group.label).to_string(),
+        href: Some(format!("{prefix}{}", group.page)),
+        current: group.page == current,
+        open: contains_page(group, model, current),
+        count: Some(group.descendants().len()),
+        items: group
+            .entries
+            .iter()
+            .map(|entry| match *entry {
+                Entry::Note(index) => {
+                    let note = &model.notes[index];
+                    note_data(note.name(), &note.page, prefix, current)
+                }
+                Entry::Child(position) => {
+                    group_data(model, &group.children[position], None, prefix, current)
+                }
+            })
+            .collect(),
+    }
+}
+
 /// A list of nav items: notes, groups with their subtrees, and
 /// hand-assembled groups.
 fn nav_items(out: &mut String, model: &Model, items: &[NavItem], prefix: &str, current: &str) {
@@ -425,6 +571,34 @@ mod tests {
     fn sidebar_pins_its_structure_and_opens_the_current_trail() {
         let model = model();
         insta::assert_snapshot!(sidebar(&model, "../", "notes/rust-tips.html"));
+    }
+
+    #[test]
+    fn sidebar_data_mirrors_the_rendered_sidebar() {
+        let data = sidebar_data(&model(), "../", "notes/rust-tips.html");
+        insta::assert_debug_snapshot!(data);
+        let labels: Vec<&str> = data.iter().map(|section| section.label.as_str()).collect();
+        assert_eq!(labels, ["by-status", "tags"]);
+        let view = &data[0];
+        assert!(view.open && !view.cloud);
+        assert_eq!(view.href.as_deref(), Some("../views/by-status/index.html"));
+        let done = &view.items[0];
+        assert_eq!(
+            (done.kind, done.label.as_str(), done.count),
+            ("group", "done", Some(1))
+        );
+        assert!(done.open && !done.current);
+        assert_eq!(done.items[0].label, "Rust <Tips>");
+        assert!(done.items[0].current);
+        assert_eq!(
+            done.items[0].href.as_deref(),
+            Some("../notes/rust-tips.html")
+        );
+        assert!(!view.items[1].open, "`open` holds no current page");
+        let tags = &data[1];
+        assert!(tags.cloud && tags.open);
+        assert_eq!(tags.items[0].label, "programming");
+        assert_eq!(tags.items[0].count, Some(1));
     }
 
     #[test]

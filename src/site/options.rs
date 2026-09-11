@@ -12,7 +12,7 @@ pub const DEFAULT_LANG: &str = "en";
 /// The site settings of a vault, the `[site]` table in
 /// `<vault>/.ntropy/config.toml`. Every key is optional; an absent table is
 /// the default.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct SiteOptions {
     /// The site theme, a directory `<vault>/.ntropy/themes/site/<name>/`.
     /// `None`, and the reserved name `default`, mean the built-in theme.
@@ -40,6 +40,10 @@ pub struct SiteOptions {
     /// when present it is the whole sidebar.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub nav: Vec<NavSection>,
+    /// The `[site.vars]` table (ADR 0058): free-form values the theme's
+    /// templates read as `vars`; ntropy itself reads nothing from it.
+    #[serde(default, skip_serializing_if = "toml::Table::is_empty")]
+    pub vars: toml::Table,
 }
 
 /// One section of the hand-assembled sidebar, a `[[site.nav]]` table.
@@ -204,6 +208,28 @@ mod tests {
         let written = toml::to_string(&options).expect("serialize");
         let back: SiteOptions = toml::from_str(&written).expect("parse back");
         assert_eq!(back, options);
+    }
+
+    #[test]
+    fn the_vars_table_takes_any_shape_and_round_trips() {
+        let options: SiteOptions = toml::from_str(
+            "[vars]\ngithub = \"https://github.com/x/y\"\nyear = 2026\n\n[vars.links]\nhome = \"/\"\n",
+        )
+        .expect("parse");
+        assert_eq!(
+            options.vars["github"],
+            toml::Value::String("https://github.com/x/y".to_string())
+        );
+        assert_eq!(options.vars["year"], toml::Value::Integer(2026));
+        assert_eq!(
+            options.vars["links"]["home"],
+            toml::Value::String("/".to_string())
+        );
+        assert!(!options.is_default());
+        let written = toml::to_string(&options).expect("serialize");
+        let back: SiteOptions = toml::from_str(&written).expect("parse back");
+        assert_eq!(back, options);
+        assert!(SiteOptions::default().vars.is_empty());
     }
 
     #[test]

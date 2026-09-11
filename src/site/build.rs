@@ -41,7 +41,7 @@ use super::SiteOptions;
 use super::frontend::{self, Grammars};
 use super::model::{self, Front, Landing, Model, Placement};
 use super::nav;
-use super::page::{Crumb, NoteFragment, Page, PageLink, TagLink, Templates};
+use super::page::{Crumb, NoteContext, NoteFragment, Page, PageKind, PageLink, TagLink, Templates};
 use super::search;
 use super::theme::{self, SiteTheme};
 
@@ -131,6 +131,12 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     let theme = SiteTheme::selected(input.theme.map(|(theme, _)| theme));
     let icons = theme.sprite();
     let templates = Templates::new(&theme)?;
+    let export = Export {
+        model: &model,
+        templates: &templates,
+        icons: &icons,
+        vars: &input.options.vars,
+    };
 
     // The grammars every page's code blocks need, written once under
     // `assets/grammars/` beside the page script.
@@ -186,9 +192,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             // page of the note; a second rendering raises none twice.
             let mut repeated = Vec::new();
             let rendered = render_note(
-                &model,
-                &templates,
-                &icons,
+                &export,
                 index,
                 note,
                 &links,
@@ -228,9 +232,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             // page; the front-page copy raises none twice.
             let mut repeated = Vec::new();
             let rendered = render_note(
-                &model,
-                &templates,
-                &icons,
+                &export,
                 index,
                 note,
                 &links,
@@ -278,10 +280,10 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     if model.front == Front::Overview {
         let body = nav::overview(&model, "");
         let page = chrome(
-            &model,
-            &icons,
+            &export,
             INDEX_PAGE,
             &model.title,
+            PageKind::Front,
             body,
             Vec::new(),
             String::new(),
@@ -304,10 +306,10 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             nav::group_list(&section.groups, &prefix)
         );
         let page = chrome(
-            &model,
-            &icons,
+            &export,
             &section.page,
             &section.title,
+            PageKind::Group,
             body,
             Vec::new(),
             String::new(),
@@ -342,10 +344,10 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                 extra.listing
             );
             let page = chrome(
-                &model,
-                &icons,
+                &export,
                 &group.page,
                 &group.value,
+                PageKind::Group,
                 body,
                 extra.crumbs,
                 String::new(),
@@ -567,9 +569,7 @@ fn group_page(model: &Model, section: usize, path: &[usize]) -> GroupPage {
 /// struct would name the same things one level down.
 #[allow(clippy::too_many_arguments)]
 fn render_note(
-    model: &Model,
-    templates: &Templates,
-    icons: &str,
+    export: &Export<'_>,
     index: usize,
     note: &Note,
     links: &[ResolvedLink],
@@ -579,6 +579,7 @@ fn render_note(
     warnings: &mut Vec<String>,
     group: Option<GroupPage>,
 ) -> Result<RenderedNote, RenderError> {
+    let model = export.model;
     let prefix = nav::prefix_for(at);
     let targets = PageTargets {
         model,
@@ -619,8 +620,16 @@ fn render_note(
         fields: frontmatter::fields(&note.frontmatter),
         body: emitted.html,
     }
-    .render(templates)?;
+    .render(export.templates)?;
 
+    // What the page is: a landing note's page is its group's, the index
+    // note's copy at the root is the front page, anything else the note's
+    // own page.
+    let kind = match (&group, at) {
+        (Some(_), _) => PageKind::Group,
+        (None, INDEX_PAGE) => PageKind::Front,
+        (None, _) => PageKind::Note,
+    };
     let placement = model.placements[index].as_ref();
     let crumbs = match group {
         Some(group) => {
@@ -645,11 +654,11 @@ fn render_note(
     let prev = placement.and_then(|placement| neighbour(placement.prev));
     let next = placement.and_then(|placement| neighbour(placement.next));
 
-    let page = chrome(
-        model,
-        icons,
+    let mut page = chrome(
+        export,
         at,
         &entry.title,
+        kind,
         body,
         crumbs,
         nav::outline(&emitted.headings),
@@ -657,8 +666,15 @@ fn render_note(
         next,
         &needed,
     );
+    page.note = Some(NoteContext {
+        id: note.id.to_string(),
+        title: entry.title.clone(),
+        created: entry.created.clone(),
+        tags: entry.tags.clone(),
+        frontmatter: note.frontmatter.clone(),
+    });
     Ok(RenderedNote {
-        page: page.render(templates)?,
+        page: page.render(export.templates)?,
         assets: emitted.assets,
         grammars: needed,
     })
@@ -681,16 +697,26 @@ fn crumbs(trail: &[model::Crumb], prefix: &str) -> Vec<Crumb> {
         .collect()
 }
 
+/// What every page of one export shares: the model, the theme's templates
+/// and icon sprite, and the config's `[site.vars]`.
+struct Export<'a> {
+    model: &'a Model,
+    templates: &'a Templates,
+    icons: &'a str,
+    vars: &'a toml::Table,
+}
+
 /// The chrome of a page at `at`: sidebar with the current trail open, the
 /// stylesheet and scripts relative to the page (one script per grammar in
 /// `grammars`, then the page script and the search script), and the given
-/// navigation.
+/// navigation. The page is rendered from no note; a caller that has one
+/// sets `note` afterwards.
 #[allow(clippy::too_many_arguments)]
 fn chrome(
-    model: &Model,
-    icons: &str,
+    export: &Export<'_>,
     at: &str,
     title: &str,
+    kind: PageKind,
     body: String,
     breadcrumbs: Vec<Crumb>,
     outline: String,
@@ -712,13 +738,19 @@ fn chrome(
         .collect();
     scripts.push(format!("{prefix}{ASSETS_DIR}/{}", frontend::APP_SCRIPT));
     scripts.push(format!("{prefix}{ASSETS_DIR}/{}", frontend::SEARCH_SCRIPT));
+    let model = export.model;
     Page {
         lang: model.lang.clone(),
         site_title: model.title.clone(),
         title: title.to_string(),
+        path: at.to_string(),
+        kind,
+        note: None,
+        vars: export.vars.clone(),
+        nav: nav::sidebar_data(model, &prefix, at),
         stylesheet: format!("{prefix}{ASSETS_DIR}/{}", theme::STYLESHEET),
         scripts,
-        icons: icons.to_string(),
+        icons: export.icons.to_string(),
         sidebar: nav::sidebar(model, &prefix, at),
         prefix,
         breadcrumbs,
@@ -726,7 +758,6 @@ fn chrome(
         prev,
         next,
         body,
-        document: false,
     }
 }
 
@@ -1226,6 +1257,72 @@ mod tests {
                 "{path} is rendered with the theme's template"
             );
         }
+    }
+
+    /// Every page tells the template what it is rendered from. The probe
+    /// template prints the context instead of a page.
+    #[test]
+    fn every_page_tells_its_kind_and_carries_its_note_and_the_vars() {
+        const E: &str = "01ERZ3NDEKTSV4RRFFQ69G5FAV";
+        let vault = vault();
+        let theme_dir = vault.path().join(".ntropy/themes/site/probe");
+        std::fs::create_dir_all(&theme_dir).expect("theme dir");
+        std::fs::write(theme_dir.join("style.css"), "body{}").expect("css");
+        let theme = SiteTheme {
+            name: "probe".to_string(),
+            stylesheet: "body{}".to_string(),
+            icons: std::collections::BTreeMap::new(),
+            templates: std::collections::BTreeMap::from([(
+                "page.html".to_string(),
+                "{{ kind }}|{{ path }}|{% if note %}{{ note.title }}/{{ note.frontmatter.status }}{% else %}-{% endif %}|{{ vars.owner }}|{{ nav | length }}"
+                    .to_string(),
+            )]),
+        };
+        let mut notes = notes(vault.path());
+        notes.push(note(
+            vault.path(),
+            E,
+            "Landing",
+            "tags: [programming]\nsite:\n  index: true\n",
+            "Welcome.\n",
+        ));
+        let vault_ids = ids(&notes);
+        let options = SiteOptions {
+            index: Some(A.to_string()),
+            vars: toml::from_str("owner = \"Acme\"\n").expect("vars"),
+            ..SiteOptions::default()
+        };
+        let built = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[ViewDef::new("by-status", "status")],
+            options: &options,
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault.path(),
+            theme: Some((&theme, &theme_dir)),
+        })
+        .expect("builds");
+        let probe = |path: &str| text(&built, path);
+        assert_eq!(
+            probe("index.html"),
+            "front|index.html|Rust Tips/done|Acme|2",
+            "the index note's copy at the root is the front page"
+        );
+        assert_eq!(
+            probe("notes/rust-tips.html"),
+            "note|notes/rust-tips.html|Rust Tips/done|Acme|2"
+        );
+        assert_eq!(
+            probe("tags/programming/index.html"),
+            "group|tags/programming/index.html|Landing/|Acme|2",
+            "a landing note renders its group's page"
+        );
+        assert_eq!(probe("tags/index.html"), "group|tags/index.html|-|Acme|2");
+        assert_eq!(
+            probe("views/by-status/done/index.html"),
+            "group|views/by-status/done/index.html|-|Acme|2"
+        );
     }
 
     #[test]

@@ -74,6 +74,7 @@ pub fn cmd_render(
         theme: None,
         theme_dir: None,
         lang: config.site.lang().to_string(),
+        vars: config.site.vars.clone(),
     };
     if to == "html" {
         let selected =

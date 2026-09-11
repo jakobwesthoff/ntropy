@@ -2079,6 +2079,66 @@ fn site_with_a_missing_theme_fails_before_writing_anything() {
 }
 
 #[test]
+fn theme_templates_render_the_site_and_the_html_artifact_with_the_vars() {
+    let dir = site_vault();
+    write_site_theme(dir.path(), "corporate", "body{}");
+    let templates = dir.path().join(".ntropy/themes/site/corporate/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(
+        templates.join("page.html"),
+        "{% extends \"ntropy/page.html\" %}{% block footer %}<footer>{{ vars.owner }} · {{ kind }}</footer>{% endblock %}",
+    )
+    .expect("template");
+    configure_site(
+        dir.path(),
+        "theme = \"corporate\"\n\n[site.vars]\nowner = \"Acme\"\n",
+    );
+
+    let output = site(dir.path(), &["-o", "out"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let out = dir.path().join("out");
+    let index = fs::read_to_string(out.join("index.html")).expect("index");
+    assert!(index.contains("<footer>Acme · front</footer>"), "{index}");
+    let page = fs::read_to_string(out.join("notes/rust-tips.html")).expect("note page");
+    assert!(page.contains("<footer>Acme · note</footer>"), "{page}");
+    assert!(
+        !out.join("assets/templates").exists(),
+        "the templates are not served"
+    );
+
+    let output = render_to_html(dir.path(), ULID_A, &["-o", "tips.html"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let artifact = fs::read_to_string(dir.path().join("tips.html")).expect("artifact");
+    assert!(
+        artifact.contains("<footer>Acme · document</footer>"),
+        "{artifact}"
+    );
+    assert!(!dir.path().join("tips_files/templates").exists());
+
+    // A template that does not parse fails both commands naming it, before
+    // anything is written.
+    fs::write(templates.join("page.html"), "{% if %}").expect("broken template");
+    let output = site(dir.path(), &["-o", "broken"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("page.html"), "{stderr}");
+    assert!(!dir.path().join("broken/index.html").exists());
+    let output = render_to_html(dir.path(), ULID_A, &["-o", "broken.html"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("page.html"), "{stderr}");
+    assert!(!dir.path().join("broken.html").exists());
+}
+
+#[test]
 fn site_theme_init_copies_the_builtin_theme_and_refuses_to_overwrite() {
     let dir = site_vault();
     let mut cmd = ntropy(dir.path());
