@@ -544,8 +544,14 @@ mod tests {
         .collect::<Vec<_>>()
         .join("\n");
 
+        // The template section names command flags in backticks too, so
+        // only the sections before it are scanned for custom properties.
+        let styled = skill
+            .split("## Templates")
+            .next()
+            .expect("the sections before the templates");
         let tokens = regex::Regex::new(r"`(--[a-z-]+)`").expect("pattern");
-        for token in tokens.captures_iter(&skill).map(|c| c[1].to_string()) {
+        for token in tokens.captures_iter(styled).map(|c| c[1].to_string()) {
             // The Shiki token colors come from the highlighter, not the theme.
             if token.starts_with("--shiki-") {
                 continue;
@@ -572,7 +578,11 @@ mod tests {
             );
         }
 
-        let markup_section = skill.split("## Markup").nth(1).expect("the markup section");
+        let markup_section = skill
+            .split("## Markup")
+            .nth(1)
+            .and_then(|rest| rest.split("## Templates").next())
+            .expect("the markup section");
         let classes = regex::Regex::new(r"`[a-z0-9]*\.([a-z][a-z0-9-]*)").expect("pattern");
         for class in classes
             .captures_iter(markup_section)
@@ -581,6 +591,55 @@ mod tests {
             assert!(
                 markup.contains(&class),
                 "the skill names the class .{class}, which no page carries"
+            );
+        }
+
+        // The template section's tables name the blocks the built-in page
+        // defines and the variables the page context carries; the first
+        // cell of every row holds the names.
+        let templates_section = skill
+            .split("## Templates")
+            .nth(1)
+            .expect("the templates section");
+        let first_cells = |header: &str| -> Vec<String> {
+            let table = templates_section.split(header).nth(1).expect(header);
+            let names = regex::Regex::new(r"`([a-z_]+)`").expect("pattern");
+            table
+                .lines()
+                .skip(1)
+                .take_while(|line| line.starts_with('|'))
+                .flat_map(|line| {
+                    let cell = line
+                        .trim_start_matches('|')
+                        .split('|')
+                        .next()
+                        .expect("a cell");
+                    names
+                        .captures_iter(cell)
+                        .map(|c| c[1].to_string())
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        };
+        let page_template =
+            std::fs::read_to_string(root.join("src/site/theme/templates/page.html"))
+                .expect("the built-in page template exists");
+        let blocks = first_cells("| Block |");
+        assert!(!blocks.is_empty(), "the block table is found");
+        for block in blocks {
+            assert!(
+                page_template.contains(&format!("{{% block {block} %}}")),
+                "the skill names the block {block}, which page.html does not define"
+            );
+        }
+        let page_source =
+            std::fs::read_to_string(root.join("src/site/page.rs")).expect("page.rs exists");
+        let variables = first_cells("| Variable |");
+        assert!(!variables.is_empty(), "the variable table is found");
+        for variable in variables {
+            assert!(
+                page_source.contains(&format!("{variable} =>")),
+                "the skill names the variable {variable}, which the page context does not carry"
             );
         }
     }

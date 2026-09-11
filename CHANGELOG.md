@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Added
+
+- A site theme may carry page templates: a `templates/<name>.html` in the
+  theme directory replaces the built-in template of that name, and the
+  built-in ones stay reachable as `ntropy/<name>` for a template that
+  extends one and fills a block. The built-in `page.html` defines empty
+  blocks at its seams (`head`, `header_nav`, `header_tools`,
+  `before_content`, `after_content`, `footer`, `scripts`). The same
+  templates render `render --to html`. A template that fails to parse or
+  render fails the export naming it.
+- Templates receive the page's `kind` (`front`, `note`, `group`,
+  `document`), `path`, the `note` they render with its raw frontmatter,
+  the sidebar as data (`nav`), and `vars`, a free-form `[site.vars]` table
+  of the vault config.
+- A note's `site.template` picks the theme template that renders its
+  pages and its html artifact; a name the theme lacks is a warning and
+  `page.html` is used.
+
+### Changed
+
+- `site theme init` writes the built-in templates into the new theme
+  beside the stylesheet, icons, and fonts.
+
 ## v2.0.0 - 2026-09-11
 
 ### Added

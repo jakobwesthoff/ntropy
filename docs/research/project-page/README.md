@@ -24,9 +24,10 @@ carries. The split of the README into pages and the depth of the
 sidebar are deferred until the overall structure is agreed.
 
 The user decided that the template override for site themes has to land
-before the page work starts; that feature belongs to the site export and
-its questions continue the log in
-[../web-export/decisions.md](../web-export/decisions.md).
+before the page work starts; that feature belongs to the site export, its
+questions continue the log in
+[../web-export/decisions.md](../web-export/decisions.md) (Q91 to Q98),
+and it is implemented (ADR 0058).
 
 ## How to resume
 

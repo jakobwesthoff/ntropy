@@ -53,7 +53,9 @@ ntropy site theme init mine                   # copy the built-in theme to .ntro
     (the key is ignored);
   - a `[site] root` that names no page of the site (the sidebar falls back
     to the default);
-  - a `[[site.nav]]` item the site cannot resolve (the item is left out).
+  - a `[[site.nav]]` item the site cannot resolve (the item is left out);
+  - a `site.template` naming a template the theme does not have
+    (`page.html` is used).
 - The export reads every note, so an encrypted vault must be unlocked. The
   output is plaintext, and writing it inside an encrypted vault prints a
   warning. Write it elsewhere.
@@ -87,6 +89,9 @@ title = "Team Handbook"              # defaults to the vault directory name
 lang = "en"                          # the html lang attribute
 related = false                      # no "related notes" under the pages (default true)
 root = "tags/handbook"               # the sidebar starts at this tag or view group
+
+[site.vars]                          # free-form; only the theme's templates read it
+copyright = "Acme, 2026"
 ```
 
 **`root`** names a page of the site, `tags/<path>` or
@@ -138,6 +143,7 @@ site:
   listing: false         # true lists the group's contents below a landing note
   hidden: false          # true keeps the note out of the sidebar, lists, and pager
   related: false         # switches the related notes off (or on) for this page only
+  template: splash       # render with the theme's templates/splash.html (site-themes.md)
 ---
 ```
 

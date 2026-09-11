@@ -756,6 +756,7 @@ site:
   order: 1               # its position; on a landing note, the group's
   hidden: false          # true keeps a note out of the sidebar and lists
   related: false         # no related notes under this page
+  template: splash       # render with the theme's templates/splash.html
 ---
 ```
 
@@ -824,14 +825,15 @@ directory unless you pass `--force`.
 
 ### Site themes
 
-A site theme is a directory `.ntropy/themes/site/<name>/`. The HTML
-structure is ntropy's, so a theme changes the look, not the layout; what
-it holds is what a web developer expects:
+A site theme is a directory `.ntropy/themes/site/<name>/`. What it holds
+is what a web developer expects: a stylesheet, fonts, icons, and, where
+the built-in layout is not enough, the page templates:
 
 ```
 style.css        the entry point, required
 icons/*.svg      one icon per file
 fonts/*          files the stylesheet references with url(fonts/...)
+templates/*.html the page templates, replacing the built-in ones by name
 anything else    copied into the site's assets/ as it is
 ```
 
@@ -929,6 +931,70 @@ class to target. The ones a theme most often restyles:
 The built-in `style.css` styles all of them and is written to be copied, so
 reading it beside an exported page is the fastest way to find any selector
 not listed here.
+
+**Templates.** The pages are rendered from three
+[minijinja](https://github.com/mitsuhiko/minijinja) templates:
+`base.html`, the document shell; `page.html`, the chrome around the
+content; and `note.html`, a note's header and body. `site theme init`
+writes them under `templates/`, and a file there replaces the built-in
+template of the same name. The built-in ones stay reachable as
+`ntropy/<name>`, so a theme that only needs a row of links and a footer
+extends the built-in page and fills two of its seams:
+
+```html
+{# .ntropy/themes/site/mine/templates/page.html #}
+{% extends "ntropy/page.html" %}
+{% block header_nav %}<nav class="site-links">
+{% for link in vars.links %}<a href="{{ prefix }}{{ link.href }}">{{ link.label }}</a>
+{% endfor %}</nav>{% endblock %}
+{% block footer %}<footer>{{ vars.copyright }}</footer>{% endblock %}
+```
+
+```toml
+# .ntropy/config.toml
+[site.vars]                          # free-form; only your templates read it
+copyright = "Acme, 2026"
+links = [
+  { label = "Docs", href = "tags/docs/index.html" },
+  { label = "Legal", href = "notes/impressum.html" },
+]
+```
+
+The built-in `page.html` keeps every block empty, so extending it
+changes nothing until a block is filled:
+
+| Block | Where it renders |
+|-------|------------------|
+| `head` | after the stylesheet and the scripts, inside `<head>` (`{{ super() }}` keeps those) |
+| `header_nav` | in the header, after the site name |
+| `header_tools` | in the header, between the search button and the scheme switch |
+| `before_content`, `after_content` | inside `main`, around the breadcrumbs, the content, and the pager |
+| `footer` | after the layout |
+| `scripts` | at the end of the body |
+
+Every page template receives the same variables:
+
+| Variable | What it holds |
+|----------|---------------|
+| `kind` | `front`, `note`, `group`, or `document` (a `render --to html` page) |
+| `note` | the note the page is rendered from: `id`, `title`, `created`, `tags`, and `frontmatter`, the raw mapping; undefined on a page made of a listing alone |
+| `vars` | the `[site.vars]` table as it stands |
+| `nav` | the sidebar as data: sections with `label`, `href`, `cloud`, `open`, and `items`; items with `kind` (`note` or `group`), `label`, `href`, `current`, `open`, `count`, and their own `items` |
+| `sidebar`, `outline`, `body`, `icons` | rendered HTML fragments: the sidebar, the outline, the content, the icon sprite |
+| `title`, `site_title`, `lang`, `path`, `prefix` | the page's title and the site's, the `lang` attribute, the page's site-relative path, and the `../` that reaches the site root |
+| `stylesheet`, `scripts` | the stylesheet's `href` and every script's `src`, relative to the page |
+| `breadcrumbs`, `prev`, `next` | the trail (`label`, `href`) and the neighbours (`title`, `href`) |
+
+Every value is escaped except the four fragments. `note.html` receives
+`title`, `created`, `tags` (`label`, `href`), `fields` (`key`, `html`),
+and `body`. A note picks another template for its pages with
+`site.template`: `template: splash` renders it with
+`templates/splash.html`, which is how a landing page gets a hero or an
+impressum drops the sidebar; a name the theme has no template for is a
+warning and `page.html` is used. The templates are read at export and
+never copied into the site; one that fails to parse or to render fails
+the export naming it.
+
 
 ## Language server
 

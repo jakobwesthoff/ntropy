@@ -161,7 +161,7 @@ Body is ordinary Markdown.
   the filename ULID; the creation date is derived from it. Duplicating them
   creates state that can drift.
 - **`site` is reserved.** A `site` mapping (`order`, `label`, `hidden`,
-  `index`, `listing`, `related`) shapes the exported website's navigation
+  `index`, `listing`, `related`, `template`) shapes the exported website's navigation
   and is hidden from the page; it is not a place for content. See
   [site.md](site.md).
 

@@ -30,8 +30,8 @@ search, and the design pass with the theme layout) are committed on the
 branch `site-generation`, as is the sidebar definition (Q77 to Q86,
 ADR 0056). The html artifact as the site's page (Q87 to Q90, ADR 0057)
 is implemented and released. Templates as part of a theme (Q91 to
-Q98, ADR 0058) are decided on the branch `new-project-page`, where the
-project page effort (`../project-page/`) needs them. The vault the
+Q98, ADR 0058) are implemented on the branch `new-project-page`, where
+the project page effort (`../project-page/`) needs them. The vault the
 sidebar work is checked against, the
 torchsnap documentation converted to notes with a `site` table each
 and a config carrying `root` and a nav table (Q84), lives outside the

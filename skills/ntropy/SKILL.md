@@ -81,8 +81,9 @@ language for filtering, and materialized symlink views for filesystem browsing.
    existing artifact needs `--force`; `render` never overwrites silently.
 13. **`site` is a reserved frontmatter key.** A note's `site` table shapes
    the exported website's navigation (`order`, `label`, `hidden`, `index`,
-   `listing`, `related`) and is hidden from the page. Never put content
-   under it, and never invent keys in it.
+   `listing`, `related`) and picks the theme template that renders the note
+   (`template`); it is hidden from the page. Never put content under it,
+   and never invent keys in it.
 14. **The site config names notes by ULID.** `[site] index` and every
    `{ note = … }` item of a `[[site.nav]]` table take the full 26-character
    ULID, never a title, slug, or path. Look it up with `ntropy search -n`
