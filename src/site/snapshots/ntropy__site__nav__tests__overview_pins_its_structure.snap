@@ -4,13 +4,13 @@ expression: "overview(&model(), \"\")"
 ---
 <header class="front">
 <h1 class="site-title">Vault &amp; Co</h1>
-<p class="note-count">2 notes, <time datetime="2016-07-31">2016-07-31</time> to <time datetime="2017-09-01">2017-09-01</time></p>
+<p class="note-count">2 notes, <time datetime="[DATE]">[DATE]</time> to <time datetime="[DATE]">[DATE]</time></p>
 </header>
 <section class="recent">
 <h2>Newest notes</h2>
 <ol class="note-rows">
-<li class="note-row"><time datetime="2017-09-01">2017-09-01</time><span class="note-row-main"><a class="note-row-title" href="notes/plain.html">Plain</a></span></li>
-<li class="note-row"><time datetime="2016-07-31">2016-07-31</time><span class="note-row-main"><a class="note-row-title" href="notes/rust-tips.html">Rust &lt;Tips&gt;</a><span class="note-row-tags"><a class="tag" href="tags/programming/rust/index.html"><svg class="icon" aria-hidden="true"><use href="#icon-tag"/></svg>programming/rust</a></span></span></li>
+<li class="note-row"><time datetime="[DATE]">[DATE]</time><span class="note-row-main"><a class="note-row-title" href="notes/plain.html">Plain</a></span></li>
+<li class="note-row"><time datetime="[DATE]">[DATE]</time><span class="note-row-main"><a class="note-row-title" href="notes/rust-tips.html">Rust &lt;Tips&gt;</a><span class="note-row-tags"><a class="tag" href="tags/programming/rust/index.html"><svg class="icon" aria-hidden="true"><use href="#icon-tag"/></svg>programming/rust</a></span></span></li>
 </ol>
 </section>
 <section class="section-summary">

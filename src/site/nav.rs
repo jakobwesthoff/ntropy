@@ -638,9 +638,14 @@ mod tests {
     fn listing_rows_show_date_title_and_tag_links() {
         let model = model();
         let out = listing(&model, &[1], "../");
+        // The date is the ULID's in the local timezone, so the expectation
+        // reads it from the note rather than spelling it out.
+        let date = &model.notes[1].created;
         assert_eq!(
             out,
-            "<ol class=\"note-rows\">\n<li class=\"note-row\"><time datetime=\"2016-07-31\">2016-07-31</time><span class=\"note-row-main\"><a class=\"note-row-title\" href=\"../notes/rust-tips.html\">Rust &lt;Tips&gt;</a><span class=\"note-row-tags\"><a class=\"tag\" href=\"../tags/programming/rust/index.html\"><svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-tag\"/></svg>programming/rust</a></span></span></li>\n</ol>\n"
+            format!(
+                "<ol class=\"note-rows\">\n<li class=\"note-row\"><time datetime=\"{date}\">{date}</time><span class=\"note-row-main\"><a class=\"note-row-title\" href=\"../notes/rust-tips.html\">Rust &lt;Tips&gt;</a><span class=\"note-row-tags\"><a class=\"tag\" href=\"../tags/programming/rust/index.html\"><svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-tag\"/></svg>programming/rust</a></span></span></li>\n</ol>\n"
+            )
         );
         // A note without tags has no tag span at all.
         let plain = listing(&model, &[0], "");
@@ -677,9 +682,14 @@ mod tests {
         assert!(out.ends_with("</section>\n"), "{out}");
     }
 
+    /// The dates are the ULIDs' in the local timezone, so the snapshot
+    /// replaces them.
     #[test]
     fn overview_pins_its_structure() {
-        insta::assert_snapshot!(overview(&model(), ""));
+        insta::with_settings!(
+            {filters => vec![(r"\d{4}-\d{2}-\d{2}", "[DATE]")]},
+            { insta::assert_snapshot!(overview(&model(), "")); }
+        );
     }
 
     #[test]
@@ -687,8 +697,11 @@ mod tests {
         let one = [note(A, "Only", "")];
         let model = Model::build(&one, &[], &SiteOptions::default(), "V").expect("model");
         let out = overview(&model, "");
+        let date = &model.notes[0].created;
         assert!(
-            out.contains("<p class=\"note-count\">1 note, <time datetime=\"2016-07-31\">2016-07-31</time></p>"),
+            out.contains(&format!(
+                "<p class=\"note-count\">1 note, <time datetime=\"{date}\">{date}</time></p>"
+            )),
             "{out}"
         );
         let none = Model::build(&[], &[], &SiteOptions::default(), "V").expect("model");
