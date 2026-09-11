@@ -15,7 +15,8 @@ use crate::id::Id;
 use crate::render::markdown::resolve_root_relative;
 use crate::render::{PreparedDocument, RenderContext, RenderError, Renderer, files_dir};
 use crate::site::build::{self, FILES_DIR};
-use crate::site::page::{NoteContext, NoteFragment, Page, PageKind, TagLink, Templates};
+use crate::site::model::SiteMeta;
+use crate::site::page::{self, NoteContext, NoteFragment, Page, PageKind, TagLink, Templates};
 use crate::site::{DocumentSettings, SiteTheme, frontend, nav, theme};
 
 /// The theme directory whose files stay out of the artifact: the icons are
@@ -153,6 +154,22 @@ impl Renderer for Html {
             body: emitted.html,
         }
         .render(&templates)?;
+
+        // The note's `site.template` selects the theme template as it does
+        // for its site page; a name the theme lacks is a warning and the
+        // default renders.
+        let site = SiteMeta::read(&doc.frontmatter, |message| ctx.warn(&message));
+        let template = match &site.template {
+            Some(name) if templates.has(&page::template_name(name)) => page::template_name(name),
+            Some(name) => {
+                ctx.warn(&format!(
+                    "`site.template` names `{name}`, which the theme has no template for; `{}` is used",
+                    page::PAGE_TEMPLATE
+                ));
+                page::PAGE_TEMPLATE.to_string()
+            }
+            None => page::PAGE_TEMPLATE.to_string(),
+        };
         let page = Page {
             lang: self.settings.lang.clone(),
             site_title: doc.title.clone(),
@@ -173,6 +190,7 @@ impl Renderer for Html {
             }),
             vars: self.settings.vars.clone(),
             nav: Vec::new(),
+            template,
             stylesheet: format!("{files}/{}", theme::STYLESHEET),
             scripts,
             icons: theme.sprite(),
@@ -538,6 +556,47 @@ mod tests {
             .render(&document, &mut ctx)
             .expect("render succeeds");
         assert_eq!(ctx.page(), "document|note.html|My Note|area/work|2|Acme|0|");
+    }
+
+    #[test]
+    fn the_note_names_its_template_for_the_artifact_too() {
+        let theme = SiteTheme {
+            templates: BTreeMap::from([
+                ("page.html".to_string(), "page:{{ title }}".to_string()),
+                ("splash.html".to_string(), "splash:{{ kind }}".to_string()),
+            ]),
+            ..SiteTheme::builtin()
+        };
+        let settings = DocumentSettings {
+            theme: Some(theme),
+            ..DocumentSettings::default()
+        };
+        let document = doc("Named", "site:\n  template: splash\n", "text\n", Vec::new());
+        let mut ctx = FakeContext::new();
+        Html::new(settings.clone())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert_eq!(ctx.page(), "splash:document");
+        assert!(ctx.warnings.is_empty(), "{:?}", ctx.warnings);
+
+        let document = doc(
+            "Unnamed",
+            "site:\n  template: no-such-template\n",
+            "text\n",
+            Vec::new(),
+        );
+        let mut ctx = FakeContext::new();
+        Html::new(settings)
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert_eq!(ctx.page(), "page:Unnamed");
+        assert_eq!(ctx.warnings.len(), 1, "{:?}", ctx.warnings);
+        assert!(
+            ctx.warnings[0].contains("`no-such-template`")
+                && ctx.warnings[0].contains("`page.html` is used"),
+            "{}",
+            ctx.warnings[0]
+        );
     }
 
     #[test]

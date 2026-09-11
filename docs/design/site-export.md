@@ -124,9 +124,16 @@ which keeps the note out of the sidebar, every list, and the pager while
 its page is still exported, linkable, and in the search data; `index`,
 a boolean, which makes the note the landing note of every group it is a
 member of; `listing`, a boolean, which makes a landing note's group page
-list the group's contents below the note; and `related`, a boolean,
+list the group's contents below the note; `related`, a boolean,
 which switches the related notes at the end of the page on or off for
-this note, whatever `[site] related` says. The table is not shown as a
+this note, whatever `[site] related` says; and `template`, a string,
+the name of the theme template that renders the note's pages (its
+own, its front-page copy, and a landing note's group page) and its
+`render --to html` artifact instead of `page.html`, `splash` for
+`templates/splash.html`
+([ADR 0058](../adr/0058-theme-templates-overriding-the-built-in-ones-by-name.md));
+a name the theme has no template for is an export warning and the
+page uses `page.html`. The table is not shown as a
 frontmatter field on the page. A `site` value that is no mapping, and a
 key of the wrong type, are export warnings naming the note, and are
 ignored.

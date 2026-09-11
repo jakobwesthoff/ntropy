@@ -41,7 +41,9 @@ use super::SiteOptions;
 use super::frontend::{self, Grammars};
 use super::model::{self, Front, Landing, Model, Placement};
 use super::nav;
-use super::page::{Crumb, NoteContext, NoteFragment, Page, PageKind, PageLink, TagLink, Templates};
+use super::page::{
+    self, Crumb, NoteContext, NoteFragment, Page, PageKind, PageLink, TagLink, Templates,
+};
 use super::search;
 use super::theme::{self, SiteTheme};
 
@@ -673,6 +675,20 @@ fn render_note(
         tags: entry.tags.clone(),
         frontmatter: note.frontmatter.clone(),
     });
+    // The note may name its own template; one the theme does not have is
+    // a warning, and the page keeps the default.
+    if let Some(name) = &entry.site.template {
+        let template = page::template_name(name);
+        if export.templates.has(&template) {
+            page.template = template;
+        } else {
+            warnings.push(format!(
+                "{}: `site.template` names `{name}`, which the theme has no template for; `{}` is used",
+                note.path.display(),
+                page::PAGE_TEMPLATE
+            ));
+        }
+    }
     Ok(RenderedNote {
         page: page.render(export.templates)?,
         assets: emitted.assets,
@@ -748,6 +764,7 @@ fn chrome(
         note: None,
         vars: export.vars.clone(),
         nav: nav::sidebar_data(model, &prefix, at),
+        template: page::PAGE_TEMPLATE.to_string(),
         stylesheet: format!("{prefix}{ASSETS_DIR}/{}", theme::STYLESHEET),
         scripts,
         icons: export.icons.to_string(),
@@ -1322,6 +1339,80 @@ mod tests {
         assert_eq!(
             probe("views/by-status/done/index.html"),
             "group|views/by-status/done/index.html|-|Acme|2"
+        );
+    }
+
+    #[test]
+    fn a_note_names_its_template_and_a_missing_one_warns() {
+        const E: &str = "01ERZ3NDEKTSV4RRFFQ69G5FAV";
+        const F: &str = "01FRZ3NDEKTSV4RRFFQ69G5FAV";
+        let vault = vault();
+        let theme_dir = vault.path().join(".ntropy/themes/site/probe");
+        std::fs::create_dir_all(&theme_dir).expect("theme dir");
+        std::fs::write(theme_dir.join("style.css"), "body{}").expect("css");
+        let theme = SiteTheme {
+            name: "probe".to_string(),
+            stylesheet: "body{}".to_string(),
+            icons: std::collections::BTreeMap::new(),
+            templates: std::collections::BTreeMap::from([
+                ("page.html".to_string(), "page:{{ title }}".to_string()),
+                (
+                    "splash.html".to_string(),
+                    "splash:{{ title }}:{{ kind }}".to_string(),
+                ),
+            ]),
+        };
+        let mut notes = notes(vault.path());
+        notes.push(note(
+            vault.path(),
+            E,
+            "Welcome",
+            "site:\n  template: splash\n",
+            "Hello.\n",
+        ));
+        notes.push(note(
+            vault.path(),
+            F,
+            "Legal",
+            "site:\n  template: no-such-template\n",
+            "Fine print.\n",
+        ));
+        let vault_ids = ids(&notes);
+        let options = SiteOptions {
+            index: Some(E.to_string()),
+            ..SiteOptions::default()
+        };
+        let built = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &options,
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault.path(),
+            theme: Some((&theme, &theme_dir)),
+        })
+        .expect("builds");
+        assert_eq!(text(&built, "notes/welcome.html"), "splash:Welcome:note");
+        assert_eq!(
+            text(&built, "index.html"),
+            "splash:Welcome:front",
+            "the note's template renders its front-page copy too"
+        );
+        assert_eq!(text(&built, "notes/legal.html"), "page:Legal");
+        assert_eq!(text(&built, "notes/plain.html"), "page:Plain");
+        let template_warnings: Vec<&String> = built
+            .warnings
+            .iter()
+            .filter(|warning| warning.contains("site.template"))
+            .collect();
+        assert_eq!(template_warnings.len(), 1, "{:?}", built.warnings);
+        assert!(
+            template_warnings[0].contains("legal.md")
+                && template_warnings[0].contains("`no-such-template`")
+                && template_warnings[0].contains("`page.html` is used"),
+            "{}",
+            template_warnings[0]
         );
     }
 

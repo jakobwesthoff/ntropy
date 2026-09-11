@@ -232,6 +232,9 @@ pub struct Page {
     pub vars: toml::Table,
     /// The sidebar as data, beside its rendered form.
     pub nav: Vec<super::nav::NavSectionData>,
+    /// The template that renders the page: [`PAGE_TEMPLATE`], or the one
+    /// the note's `site.template` names.
+    pub template: String,
     /// The stylesheet's `href`, relative to this page.
     pub stylesheet: String,
     /// The `src` of every script the page loads, relative to this page: the
@@ -280,8 +283,14 @@ impl Page {
             next => link(&self.next),
             body => Value::from_safe_string(self.body.clone()),
         };
-        templates.render(PAGE_TEMPLATE, context)
+        templates.render(&self.template, context)
     }
+}
+
+/// The template name a note's `site.template` selects: the theme's
+/// `templates/<name>.html`.
+pub fn template_name(name: &str) -> String {
+    format!("{name}.html")
 }
 
 /// Interpolation escaping: the same five characters the HTML writer
@@ -341,6 +350,7 @@ mod tests {
                     items: Vec::new(),
                 }],
             }],
+            template: PAGE_TEMPLATE.to_string(),
             stylesheet: "../assets/style.css".to_string(),
             scripts: vec![
                 "../assets/grammars/rust.js".to_string(),

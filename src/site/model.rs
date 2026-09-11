@@ -58,6 +58,9 @@ pub struct SiteMeta {
     /// On a landing note, whether the group's page lists the group's
     /// contents below the note.
     pub listing: bool,
+    /// The theme template that renders the note's page instead of
+    /// `page.html`, by its name without the `.html` (ADR 0058).
+    pub template: Option<String>,
 }
 
 impl SiteMeta {
@@ -86,11 +89,13 @@ impl SiteMeta {
                 ("index", Value::Bool(b)) => meta.index = *b,
                 ("related", Value::Bool(b)) => meta.related = Some(*b),
                 ("listing", Value::Bool(b)) => meta.listing = *b,
-                ("order" | "label" | "hidden" | "index" | "related" | "listing", _) => {
-                    warn(format!(
-                        "`{SITE_FIELD}.{key}` has the wrong type and is ignored (order takes an integer, label a string, the others a boolean)"
-                    ))
-                }
+                ("template", Value::String(s)) => meta.template = Some(s.clone()),
+                (
+                    "order" | "label" | "hidden" | "index" | "related" | "listing" | "template",
+                    _,
+                ) => warn(format!(
+                    "`{SITE_FIELD}.{key}` has the wrong type and is ignored (order takes an integer, label and template a string, the others a boolean)"
+                )),
                 _ => {}
             }
         }
@@ -1352,7 +1357,7 @@ mod tests {
         let full = note(
             A,
             "Full",
-            "site:\n  order: 2\n  label: Start here\n  hidden: true\n  index: true\n  related: false\n  listing: true\n  extra: ignored\n",
+            "site:\n  order: 2\n  label: Start here\n  hidden: true\n  index: true\n  related: false\n  listing: true\n  template: splash\n  extra: ignored\n",
         );
         assert_eq!(
             SiteMeta::read(&full.frontmatter, warn),
@@ -1363,6 +1368,7 @@ mod tests {
                 index: true,
                 related: Some(false),
                 listing: true,
+                template: Some("splash".to_string()),
             }
         );
         let none = note(B, "None", "status: open\n");
@@ -1372,7 +1378,7 @@ mod tests {
         let wrong = note(
             C,
             "Wrong",
-            "site:\n  order: two\n  hidden: yes please\n  related: sometimes\n",
+            "site:\n  order: two\n  hidden: yes please\n  related: sometimes\n  template: 3\n",
         );
         assert_eq!(
             SiteMeta::read(&wrong.frontmatter, warn),
@@ -1384,7 +1390,7 @@ mod tests {
             SiteMeta::default()
         );
         let warnings = warnings.into_inner();
-        assert_eq!(warnings.len(), 4, "{warnings:?}");
+        assert_eq!(warnings.len(), 5, "{warnings:?}");
         assert!(
             warnings[0].contains("`site.order` has the wrong type"),
             "{}",
@@ -1400,7 +1406,12 @@ mod tests {
             "{}",
             warnings[2]
         );
-        assert!(warnings[3].contains("not a table"), "{}", warnings[3]);
+        assert!(
+            warnings[3].contains("`site.template` has the wrong type"),
+            "{}",
+            warnings[3]
+        );
+        assert!(warnings[4].contains("not a table"), "{}", warnings[4]);
     }
 
     #[test]

@@ -2123,6 +2123,47 @@ fn theme_templates_render_the_site_and_the_html_artifact_with_the_vars() {
     );
     assert!(!dir.path().join("tips_files/templates").exists());
 
+    // A note names its template; a name the theme lacks is a warning that
+    // `--strict` turns into a failure.
+    fs::write(
+        templates.join("splash.html"),
+        "<main class=\"splash\">{{ title }}</main>",
+    )
+    .expect("splash template");
+    write_note(
+        dir.path(),
+        ULID_C,
+        "welcome",
+        "---\ntitle: Welcome\nsite:\n  template: splash\n---\nHi.\n",
+    );
+    let output = site(dir.path(), &["-o", "named"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let page = fs::read_to_string(dir.path().join("named/notes/welcome.html")).expect("page");
+    assert_eq!(page, "<main class=\"splash\">Welcome</main>");
+    write_note(
+        dir.path(),
+        ULID_C,
+        "welcome",
+        "---\ntitle: Welcome\nsite:\n  template: no-such-template\n---\nHi.\n",
+    );
+    let output = site(dir.path(), &["-o", "unnamed", "--strict"]);
+    assert!(
+        !output.status.success(),
+        "a missing template fails --strict"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("`site.template` names `no-such-template`"),
+        "{stderr}"
+    );
+    let page = fs::read_to_string(dir.path().join("unnamed/notes/welcome.html"))
+        .expect("the page is still written, with the default template");
+    assert!(page.contains("<footer>Acme · note</footer>"), "{page}");
+
     // A template that does not parse fails both commands naming it, before
     // anything is written.
     fs::write(templates.join("page.html"), "{% if %}").expect("broken template");
