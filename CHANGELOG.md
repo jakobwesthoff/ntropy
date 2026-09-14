@@ -8,6 +8,11 @@ and this project adheres to
 
 ## Unreleased
 
+### Changed
+
+- Dependencies updated to their latest compatible releases: `jiff` 0.2.37,
+  `toml` 1.1.6.
+
 ### Fixed
 
 - v2.0.0 and v2.1.0 still locked the yanked `chacha20` 0.10.1, as they were
