@@ -1,0 +1,115 @@
+---
+source: src/site/nav.rs
+expression: data
+---
+[
+    NavSectionData {
+        label: "by-status",
+        href: Some(
+            "../views/by-status/index.html",
+        ),
+        cloud: false,
+        open: true,
+        items: [
+            NavItemData {
+                kind: "group",
+                label: "done",
+                href: Some(
+                    "../views/by-status/done/index.html",
+                ),
+                current: false,
+                open: true,
+                count: Some(
+                    1,
+                ),
+                items: [
+                    NavItemData {
+                        kind: "note",
+                        label: "Rust <Tips>",
+                        href: Some(
+                            "../notes/rust-tips.html",
+                        ),
+                        current: true,
+                        open: false,
+                        count: None,
+                        items: [],
+                    },
+                ],
+            },
+            NavItemData {
+                kind: "group",
+                label: "open",
+                href: Some(
+                    "../views/by-status/open/index.html",
+                ),
+                current: false,
+                open: false,
+                count: Some(
+                    1,
+                ),
+                items: [
+                    NavItemData {
+                        kind: "note",
+                        label: "Plain",
+                        href: Some(
+                            "../notes/plain.html",
+                        ),
+                        current: false,
+                        open: false,
+                        count: None,
+                        items: [],
+                    },
+                ],
+            },
+        ],
+    },
+    NavSectionData {
+        label: "tags",
+        href: Some(
+            "../tags/index.html",
+        ),
+        cloud: true,
+        open: true,
+        items: [
+            NavItemData {
+                kind: "group",
+                label: "programming",
+                href: Some(
+                    "../tags/programming/index.html",
+                ),
+                current: false,
+                open: true,
+                count: Some(
+                    1,
+                ),
+                items: [
+                    NavItemData {
+                        kind: "group",
+                        label: "rust",
+                        href: Some(
+                            "../tags/programming/rust/index.html",
+                        ),
+                        current: false,
+                        open: true,
+                        count: Some(
+                            1,
+                        ),
+                        items: [
+                            NavItemData {
+                                kind: "note",
+                                label: "Rust <Tips>",
+                                href: Some(
+                                    "../notes/rust-tips.html",
+                                ),
+                                current: true,
+                                open: false,
+                                count: None,
+                                items: [],
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
+    },
+]

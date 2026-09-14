@@ -1,0 +1,22 @@
+view = []
+
+[site]
+theme = "ntropy"
+title = "ntropy"
+index = "01M28Q3276TZRS3RRYPV8QX8R3"
+lang = "en"
+related = false
+root = "tags/docs"
+
+[site.vars]
+github = "https://github.com/jakobwesthoff/ntropy"
+crates = "https://crates.io/crates/ntropy"
+author = "Jakob Westhoff"
+author_url = "https://westhoffswelt.de"
+tagline = "Your knowledge, plain and yours"
+
+[site.vars.imprint]
+# The contact lines of the impressum note carry their values XOR-obfuscated
+# and base64-encoded; the theme's template decodes them with this key,
+# rot13-encoded here, so crawlers do not harvest them.
+key = "6sp8Jgne71wECxAaQmGRG3KQJAZpO6Oo"

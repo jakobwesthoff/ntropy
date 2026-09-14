@@ -39,24 +39,39 @@ impl LeafInput {
 /// Inputs sharing a base name are disambiguated together by appending the
 /// shortest equal-length ULID tail that makes them all distinct.
 pub fn leaf_names(inputs: &[LeafInput]) -> Vec<String> {
+    let bases: Vec<(Id, String)> = inputs
+        .iter()
+        .map(|input| (input.id, input.base()))
+        .collect();
+    disambiguate(&bases)
+        .into_iter()
+        .map(|name| format!("{name}.md"))
+        .collect()
+}
+
+/// Make each `(id, base)` name unique, in input order: a base that occurs
+/// once stays as it is; the bases that collide get `-<tail>` appended, the
+/// tail being the shortest equal-length slice of the colliders' ULID tails
+/// that tells them apart. The same rule names the site's note pages
+/// (ADR 0054).
+pub fn disambiguate(inputs: &[(Id, String)]) -> Vec<String> {
     // Bucket input indices by their base name so collisions are handled
     // per-group while the output stays aligned to the original order.
-    let mut by_base: std::collections::HashMap<String, Vec<usize>> =
-        std::collections::HashMap::new();
-    for (i, input) in inputs.iter().enumerate() {
-        by_base.entry(input.base()).or_default().push(i);
+    let mut by_base: std::collections::HashMap<&str, Vec<usize>> = std::collections::HashMap::new();
+    for (i, (_, base)) in inputs.iter().enumerate() {
+        by_base.entry(base.as_str()).or_default().push(i);
     }
 
     let mut names = vec![String::new(); inputs.len()];
     for (base, indices) in by_base {
         if indices.len() == 1 {
-            names[indices[0]] = format!("{base}.md");
+            names[indices[0]] = base.to_string();
             continue;
         }
 
         let tail_len = disambiguating_tail_len(inputs, &indices);
         for &i in &indices {
-            names[i] = format!("{base}-{}.md", inputs[i].id.tail(tail_len));
+            names[i] = format!("{base}-{}", inputs[i].0.tail(tail_len));
         }
     }
     names
@@ -67,10 +82,10 @@ pub fn leaf_names(inputs: &[LeafInput]) -> Vec<String> {
 ///
 /// Distinct ULIDs always become unique at full length, so the full width is the
 /// guaranteed terminating fallback.
-fn disambiguating_tail_len(inputs: &[LeafInput], indices: &[usize]) -> usize {
+fn disambiguating_tail_len(inputs: &[(Id, String)], indices: &[usize]) -> usize {
     (MIN_TAIL..ULID_LEN)
         .find(|&len| {
-            let mut tails: Vec<String> = indices.iter().map(|&i| inputs[i].id.tail(len)).collect();
+            let mut tails: Vec<String> = indices.iter().map(|&i| inputs[i].0.tail(len)).collect();
             tails.sort();
             tails.windows(2).all(|w| w[0] != w[1])
         })
@@ -124,6 +139,20 @@ mod tests {
         let names = leaf_names(&inputs);
         assert_eq!(names[0], "2026-06-25-review-G5FAV.md");
         assert_eq!(names[1], "2026-06-25-review-X5FAV.md");
+    }
+
+    #[test]
+    fn disambiguate_touches_only_the_colliding_bases() {
+        let id = |s: &str| -> Id { s.parse().expect("valid ULID") };
+        let inputs = vec![
+            (id("01ARZ3NDEKTSV4RRFFQ69G5FAV"), "review".to_string()),
+            (id("01BRZ3NDEKTSV4RRFFQ69G5FAV"), "notes".to_string()),
+            (id("01ARZ3NDEKTSV4RRFFQ69G5FBW"), "review".to_string()),
+        ];
+        assert_eq!(
+            disambiguate(&inputs),
+            vec!["review-FAV", "notes", "review-FBW"]
+        );
     }
 
     #[test]

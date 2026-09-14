@@ -1,0 +1,39 @@
+---
+source: src/site/page.rs
+expression: document().render()
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quarterly &lt;Review&gt;</title>
+<link rel="stylesheet" href="quarterly-review_files/style.css">
+<script>try{var t=localStorage.getItem("ntropy-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<script defer src="quarterly-review_files/app.js"></script>
+
+</head>
+<body class="document">
+<svg hidden><symbol id="icon-menu"/></svg>
+<div class="layout">
+<header class="site-header">
+<span class="site-name">Quarterly &lt;Review&gt;</span>
+<div class="header-tools">
+<div class="theme-switch" role="group" aria-label="Color scheme">
+<button class="theme-choice" type="button" data-theme-choice="system" aria-pressed="true" title="Follow the system"><svg class="icon" aria-hidden="true"><use href="#icon-monitor"/></svg><span class="visually-hidden">System</span></button>
+<button class="theme-choice" type="button" data-theme-choice="light" aria-pressed="false" title="Light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg><span class="visually-hidden">Light</span></button>
+<button class="theme-choice" type="button" data-theme-choice="dark" aria-pressed="false" title="Dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg><span class="visually-hidden">Dark</span></button>
+</div>
+</div>
+</header>
+<main>
+<div class="content">
+<article>B</article>
+</div>
+</main>
+<aside class="side">
+<nav class="outline">O</nav>
+</aside>
+</div>
+</body>
+</html>

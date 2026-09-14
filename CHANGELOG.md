@@ -6,6 +6,142 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.1.0 - 2026-09-11
+
+### Added
+
+- A site theme may carry page templates: a `templates/<name>.html` in the
+  theme directory replaces the built-in template of that name, and the
+  built-in ones stay reachable as `ntropy/<name>` for a template that
+  extends one and fills a block. The built-in `page.html` defines empty
+  blocks at its seams (`head`, `header_nav`, `header_tools`,
+  `before_content`, `after_content`, `footer`, `scripts`). The same
+  templates render `render --to html`. A template that fails to parse or
+  render fails the export naming it.
+- Templates receive the page's `kind` (`front`, `note`, `group`,
+  `document`), `path`, the `note` they render with its raw frontmatter,
+  the sidebar as data (`nav`), and `vars`, a free-form `[site.vars]` table
+  of the vault config.
+- A note's `site.template` picks the theme template that renders its
+  pages and its html artifact; a name the theme lacks is a warning and
+  `page.html` is used.
+
+### Changed
+
+- `site theme init` writes the built-in templates into the new theme
+  beside the stylesheet, icons, and fonts.
+- A sidebar rooted at a tag or view group (`[site] root`, or a single
+  `tag:` export query) shows the root's child groups as its sections
+  instead of one section wrapping them; breadcrumbs start at the
+  section. Every section's title now links to the section's page, in
+  place of the "All groups" and "Overview" rows.
+
+## v2.0.0 - 2026-09-11
+
+### Added
+
+- `ntropy site -o <dir> [query]` exports the vault as a static website:
+  a page per note under `notes/`, a tag tree under `tags/` with a page per
+  tag, a tree per configured view under `views/`, and a front page (the
+  note named by `[site] index`, or a generated overview). Every page has a
+  sidebar with the current trail opened, breadcrumbs, an outline of the
+  note's headings, and previous/next links. Note links point at the
+  target's page; vault files the notes reference are copied under
+  `files/`, a linked directory with its whole tree. The site works when
+  opened from disk. An optional query restricts the exported notes,
+  `--force` empties a non-empty output directory, `-p` prints the front
+  page's path, and `--strict` fails on export warnings.
+- `ntropy site theme init <name>` copies the built-in site theme into
+  `.ntropy/themes/site/<name>/` as the starting point for a custom one.
+- A note's `site` frontmatter table shapes the site's navigation: `order`
+  places the note among its group's entries, `label` names it in the
+  sidebar and the pager, `hidden` keeps it out of the sidebar, the lists,
+  and the pager while its page stays exported and searchable, and `index`
+  makes it the landing note of its groups, whose pages then show the
+  note in place of the listing (`listing: true` keeps the listing
+  below it) and take the note's label and order. Group
+  entries read in order: ordered ones first, then notes newest first,
+  then groups by label; previous and next follow that reading order
+  across group boundaries.
+- The agent skill covers the website export: a `site` row and an
+  html-aware `render` row, golden rules for the reserved `site`
+  frontmatter key and for naming notes by ULID in the site config, a
+  publish workflow, and two references, `site.md` (command, warnings,
+  `[site]` and the nav table, the `site` frontmatter keys, the standalone
+  page) and `site-themes.md` (layout, tokens, fonts, icons, markup). A test
+  pins the theme reference's names to the built-in theme.
+- The search palette's note results show their icon: the built-in theme
+  was missing the `file-text` icon the palette uses.
+- `ntropy render --to html` writes the site's page for one note as
+  `<stem>.html` plus `<stem>_files/` beside it, holding the theme, the
+  fonts, the page script, the grammars the page needs, and the images
+  and files the note references, so highlighting, the scheme switch,
+  the outline, the type, and the images all work as on the site. The
+  page has no sidebar, search, breadcrumbs, pager, or related notes.
+- `[site] root` roots the sidebar at a tag or view group page
+  (`tags/docs`, `views/by-status/open`), and an export whose query is a
+  single `tag:` predicate is rooted at that tag; `[[site.nav]]` tables
+  assemble the sidebar by hand from notes, tag subtrees, views and their
+  groups, the whole tag tree, and labelled groups of items, and are then
+  the whole sidebar. Breadcrumbs follow the sidebar. `[site] related =
+  false` drops the related notes from the note pages, and a note's
+  `site.related` overrides that for its own page.
+- Exported pages carry a scheme switch (system, light, dark) that
+  remembers the choice in the browser, an outline that follows the
+  reader's position, and code blocks highlighted by Shiki in the browser
+  for 72 languages; a page loads only the grammars its code blocks need,
+  and a fence language without a grammar is reported as an export
+  warning.
+- The exported site's look: Fraunces for titles, Literata for note
+  bodies, DM Sans for the chrome, DM Mono for dates and counts, all
+  shipped with the site; warm paper with amber-brown ink in light mode,
+  warm black with gold in dark mode; Lucide icons in the chrome, on
+  tags, and in callouts.
+  Note lists are one row per note with the date, the title, and the
+  tags as links. The sidebar keeps view sections collapsed away from
+  their pages and lists the top-level tags with counts; on narrow
+  screens it is a drawer. A note page links its tags to their pages,
+  ends with the notes sharing the most tags with it, and drops a leading
+  heading that repeats its title. A view over the `tags` field is
+  skipped, since the tag section already is that view. `/` opens the
+  search, Escape closes it.
+- A site theme's layout: `style.css`, `icons/*.svg`, `fonts/`, and any
+  other file, copied under `assets/`. The icons become a sprite every
+  page inlines; a vault theme's icons replace or add to the built-in
+  ones by file name. `site theme init` writes the complete built-in
+  theme, fonts and icons included.
+- Exported sites search in the browser, in a palette over the page that
+  the header's button, `/`, or Ctrl+K opens. A word matches titles,
+  tags, frontmatter values, and text; two words need both; `tag:`,
+  `field:`, and `text:` narrow, `tag:` and `field:` partially, `text:`
+  as the same regex as in the CLI; `and`, `or`, `not`, and parentheses
+  combine. Results come grouped, tag and view pages before notes, with
+  the matches marked and a line of context per note; the arrow keys and
+  Enter open one. The search data is one script under `assets/`, loaded
+  the first time the palette opens.
+- `render --to html` writes a note as one self-contained web page: the
+  site theme's stylesheet inlined, the title, tags, and remaining
+  frontmatter as a header, the converted body with heading anchors, and
+  note links pointing at `<slug>.html` beside the artifact. No external
+  tool is involved.
+- Site themes. A directory `<vault>/.ntropy/themes/site/<name>/` holding a
+  `style.css` is a theme; `[site] theme` in the vault config selects it
+  and `--theme` overrides it for the `html` format. A built-in theme with
+  light and dark palettes ships in the binary.
+- A `[site]` table in the vault config: `theme`, `index`, `title`, and
+  `lang`, all optional.
+
+### Changed
+
+- `render` refuses an existing artifact of any format, and for `html` a
+  non-empty `<stem>_files/` directory, unless `--force` replaces them;
+  it used to overwrite the artifact in place. A script that re-renders
+  into the same path needs the flag.
+- Typst themes live in `<vault>/.ntropy/themes/typst/`, one subdirectory
+  per theme type under `themes/`. A theme still at
+  `.ntropy/themes/<name>.typ` fails the render with a message naming both
+  the old and the new path; move the file to `themes/typst/` once.
+
 ## v1.12.1 - 2026-09-07
 
 ### Changed

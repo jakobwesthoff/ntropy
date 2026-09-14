@@ -72,6 +72,10 @@ pub enum Error {
     #[error(transparent)]
     Render(#[from] RenderError),
 
+    /// The browser-side files embedded in the binary could not be read.
+    #[error(transparent)]
+    Frontend(#[from] crate::site::frontend::GrammarError),
+
     /// A write could not be directed at a note.
     #[error(transparent)]
     Write(#[from] WriteError),

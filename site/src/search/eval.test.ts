@@ -1,0 +1,204 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
+import { describe, expect, it } from "vitest";
+
+import {
+  compile,
+  matches,
+  matchesPage,
+  noteFrom,
+  type SearchPage,
+  scalarValues,
+  smartCaseInsensitive,
+  textRegex,
+} from "./eval";
+import { QueryError } from "./query";
+
+const note = noteFrom(
+  "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+  "notes/x.html",
+  "2026-01-01",
+  {
+    title: "Rust Tips",
+    tags: ["Programming/Rust"],
+    status: "draft",
+    n: 2,
+    list: [1, "b"],
+  },
+  "Body with Tokens.\nsecond line\n",
+);
+
+describe("smartCaseInsensitive", () => {
+  it("is insensitive for lowercase literals and sensitive for uppercase ones", () => {
+    expect(smartCaseInsensitive("foo")).toBe(true);
+    expect(smartCaseInsensitive("Foo")).toBe(false);
+    expect(smartCaseInsensitive("foo Bar")).toBe(false);
+  });
+
+  it("ignores class shorthands, properties, flags, and quantifiers", () => {
+    expect(smartCaseInsensitive("foo\\W")).toBe(true);
+    expect(smartCaseInsensitive("\\p{Lu}foo")).toBe(true);
+    expect(smartCaseInsensitive("(?i)foo")).toBe(true);
+    expect(smartCaseInsensitive("(?P<Name>foo)")).toBe(true);
+    expect(smartCaseInsensitive("a{2,3}")).toBe(true);
+    expect(smartCaseInsensitive("\\Bfoo")).toBe(true);
+  });
+
+  it("counts literals inside classes and escaped punctuation", () => {
+    expect(smartCaseInsensitive("[A-Z]")).toBe(false);
+    expect(smartCaseInsensitive("[a-z]")).toBe(true);
+    expect(smartCaseInsensitive("\\.")).toBe(true);
+  });
+
+  it("is sensitive without any literal", () => {
+    expect(smartCaseInsensitive("\\w+")).toBe(false);
+    expect(smartCaseInsensitive("^$")).toBe(false);
+  });
+});
+
+describe("textRegex", () => {
+  it("anchors to lines and applies smart case", () => {
+    expect(textRegex("^second").test("first\nsecond")).toBe(true);
+    expect(textRegex("tokens").test("With Tokens")).toBe(true);
+    expect(textRegex("Tokens").test("with tokens")).toBe(false);
+  });
+
+  it("refuses constructs the CLI's regex engine rejects", () => {
+    expect(() => textRegex("a(?=b)")).toThrow(QueryError);
+    expect(() => textRegex("a(?<!b)")).toThrow(QueryError);
+    expect(() => textRegex("(a)\\1")).toThrow(QueryError);
+    expect(() => textRegex("(?<x>a)\\k<x>")).toThrow(QueryError);
+  });
+
+  it("reports an invalid pattern as a pattern error without a position", () => {
+    try {
+      textRegex("[");
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toBeInstanceOf(QueryError);
+      expect((error as QueryError).position).toBeNull();
+      expect((error as QueryError).message).toContain("invalid search pattern");
+    }
+  });
+
+  it("refuses flags JavaScript lacks and inline flags after the start", () => {
+    expect(() => textRegex("(?x)a b")).toThrow("the flag `x` is not supported");
+    expect(() => textRegex("a(?i)b")).toThrow("only supported at the start");
+    expect(textRegex("(?i)(?s)a.b").test("A\nB")).toBe(true);
+  });
+
+  it("keeps escaped punctuation inside classes out of the smart-case check", () => {
+    // `\-` inside the class is punctuation, not a cased letter: the
+    // pattern stays case-insensitive.
+    expect(textRegex("[a\\-z]").test("Q")).toBe(false);
+    expect(textRegex("[\\.x]").test("X")).toBe(true);
+  });
+
+  it("falls back from Unicode mode for escapes Rust accepts", () => {
+    expect(textRegex("a\\-b").test("a-b")).toBe(true);
+  });
+});
+
+describe("matches", () => {
+  it("evaluates every predicate kind", () => {
+    expect(matches(compile("tag:programming"), note)).toBe(true);
+    expect(matches(compile("status:draft"), note)).toBe(true);
+    expect(matches(compile("n:2"), note)).toBe(true);
+    expect(matches(compile("list:b"), note)).toBe(true);
+    expect(matches(compile("list:1"), note)).toBe(true);
+    expect(matches(compile("title:Rust"), note)).toBe(false);
+    expect(matches(compile("tokens"), note)).toBe(true);
+    expect(matches(compile("not tokens"), note)).toBe(false);
+    expect(matches(compile("tokens and status:done or tag:rust"), note)).toBe(
+      true,
+    );
+  });
+
+  it("ignores prototype properties as fields", () => {
+    expect(matches(compile("constructor:x"), note)).toBe(false);
+    expect(matches(compile("toString:x"), note)).toBe(false);
+  });
+
+  it("reads a bare term as a body regex under the CLI's semantics", () => {
+    expect(matches(compile("rust"), note)).toBe(false);
+    expect(matches(compile('"to.ens"'), note)).toBe(true);
+    expect(() => compile("(")).toThrow();
+    expect(() => compile('"("')).toThrow();
+  });
+
+  it("reads a bare term as a substring of anything under the reader's", () => {
+    const reader = (q: string) => matches(compile(q, "reader"), note, "reader");
+    expect(reader("rust")).toBe(true);
+    expect(reader("RUST TIPS")).toBe(true);
+    expect(reader("programming")).toBe(true);
+    expect(reader("draft")).toBe(true);
+    expect(reader("second line")).toBe(true);
+    expect(reader('"to.ens"')).toBe(false);
+    expect(reader('"c++ ("')).toBe(false);
+    expect(reader("tag:rus")).toBe(true);
+    expect(reader("tag:gramm")).toBe(true);
+    expect(reader("tag:Programming/Rust")).toBe(true);
+    expect(reader("status:raf")).toBe(true);
+    expect(reader("list:b")).toBe(true);
+    expect(reader("n:2")).toBe(true);
+    expect(reader('text:"^second"')).toBe(true);
+    expect(reader("not rust")).toBe(false);
+  });
+});
+
+describe("matchesPage", () => {
+  const tag: SearchPage = {
+    kind: "tag",
+    section: "tags",
+    field: null,
+    value: "programming/rust",
+    label: "rust",
+    page: "tags/programming/rust/index.html",
+    count: 3,
+  };
+  const group: SearchPage = {
+    ...tag,
+    kind: "group",
+    section: "by-status",
+    field: "status",
+    value: "open",
+    label: "open",
+    page: "views/by-status/open/index.html",
+  };
+
+  it("selects tag pages by tag, group pages by field, any page by term", () => {
+    const q = (s: string) => compile(s, "reader");
+    expect(matchesPage(q("tag:rust"), tag)).toBe(true);
+    expect(matchesPage(q("tag:gram"), tag)).toBe(true);
+    expect(matchesPage(q("tag:rust"), group)).toBe(false);
+    expect(matchesPage(q("status:op"), group)).toBe(true);
+    expect(matchesPage(q("STATUS:open"), group)).toBe(true);
+    expect(matchesPage(q("status:open"), tag)).toBe(false);
+    expect(matchesPage(q("other:open"), group)).toBe(false);
+    expect(matchesPage(q("rust"), tag)).toBe(true);
+    expect(matchesPage(q("open"), group)).toBe(true);
+    expect(matchesPage(q("text:rust"), tag)).toBe(false);
+    expect(matchesPage(q("rust and not tag:home"), tag)).toBe(true);
+    expect(matchesPage(q("rust or open"), group)).toBe(true);
+  });
+});
+
+describe("scalarValues", () => {
+  it("flattens scalars from lists and maps, skipping nulls", () => {
+    expect(scalarValues({ a: "x", b: [1, true, null], c: { d: "y" } })).toEqual(
+      ["x", "1", "true", "y"],
+    );
+  });
+});
+
+describe("noteFrom", () => {
+  it("derives title and normalized tags from the frontmatter", () => {
+    expect(note.title).toBe("Rust Tips");
+    expect(note.tags).toEqual(["programming/rust"]);
+    const untitled = noteFrom("x", "p", "d", { tags: "One" }, "");
+    expect(untitled.title).toBe("");
+    expect(untitled.tags).toEqual(["one"]);
+  });
+});

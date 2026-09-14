@@ -1,0 +1,1417 @@
+/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this
+ * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
+
+/* The built-in site theme. Every color and face is a custom property on
+ * :root so a theme that wants only a palette redefines the properties and
+ * keeps the rest. The dark palette applies to a system preference and to
+ * an explicit data-theme="dark" on the root element; data-theme="light"
+ * wins over the system preference.
+ *
+ * The fonts ship beside this file under fonts/ (all under the SIL Open
+ * Font License, see fonts/LICENSE): Fraunces for the titles, Literata for
+ * note bodies and their headings, DM Sans for the chrome, DM Mono for
+ * dates, counts, and code. The standalone document inlines this stylesheet
+ * and has no fonts/ beside it; there the stacks fall back to the system
+ * faces.
+ *
+ * Icons are inline SVG `<use>` references into the sprite every page
+ * carries, built from icons/; they take the text color, so a theme sizes,
+ * colors, or hides them here. */
+
+@font-face {
+  font-family: "Fraunces";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url(fonts/fraunces-latin-standard-normal.woff2) format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Literata";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url(fonts/literata-latin-standard-normal.woff2) format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Literata";
+  font-style: italic;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url(fonts/literata-latin-standard-italic.woff2) format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "DM Sans";
+  font-style: normal;
+  font-weight: 100 1000;
+  font-display: swap;
+  src: url(fonts/dm-sans-latin-wght-normal.woff2) format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/dm-mono-latin-400-normal.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "DM Mono";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url(fonts/dm-mono-latin-400-italic.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "DM Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url(fonts/dm-mono-latin-500-normal.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* Tokens. Colors come in three text tones (headings brightest, body one
+ * step down, secondary text muted, marks faint) over three grounds (page,
+ * surface, raised). The light palette is warm paper with amber-brown ink
+ * for links and rules; the dark palette is a brown-black with a gold
+ * accent. The sizes are named for their job in these pages rather than as
+ * a generic scale, so a theme can retune the reading column or the chrome
+ * without touching every rule. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #fbf7ef;
+  --surface: #f3ecdf;
+  --raised: #ffffff;
+  --border: #ddd2bd;
+  --fg-bright: #1b160f;
+  --fg: #2c2518;
+  --muted: #6e6553;
+  --faint: #a89b85;
+  --accent: #8c5a10;
+  --accent-soft: rgba(140, 90, 16, 0.1);
+  --link: #8c5a10;
+  --note-link: #8c5a10;
+  --callout-note: #8c5a10;
+  --callout-tip: #2f7a3a;
+  --callout-important: #6e40c9;
+  --callout-warning: #b5541a;
+  --callout-caution: #c0392b;
+  --shadow-panel: 0 12px 32px rgba(27, 22, 15, 0.16);
+  --shadow-raised: 0 1px 2px rgba(27, 22, 15, 0.14);
+  --display: "Fraunces", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --serif: "Literata", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --sans: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Layout: the reading column and the chrome around it. */
+  --measure: 42rem;
+  --page-width: 84rem;
+  --gutter: 1.5rem;
+  --sidebar-width: 15.5rem;
+  --outline-width: 13rem;
+  --column-gap: 3rem;
+  --header-height: 3.5rem;
+
+  /* Rhythm: the space between blocks of a note and between sections. */
+  --block-gap: 1.1em;
+  --section-gap: 2rem;
+
+  /* Shape and motion. */
+  --radius-control: 6px;
+  --radius-block: 8px;
+  --radius-panel: 10px;
+  --radius-pill: 999px;
+  --motion: 0.15s;
+  --accent-bar: 3px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #1a1510;
+    --surface: #241d16;
+    --raised: #2d251b;
+    --border: #3f3428;
+    --fg-bright: #f8f2e4;
+    --fg: #e7dfcd;
+    --muted: #a69a88;
+    --faint: #6d6151;
+    --accent: #e4b45a;
+    --accent-soft: rgba(228, 180, 90, 0.12);
+    --link: #edc670;
+    --note-link: #edc670;
+    --callout-note: #e4b45a;
+    --callout-tip: #7fcb7a;
+    --callout-important: #c39cf5;
+    --callout-warning: #f0a05a;
+    --callout-caution: #f28b7d;
+    --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #1a1510;
+  --surface: #241d16;
+  --raised: #2d251b;
+  --border: #3f3428;
+  --fg-bright: #f8f2e4;
+  --fg: #e7dfcd;
+  --muted: #a69a88;
+  --faint: #6d6151;
+  --accent: #e4b45a;
+  --accent-soft: rgba(228, 180, 90, 0.12);
+  --link: #edc670;
+  --note-link: #edc670;
+  --callout-note: #e4b45a;
+  --callout-tip: #7fcb7a;
+  --callout-important: #c39cf5;
+  --callout-warning: #f0a05a;
+  --callout-caution: #f28b7d;
+  --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Base. */
+
+html {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--serif);
+  font-size: 106.25%;
+  line-height: 1.65;
+  scroll-behavior: smooth;
+  /* An anchor jump lands the heading below the sticky header. */
+  scroll-padding-top: calc(var(--header-height) + 1rem);
+  -webkit-text-size-adjust: 100%;
+}
+
+/* Light text on a dark ground reads crisper with grayscale antialiasing;
+ * dark text on light does not, so only the dark palette sets it. */
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+html[data-theme="dark"] {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  padding: 1.5rem 1rem;
+}
+
+main {
+  max-width: var(--measure);
+  margin: 0 auto;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--bg);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+a {
+  color: var(--link);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+a.note-link {
+  color: var(--note-link);
+  font-style: italic;
+}
+
+.icon {
+  width: 1.1em;
+  height: 1.1em;
+  flex: none;
+  vertical-align: -0.2em;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* The note header: the title in the serif over a teal rule, the date
+ * stamped in the mono, the tags, then the remaining frontmatter. */
+
+.note-header {
+  border-bottom: 2px solid var(--accent);
+  margin-bottom: 2rem;
+  padding-bottom: 1.1rem;
+}
+
+.note-title {
+  font-family: var(--display);
+  font-size: 2.4rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.15;
+  margin: 0 0 0.7rem;
+  text-wrap: balance;
+}
+
+.note-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 1.25rem;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.note-created {
+  color: var(--accent);
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+.tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.9rem;
+}
+
+.tag {
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tag .icon {
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.3em;
+  opacity: 0.8;
+  vertical-align: -0.1em;
+}
+
+a.tag:hover {
+  color: var(--link);
+  text-decoration: underline;
+}
+
+.frontmatter {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 1.25rem;
+  row-gap: 0.15rem;
+  margin: 1rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+}
+
+.frontmatter dt {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.frontmatter dd,
+.frontmatter dl,
+.frontmatter ul {
+  margin: 0;
+  padding: 0;
+}
+
+.frontmatter ul {
+  list-style: none;
+}
+
+.frontmatter dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: 0.75rem;
+}
+
+/* Body content. */
+
+h1, h2, h3, h4, h5, h6 {
+  color: var(--fg-bright);
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: -0.005em;
+  line-height: 1.25;
+  margin: 1.8em 0 0.6em;
+  text-wrap: balance;
+}
+
+h1 { font-size: 1.9rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.2rem; }
+h4 { font-size: 1.05rem; }
+h5, h6 { font-size: 1rem; }
+
+p, ul, ol, dl, table, pre, blockquote {
+  margin: 0 0 var(--block-gap);
+}
+
+li > p:last-child {
+  margin-bottom: 0;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.875em;
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+}
+
+pre {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: var(--accent-bar) solid var(--accent);
+  border-radius: var(--radius-block);
+  font-size: 0.85rem;
+  line-height: 1.7;
+  overflow-x: auto;
+  padding: 0.9rem 1.1rem;
+}
+
+pre code {
+  background: none;
+  font-size: inherit;
+  padding: 0;
+}
+
+blockquote {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: var(--accent-bar) solid var(--muted);
+  border-radius: var(--radius-block);
+  color: var(--muted);
+  padding: 0.7rem 1.1rem;
+}
+
+blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* Tables: rules between rows only, inside a rounded card. Separate
+ * borders keep the corners round, which collapsed borders drop. */
+
+table {
+  border: 1px solid var(--border);
+  border-collapse: separate;
+  border-radius: var(--radius-block);
+  border-spacing: 0;
+  font-family: var(--sans);
+  font-size: 0.9375rem;
+  overflow: hidden;
+}
+
+th, td {
+  border-bottom: 1px solid var(--border);
+  padding: 0.45rem 0.85rem;
+  text-align: left;
+}
+
+tr:last-child > td {
+  border-bottom: 0;
+}
+
+th {
+  background: var(--surface);
+  color: var(--fg-bright);
+  font-weight: 600;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 2.2rem 0;
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-control);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  margin-right: 0.35em;
+}
+
+/* Callouts, one accent per kind, each with its icon before the title. */
+
+.callout {
+  --callout: var(--callout-note);
+  background: color-mix(in srgb, var(--callout) 7%, transparent);
+  border-left: var(--accent-bar) solid var(--callout);
+  border-radius: 0 var(--radius-block) var(--radius-block) 0;
+  margin: 0 0 var(--block-gap);
+  padding: 0.7rem 1.1rem 0.1rem;
+}
+
+.callout-title {
+  color: var(--callout);
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0 0 0.4rem;
+}
+
+.callout-title .icon {
+  width: 1.05em;
+  height: 1.05em;
+  margin-right: 0.45em;
+  vertical-align: -0.2em;
+}
+
+.callout-tip { --callout: var(--callout-tip); }
+.callout-important { --callout: var(--callout-important); }
+.callout-warning { --callout: var(--callout-warning); }
+.callout-caution { --callout: var(--callout-caution); }
+
+/* Footnotes. */
+
+.footnotes {
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin-top: 2.5rem;
+  padding-top: 1rem;
+}
+
+.footnote-backref {
+  text-decoration: none;
+}
+
+/* Highlighted code: Shiki emits both themes' token colors as custom
+ * properties (--shiki-light, --shiki-dark); the scheme in effect picks one.
+ * The block keeps this theme's surface as its background rather than the
+ * Shiki theme's, so code sits on the same paper as everything else. */
+
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .shiki,
+  :root:not([data-theme="light"]) .shiki span {
+    color: var(--shiki-dark);
+  }
+}
+
+:root[data-theme="dark"] .shiki,
+:root[data-theme="dark"] .shiki span {
+  color: var(--shiki-dark);
+}
+
+/* The site layout: header, navigation, content, and the outline beside it.
+ * A standalone rendered note is the same page without the navigation
+ * column. */
+
+.site,
+.document {
+  padding: 0;
+}
+
+.document .layout {
+  grid-template-columns: minmax(0, 1fr) var(--outline-width);
+  grid-template-areas:
+    "header header"
+    "main side";
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) minmax(0, 1fr) var(--outline-width);
+  grid-template-areas:
+    "header header header"
+    "sidebar main side";
+  column-gap: var(--column-gap);
+  max-width: var(--page-width);
+  margin: 0 auto;
+  padding: 0 var(--gutter) 3rem;
+}
+
+/* The header stays in view, translucent over the page scrolling under it. */
+
+.site-header {
+  grid-area: header;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  height: var(--header-height);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--border);
+  font-family: var(--sans);
+  margin-bottom: var(--section-gap);
+}
+
+.site-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55em;
+  color: var(--fg-bright);
+  font-size: 1.05rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-right: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.site-name::before {
+  content: "";
+  flex: none;
+  width: 0.6em;
+  height: 0.6em;
+  background: var(--accent);
+  border-radius: 2px;
+}
+
+.site-name:hover {
+  color: var(--link);
+}
+
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.nav-open,
+.nav-close {
+  display: none;
+  color: var(--muted);
+  padding: 0.3rem;
+}
+
+.nav-open .icon,
+.nav-close .icon {
+  width: 1.4rem;
+  height: 1.4rem;
+  vertical-align: middle;
+}
+
+/* The scheme switch: three pressed-or-not icon buttons in one bar. */
+
+.theme-switch {
+  display: inline-flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-block);
+  padding: 2px;
+}
+
+.theme-choice {
+  background: none;
+  border: 0;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.3rem 0.5rem;
+  transition: background var(--motion), color var(--motion);
+}
+
+.theme-choice .icon {
+  width: 1rem;
+  height: 1rem;
+  vertical-align: middle;
+}
+
+.theme-choice:hover {
+  color: var(--fg);
+}
+
+.theme-choice[aria-pressed="true"] {
+  background: var(--raised);
+  color: var(--accent);
+  box-shadow: var(--shadow-raised);
+}
+
+/* The search button, and the palette it opens over the page. */
+
+.search-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-block);
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  padding: 0.35rem 0.6rem 0.35rem 0.7rem;
+  transition: color var(--motion), border-color var(--motion);
+}
+
+.search-toggle:hover {
+  border-color: var(--accent);
+  color: var(--fg);
+}
+
+.search-toggle kbd,
+.palette-keys kbd {
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+}
+
+body.palette-open {
+  overflow: hidden;
+}
+
+.palette-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  padding: 10vh 1rem 1rem;
+  overflow-y: auto;
+}
+
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border: 0;
+  cursor: default;
+  padding: 0;
+}
+
+.palette {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--measure), 100%);
+  max-height: 78vh;
+  margin: 0 auto;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-panel);
+  box-shadow: var(--shadow-panel);
+  font-family: var(--sans);
+  overflow: hidden;
+}
+
+.palette-box {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  padding: 0.35rem 1rem;
+}
+
+.palette-box .icon {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.palette-input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  color: var(--fg-bright);
+  font: inherit;
+  font-size: 1.05rem;
+  padding: 0.6rem 0;
+}
+
+.palette-input:focus {
+  outline: none;
+}
+
+.palette-input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.palette-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.4rem 0.5rem;
+  scrollbar-width: thin;
+}
+
+.palette-hint,
+.palette-error {
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0.8rem 0.6rem;
+}
+
+.palette-hint code {
+  font-size: 0.85em;
+}
+
+.palette-error {
+  color: var(--callout-caution);
+}
+
+.palette-group h3 {
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin: 0.6rem 0.6rem 0.25rem;
+}
+
+.palette-group ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.palette-row a {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.7rem;
+  border-left: var(--accent-bar) solid transparent;
+  border-radius: var(--radius-control);
+  color: var(--fg);
+  padding: 0.5rem 0.7rem 0.5rem 0.55rem;
+  text-decoration: none;
+}
+
+.palette-row .icon {
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.2rem;
+  color: var(--faint);
+}
+
+.palette-row.is-selected a {
+  background: var(--surface);
+  border-left-color: var(--accent);
+}
+
+.palette-row.is-selected .icon {
+  color: var(--accent);
+}
+
+.palette-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.palette-title {
+  color: var(--fg-bright);
+  font-weight: 500;
+}
+
+.palette-section {
+  color: var(--muted);
+  font-weight: 400;
+  margin-left: 0.5rem;
+}
+
+.palette-section::before {
+  content: "in ";
+}
+
+.palette-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem 0.8rem;
+  color: var(--muted);
+  font-size: 0.8125rem;
+}
+
+.palette-meta time {
+  font-family: var(--mono);
+}
+
+.palette-snippet {
+  color: var(--muted);
+  font-family: var(--serif);
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.palette mark {
+  background: var(--accent-soft);
+  border-radius: 3px;
+  color: var(--fg-bright);
+  padding: 0 0.1em;
+}
+
+.palette-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.75rem;
+  padding: 0.5rem 1rem;
+}
+
+.palette-keys {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* The navigation pane. Every clickable thing is a row of one geometry
+   (padding, radius, hover fill), labels of notes and groups share the left
+   edge of their level, the disclosure caret sits at the right end of a row,
+   and each nested level steps in by a rail. */
+
+.sidebar-pane {
+  grid-area: sidebar;
+  font-family: var(--sans);
+  font-size: 0.875rem;
+}
+
+.sidebar summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+.sidebar summary::-webkit-details-marker {
+  display: none;
+}
+
+.nav-title,
+.nav-note > a,
+.nav-group > details > summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-control);
+  padding: 0.3rem 0.5rem;
+  line-height: 1.35;
+  color: var(--fg);
+  text-decoration: none;
+  transition: background-color var(--motion), color var(--motion);
+}
+
+.nav-title:hover,
+.nav-note > a:hover,
+.nav-group > details > summary:hover {
+  background: var(--surface);
+  color: var(--fg-bright);
+}
+
+.nav-title:focus-visible,
+.nav-note > a:focus-visible,
+.nav-group > details > summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.sidebar .chevron {
+  flex: none;
+  order: 1;
+  width: 0.85em;
+  height: 0.85em;
+  margin-left: auto;
+  color: var(--faint);
+  transition: transform var(--motion);
+}
+
+.sidebar details[open] > summary > .chevron {
+  transform: rotate(90deg);
+}
+
+/* A group row is a link with the caret beside it: the label navigates, the
+   caret toggles. */
+.nav-group > details > summary > a,
+.nav-group > details > summary > span {
+  flex: 1;
+  min-width: 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+.nav-section + .nav-section {
+  margin-top: 0.75rem;
+}
+
+.nav-title {
+  color: var(--fg-bright);
+  font-weight: 600;
+  margin: 0;
+}
+
+.nav-title a {
+  flex: 1;
+  color: inherit;
+  text-decoration: none;
+}
+
+.nav-entries {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-entries .nav-entries {
+  margin-left: 0.85rem;
+  padding-left: 0.4rem;
+  border-left: 1px solid var(--border);
+}
+
+.nav-note > a[aria-current="page"],
+.nav-group > details > summary:has(> a[aria-current="page"]) {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.nav-group > details > summary > a[aria-current="page"] {
+  color: var(--accent);
+}
+
+.tag-cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.85rem;
+  list-style: none;
+  margin: 0;
+  padding: 0.2rem 0.5rem 0;
+}
+
+.tag-cloud a {
+  color: var(--fg);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.tag-cloud a:hover {
+  color: var(--link);
+}
+
+.tag-cloud a[aria-current="true"] {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.count {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  margin-left: 0.4em;
+}
+
+/* Content column, outline column. */
+
+.layout > main {
+  grid-area: main;
+  max-width: var(--measure);
+  min-width: 0;
+  width: 100%;
+}
+
+.side {
+  grid-area: side;
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+}
+
+.sidebar-pane,
+.side {
+  position: sticky;
+  top: calc(var(--header-height) + 1rem);
+  align-self: start;
+  max-height: calc(100vh - var(--header-height) - 2rem);
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.breadcrumbs ol {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: 0.8125rem;
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+}
+
+.breadcrumbs a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.breadcrumbs a:hover {
+  color: var(--link);
+}
+
+.breadcrumbs .sep {
+  width: 0.9em;
+  height: 0.9em;
+  margin-right: 0.25rem;
+  color: var(--faint);
+  vertical-align: -0.15em;
+}
+
+.pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-top: 1px solid var(--border);
+  font-family: var(--sans);
+  margin-top: 3rem;
+  padding-top: 1.25rem;
+}
+
+.pager a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--fg-bright);
+  max-width: 48%;
+  text-decoration: none;
+}
+
+.pager .next {
+  margin-left: auto;
+  text-align: right;
+}
+
+.pager .icon {
+  color: var(--faint);
+}
+
+.pager-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.pager-label {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.pager-title {
+  font-weight: 500;
+}
+
+.pager a:hover .pager-title {
+  color: var(--link);
+}
+
+.outline ul {
+  border-left: 1px solid var(--border);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.outline a {
+  color: var(--muted);
+  display: block;
+  padding: 0.2rem 0.75rem;
+  text-decoration: none;
+}
+
+.outline a:hover {
+  color: var(--fg);
+}
+
+.outline a[aria-current="true"] {
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+  margin-left: -1px;
+}
+
+.outline .depth-3 a { padding-left: 1.4rem; }
+.outline .depth-4 a { padding-left: 2.05rem; }
+.outline .depth-5 a,
+.outline .depth-6 a { padding-left: 2.7rem; }
+
+/* Note rows: date, title, tags on one line, each in its column. */
+
+.note-rows {
+  list-style: none;
+  margin: 0 0 1.5rem;
+  padding: 0;
+}
+
+.note-row {
+  display: grid;
+  grid-template-columns: 6.25rem minmax(0, 1fr);
+  align-items: baseline;
+  column-gap: 1rem;
+  border-top: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-family: var(--sans);
+  margin: 0 -0.5rem;
+  padding: 0.55rem 0.5rem;
+  transition: background var(--motion);
+}
+
+.note-row:hover {
+  background: var(--surface);
+}
+
+.note-row-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 1rem;
+  row-gap: 0.1rem;
+  min-width: 0;
+}
+
+.note-row:last-child {
+  border-bottom: 1px solid var(--border);
+}
+
+.note-row time {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  white-space: nowrap;
+}
+
+.note-row-title {
+  color: var(--fg-bright);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.note-row-title:hover {
+  color: var(--link);
+  text-decoration: underline;
+}
+
+.note-row-tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.8rem;
+  font-size: 0.8125rem;
+}
+
+.empty {
+  color: var(--muted);
+  font-family: var(--sans);
+}
+
+/* Group chips: a section's or group's children with their counts. */
+
+.group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  list-style: none;
+  margin: 0 0 1.75rem;
+  padding: 0;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: baseline;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 0.875rem;
+  padding: 0.2rem 0.8rem;
+  text-decoration: none;
+  transition: border-color var(--motion), color var(--motion);
+}
+
+.chip:hover {
+  border-color: var(--accent);
+  color: var(--link);
+}
+
+/* The generated front page. */
+
+.front {
+  margin-bottom: 2.5rem;
+}
+
+.site-title {
+  font-family: var(--display);
+  font-size: 2.75rem;
+  margin: 0 0 0.5rem;
+}
+
+/* The title of a tag or group page, the one heading a page has outside a
+ * note body. */
+.content > h1 {
+  font-family: var(--display);
+  font-size: 2.2rem;
+  margin-top: 0;
+}
+
+.note-count {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.recent h2,
+.section-summary h2,
+.related h2 {
+  font-family: var(--display);
+  font-size: 1.35rem;
+  margin: var(--section-gap) 0 0.75rem;
+}
+
+.section-summary h2 a {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+.section-summary h2 a:hover {
+  color: var(--link);
+}
+
+.related {
+  border-top: 1px solid var(--border);
+  margin-top: 3rem;
+  padding-top: 0.5rem;
+}
+
+/* Narrow screens: one column, the navigation as a drawer the menu link
+ * opens by targeting it. */
+
+@media (max-width: 60rem) {
+  .layout {
+    --gutter: 1rem;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "header"
+      "main"
+      "side";
+    column-gap: 0;
+    padding: 0 var(--gutter) 2rem;
+  }
+
+  .layout > main {
+    max-width: none;
+  }
+
+  .nav-open {
+    display: inline-flex;
+    margin-left: -0.3rem;
+  }
+
+  .sidebar-pane {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: min(20rem, 85vw);
+    max-height: none;
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-panel);
+    padding: 1rem 1.25rem 2rem;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease-out;
+    visibility: hidden;
+  }
+
+  .sidebar-pane:target {
+    transform: none;
+    visibility: visible;
+  }
+
+  .nav-close {
+    display: inline-flex;
+    float: right;
+    margin: -0.2rem -0.5rem 0.5rem 0;
+  }
+
+  .side {
+    position: static;
+    max-height: none;
+    margin-top: 2rem;
+  }
+
+  .note-title {
+    font-size: 1.9rem;
+  }
+
+  .site-title {
+    font-size: 2.2rem;
+  }
+
+  .search-toggle > span,
+  .search-toggle kbd {
+    display: none;
+  }
+
+  .palette-layer {
+    padding: 4vh 0.75rem 0.75rem;
+  }
+
+  .palette-keys {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .sidebar-pane,
+  .theme-choice,
+  .search-toggle,
+  .chip,
+  .note-row,
+  .sidebar .chevron {
+    transition: none;
+  }
+}

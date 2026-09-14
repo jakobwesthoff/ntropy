@@ -1,0 +1,55 @@
+---
+source: src/site/build.rs
+expression: "format!(\"{}\\n--\\n{}\", paths.join(\"\\n\"), copies.join(\"\\n\"))"
+---
+assets/app.js
+assets/fonts/LICENSE
+assets/fonts/dm-mono-latin-400-italic.woff2
+assets/fonts/dm-mono-latin-400-normal.woff2
+assets/fonts/dm-mono-latin-500-normal.woff2
+assets/fonts/dm-sans-latin-wght-normal.woff2
+assets/fonts/fraunces-latin-standard-normal.woff2
+assets/fonts/literata-latin-standard-italic.woff2
+assets/fonts/literata-latin-standard-normal.woff2
+assets/grammars/rust.js
+assets/icons/LICENSE
+assets/icons/arrow-up-right.svg
+assets/icons/calendar.svg
+assets/icons/chevron-down.svg
+assets/icons/chevron-left.svg
+assets/icons/chevron-right.svg
+assets/icons/corner-down-right.svg
+assets/icons/file-text.svg
+assets/icons/folder.svg
+assets/icons/info.svg
+assets/icons/lightbulb.svg
+assets/icons/link.svg
+assets/icons/list.svg
+assets/icons/menu.svg
+assets/icons/message-square-warning.svg
+assets/icons/monitor.svg
+assets/icons/moon.svg
+assets/icons/octagon-alert.svg
+assets/icons/search.svg
+assets/icons/sun.svg
+assets/icons/tag.svg
+assets/icons/triangle-alert.svg
+assets/icons/x.svg
+assets/search-data.js
+assets/search.js
+assets/style.css
+index.html
+notes/plain.html
+notes/rust-tips.html
+notes/untagged.html
+tags/index.html
+tags/programming/index.html
+tags/programming/rust/index.html
+views/by-status/done/index.html
+views/by-status/index.html
+views/by-status/open/index.html
+--
+files/all-notes/assets/gallery/a.jpg <- all-notes/assets/gallery/a.jpg
+files/all-notes/assets/gallery/sub/b.jpg <- all-notes/assets/gallery/sub/b.jpg
+files/all-notes/diagram.png <- all-notes/diagram.png
+files/assets/logo.svg <- assets/logo.svg

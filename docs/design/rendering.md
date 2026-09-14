@@ -8,13 +8,16 @@ such as a PDF. Decisions are recorded in
 selector semantics in [query-and-search.md](query-and-search.md), the overall
 command surface in [cli.md](cli.md).
 
-`render` produces one output artifact from a single note. Two formats ship:
-`pdf`, the default, and `typst`, the emitted Typst document. Both come from
-ntropy's own engine, which converts the note to Typst markup; the `typst` format
-hands that markup out directly, while the `pdf` format compiles it with the
-external `typst` binary. The typst engine's full model lives in
-[typst-engine.md](typst-engine.md); this document covers the shared command
-surface, preparation, and execution model.
+`render` produces one output artifact from a single note. Three formats ship:
+`pdf`, the default, and `typst`, the emitted Typst document, both from
+ntropy's typst engine, which converts the note to Typst markup, hands it out
+directly for `typst`, and compiles it with the external `typst` binary for
+`pdf`; and `html`, a self-contained web page from the html engine, which
+converts the same note through the shared Markdown walk and inlines the site
+theme's stylesheet. The engines' models live in
+[typst-engine.md](typst-engine.md) and [html-engine.md](html-engine.md); this
+document covers the shared command surface, preparation, and execution
+model.
 
 ## CLI surface
 
@@ -31,8 +34,8 @@ surface, preparation, and execution model.
   keys off the controlling terminal (ADR 0036). A cancelled picker exits
   non-zero under `-p`, so `open "$(ntropy render -p ...)"` branches
   correctly, and is a successful no-op without it, like `delete`.
-- `--to <format>` selects the output format, `pdf` (the default) or
-  `typst`.
+- `--to <format>` selects the output format, `pdf` (the default),
+  `typst`, or `html`.
 - `--engine <name>` overrides the format's default engine. Both shipped
   formats are produced by the typst engine; the flag exists so that
   invocations written today keep working when alternative engines
@@ -40,8 +43,11 @@ surface, preparation, and execution model.
 - `--output <path>` / `-o` names the artifact. The default is
   `./<slug>.<ext>` in the current working directory, where `<slug>` is the
   slug component of the note's filename and `<ext>` is the format's
-  extension (`pdf` or `typ`). An existing file at the target is
-  overwritten.
+  extension (`pdf`, `typ`, or `html`). The `html` format also writes
+  `<stem>_files/` beside the artifact
+  ([html-engine.md](html-engine.md)). An existing artifact, or a
+  non-empty files directory, is refused unless `--force` is given,
+  which replaces both.
 - `--print` / `-p` prints the artifact's path to stdout as one line on
   success, so `open "$(ntropy render -p ...)"` composes. Without it, a
   `Rendering <reference>...` line announces the work before the engine
@@ -78,7 +84,7 @@ The result is the name a plaintext vault would have produced.
 
 ## Formats and engines
 
-A **format** is the artifact kind the user asks for (`pdf`, `typst`). An
+A **format** is the artifact kind the user asks for (`pdf`, `typst`, `html`). An
 **engine** is an implementation able to produce one or more formats. The
 registry maps
 every format to the engines that produce it, one marked as the format's
@@ -228,8 +234,10 @@ tools installed:
 ## Module layout
 
 - `src/render/` (library): the document model and shared preparation, the
-  format/engine registry, `Renderer`, `RenderContext`, `RenderError`, and
-  the typst engine under `src/render/typst/`.
+  format/engine registry, `Renderer`, `RenderContext`, `RenderError`, the
+  shared Markdown walk and its output trait under `src/render/markdown/`,
+  the typst engine under `src/render/typst/`, and the HTML emitter under
+  `src/render/html/`.
 - `src/bin/ntropy/run/render.rs` (binary): `cmd_render` (selector
   resolution, picker on ambiguity, output-path defaulting) and the
   production `RenderContext`.
@@ -249,12 +257,18 @@ decides how to honor a setting for the formats it produces.
   a typed enum, so a typo is a config parse error naming the bad value
   before anything scans or renders. The typst engine passes it into the
   emitted document's template application.
-- `theme` names a Typst file in `<vault>/.ntropy/themes/` and is the
+- `theme` names a Typst file in `<vault>/.ntropy/themes/typst/` and is the
   vault-wide default look (ADR 0045). It is a free-form string rather
   than an enum, because the legal values are whatever files the vault
   holds; a name resolving to no file is reported when the theme loads,
   naming the path. `--theme` overrides it per invocation and the reserved
   name `default` selects the built-in look from either source.
+
+The `html` format reads none of this: its look comes from `[site] theme`,
+a directory in `<vault>/.ntropy/themes/site/`, and its page language from
+`[site] lang` ([site-export.md](site-export.md)). `--theme` names whichever
+kind the format uses, so a vault configuring both renders each format in
+its own look.
 
 Theme selection is a pure decision over those two sources; loading the
 file is the one step that touches the filesystem, and it happens before

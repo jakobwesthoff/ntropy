@@ -1,0 +1,22 @@
+---
+source: src/render/html/emitter.rs
+expression: "html(\"| L | C | R | D |\\n| :-- | :-: | --: | --- |\\n| a | *b* | c | d |\")"
+---
+<table>
+<thead>
+<tr>
+<th style="text-align: left">L</th>
+<th style="text-align: center">C</th>
+<th style="text-align: right">R</th>
+<th>D</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left">a</td>
+<td style="text-align: center"><em>b</em></td>
+<td style="text-align: right">c</td>
+<td>d</td>
+</tr>
+</tbody>
+</table>

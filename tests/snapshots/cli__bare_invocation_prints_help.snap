@@ -20,6 +20,7 @@ Commands:
   reconcile  Realign drifted filenames, re-sync views, and sync `.gitignore`
   delete     Delete a note by id or query
   render     Render a note to a document artifact
+  site       Export the vault as a static website
   view       Manage materialized view definitions
   tags       List all tags with note counts
   info       Show the active vault, its resolution, and vault statistics

@@ -15,7 +15,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 
 use ntropy::link;
 use ntropy::ops;
@@ -47,6 +47,7 @@ pub fn cmd_render(
     engine: Option<String>,
     output: Option<PathBuf>,
     theme: Option<String>,
+    force: bool,
     print: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
@@ -61,17 +62,38 @@ pub fn cmd_render(
     // authority), so a bad value reports what exists without a wasted scan. The
     // extension comes from the same lookup, so the default output name is known
     // up front.
-    // The theme is selected from `--theme` over the vault's `[render] theme`
-    // and loaded before anything else, so a name that resolves to no file fails
+    // The theme is selected from `--theme` over the vault's configured one and
+    // loaded before anything else, so a name that resolves to no file fails
     // here rather than after a scan and a compile (ADR 0045). `default` from
-    // either source means the built-in look and reads no file.
-    let selected = ntropy::render::theme::select(theme.as_deref(), config.render.theme.as_deref());
-    let loaded_theme = selected
-        .map(|name| ntropy::render::theme::load(&session.layout().themes_dir(), name))
-        .transpose()
-        .context("while loading the render theme")?;
+    // either source means the built-in look and reads no file. Which theme
+    // kind `--theme` names follows the format: the `html` format takes a site
+    // theme from `[site] theme` and `themes/site/`, every other format a Typst
+    // theme from `[render] theme` and `themes/typst/` (ADR 0048).
+    let mut loaded_theme = None;
+    let mut site = ntropy::site::DocumentSettings {
+        theme: None,
+        theme_dir: None,
+        lang: config.site.lang().to_string(),
+        vars: config.site.vars.clone(),
+    };
+    if to == "html" {
+        let selected =
+            ntropy::render::theme::select(theme.as_deref(), config.site.theme.as_deref());
+        site.theme = selected
+            .map(|name| ntropy::site::theme::load(session.layout(), name))
+            .transpose()
+            .context("while loading the site theme")?;
+        site.theme_dir = selected.map(|name| session.layout().site_theme_dir(name));
+    } else {
+        let selected =
+            ntropy::render::theme::select(theme.as_deref(), config.render.theme.as_deref());
+        loaded_theme = selected
+            .map(|name| ntropy::render::theme::load(session.layout(), name))
+            .transpose()
+            .context("while loading the render theme")?;
+    }
 
-    let registry = Registry::new(config.render.clone(), loaded_theme);
+    let registry = Registry::new(config.render.clone(), loaded_theme, site);
     let renderer = registry
         .resolve(&to, engine.as_deref())
         .context("while selecting the render engine")?;
@@ -145,8 +167,7 @@ pub fn cmd_render(
     };
 
     // The default artifact name is the note's slug plus the format's extension,
-    // in the current directory; `-o` overrides it. An existing file is
-    // overwritten (ADR 0037).
+    // in the current directory; `-o` overrides it.
     let output_path = output.unwrap_or_else(|| default_output_path(&note.slug, &extension));
 
     // Announce the work before the engine runs: external typesetting can take
@@ -175,6 +196,30 @@ pub fn cmd_render(
     // below keep the original, as-given form.
     let cwd = std::env::current_dir().context("while resolving the current directory")?;
     let absolute_output = absolutize(&output_path, &cwd);
+
+    // An existing artifact, and for `html` a non-empty files directory
+    // beside it, are render targets of an earlier run: neither is replaced
+    // without `--force` (ADR 0057), which then clears the directory so no
+    // stale file of an earlier render lingers in it.
+    let files = ntropy::render::files_dir(&absolute_output);
+    let files_shown = files
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    if !force {
+        if absolute_output.exists() {
+            bail!(
+                "`{}` exists; pass --force to replace it",
+                output_path.display()
+            );
+        }
+        if to == "html" && dir_has_entries(&files) {
+            bail!("`{files_shown}/` is not empty; pass --force to replace it");
+        }
+    } else if to == "html" && files.is_dir() {
+        std::fs::remove_dir_all(&files)
+            .with_context(|| format!("while clearing `{files_shown}/`"))?;
+    }
 
     // A rendered artifact is plaintext by nature. The common accident is a
     // shell whose working directory happens to be the vault, where the default
@@ -225,6 +270,13 @@ fn default_output_path(slug: &str, extension: &str) -> PathBuf {
     PathBuf::from(format!("{slug}.{extension}"))
 }
 
+/// Whether `dir` is a directory holding at least one entry.
+fn dir_has_entries(dir: &Path) -> bool {
+    std::fs::read_dir(dir)
+        .map(|mut entries| entries.next().is_some())
+        .unwrap_or(false)
+}
+
 /// Ignore `SIGPIPE` process-wide for the lifetime of the value, restoring the
 /// previous disposition on drop.
 ///
@@ -267,11 +319,11 @@ impl Drop for SigpipeIgnoredScope {
 /// Component-wise, which `Path::starts_with` already is: a sibling directory
 /// whose name merely begins with the vault's — `/v/vault-notes` beside
 /// `/v/vault` — is not inside it.
-fn lands_inside_vault(vault_root: &Path, output: &Path) -> bool {
+pub(super) fn lands_inside_vault(vault_root: &Path, output: &Path) -> bool {
     output.starts_with(vault_root)
 }
 
-fn absolutize(path: &Path, cwd: &Path) -> PathBuf {
+pub(super) fn absolutize(path: &Path, cwd: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
     } else {
@@ -335,6 +387,8 @@ fn is_executable_file(path: &Path) -> bool {
 struct ProcessContext {
     staging: tempfile::TempDir,
     output: PathBuf,
+    /// The artifact's files directory, `<stem>_files/` beside it.
+    files: PathBuf,
     /// The number of degradation warnings the engine reported, so the caller
     /// can fold them into the `--strict` exit decision alongside scan warnings.
     warnings: usize,
@@ -348,9 +402,23 @@ impl ProcessContext {
         let staging = tempfile::TempDir::new_in(super::securetemp::runtime_dir())?;
         Ok(Self {
             staging,
+            files: ntropy::render::files_dir(&output),
             output,
             warnings: 0,
         })
+    }
+
+    /// The path of `relative` inside the files directory, its parent
+    /// directories created.
+    fn file_path(&self, relative: &str) -> Result<PathBuf, RenderError> {
+        let path = self.files.join(relative);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(|source| RenderError::WriteFile {
+                name: relative.to_string(),
+                source,
+            })?;
+        }
+        Ok(path)
     }
 
     /// How many degradation warnings the engine reported during the render.
@@ -470,6 +538,24 @@ impl RenderContext for ProcessContext {
 
     fn write_output(&mut self, contents: &[u8]) -> Result<(), RenderError> {
         std::fs::write(&self.output, contents).map_err(|source| RenderError::WriteOutput { source })
+    }
+
+    fn write_file(&mut self, relative: &str, contents: &[u8]) -> Result<(), RenderError> {
+        let path = self.file_path(relative)?;
+        std::fs::write(path, contents).map_err(|source| RenderError::WriteFile {
+            name: relative.to_string(),
+            source,
+        })
+    }
+
+    fn copy_file(&mut self, from: &Path, relative: &str) -> Result<(), RenderError> {
+        let path = self.file_path(relative)?;
+        std::fs::copy(from, path)
+            .map(|_| ())
+            .map_err(|source| RenderError::WriteFile {
+                name: relative.to_string(),
+                source,
+            })
     }
 
     fn warn(&mut self, message: &str) {

@@ -1,0 +1,68 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - site
+    - "--help"
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Export the vault as a static website.
+
+Every note becomes a page under `notes/`, beside a tag tree, one page per configured view and group, and a front page. Pages carry a sidebar, breadcrumbs, an outline, and previous/next links. The site works when opened straight from disk; no server is needed.
+
+The look comes from `[site] theme` in `.ntropy/config.toml`, a directory in `.ntropy/themes/site/`; `--theme` overrides it for one invocation. `site theme init` copies the built-in theme into the vault.
+
+Usage: ntropy site [OPTIONS] --output <DIR> [QUERY]...
+       ntropy site <COMMAND>
+
+Commands:
+  theme  Manage site themes
+  help   Print this message or the help of the given subcommand(s)
+
+Arguments:
+  [QUERY]...
+          A query DSL expression restricting the exported notes (joined from trailing arguments; omitted = every note)
+
+Options:
+      --vault <PATH>
+          Operate on the vault at this path (overrides all other resolution)
+
+  -n, --non-interactive
+          Force non-interactive (plain) behavior even on a TTY
+
+  -o, --output <DIR>
+          The output directory. A non-empty directory is refused unless `--force` empties it first
+
+      --strict
+          Treat malformed/badly-named notes as errors instead of warnings
+
+      --theme <NAME>
+          Export with this site theme instead of the vault's configured one.
+          
+          Names the directory `<vault>/.ntropy/themes/site/<NAME>/`. `default` selects the built-in theme, overriding a configured one.
+
+      --force
+          Empty a non-empty output directory before writing
+
+  -i, --identity <PATH>
+          Use this age identity file instead of the OS credential store.
+          
+          `$NTROPY_IDENTITY` is consulted when the flag is absent.
+
+  -p, --print
+          Print the path of the site's `index.html` to stdout on success
+
+      --passphrase-file <PATH>
+          Read the vault passphrase from the first line of this file.
+          
+          Supplies the passphrase wherever one would otherwise be typed: creating an encrypted vault, unlocking one, or converting one. On `vault passphrase` it is the *current* passphrase.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+----- stderr -----

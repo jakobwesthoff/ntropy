@@ -164,7 +164,7 @@ fn collect_state(dir: &Path, files: &mut LeafMap, dirs: &mut DirSet) -> Result<(
 /// normalizing each value the same way tags are (ADR 0009). Values that
 /// normalize to nothing, and missing/non-scalar fields, contribute nothing, so
 /// such notes are skipped.
-fn group_values(note: &Note, field: &str) -> Vec<String> {
+pub fn group_values(note: &Note, field: &str) -> Vec<String> {
     if field == "tags" {
         return note.tags.clone();
     }

@@ -1189,7 +1189,7 @@ fn render_scan_warnings_print_and_strict_fails() {
         assert_cmd_snapshot!("render_warnings_lenient", lenient);
 
         let mut strict = ntropy(dir.path());
-        strict.args(["render", ULID_A, "-p", "-n", "--strict"]);
+        strict.args(["render", ULID_A, "-p", "-n", "--strict", "--force"]);
         strict.env("PATH", STUB_BIN);
         assert_cmd_snapshot!("render_warnings_strict", strict);
     });
@@ -1264,8 +1264,9 @@ fn render_output_flag_is_honored() {
 }
 
 #[test]
-fn render_overwrites_an_existing_artifact() {
-    // A pre-existing file at the target is replaced silently (ADR 0037).
+fn render_keeps_an_existing_artifact_unless_forced() {
+    // A pre-existing file at the target is a render target of an earlier
+    // run: refused without `--force`, replaced with it (ADR 0057).
     let dir = setup_vault();
     write_note(
         dir.path(),
@@ -1279,6 +1280,22 @@ fn render_overwrites_an_existing_artifact() {
 
     let mut cmd = ntropy(dir.path());
     cmd.args(["render", ULID_A, "-n"]);
+    cmd.env("PATH", STUB_BIN);
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr)
+            .contains("`wanted.pdf` exists; pass --force to replace it"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read_to_string(&target).expect("read artifact"),
+        "stale content"
+    );
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-n", "--force"]);
     cmd.env("PATH", STUB_BIN);
     let status = cmd.status().expect("run render");
     assert!(status.success());
@@ -1406,9 +1423,9 @@ fn a_resolved_note_link_targets_the_targets_default_artifact_name() {
 // Render themes (ADR 0045)
 // =========================================================================
 
-/// Write a theme file into the vault's themes directory, creating it.
+/// Write a theme file into the vault's Typst themes directory, creating it.
 fn write_theme(vault: &Path, name: &str, source: &str) {
-    let dir = vault.join(".ntropy/themes");
+    let dir = vault.join(".ntropy/themes/typst");
     fs::create_dir_all(&dir).expect("themes dir");
     fs::write(dir.join(format!("{name}.typ")), source).expect("write theme");
 }
@@ -1434,7 +1451,9 @@ fn marker_theme(marker: &str) -> String {
 /// involved, so the emitted document is inspectable without a compiler.
 fn render_to_typst(vault: &Path, id: &str, extra: &[&str]) -> String {
     let mut cmd = ntropy(vault);
-    cmd.args(["render", id, "--to", "typst", "-o", "out.typ", "-n"]);
+    cmd.args([
+        "render", id, "--to", "typst", "-o", "out.typ", "-n", "--force",
+    ]);
     cmd.args(extra);
     cmd.current_dir(vault);
     cmd.env("PATH", "no-such-bin");
@@ -1445,6 +1464,767 @@ fn render_to_typst(vault: &Path, id: &str, extra: &[&str]) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
     fs::read_to_string(vault.join("out.typ")).expect("typ artifact exists")
+}
+
+// ---------------------------------------------------------------------------
+// The html format (ADR 0046, ADR 0048)
+// ---------------------------------------------------------------------------
+
+/// Write a site theme's stylesheet into `.ntropy/themes/site/<name>/`.
+fn write_site_theme(vault: &Path, name: &str, css: &str) {
+    let dir = vault.join(".ntropy/themes/site").join(name);
+    fs::create_dir_all(&dir).expect("site theme dir");
+    fs::write(dir.join("style.css"), css).expect("write stylesheet");
+}
+
+/// Append a `[site]` table to the vault config.
+fn configure_site(vault: &Path, table: &str) {
+    let path = vault.join(".ntropy/config.toml");
+    let mut text = fs::read_to_string(&path).expect("config exists");
+    text.push_str("\n[site]\n");
+    text.push_str(table);
+    fs::write(path, text).expect("write config");
+}
+
+fn render_to_html(vault: &Path, id: &str, extra: &[&str]) -> std::process::Output {
+    let mut cmd = ntropy(vault);
+    cmd.args(["render", id, "--to", "html", "-n"]);
+    cmd.args(extra);
+    cmd.current_dir(vault);
+    cmd.env("PATH", "no-such-bin");
+    cmd.output().expect("run render")
+}
+
+#[test]
+fn render_to_html_writes_the_page_and_its_files_beside_it_without_any_tool() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        &format!(
+            "---\ntitle: Report\ntags: [work]\nstatus: draft\n---\n## Findings\n\nSee [the other]({ULID_B}-other.md).\n"
+        ),
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "other",
+        "---\ntitle: The Other One\n---\nBody.\n",
+    );
+
+    let output = render_to_html(dir.path(), ULID_A, &["-p"]);
+    assert!(
+        output.status.success(),
+        "render failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "report.html"
+    );
+
+    let page = fs::read_to_string(dir.path().join("report.html")).expect("html artifact");
+    assert!(page.starts_with("<!doctype html>"), "{page}");
+    assert!(page.contains("<title>Report</title>"), "{page}");
+    assert!(
+        page.contains("<link rel=\"stylesheet\" href=\"report_files/style.css\">"),
+        "{page}"
+    );
+    assert!(
+        page.contains("<script defer src=\"report_files/app.js\"></script>"),
+        "{page}"
+    );
+    assert!(!page.contains("search.js"), "{page}");
+    assert!(
+        page.contains("<span class=\"site-name\">Report</span>"),
+        "{page}"
+    );
+    assert!(page.contains("<h2 id=\"findings\">Findings</h2>"), "{page}");
+    assert!(
+        page.contains("<a class=\"note-link\" href=\"other.html\">The Guide</a>")
+            || page.contains("<a class=\"note-link\" href=\"other.html\">The Other One</a>"),
+        "{page}"
+    );
+    assert!(page.contains("<dt>status</dt>"), "{page}");
+    let files = dir.path().join("report_files");
+    let css = fs::read_to_string(files.join("style.css")).expect("the stylesheet is a file");
+    assert!(css.contains("--callout-note"), "{css}");
+    assert!(files.join("app.js").is_file());
+    assert!(files.join("fonts/LICENSE").is_file());
+    assert!(
+        !files.join("icons").exists(),
+        "the sprite is inline, so the icon files stay out"
+    );
+    assert!(
+        !files.join("grammars").exists(),
+        "no code block, no grammar"
+    );
+}
+
+#[test]
+fn render_refuses_an_existing_artifact_or_files_directory_unless_forced() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\n```rust\nfn main() {}\n```\n",
+    );
+    assert!(render_to_html(dir.path(), ULID_A, &[]).status.success());
+    assert!(dir.path().join("report_files/grammars/rust.js").is_file());
+
+    let again = render_to_html(dir.path(), ULID_A, &[]);
+    assert!(!again.status.success(), "a second render must refuse");
+    let stderr = String::from_utf8_lossy(&again.stderr);
+    assert!(
+        stderr.contains("report.html") && stderr.contains("--force"),
+        "{stderr}"
+    );
+
+    // The directory alone blocks too, and `--force` replaces both, leaving
+    // nothing stale behind.
+    fs::remove_file(dir.path().join("report.html")).expect("remove artifact");
+    fs::write(dir.path().join("report_files/stale.txt"), "old").expect("stale file");
+    let blocked = render_to_html(dir.path(), ULID_A, &[]);
+    assert!(!blocked.status.success());
+    assert!(
+        String::from_utf8_lossy(&blocked.stderr).contains("report_files"),
+        "{}",
+        String::from_utf8_lossy(&blocked.stderr)
+    );
+    let forced = render_to_html(dir.path(), ULID_A, &["--force"]);
+    assert!(
+        forced.status.success(),
+        "{}",
+        String::from_utf8_lossy(&forced.stderr)
+    );
+    assert!(dir.path().join("report.html").is_file());
+    assert!(!dir.path().join("report_files/stale.txt").exists());
+
+    // Every format refuses an existing artifact, before any tool runs.
+    fs::write(dir.path().join("report.pdf"), "not a pdf").expect("existing pdf");
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-n", "-o", "report.pdf"]);
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success());
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("--force"),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn render_to_html_reports_the_format_and_engine() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    let output = render_to_html(dir.path(), ULID_A, &[]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Rendered report.html (html via html"),
+        "unexpected report: {stdout}"
+    );
+}
+
+#[test]
+fn render_to_html_takes_the_site_theme_from_config_and_the_flag() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    write_site_theme(dir.path(), "corporate", "/* CORPORATE-SITE-THEME */");
+    write_site_theme(dir.path(), "customer", "/* CUSTOMER-SITE-THEME */");
+    configure_site(dir.path(), "theme = \"corporate\"\nlang = \"de\"\n");
+
+    let read = |suffix: &str| {
+        fs::read_to_string(dir.path().join(format!("report{suffix}_files/style.css")))
+            .expect("the artifact's stylesheet")
+    };
+
+    assert!(
+        render_to_html(dir.path(), ULID_A, &["-o", "report.html"])
+            .status
+            .success()
+    );
+    let css = read("");
+    assert!(
+        css.contains("CORPORATE-SITE-THEME"),
+        "config theme applies: {css}"
+    );
+    assert!(
+        !css.contains("--callout-note"),
+        "the built-in stylesheet is replaced"
+    );
+    let page = fs::read_to_string(dir.path().join("report.html")).expect("artifact");
+    assert!(
+        page.contains("<html lang=\"de\">"),
+        "the configured language applies: {page}"
+    );
+
+    assert!(
+        render_to_html(
+            dir.path(),
+            ULID_A,
+            &["--theme", "customer", "-o", "report-flag.html"]
+        )
+        .status
+        .success()
+    );
+    assert!(
+        read("-flag").contains("CUSTOMER-SITE-THEME"),
+        "the flag overrides the config"
+    );
+
+    assert!(
+        render_to_html(
+            dir.path(),
+            ULID_A,
+            &["--theme", "default", "-o", "report-default.html"]
+        )
+        .status
+        .success()
+    );
+    let css = read("-default");
+    assert!(
+        css.contains("--callout-note"),
+        "`default` restores the built-in stylesheet"
+    );
+    assert!(!css.contains("CORPORATE-SITE-THEME"));
+}
+
+#[test]
+fn render_to_html_ignores_the_typst_theme_and_typst_ignores_the_site_theme() {
+    // `--theme` follows the format: each format resolves only its own kind of
+    // theme, so a vault configuring both renders each format in its own look
+    // and a missing theme of the other kind never gets in the way.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    configure_theme(dir.path(), "no-such-typst-theme");
+    write_site_theme(dir.path(), "corporate", "/* CORPORATE-SITE-THEME */");
+    configure_site(dir.path(), "theme = \"corporate\"\n");
+
+    let output = render_to_html(dir.path(), ULID_A, &["-o", "report.html"]);
+    assert!(
+        output.status.success(),
+        "the missing typst theme must not affect html: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        fs::read_to_string(dir.path().join("report_files/style.css"))
+            .expect("the artifact's stylesheet")
+            .contains("CORPORATE-SITE-THEME")
+    );
+}
+
+#[test]
+fn render_to_html_with_a_missing_site_theme_fails_naming_the_stylesheet() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    configure_site(dir.path(), "theme = \"no-such-theme\"\n");
+
+    let output = render_to_html(dir.path(), ULID_A, &[]);
+    assert!(!output.status.success(), "a missing site theme must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no-such-theme")
+            && stderr.contains(".ntropy/themes/site/no-such-theme/style.css"),
+        "the error does not name the theme and the path: {stderr}"
+    );
+    assert!(!dir.path().join("report.html").exists());
+}
+
+// ---------------------------------------------------------------------------
+// The site command (ADR 0046, ADR 0054)
+// ---------------------------------------------------------------------------
+
+/// Two linked notes, one tagged, in a vault with the default `by-tag` view.
+fn site_vault() -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "rust-tips",
+        &format!(
+            "---\ntitle: Rust Tips\ntags: [work/rust]\n---\n## Intro\n\nSee [the guide]({ULID_B}-guide.md).\n"
+        ),
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "guide",
+        "---\ntitle: The Guide\n---\nPlain body.\n",
+    );
+    dir
+}
+
+fn site(vault: &Path, args: &[&str]) -> std::process::Output {
+    let mut cmd = ntropy(vault);
+    cmd.args(["site", "-n"]);
+    cmd.args(args);
+    cmd.current_dir(vault);
+    cmd.output().expect("run site")
+}
+
+#[test]
+fn site_help_pins_the_flag_surface() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["site", "--help"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn site_exports_the_vault_into_the_output_directory() {
+    let dir = site_vault();
+    let output = site(dir.path(), &["-o", "out"]);
+    assert!(
+        output.status.success(),
+        "site failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Exported 6 pages to out (2 notes, 0 warnings)"),
+        "unexpected report: {stdout}"
+    );
+
+    let out = dir.path().join("out");
+    for page in [
+        "index.html",
+        "notes/rust-tips.html",
+        "notes/the-guide.html",
+        "tags/index.html",
+        "tags/work/index.html",
+        "tags/work/rust/index.html",
+        "assets/style.css",
+        "assets/icons/tag.svg",
+        "assets/fonts/LICENSE",
+    ] {
+        assert!(out.join(page).is_file(), "missing {page}");
+    }
+    // A view over the tags field repeats the tag section and gets no pages.
+    assert!(!out.join("views").exists(), "views/ was written");
+    let page = fs::read_to_string(out.join("notes/rust-tips.html")).expect("note page");
+    assert!(
+        page.contains("<a class=\"note-link\" href=\"../notes/the-guide.html\">The Guide</a>"),
+        "{page}"
+    );
+    assert!(
+        page.contains("<link rel=\"stylesheet\" href=\"../assets/style.css\">"),
+        "{page}"
+    );
+    let index = fs::read_to_string(out.join("index.html")).expect("index");
+    assert!(index.contains("2 notes"), "{index}");
+}
+
+#[test]
+fn site_print_flag_prints_the_index_path() {
+    let dir = site_vault();
+    let output = site(dir.path(), &["-o", "out", "-p"]);
+    assert!(output.status.success());
+    assert_eq!(
+        String::from_utf8_lossy(&output.stdout).trim(),
+        "out/index.html"
+    );
+}
+
+#[test]
+fn site_requires_an_output_directory() {
+    let dir = site_vault();
+    let output = site(dir.path(), &[]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--output"), "{stderr}");
+}
+
+#[test]
+fn site_refuses_a_non_empty_directory_unless_forced() {
+    let dir = site_vault();
+    let out = dir.path().join("out");
+    fs::create_dir_all(&out).expect("out dir");
+    fs::write(out.join("stale.txt"), "old").expect("stale file");
+
+    let output = site(dir.path(), &["-o", "out"]);
+    assert!(
+        !output.status.success(),
+        "a non-empty directory must be refused"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("--force"), "{stderr}");
+    assert!(
+        out.join("stale.txt").is_file(),
+        "nothing is removed without --force"
+    );
+    assert!(
+        !out.join("index.html").exists(),
+        "nothing is written without --force"
+    );
+
+    let output = site(dir.path(), &["-o", "out", "--force"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !out.join("stale.txt").exists(),
+        "--force empties the directory"
+    );
+    assert!(out.join("index.html").is_file());
+}
+
+#[test]
+fn site_query_restricts_the_notes_and_warns_about_links_left_out() {
+    let dir = site_vault();
+    let output = site(dir.path(), &["-o", "out", "tag:work"]);
+    assert!(output.status.success());
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("(1 note, 1 warning)"), "{stdout}");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("not among the exported notes") && stderr.contains(ULID_B),
+        "{stderr}"
+    );
+    let out = dir.path().join("out");
+    assert!(out.join("notes/rust-tips.html").is_file());
+    assert!(!out.join("notes/the-guide.html").exists());
+    let page = fs::read_to_string(out.join("notes/rust-tips.html")).expect("note page");
+    assert!(
+        page.contains("See the guide."),
+        "the excluded link degrades to text: {page}"
+    );
+
+    // Under `--strict` the same export fails on that warning.
+    let output = site(dir.path(), &["-o", "strict-out", "tag:work", "--strict"]);
+    assert!(
+        !output.status.success(),
+        "--strict fails on an export warning"
+    );
+    assert!(
+        dir.path().join("strict-out/index.html").is_file(),
+        "the site is written even when the exit code fails"
+    );
+}
+
+#[test]
+fn site_roots_the_sidebar_by_config_or_by_a_tag_query_and_takes_a_nav_table() {
+    // Replaces the `[site]` table, where `configure_site` appends one.
+    let set_site = |vault: &Path, table: &str| {
+        let path = vault.join(".ntropy/config.toml");
+        let text = fs::read_to_string(&path).expect("config exists");
+        let base = text
+            .split("\n[site]\n")
+            .next()
+            .expect("the split yields text");
+        fs::write(path, format!("{base}\n[site]\n{table}")).expect("write config");
+    };
+
+    // A single `tag:` query roots the sidebar at that tag without config.
+    let dir = site_vault();
+    let output = site(dir.path(), &["-o", "by-query", "tag:work"]);
+    assert!(output.status.success());
+    let page =
+        fs::read_to_string(dir.path().join("by-query/notes/rust-tips.html")).expect("note page");
+    // `work` holds no note of its own, so its one child is the section.
+    assert!(
+        page.contains("<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/work/rust/index.html\">rust</a></summary>"),
+        "{page}"
+    );
+    assert!(
+        page.contains("<li><a href=\"../tags/work/rust/index.html\">rust</a></li>"),
+        "the breadcrumb starts at the section: {page}"
+    );
+    assert!(!page.contains(">work<"), "the root wraps nothing: {page}");
+
+    // A configured root wins over the query, and a bad one warns.
+    set_site(dir.path(), "root = \"tags/work/rust\"\n");
+    let output = site(dir.path(), &["-o", "by-root", "tag:work"]);
+    assert!(output.status.success());
+    let page =
+        fs::read_to_string(dir.path().join("by-root/notes/rust-tips.html")).expect("note page");
+    // A root without child groups is the one section itself.
+    assert!(
+        page.contains("<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg><a href=\"../tags/work/rust/index.html\">rust</a></summary>"),
+        "{page}"
+    );
+    set_site(dir.path(), "root = \"tags/no-such-tag\"\n");
+    let output = site(dir.path(), &["-o", "bad-root"]);
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("the sidebar root `tags/no-such-tag` is not a tag or view group page"),
+        "{stderr}"
+    );
+
+    // A nav table is the whole sidebar; an item the site cannot resolve
+    // warns and is left out.
+    let dir = site_vault();
+    configure_site(
+        dir.path(),
+        &format!(
+            "[[site.nav]]\nlabel = \"Handbook\"\nitems = [\n  {{ note = \"{ULID_B}\", label = \"Read me first\" }},\n  {{ label = \"Topics\", items = [{{ tag = \"work\" }}, {{ tag = \"no-such-tag\" }}] }},\n]\n"
+        ),
+    );
+    let output = site(dir.path(), &["-o", "by-nav"]);
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("no exported note carries the tag `no-such-tag`"),
+        "{stderr}"
+    );
+    let page =
+        fs::read_to_string(dir.path().join("by-nav/notes/the-guide.html")).expect("note page");
+    assert!(
+        page.contains("<summary class=\"nav-title\"><svg class=\"icon chevron\" aria-hidden=\"true\"><use href=\"#icon-chevron-right\"/></svg>Handbook</summary>"),
+        "{page}"
+    );
+    assert!(
+        page.contains(
+            "<a href=\"../notes/the-guide.html\" aria-current=\"page\">Read me first</a>"
+        ),
+        "{page}"
+    );
+    assert!(!page.contains("nav-tags"), "the tag cloud is gone: {page}");
+    assert!(
+        page.contains("<ol>\n<li><span>Handbook</span></li>\n</ol>"),
+        "{page}"
+    );
+    // A nav table that does not parse fails the command before anything
+    // is written.
+    set_site(
+        dir.path(),
+        "[[site.nav]]\nlabel = \"X\"\nitems = [{ notes = \"y\" }]\n",
+    );
+    let output = site(dir.path(), &["-o", "bad-nav"]);
+    assert!(!output.status.success());
+    assert!(!dir.path().join("bad-nav").exists());
+}
+
+#[test]
+fn site_uses_the_configured_site_theme_and_copies_its_files() {
+    let dir = site_vault();
+    write_site_theme(dir.path(), "corporate", "/* CORPORATE-SITE-THEME */");
+    fs::write(
+        dir.path().join(".ntropy/themes/site/corporate/logo.svg"),
+        "<svg/>",
+    )
+    .expect("theme asset");
+    configure_site(dir.path(), "theme = \"corporate\"\ntitle = \"Team Docs\"\n");
+
+    let output = site(dir.path(), &["-o", "out"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let out = dir.path().join("out");
+    assert_eq!(
+        fs::read_to_string(out.join("assets/style.css")).expect("stylesheet"),
+        "/* CORPORATE-SITE-THEME */"
+    );
+    assert_eq!(
+        fs::read_to_string(out.join("assets/logo.svg")).expect("theme asset copied"),
+        "<svg/>"
+    );
+    let index = fs::read_to_string(out.join("index.html")).expect("index");
+    assert!(
+        index.contains("<h1 class=\"site-title\">Team Docs</h1>"),
+        "{index}"
+    );
+
+    let output = site(dir.path(), &["-o", "plain", "--theme", "default"]);
+    assert!(output.status.success());
+    let css = fs::read_to_string(dir.path().join("plain/assets/style.css")).expect("stylesheet");
+    assert!(
+        css.contains("--callout-note"),
+        "`default` restores the built-in theme"
+    );
+}
+
+#[test]
+fn site_with_a_missing_theme_fails_before_writing_anything() {
+    let dir = site_vault();
+    configure_site(dir.path(), "theme = \"no-such-theme\"\n");
+    let output = site(dir.path(), &["-o", "out"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(".ntropy/themes/site/no-such-theme/style.css"),
+        "{stderr}"
+    );
+    assert!(
+        !dir.path().join("out").exists(),
+        "no output directory is created"
+    );
+}
+
+#[test]
+fn theme_templates_render_the_site_and_the_html_artifact_with_the_vars() {
+    let dir = site_vault();
+    write_site_theme(dir.path(), "corporate", "body{}");
+    let templates = dir.path().join(".ntropy/themes/site/corporate/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(
+        templates.join("page.html"),
+        "{% extends \"ntropy/page.html\" %}{% block footer %}<footer>{{ vars.owner }} · {{ kind }}</footer>{% endblock %}",
+    )
+    .expect("template");
+    configure_site(
+        dir.path(),
+        "theme = \"corporate\"\n\n[site.vars]\nowner = \"Acme\"\n",
+    );
+
+    let output = site(dir.path(), &["-o", "out"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let out = dir.path().join("out");
+    let index = fs::read_to_string(out.join("index.html")).expect("index");
+    assert!(index.contains("<footer>Acme · front</footer>"), "{index}");
+    let page = fs::read_to_string(out.join("notes/rust-tips.html")).expect("note page");
+    assert!(page.contains("<footer>Acme · note</footer>"), "{page}");
+    assert!(
+        !out.join("assets/templates").exists(),
+        "the templates are not served"
+    );
+
+    let output = render_to_html(dir.path(), ULID_A, &["-o", "tips.html"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let artifact = fs::read_to_string(dir.path().join("tips.html")).expect("artifact");
+    assert!(
+        artifact.contains("<footer>Acme · document</footer>"),
+        "{artifact}"
+    );
+    assert!(!dir.path().join("tips_files/templates").exists());
+
+    // A note names its template; a name the theme lacks is a warning that
+    // `--strict` turns into a failure.
+    fs::write(
+        templates.join("splash.html"),
+        "<main class=\"splash\">{{ title }}</main>",
+    )
+    .expect("splash template");
+    write_note(
+        dir.path(),
+        ULID_C,
+        "welcome",
+        "---\ntitle: Welcome\nsite:\n  template: splash\n---\nHi.\n",
+    );
+    let output = site(dir.path(), &["-o", "named"]);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let page = fs::read_to_string(dir.path().join("named/notes/welcome.html")).expect("page");
+    assert_eq!(page, "<main class=\"splash\">Welcome</main>");
+    write_note(
+        dir.path(),
+        ULID_C,
+        "welcome",
+        "---\ntitle: Welcome\nsite:\n  template: no-such-template\n---\nHi.\n",
+    );
+    let output = site(dir.path(), &["-o", "unnamed", "--strict"]);
+    assert!(
+        !output.status.success(),
+        "a missing template fails --strict"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("`site.template` names `no-such-template`"),
+        "{stderr}"
+    );
+    let page = fs::read_to_string(dir.path().join("unnamed/notes/welcome.html"))
+        .expect("the page is still written, with the default template");
+    assert!(page.contains("<footer>Acme · note</footer>"), "{page}");
+
+    // A template that does not parse fails both commands naming it, before
+    // anything is written.
+    fs::write(templates.join("page.html"), "{% if %}").expect("broken template");
+    let output = site(dir.path(), &["-o", "broken"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("page.html"), "{stderr}");
+    assert!(!dir.path().join("broken/index.html").exists());
+    let output = render_to_html(dir.path(), ULID_A, &["-o", "broken.html"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("page.html"), "{stderr}");
+    assert!(!dir.path().join("broken.html").exists());
+}
+
+#[test]
+fn site_theme_init_copies_the_builtin_theme_and_refuses_to_overwrite() {
+    let dir = site_vault();
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["site", "theme", "init", "mine"]);
+    cmd.current_dir(dir.path());
+    let output = cmd.output().expect("run site theme init");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("[site] theme = \"mine\""), "{stdout}");
+    let css = fs::read_to_string(dir.path().join(".ntropy/themes/site/mine/style.css"))
+        .expect("the stylesheet is written");
+    assert!(css.contains("--callout-note"), "{css}");
+
+    // The copy is a usable theme as it stands.
+    configure_site(dir.path(), "theme = \"mine\"\n");
+    assert!(site(dir.path(), &["-o", "out"]).status.success());
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["site", "theme", "init", "mine"]);
+    cmd.current_dir(dir.path());
+    let output = cmd.output().expect("run site theme init again");
+    assert!(
+        !output.status.success(),
+        "an existing theme directory is refused"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("already exists"), "{stderr}");
+}
+
+#[test]
+fn site_theme_init_rejects_a_traversing_name() {
+    let dir = site_vault();
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["site", "theme", "init", "../escape"]);
+    cmd.current_dir(dir.path());
+    let output = cmd.output().expect("run site theme init");
+    assert!(!output.status.success());
+    assert!(!dir.path().join(".ntropy/themes/escape").exists());
 }
 
 /// A vault with one note and a `corporate` theme configured vault-wide.
@@ -1602,8 +2382,49 @@ fn a_configured_theme_with_no_file_errors_naming_the_path() {
     assert!(!output.status.success(), "a missing theme must fail");
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("no-such-theme") && stderr.contains(".ntropy/themes/no-such-theme.typ"),
+        stderr.contains("no-such-theme")
+            && stderr.contains(".ntropy/themes/typst/no-such-theme.typ"),
         "the error does not name the theme and the path: {stderr}"
+    );
+    assert!(
+        !dir.path().join("report.typ").exists(),
+        "an artifact was produced despite the failure"
+    );
+}
+
+#[test]
+fn a_theme_left_at_the_pre_split_location_fails_naming_both_paths() {
+    // A vault themed under v1.12 keeps its file at `.ntropy/themes/<name>.typ`
+    // (ADR 0047 moved Typst themes into `themes/typst/`). The render fails,
+    // says where the file is and where it has to go, and never reads it
+    // from the old place.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\nBody.\n",
+    );
+    let legacy = dir.path().join(".ntropy/themes");
+    fs::create_dir_all(&legacy).expect("themes dir");
+    fs::write(
+        legacy.join("corporate.typ"),
+        marker_theme("CORPORATE-THEME"),
+    )
+    .expect("write the legacy theme");
+    configure_theme(dir.path(), "corporate");
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success(), "a moved theme must fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(".ntropy/themes/corporate.typ")
+            && stderr.contains(".ntropy/themes/typst/corporate.typ"),
+        "the error does not name both locations: {stderr}"
     );
     assert!(
         !dir.path().join("report.typ").exists(),
@@ -2102,7 +2923,9 @@ fn render_to_typst_raw_html_warns_and_strict_fails() {
         assert_cmd_snapshot!("render_typst_html_lenient", lenient);
 
         let mut strict = ntropy(dir.path());
-        strict.args(["render", ULID_A, "--to", "typst", "-p", "-n", "--strict"]);
+        strict.args([
+            "render", ULID_A, "--to", "typst", "-p", "-n", "--strict", "--force",
+        ]);
         strict.current_dir(dir.path());
         strict.env("PATH", "no-such-bin");
         assert_cmd_snapshot!("render_typst_html_strict", strict);

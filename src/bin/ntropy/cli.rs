@@ -164,20 +164,22 @@ pub enum Command {
 
     /// Render a note to a document artifact.
     ///
-    /// `--to` selects the output format: `pdf` (the default) or `typst`, the
-    /// emitted Typst document. `pdf` is produced by ntropy's own typst engine,
-    /// which compiles the note with the external `typst` binary, so only `typst`
-    /// need be on `PATH`. The `typst` format needs no external tool.
+    /// `--to` selects the output format: `pdf` (the default), `typst`, the
+    /// emitted Typst document, or `html`, a self-contained web page. `pdf` is
+    /// produced by ntropy's own typst engine, which compiles the note with the
+    /// external `typst` binary, so only `typst` need be on `PATH`. The `typst`
+    /// and `html` formats need no external tool.
     ///
-    /// The look comes from the vault's `[render] theme` in
-    /// `.ntropy/config.toml`, a Typst file in `.ntropy/themes/`; `--theme`
-    /// overrides it for one invocation.
+    /// The look comes from the vault's config in `.ntropy/config.toml`:
+    /// `[render] theme`, a Typst file in `.ntropy/themes/typst/`, for `pdf`
+    /// and `typst`; `[site] theme`, a directory in `.ntropy/themes/site/`,
+    /// for `html`. `--theme` overrides it for one invocation.
     Render {
         /// A full ULID or a query DSL expression (joined from trailing
         /// arguments; omitted = choose from all notes).
         #[arg(value_name = "ID|QUERY")]
         selector: Vec<String>,
-        /// The output format: `pdf` (default) or `typst`.
+        /// The output format: `pdf` (default), `typst`, or `html`.
         #[arg(long, value_name = "FORMAT", default_value = ntropy::render::DEFAULT_FORMAT)]
         to: String,
         /// Override the format's default engine.
@@ -188,11 +190,53 @@ pub enum Command {
         output: Option<PathBuf>,
         /// Render with this theme instead of the vault's configured one.
         ///
-        /// Names a file in `<vault>/.ntropy/themes/<NAME>.typ`. `default`
-        /// selects ntropy's built-in look, overriding a configured theme.
+        /// Names `<vault>/.ntropy/themes/typst/<NAME>.typ` for `pdf` and
+        /// `typst`, or the directory `<vault>/.ntropy/themes/site/<NAME>/`
+        /// for `html`. `default` selects ntropy's built-in look, overriding a
+        /// configured theme.
         #[arg(long, value_name = "NAME")]
         theme: Option<String>,
         /// Print the artifact's path to stdout on success.
+        #[arg(short = 'p', long)]
+        print: bool,
+        /// Replace an existing artifact, and for `html` a non-empty files
+        /// directory beside it; without it either is refused.
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Export the vault as a static website.
+    ///
+    /// Every note becomes a page under `notes/`, beside a tag tree, one page
+    /// per configured view and group, and a front page. Pages carry a
+    /// sidebar, breadcrumbs, an outline, and previous/next links. The site
+    /// works when opened straight from disk; no server is needed.
+    ///
+    /// The look comes from `[site] theme` in `.ntropy/config.toml`, a
+    /// directory in `.ntropy/themes/site/`; `--theme` overrides it for one
+    /// invocation. `site theme init` copies the built-in theme into the vault.
+    #[command(args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
+    Site {
+        #[command(subcommand)]
+        command: Option<SiteCommand>,
+        /// The output directory. A non-empty directory is refused unless
+        /// `--force` empties it first.
+        #[arg(short = 'o', long, value_name = "DIR", required = true)]
+        output: Option<PathBuf>,
+        /// A query DSL expression restricting the exported notes (joined from
+        /// trailing arguments; omitted = every note).
+        #[arg(value_name = "QUERY")]
+        query: Vec<String>,
+        /// Export with this site theme instead of the vault's configured one.
+        ///
+        /// Names the directory `<vault>/.ntropy/themes/site/<NAME>/`.
+        /// `default` selects the built-in theme, overriding a configured one.
+        #[arg(long, value_name = "NAME")]
+        theme: Option<String>,
+        /// Empty a non-empty output directory before writing.
+        #[arg(long)]
+        force: bool,
+        /// Print the path of the site's `index.html` to stdout on success.
         #[arg(short = 'p', long)]
         print: bool,
     },
@@ -275,6 +319,26 @@ pub enum VaultCommand {
         /// The current passphrase comes from the global `--passphrase-file`.
         #[arg(long, value_name = "PATH")]
         new_passphrase_file: Option<PathBuf>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SiteCommand {
+    /// Manage site themes.
+    #[command(subcommand)]
+    Theme(SiteThemeCommand),
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SiteThemeCommand {
+    /// Copy the built-in site theme into the vault as the starting point for
+    /// a custom one.
+    ///
+    /// Writes `<vault>/.ntropy/themes/site/<NAME>/` and refuses to overwrite
+    /// an existing directory. Select it with `[site] theme = "<NAME>"`.
+    Init {
+        /// The new theme's name.
+        name: String,
     },
 }
 

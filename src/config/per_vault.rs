@@ -17,9 +17,10 @@ use serde::{Deserialize, Serialize};
 
 use super::ConfigError;
 use crate::render::RenderOptions;
+use crate::site::SiteOptions;
 
 /// The parsed per-vault configuration.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct PerVaultConfig {
     /// View definitions, serialized as `[[view]]` tables.
     #[serde(default, rename = "view")]
@@ -29,6 +30,10 @@ pub struct PerVaultConfig {
     /// stay as they are.
     #[serde(default, skip_serializing_if = "RenderOptions::is_default")]
     pub render: RenderOptions,
+    /// Site settings, serialized as a `[site]` table, omitted on write when
+    /// entirely default like `[render]`.
+    #[serde(default, skip_serializing_if = "SiteOptions::is_default")]
+    pub site: SiteOptions,
 }
 
 /// One view definition: an output directory name plus the field it groups by.
@@ -164,6 +169,28 @@ mod tests {
     fn absent_render_section_uses_defaults() {
         let cfg: PerVaultConfig = toml::from_str("").expect("parse");
         assert_eq!(cfg.render, crate::render::RenderOptions::default());
+    }
+
+    #[test]
+    fn parse_site_section() {
+        let cfg: PerVaultConfig =
+            toml::from_str("[site]\ntheme = \"corporate\"\nlang = \"de\"\n").expect("parse");
+        assert_eq!(cfg.site.theme.as_deref(), Some("corporate"));
+        assert_eq!(cfg.site.lang(), "de");
+        assert_eq!(cfg.site.index, None);
+    }
+
+    #[test]
+    fn site_section_serializes_only_when_configured() {
+        let mut cfg = PerVaultConfig::default();
+        cfg.add(view("by-tag", "tags"));
+        assert!(!cfg.to_toml().expect("serialize").contains("[site]"));
+
+        cfg.site.title = Some("Docs".to_string());
+        let text = cfg.to_toml().expect("serialize");
+        assert!(text.contains("[site]\ntitle = \"Docs\""), "{text}");
+        let parsed: PerVaultConfig = toml::from_str(&text).expect("parse back");
+        assert_eq!(parsed, cfg);
     }
 
     #[test]

@@ -1,0 +1,54 @@
+---
+source: src/site/page.rs
+expression: page().render()
+---
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rust &lt;Tips&gt; · Vault &amp; Co</title>
+<link rel="stylesheet" href="../assets/style.css">
+<script>try{var t=localStorage.getItem("ntropy-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<script defer src="../assets/grammars/rust.js"></script>
+<script defer src="../assets/app.js"></script>
+
+</head>
+<body class="site">
+<svg hidden><symbol id="icon-menu"/></svg>
+<div class="layout">
+<header class="site-header">
+<a class="nav-open" href="#sidebar" aria-label="Open navigation"><svg class="icon" aria-hidden="true"><use href="#icon-menu"/></svg></a>
+<a class="site-name" href="../index.html">Vault &amp; Co</a>
+<div class="header-tools">
+<button class="search-toggle" type="button" aria-haspopup="dialog" data-search="../assets/search-data.js" data-prefix="../"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><span>Search</span><kbd>/</kbd></button>
+<div class="theme-switch" role="group" aria-label="Color scheme">
+<button class="theme-choice" type="button" data-theme-choice="system" aria-pressed="true" title="Follow the system"><svg class="icon" aria-hidden="true"><use href="#icon-monitor"/></svg><span class="visually-hidden">System</span></button>
+<button class="theme-choice" type="button" data-theme-choice="light" aria-pressed="false" title="Light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg><span class="visually-hidden">Light</span></button>
+<button class="theme-choice" type="button" data-theme-choice="dark" aria-pressed="false" title="Dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg><span class="visually-hidden">Dark</span></button>
+</div>
+</div>
+</header>
+<div class="sidebar-pane" id="sidebar">
+<a class="nav-close" href="#" aria-label="Close navigation"><svg class="icon" aria-hidden="true"><use href="#icon-x"/></svg></a>
+<nav class="sidebar">S</nav>
+</div>
+<main>
+<nav class="breadcrumbs" aria-label="You are here"><ol>
+<li><span>Reference</span></li>
+<li><svg class="icon sep" aria-hidden="true"><use href="#icon-chevron-right"/></svg><a href="../views/by-status/index.html">by-status</a></li>
+<li><svg class="icon sep" aria-hidden="true"><use href="#icon-chevron-right"/></svg><a href="../views/by-status/done/index.html">done</a></li>
+</ol></nav>
+<div class="content">
+<article>B</article>
+</div>
+<nav class="pager">
+<a class="prev" rel="prev" href="earlier.html"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg><span class="pager-text"><span class="pager-label">Previous</span><span class="pager-title">Earlier &lt;one&gt;</span></span></a>
+</nav>
+</main>
+<aside class="side">
+<nav class="outline">O</nav>
+</aside>
+</div>
+</body>
+</html>
