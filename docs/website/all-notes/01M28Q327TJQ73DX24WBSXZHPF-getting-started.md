@@ -21,6 +21,25 @@ ntropy is published on crates.io:
 cargo install ntropy
 ```
 
+### Homebrew
+
+On macOS and Linux, ntropy also installs from my
+[Homebrew tap](https://github.com/jakobwesthoff/homebrew-tap):
+
+```bash
+brew install jakobwesthoff/tap/ntropy
+```
+
+The formula brings typst along, which
+[PDF rendering](01M28Q32H5RYMZ5MHBQSQQN13B-rendering-to-pdf-and-html.md)
+needs, and installs the [shell integration](01M28Q32N56MS70ETPES4794HJ-scripting-and-the-shell.md)
+script that defines `ncd`. To use it, add this line to your `~/.zshrc` or
+`~/.bashrc`:
+
+```bash
+source "$(brew --prefix)/opt/ntropy/share/ntropy/ntropy.sh"
+```
+
 ### Pre-built binaries
 
 Each release ships binaries on the

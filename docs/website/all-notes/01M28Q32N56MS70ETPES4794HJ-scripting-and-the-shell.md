@@ -44,6 +44,9 @@ A `search` that matches nothing exits non-zero, so `if ntropy search -n tag:urge
 ```bash
 # In ~/.bashrc or ~/.zshrc
 source /path/to/ntropy/contrib/shell/ntropy.sh
+
+# Installed with Homebrew, the script is already on disk
+source "$(brew --prefix)/opt/ntropy/share/ntropy/ntropy.sh"
 ```
 
 ```bash

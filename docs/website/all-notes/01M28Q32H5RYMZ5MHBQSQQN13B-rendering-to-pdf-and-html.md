@@ -41,8 +41,9 @@ that produced it, and its size:
 
 ntropy converts the note to Typst with its own engine and only typesets
 the PDF with [typst](https://typst.app), so that is the single tool you
-install yourself, for example with `brew install typst`. If it is not on
-your `PATH`, the render fails with an error naming it.
+install yourself, for example with `brew install typst`. The Homebrew
+formula for ntropy installs it as a dependency. If it is not on your
+`PATH`, the render fails with an error naming it.
 
 Content the artifact cannot carry, raw HTML in a PDF or a remote image
 (typst fetches nothing from the network), is dropped with a warning on

@@ -31,6 +31,16 @@ any other note. It scratched my itch; maybe it scratches yours.
 cargo install ntropy
 ```
 
+### Homebrew
+
+```bash
+brew install jakobwesthoff/tap/ntropy
+```
+
+The formula lives in my
+[Homebrew tap](https://github.com/jakobwesthoff/homebrew-tap) and installs
+typst, which PDF rendering needs, along with ntropy.
+
 ### Pre-built binaries
 
 Pre-built binaries are available on the
