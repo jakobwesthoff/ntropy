@@ -1877,6 +1877,52 @@ body.palette-open {
   border-color: var(--muted);
 }
 
+/* Cargo or Homebrew: the other install way is one more pill in the
+ * downloads row. Picking it swaps the command in the box, and the pill
+ * turns into the way back. Two visually hidden radios and :has() carry
+ * the choice, so the page needs no script for it and shows cargo by
+ * default. Both commands share one grid cell and the hidden one keeps
+ * its width, so the box does not resize on a swap. */
+
+.front-install-way > input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.front-command-lines {
+  display: grid;
+  min-width: 0;
+}
+
+.front-command-lines pre {
+  grid-area: 1 / 1;
+}
+
+.front-install-way:has(#install-way-cargo:checked) pre[data-way="brew"],
+.front-install-way:has(#install-way-brew:checked) pre[data-way="cargo"] {
+  visibility: hidden;
+}
+
+.front-install-way label.download {
+  cursor: pointer;
+}
+
+.front-install-way:has(#install-way-cargo:checked) label[for="install-way-cargo"],
+.front-install-way:has(#install-way-brew:checked) label[for="install-way-brew"] {
+  display: none;
+}
+
+.front-install-way:has(#install-way-cargo:focus-visible) label[for="install-way-brew"],
+.front-install-way:has(#install-way-brew:focus-visible) label[for="install-way-cargo"] {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.front-downloads-gap {
+  margin-left: 0.6rem;
+}
+
 .front-way-text {
   font-family: var(--sans);
   color: var(--muted);

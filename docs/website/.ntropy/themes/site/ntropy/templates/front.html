@@ -49,10 +49,17 @@
 
 <section class="front-section front-install" id="install">
 <h2>Install</h2>
-<div class="front-command"><pre>cargo install ntropy</pre><button class="copy" type="button" data-copy>copy</button></div>
-<div class="front-downloads"><span class="front-downloads-label">or download a binary</span>
+<div class="front-install-way">
+<input type="radio" name="install-way" id="install-way-cargo" value="cargo" checked>
+<input type="radio" name="install-way" id="install-way-brew" value="brew">
+<div class="front-command"><div class="front-command-lines"><pre data-way="cargo">cargo install ntropy</pre><pre data-way="brew">brew install jakobwesthoff/tap/ntropy</pre></div><button class="copy" type="button" data-copy>copy</button></div>
+<div class="front-downloads"><span class="front-downloads-label">or use</span>
+<label class="download" for="install-way-brew">homebrew</label>
+<label class="download" for="install-way-cargo">cargo</label>
+<span class="front-downloads-label front-downloads-gap">or download a binary</span>
 <a class="download" href="{{ vars.github }}/releases/latest" title="Apple Silicon and Intel"><svg class="icon" aria-hidden="true"><use href="#icon-apple"/></svg>macOS</a>
 <a class="download" href="{{ vars.github }}/releases/latest" title="x86_64 and aarch64, statically linked"><svg class="icon" aria-hidden="true"><use href="#icon-linux"/></svg>Linux</a>
+</div>
 </div>
 <p class="front-way-text"><a href="{{ prefix }}tags/docs/develop/index.html">or build it from source</a></p>
 <div class="front-commands">
@@ -79,7 +86,16 @@ ntropy view add by-status --field status</pre>
 (function () {
   document.querySelectorAll("[data-copy]").forEach(function (button) {
     button.addEventListener("click", function () {
-      var text = button.parentElement.querySelector("pre").textContent;
+      // The install box stacks one command per install way and hides all
+      // but the chosen one, so copy the one that is visible.
+      var lines = button.parentElement.querySelectorAll("pre");
+      var text = "";
+      for (var i = 0; i < lines.length; i++) {
+        if (getComputedStyle(lines[i]).visibility !== "hidden") {
+          text = lines[i].textContent;
+          break;
+        }
+      }
       navigator.clipboard.writeText(text).then(function () {
         button.textContent = "copied";
         setTimeout(function () { button.textContent = "copy"; }, 1500);
