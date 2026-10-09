@@ -159,6 +159,5 @@ Open a note under `all-notes/`, type `[`, and pick a note to insert a link;
   covered by tests over an in-memory connection. `tower-lsp-server` remains the
   identified fallback should it ever prove limiting (ADR 0029).
 - Tier-2 features (backlinks/references, hover preview, dangling-link
-  diagnostics, document-symbol outline) are deferred; see the todos referenced
-  from `todos/01kvxwqq5vbjekr578jffved5m-linking-and-language-server.md`.
+  diagnostics, document-symbol outline) are deferred.
 

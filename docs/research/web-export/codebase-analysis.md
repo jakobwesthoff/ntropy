@@ -68,7 +68,7 @@ site to mirror:
    normalized like tags, notes without the field are omitted. Leaves are
    named `<date>-<slug>.md` with a ULID-tail disambiguator on collision
    (`src/view/leaf.rs`). There is no per-view filter; that is an open
-   todo (`todos/01kvxys57hdztv654z1xx5dge3-per-view-filtering.md`).
+   todo (01KVXYS57HDZTV654Z1XX5DGE3).
    **The grouping computation is not separable from materialization
    through the public API**: `sync_view` both computes and writes
    symlinks; the pure `desired_links(view_dir, view, notes)` that
@@ -87,7 +87,7 @@ site to mirror:
 
 Views are disabled in encrypted vaults because a symlink tree spells out
 the tag taxonomy in plaintext inside the synced directory
-(`docs/design/encryption.md:236-246`, `todos/01ky7r9ean3b4bxs6fehpcg4ny-encrypted-vault-views.md`).
+(`docs/design/encryption.md:236-246`, todo 01KY7R9EAN3B4BXS6FEHPCG4NY).
 
 ## 3. Rendering: what exists and how much transfers
 
@@ -186,10 +186,10 @@ that overrides selectively, one typed seam carrying title and frontmatter.
 - Backlinks: `grep -rn backlink src` returns nothing. ADR 0028 states
   the intent (compute on demand by scanning bodies), two todos plan an
   LSP and a CLI surface for it
-  (`todos/01kvzkk1bvqnhfx3v6w7w80ytd-lsp-backlinks-references.md`,
-  `todos/01kw4bdqkqfn8ep41cet8b1avz-cli-link-helpers.md`).
+  (todos 01KVZKK1BVQNHFX3V6W7W80YTD
+  and 01KW4BDQKQFN8EP41CET8B1AVZ).
 - Structured (JSON) output of notes: planned, not built
-  (`todos/01kw9z4fjqnvjstfem8a6q1maa-json-output-mode.md`).
+  (todo 01KW9Z4FJQNVJSTFEM8A6Q1MAA).
 - Multi-note rendering: `render` is one note per invocation by decision
   (ADR 0037; `docs/design/rendering.md:265-273` lists it as deferred).
 - Any web-related dependency in `Cargo.toml`.
@@ -227,7 +227,7 @@ a context's.
   inside an encrypted vault (`encryption.md:220-233`). An exported site's
   directory structure and file names expose the same taxonomy the
   disabled views would. Assets are not encrypted at all today
-  (`todos/01kz9zn4gkf9xct143e1w5ysej-encrypted-vault-assets.md`).
+  (todo 01KZ9ZN4GKF9XCT143E1W5YSEJ).
 - **Reserved names.** `all-notes`, `.ntropy`, `.gitignore`, `README.md`
   and every configured view name are taken inside a vault
   (`src/vault/layout.rs:51`); an output directory defaulting to inside

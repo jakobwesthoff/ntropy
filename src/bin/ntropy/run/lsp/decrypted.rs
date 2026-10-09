@@ -12,7 +12,7 @@
 //! Read-only on purpose: nothing writes these copies back, so editing a note is
 //! still `ntropy search`. A `0400` file makes an editor complain at save time
 //! rather than silently discard the work. Write-back is deferred; see
-//! `todos/01kz9zn4gmd3h92rp47k4dw978-lsp-reencrypt-decrypted-target-on-save.md`.
+//! todo 01KZ9ZN4GMD3H92RP47K4DW978.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

@@ -617,11 +617,9 @@ fn new_missing_named_template_errors() {
 
 #[test]
 fn new_print_accepts_a_yaml_special_title() {
-    // Reproduces the bug in
-    // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
-    // a `: ` in the title used to break the default template's YAML and leave
-    // no note behind. Frontmatter substitution is now YAML-aware (ADR 0034),
-    // so the same title now creates a well-formed note.
+    // Regression test: a `: ` in the title must not break the default
+    // template's YAML. Frontmatter substitution is YAML-aware (ADR 0034), so
+    // the title creates a well-formed note.
     let dir = setup_vault();
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
@@ -638,9 +636,7 @@ fn new_print_accepts_a_yaml_special_title() {
 
 #[test]
 fn new_print_with_invalid_template_leaves_no_stray_file() {
-    // Aspect 1 of
-    // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
-    // a template whose rendered output is not a well-formed note (here, no
+    // A template whose rendered output is not a well-formed note (here, no
     // `title` field) must fail `new` without leaving a file in `all-notes/`.
     let dir = setup_vault();
     let templates = dir.path().join(".ntropy/templates");

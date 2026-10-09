@@ -35,9 +35,10 @@ The exceptions carry no header:
   genuine, validated trade-offs.
 - Design docs (`docs/design/`) describe the lasting design and stay
   timeless: no transition narration, no deferred-work notes, no
-  references to todos. Deferred and future work lives in `todos/`
-  (one `<ulid>-slug.md` file per topic, linking back to the design
-  where useful); todo files are deleted once completed.
+  references to todos. Deferred and future work lives in the ntropy
+  todo vault at `todos/` (format and commands in `todos/README.md`),
+  one note per topic, linking back to the design where useful; a todo
+  is deleted once completed.
 - Keep documentation current: when a decision lands or code changes make
   a doc stale, update the affected design docs and todos in the same
   unit of work, not afterwards.

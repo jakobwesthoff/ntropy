@@ -18,8 +18,7 @@ Validated against the repository at the start of the effort:
 - A site theme is a stylesheet, fonts, and icons (ADR 0055). The three
   page templates (`base.html`, `page.html`, `note.html`) are compiled
   into the binary (ADR 0050); a theme cannot change markup or layout.
-  The template override is the deferred item in
-  `todos/01m26qwep48ad9qtdyxqnhc5rn-site-theme-template-override.md`.
+  The template override is deferred.
 - The front page of an export is a note rendered in the ordinary page
   layout with sidebar, breadcrumbs, and outline.
 - The Markdown walk passes raw HTML blocks and inline HTML through to

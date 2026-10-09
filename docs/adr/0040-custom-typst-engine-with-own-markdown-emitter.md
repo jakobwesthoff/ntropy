@@ -37,7 +37,7 @@ working-directory field for this.
 The supported input surface is what GitHub renders, with decided
 exceptions and degradations recorded in the design document; math is not
 supported for now (deferred to
-`todos/01kx5n2ww5526gtfmhga2b8xe4-typst-engine-math-support-via-mitex.md`).
+todo 01KX5N2WW5526GTFMHGA2B8XE4).
 
 The emitted Typst is an intermediate representation: readability is a
 non-goal, and the emitter always prefers mechanically foolproof forms —

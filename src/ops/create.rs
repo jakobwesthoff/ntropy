@@ -185,11 +185,9 @@ mod tests {
 
     #[test]
     fn yaml_special_title_creates_a_well_formed_note() {
-        // Reproduces the bug in
-        // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
-        // a title containing `: ` used to break the default template's
-        // `title: {{title}}` line. `create_note` now succeeds and the file it
-        // writes is a well-formed note (ADR 0034).
+        // Regression test: a title containing `: ` must not break the default
+        // template's `title: {{title}}` line. `create_note` succeeds and the
+        // file it writes is a well-formed note (ADR 0034).
         let (_guard, session) = temp_vault();
         let note = create_note(&session, "Q3: Planning kickoff", None).expect("create");
         assert_eq!(note.title, "Q3: Planning kickoff");
@@ -233,9 +231,7 @@ mod tests {
 
     #[test]
     fn template_without_title_field_errors_and_leaves_no_stray_file() {
-        // Reproduces aspect 1 of
-        // todos/01kwvczg18dprcrdja9dzzqzde-failed-new-leaves-malformed-note-file-in-all-notes.md:
-        // a custom template whose frontmatter has no `title` field renders to a
+        // A custom template whose frontmatter has no `title` field renders to a
         // file `Note::parse` rejects. `create_note` must fail without writing
         // anything to `all-notes/`.
         let (_guard, session) = temp_vault();
