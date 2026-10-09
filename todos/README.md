@@ -81,9 +81,10 @@ alone.
   tags and link extraction (`src/note/`, `src/text/`, `src/link/`,
   `src/id.rs`, `src/datetime.rs`)
 - `vault`: vault resolution, configuration, scanning, filesystem
-  utilities, the ops layer and the library's public API (`src/vault/`,
-  `src/config/`, `src/ops/`, `src/scan.rs`, `src/fsutil.rs`,
-  `src/session.rs`, `src/error.rs`, `src/lib.rs`)
+  utilities, the ops layer, templates and the library's public API
+  (`src/vault/`, `src/config/`, `src/ops/`, `src/scan.rs`,
+  `src/fsutil.rs`, `src/template.rs`, `src/session.rs`, `src/error.rs`,
+  `src/lib.rs`)
 - `query`: the query language: tokenizer, parser and evaluation
   (`src/query/`)
 - `view`: materialized views, reconcile and the vault `.gitignore`
