@@ -87,3 +87,4 @@ made.
 - [0056. Sidebar order, labels, landing notes, and a nav table](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0056-sidebar-order-labels-landing-notes-and-a-nav-table.md)
 - [0057. The html artifact as a page with a files directory](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0057-html-artifact-as-a-page-with-a-files-directory.md)
 - [0058. Theme templates overriding the built-in ones by name](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0058-theme-templates-overriding-the-built-in-ones-by-name.md)
+- [0059. Width-aware picker columns](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0059-width-aware-picker-columns.md)

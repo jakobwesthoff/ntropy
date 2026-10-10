@@ -8,6 +8,10 @@ Accepted
 
 Supersedes the picker-library part of [ADR 0014](0014-interactive-by-default-cli-with-auto-output-mode.md).
 
+Amended 2026-10-10 by [ADR 0059](0059-width-aware-picker-columns.md): the
+title and tag columns size from the terminal width, rows are rebuilt when the
+width changes, and the ULID shows only in space the title and tags leave over.
+
 ## Context
 
 ADR 0014 embedded the interactive picker with `nucleo-picker`. That crate
