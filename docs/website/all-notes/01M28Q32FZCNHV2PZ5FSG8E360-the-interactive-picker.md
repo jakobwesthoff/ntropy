@@ -17,7 +17,9 @@ at the bottom and results stack upward, with the best match closest to
 the cursor. Type to filter the list live. Matched characters glow
 yellow and the current row is cyan, both colors drawn from your
 terminal's own palette so the picker follows your theme. The dimmed line
-under the prompt counts the matches and shows the selected note's ULID.
+under the prompt counts the matches and shows the selected note's ULID,
+with a reminder of extra keys such as `^Y path` at its right end when the
+terminal is wide enough.
 
 | Key | Action |
 |-----|--------|
@@ -27,6 +29,7 @@ under the prompt counts the matches and shows the selected note's ULID.
 | `Ctrl-W` | Delete the last word |
 | `Ctrl-U` | Clear the query |
 | `Enter` | Open the selected note |
+| `Ctrl-Y` | Print the selected note's path instead, as if you had passed `-p` |
 | `Esc` / `Ctrl-C` | Abort |
 
 Choosing a note opens it in your editor. Closing the editor reconciles

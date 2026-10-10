@@ -57,6 +57,43 @@ pub struct Row {
     pub search: String,
 }
 
+/// A key that ends the picker with the selected item like Enter does, but
+/// tells the caller to act on it differently, e.g. Ctrl-Y in `search` prints
+/// the note's path instead of opening it. The stats line lists each key with
+/// its `hint`.
+pub struct AcceptKey<A> {
+    /// The letter pressed together with Ctrl.
+    pub ctrl: char,
+    /// A word or two for the stats line, e.g. `path`.
+    pub hint: &'static str,
+    /// What the caller receives when the key ends the picker.
+    pub action: A,
+}
+
+/// The Ctrl keys the picker itself handles. An [`AcceptKey`] on one of them
+/// is ignored, so a caller cannot take away aborting or moving the selection.
+const BUILT_IN_CTRL_KEYS: [char; 5] = ['c', 'n', 'p', 'u', 'w'];
+
+/// The action of the accept key a key press matches, if any.
+fn accept_key<A: Copy>(keys: &[AcceptKey<A>], code: KeyCode, modifiers: KeyModifiers) -> Option<A> {
+    let KeyCode::Char(c) = code else {
+        return None;
+    };
+    if !modifiers.contains(KeyModifiers::CONTROL) || BUILT_IN_CTRL_KEYS.contains(&c) {
+        return None;
+    }
+    keys.iter().find(|k| k.ctrl == c).map(|k| k.action)
+}
+
+/// The stats line's hint for the accept keys, e.g. `^Y path`, or empty when
+/// there are none.
+fn key_hints<A>(keys: &[AcceptKey<A>]) -> String {
+    keys.iter()
+        .map(|k| format!("^{} {}", k.ctrl.to_ascii_uppercase(), k.hint))
+        .collect::<Vec<_>>()
+        .join("  ")
+}
+
 /// Present `items` in the interactive picker and return the chosen one.
 ///
 /// `render_all` turns the whole item set into its [`Row`]s in one pass for a
@@ -66,6 +103,19 @@ pub struct Row {
 /// Returns `Ok(None)` when there are no items or the user aborts (Esc / Ctrl-C)
 /// without selecting.
 pub fn pick<T>(items: Vec<T>, render_all: impl Fn(&[T], usize) -> Vec<Row>) -> Result<Option<T>> {
+    let keys: [AcceptKey<()>; 0] = [];
+    Ok(pick_with_keys(items, render_all, &keys)?.map(|(item, _)| item))
+}
+
+/// [`pick`] with extra [`AcceptKey`]s besides Enter.
+///
+/// Returns the chosen item together with the action of the accept key that
+/// chose it, or `None` for the action when Enter did.
+pub fn pick_with_keys<T, A: Copy>(
+    items: Vec<T>,
+    render_all: impl Fn(&[T], usize) -> Vec<Row>,
+    keys: &[AcceptKey<A>],
+) -> Result<Option<(T, Option<A>)>> {
     // Nothing to pick: never touch the terminal so non-interactive callers and
     // empty result sets stay side-effect free.
     if items.is_empty() {
@@ -109,7 +159,7 @@ pub fn pick<T>(items: Vec<T>, render_all: impl Fn(&[T], usize) -> Vec<Row>) -> R
     // delivers each frame as one write; `draw` flushes once per frame.
     let mut frame = io::BufWriter::with_capacity(FRAME_BUFFER_BYTES, tty);
 
-    run_loop(&mut frame, items, render_all)
+    run_loop(&mut frame, items, render_all, keys)
 }
 
 /// The frame buffer size: comfortably a full redraw of a large terminal, so a
@@ -138,29 +188,37 @@ impl<F: FnMut()> Drop for TerminalGuard<F> {
     }
 }
 
-/// The read-draw-react loop. Returns the selection, or `None` on abort.
-fn run_loop<T>(
+/// The read-draw-react loop. Returns the selection with the accept key that
+/// chose it (`None` for Enter), or `None` on abort.
+fn run_loop<T, A: Copy>(
     tty: &mut impl Write,
     items: Vec<T>,
     render_all: impl Fn(&[T], usize) -> Vec<Row>,
-) -> Result<Option<T>> {
+    keys: &[AcceptKey<A>],
+) -> Result<Option<(T, Option<A>)>> {
     let (mut cols, rows) = terminal::size().context("while querying the terminal size")?;
     let mut built_row_width = row_width(cols);
     let picker_rows = render_all(&items, built_row_width);
     let mut state = PickerState::new(items, picker_rows, list_height(rows));
+    let hints = key_hints(keys);
 
     // The first frame paints a fresh alternate screen and every later frame
     // erases per line, so a full clear is only needed again after a resize.
     let mut clear_all = true;
     loop {
-        draw(tty, &state, cols, clear_all).context("while drawing the picker")?;
+        draw(tty, &state, cols, clear_all, &hints).context("while drawing the picker")?;
         clear_all = false;
 
         match event::read().context("while reading a key event")? {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
+                // An accept key ends the picker exactly as Enter does, with no
+                // selection when nothing matches.
+                if let Some(action) = accept_key(keys, key.code, key.modifiers) {
+                    return Ok(state.into_selected().map(|item| (item, Some(action))));
+                }
                 let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
                 match key.code {
-                    KeyCode::Enter => return Ok(state.into_selected()),
+                    KeyCode::Enter => return Ok(state.into_selected().map(|item| (item, None))),
                     KeyCode::Esc => return Ok(None),
                     KeyCode::Char('c') if ctrl => return Ok(None),
                     // The list is bottom-anchored with the best match at the
@@ -229,11 +287,18 @@ fn list_height(terminal_rows: u16) -> usize {
 }
 
 /// Draw the whole picker, bottom-anchored: the list region (best match at the
-/// bottom), a divider, the prompt, a second divider, then the dimmed `m/n` stats.
+/// bottom), a divider, the prompt, a second divider, then the dimmed `m/n` stats
+/// with the accept-key `hints` at their right.
 ///
 /// `clear_all` wipes the screen before painting; it is needed after a resize,
 /// where rows the frame does not touch may hold reflowed leftovers.
-fn draw<T>(tty: &mut impl Write, state: &PickerState<T>, cols: u16, clear_all: bool) -> Result<()> {
+fn draw<T>(
+    tty: &mut impl Write,
+    state: &PickerState<T>,
+    cols: u16,
+    clear_all: bool,
+    hints: &str,
+) -> Result<()> {
     // The frame is bracketed by a synchronized update (DEC mode 2026): a
     // supporting terminal applies everything in between as one atomic screen
     // swap, so a display refresh can never catch the frame half painted.
@@ -294,6 +359,7 @@ fn draw<T>(tty: &mut impl Write, state: &PickerState<T>, cols: u16, clear_all: b
             matching,
             total,
             state.selected_detail(),
+            hints,
         )),
         style::SetAttribute(Attribute::Reset),
         terminal::Clear(terminal::ClearType::UntilNewLine),
@@ -329,18 +395,26 @@ fn divider_line(width: usize, fill: char) -> String {
     std::iter::repeat_n(fill, width).collect()
 }
 
+/// The smallest gap between the stats and the right-aligned key hints.
+const HINTS_GAP: usize = 2;
+
 /// The dimmed stats string, indented to sit directly under the query text (past
 /// the prompt prefix). Shows the cursor's rank within the matches plus the total
 /// candidate count, or an empty-state hint, followed by the selected row's
-/// detail (the note's ULID) when it has one. Clipped to `width` on a narrow
-/// terminal, which cuts the detail first. `rank` is the 1-based position of the
-/// selection among the matches, or `None` when nothing matches.
+/// detail (the note's ULID) when it has one. `rank` is the 1-based position of
+/// the selection among the matches, or `None` when nothing matches.
+///
+/// The accept-key `hints` sit right-aligned at the end of the line. They are
+/// the first thing to go when the line is too narrow: they show only with at
+/// least [`HINTS_GAP`] columns between them and the stats, and the stats are
+/// clipped to `width` (cutting the detail first) only once the hints are gone.
 fn stats_line(
     width: usize,
     rank: Option<usize>,
     matching: usize,
     total: usize,
     detail: Option<&str>,
+    hints: &str,
 ) -> String {
     let body = match rank {
         None => format!("no matches · {total} total"),
@@ -351,6 +425,13 @@ fn stats_line(
     if let Some(detail) = detail.filter(|d| !d.is_empty()) {
         line.push_str(" · ");
         line.push_str(detail);
+    }
+
+    let used = line.width() + hints.width();
+    if !hints.is_empty() && used + HINTS_GAP <= width {
+        line.push_str(&" ".repeat(width - used));
+        line.push_str(hints);
+        return line;
     }
     if line.chars().count() > width {
         return line.chars().take(width).collect();
@@ -451,7 +532,7 @@ mod tests {
 
     #[test]
     fn stats_align_under_the_query_text() {
-        let line = stats_line(40, Some(3), 12, 40, None);
+        let line = stats_line(40, Some(3), 12, 40, None, "");
         // Indented past the prompt prefix so it sits under the query text.
         assert_eq!(line, "  3/12 · 40 total");
         assert_eq!(line.trim_start(), "3/12 · 40 total");
@@ -459,26 +540,140 @@ mod tests {
 
     #[test]
     fn stats_show_an_empty_state_when_nothing_matches() {
-        assert_eq!(stats_line(40, None, 0, 40, None), "  no matches · 40 total");
+        assert_eq!(
+            stats_line(40, None, 0, 40, None, ""),
+            "  no matches · 40 total"
+        );
     }
 
     #[test]
     fn stats_end_with_the_selected_rows_detail() {
         assert_eq!(
-            stats_line(80, Some(3), 12, 40, Some("01ARZ3NDEKTSV4RRFFQ69G5FAV")),
+            stats_line(80, Some(3), 12, 40, Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"), ""),
             "  3/12 · 40 total · 01ARZ3NDEKTSV4RRFFQ69G5FAV"
         );
     }
 
     #[test]
     fn an_empty_detail_adds_no_separator() {
-        assert_eq!(stats_line(80, Some(1), 1, 1, Some("")), "  1/1 · 1 total");
+        assert_eq!(
+            stats_line(80, Some(1), 1, 1, Some(""), ""),
+            "  1/1 · 1 total"
+        );
+    }
+
+    /// The counts and ULID part used by the key-hint tests: 46 columns.
+    const LEFT: &str = "  3/12 · 40 total · 01ARZ3NDEKTSV4RRFFQ69G5FAV";
+
+    fn stats_with_hint(width: usize) -> String {
+        stats_line(
+            width,
+            Some(3),
+            12,
+            40,
+            Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+            "^Y path",
+        )
+    }
+
+    #[test]
+    fn key_hints_are_right_aligned() {
+        let line = stats_with_hint(60);
+        assert!(line.starts_with(LEFT));
+        assert!(line.ends_with("^Y path"));
+        assert_eq!(line.width(), 60);
+    }
+
+    #[test]
+    fn key_hints_keep_a_two_column_gap_or_go() {
+        // 46 + 2 + 7 = 55.
+        assert!(stats_with_hint(55).ends_with(&format!("{LEFT}  ^Y path")));
+        assert_eq!(stats_with_hint(54), LEFT);
+    }
+
+    #[test]
+    fn key_hints_go_before_the_ulid_is_cut() {
+        assert_eq!(LEFT.width(), 46);
+        assert_eq!(stats_with_hint(46), LEFT);
     }
 
     #[test]
     fn a_narrow_terminal_cuts_the_detail_first() {
-        let line = stats_line(20, Some(3), 12, 40, Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        let line = stats_line(
+            20,
+            Some(3),
+            12,
+            40,
+            Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"),
+            "^Y path",
+        );
         assert_eq!(line, "  3/12 · 40 total · ");
+    }
+
+    // -------------------------------------------------------------------------
+    // Accept keys
+    // -------------------------------------------------------------------------
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    enum Action {
+        First,
+        Second,
+    }
+
+    const KEYS: [AcceptKey<Action>; 2] = [
+        AcceptKey {
+            ctrl: 'y',
+            hint: "path",
+            action: Action::First,
+        },
+        AcceptKey {
+            ctrl: 'o',
+            hint: "other",
+            action: Action::Second,
+        },
+    ];
+
+    #[test]
+    fn a_configured_ctrl_key_yields_its_action() {
+        let ctrl = KeyModifiers::CONTROL;
+        assert_eq!(
+            accept_key(&KEYS, KeyCode::Char('y'), ctrl),
+            Some(Action::First)
+        );
+        assert_eq!(
+            accept_key(&KEYS, KeyCode::Char('o'), ctrl),
+            Some(Action::Second)
+        );
+    }
+
+    #[test]
+    fn the_letter_without_ctrl_is_no_accept_key() {
+        let none = KeyModifiers::NONE;
+        assert_eq!(accept_key(&KEYS, KeyCode::Char('y'), none), None);
+    }
+
+    #[test]
+    fn an_unconfigured_ctrl_key_is_no_accept_key() {
+        let ctrl = KeyModifiers::CONTROL;
+        assert_eq!(accept_key(&KEYS, KeyCode::Char('z'), ctrl), None);
+        assert_eq!(accept_key::<Action>(&[], KeyCode::Char('y'), ctrl), None);
+    }
+
+    #[test]
+    fn an_accept_key_cannot_shadow_a_built_in_key() {
+        let shadowing = [AcceptKey {
+            ctrl: 'c',
+            hint: "nope",
+            action: Action::First,
+        }];
+        let ctrl = KeyModifiers::CONTROL;
+        assert_eq!(accept_key(&shadowing, KeyCode::Char('c'), ctrl), None);
+    }
+
+    #[test]
+    fn key_hints_name_each_key_and_its_purpose() {
+        assert_eq!(key_hints(&KEYS), "^Y path  ^O other");
+        assert_eq!(key_hints::<Action>(&[]), "");
     }
 
     #[test]
@@ -508,7 +703,7 @@ mod tests {
 
     #[test]
     fn stats_degrade_to_a_truncation_when_too_narrow() {
-        let line = stats_line(4, Some(1), 100, 200, None);
+        let line = stats_line(4, Some(1), 100, 200, None, "^Y path");
         assert_eq!(line.chars().count(), 4);
     }
 }

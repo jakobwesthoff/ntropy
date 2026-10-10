@@ -376,6 +376,37 @@ fn cmd_vault(_global: &GlobalArgs, command: VaultCommand) -> Result<ExitCode> {
     Err(encryption_unsupported())
 }
 
+/// The extra keys of the search picker: Ctrl-Y prints the selected note's path
+/// for a user who wanted it but forgot `-p`.
+const SEARCH_KEYS: [picker::AcceptKey<()>; 1] = [picker::AcceptKey {
+    ctrl: 'y',
+    hint: "path",
+    action: (),
+}];
+
+/// What `search` does with the note chosen in the picker (or the lone match).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SelectionAction {
+    Open,
+    PrintPath,
+    PrintContent,
+}
+
+/// The [`SelectionAction`] for a chosen note. The print-path key always prints
+/// the path, whatever the flags say; otherwise `--print-content` and `--print`
+/// decide, and without either the note opens in the editor.
+fn selection_action(print: bool, print_content: bool, print_path_key: bool) -> SelectionAction {
+    if print_path_key {
+        SelectionAction::PrintPath
+    } else if print_content {
+        SelectionAction::PrintContent
+    } else if print {
+        SelectionAction::PrintPath
+    } else {
+        SelectionAction::Open
+    }
+}
+
 fn cmd_search(
     global: &GlobalArgs,
     session: &VaultSession,
@@ -427,29 +458,36 @@ fn cmd_search(
                 // On a TTY a lone match is selected straight away; several open
                 // the picker pre-filtered to them.
                 let selected = if let [note] = notes {
-                    Some(note.path.clone())
+                    Some((note.path.clone(), false))
                 } else {
                     let candidates = ops::to_candidates(notes)?;
-                    picker::pick(candidates, picker::align_candidates)?.map(|s| s.path)
+                    picker::pick_with_keys(candidates, picker::align_candidates, &SEARCH_KEYS)?
+                        .map(|(s, key)| (s.path, key.is_some()))
                 };
                 match selected {
-                    // `--print-content` writes the note itself, decrypting
-                    // where the vault requires it, so the output is the same
-                    // whichever way the vault stores its notes.
-                    Some(path) if print_content => {
-                        print!(
-                            "{}",
-                            session
-                                .cipher()
-                                .read(&path)
-                                .context("while reading the note")?
-                        );
+                    Some((path, print_path_key)) => {
+                        match selection_action(print, print_content, print_path_key) {
+                            // `--print-content` writes the note itself,
+                            // decrypting where the vault requires it, so the
+                            // output is the same whichever way the vault
+                            // stores its notes.
+                            SelectionAction::PrintContent => {
+                                print!(
+                                    "{}",
+                                    session
+                                        .cipher()
+                                        .read(&path)
+                                        .context("while reading the note")?
+                                );
+                            }
+                            // `--print` writes the selection's path to stdout
+                            // instead of opening the editor (ADR 0035).
+                            // Nothing was edited, so no realign or view
+                            // refresh is needed.
+                            SelectionAction::PrintPath => println!("{}", path.display()),
+                            SelectionAction::Open => open_and_refresh(session, &path)?,
+                        }
                     }
-                    // `--print` writes the selection's path to stdout instead
-                    // of opening the editor (ADR 0035). Nothing was edited, so
-                    // no realign or view refresh is needed.
-                    Some(path) if print => println!("{}", path.display()),
-                    Some(path) => open_and_refresh(session, &path)?,
                     // A cancelled picker produced no path, so under `--print`
                     // the command fails and `p=$(ntropy search -p ...)`
                     // branches correctly; without `--print` a cancel stays a
@@ -841,4 +879,37 @@ fn file_name(path: &Path) -> String {
     path.file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.display().to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn enter_opens_the_note_without_a_print_flag() {
+        assert_eq!(selection_action(false, false, false), SelectionAction::Open);
+    }
+
+    #[test]
+    fn enter_follows_the_print_flags() {
+        assert_eq!(
+            selection_action(true, false, false),
+            SelectionAction::PrintPath
+        );
+        assert_eq!(
+            selection_action(false, true, false),
+            SelectionAction::PrintContent
+        );
+    }
+
+    #[test]
+    fn the_print_path_key_always_prints_the_path() {
+        for (print, print_content) in [(false, false), (true, false), (false, true)] {
+            assert_eq!(
+                selection_action(print, print_content, true),
+                SelectionAction::PrintPath,
+                "print: {print}, print_content: {print_content}"
+            );
+        }
+    }
 }

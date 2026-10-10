@@ -13,9 +13,9 @@ reworked (ADR 0059). The picker draws itself by hand over `crossterm` (ADR
 0027): `src/bin/ntropy/run/picker/mod.rs` queues every frame, brackets it in a
 synchronized update, erases per line, hides and parks the cursor, and clips
 each row to the terminal width, while `picker/layout.rs` computes the column
-widths. Each new piece of UI (the stats line, a prompt that clips, a second
-accept key) is more hand-drawn code. This investigation settles whether moving
-the rendering to the `ratatui` crate is worth it.
+widths. Each new piece of UI (the stats line with its right-aligned key hints,
+a prompt that clips) is more hand-drawn code. This investigation settles
+whether moving the rendering to the `ratatui` crate is worth it.
 
 ## Context
 
@@ -54,4 +54,3 @@ Constraints any replacement has to keep:
 ## Relations
 
 - Relates to: [Picker prompt line is not clipped to the terminal width](01KWH6QRNAMFX7MM7GT6NM4CJ0-picker-prompt-line-is-not-clipped-to-the-terminal-width.md), a framework would clip the prompt
-- Relates to: [Print the selected note's path from the search picker with a key](01M4JTGFFE0A5JZ9K9MENZZ90X-print-the-selected-notes-path-from-the-search-picker-with-a-key.md), adds to the same event loop

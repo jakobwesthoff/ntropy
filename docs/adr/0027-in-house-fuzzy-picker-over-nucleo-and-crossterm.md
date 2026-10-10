@@ -13,6 +13,12 @@ title and tag columns split the terminal width, rows are rebuilt when the
 width changes, and the selected note's ULID shows in the stats line instead of
 at the end of every row.
 
+Amended 2026-10-10 at the user's request: a picker caller may add accept keys
+besides Enter. The search picker's Ctrl-Y selects the highlighted note and
+prints its path as `--print` does, whatever other flags were given. Such keys
+are hinted right-aligned at the end of the stats line, and the hints are the
+first part of the line to go when it is too narrow.
+
 ## Context
 
 ADR 0014 embedded the interactive picker with `nucleo-picker`. That crate

@@ -8,6 +8,13 @@ and this project adheres to
 
 ## Unreleased
 
+### Added
+
+- Ctrl-Y in the `search` picker prints the selected note's path, as `-p`
+  would, instead of opening it. It helps when you meant to pass `-p` and
+  forgot. The stats line under the prompt hints at the key while the
+  terminal is wide enough.
+
 ### Changed
 
 - The picker splits the terminal width between its title and tag columns
