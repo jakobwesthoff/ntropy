@@ -16,7 +16,7 @@
 //! draw loop reacts to width.
 
 use ntropy::ops::Candidate;
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_width::UnicodeWidthStr;
 
 use super::Row;
 
@@ -112,21 +112,34 @@ fn truncate(s: &str, max: usize) -> String {
     if max == 0 {
         return String::new();
     }
-    // Reserve one column for the trailing `…`, then take whole characters while
-    // they still fit so a wide character never straddles the boundary.
-    let budget = max - 1;
-    let mut out = String::new();
-    let mut used = 0;
-    for c in s.chars() {
-        let w = c.width().unwrap_or(0);
-        if used + w > budget {
-            break;
-        }
-        out.push(c);
-        used += w;
-    }
+    let mut out = fit_prefix(s, max - 1).to_string();
     out.push('…');
     out
+}
+
+/// The longest character prefix of `s` that is at most `max` display columns
+/// wide.
+///
+/// Width is the *string* width, the same measure `max_width` and `pad` use, so
+/// a cut cell lines up with the padding around it. It differs from the sum of
+/// per-character widths for emoji sequences: `#` plus VS16 is one two-column
+/// glyph whose characters sum to one, and a ZWJ family emoji is two columns
+/// whose characters sum to more. Prefix widths are therefore not monotonic (a
+/// half-built ZWJ sequence can be wider than the finished one), so every
+/// character boundary is checked rather than stopping at the first prefix that
+/// overflows. Only strings that do not fit pay for that scan.
+pub(super) fn fit_prefix(s: &str, max: usize) -> &str {
+    if s.width() <= max {
+        return s;
+    }
+    let mut end = 0;
+    for (i, c) in s.char_indices() {
+        let next = i + c.len_utf8();
+        if s[..next].width() <= max {
+            end = next;
+        }
+    }
+    &s[..end]
 }
 
 /// Right-pad `s` with spaces to `width` display columns (never truncates).
@@ -293,6 +306,78 @@ mod tests {
         assert_eq!(date_column(&rows[0].display), date_column(&rows[1].display));
         // The CJK title (3 chars, 6 columns) is the widest, so it sets the cap.
         assert_eq!(date_column(&rows[0].display), 6 + 2);
+    }
+
+    #[test]
+    fn truncate_measures_emoji_presentation_by_string_width() {
+        // `#` followed by VS16 renders as one two-column emoji, while its
+        // per-character widths sum to one. The cut must honour the string
+        // width or the cell spills past its column.
+        let cut = truncate("#\u{FE0F}xyz", 3);
+        assert!(cut.width() <= 3, "{cut:?} is {} columns", cut.width());
+        assert!(cut.ends_with('…'));
+    }
+
+    #[test]
+    fn emoji_presentation_title_stays_within_the_title_cap() {
+        let title = "#\u{FE0F}".repeat(30);
+        let rows = align_candidates(&[candidate(ULID_A, &title, "2026-06-25", &[])]);
+        // The title cell plus its two-space separator ends where the date
+        // begins.
+        assert!(date_column(&rows[0].display) <= TITLE_CAP + 2);
+    }
+
+    #[test]
+    fn fit_prefix_keeps_a_zwj_sequence_that_fits_by_string_width() {
+        // The family emoji is one two-column glyph, so with the trailing `x`
+        // the whole string is three columns wide, although its characters'
+        // widths sum to more.
+        let s = "🧑\u{200D}🤝\u{200D}🧑x";
+        assert_eq!(s.width(), 3);
+        assert_eq!(fit_prefix(s, 3), s);
+    }
+
+    #[test]
+    fn fit_prefix_stops_at_the_widest_prefix_that_fits() {
+        assert_eq!(fit_prefix("abcdef", 4), "abcd");
+        // A wide character that would straddle the edge is dropped whole.
+        assert_eq!(fit_prefix("日本語", 5), "日本");
+        assert_eq!(fit_prefix("abc", 0), "");
+    }
+
+    #[test]
+    fn fit_prefix_returns_a_fitting_string_unchanged() {
+        assert_eq!(fit_prefix("abc", 3), "abc");
+        assert_eq!(fit_prefix("abc", 10), "abc");
+        assert_eq!(fit_prefix("", 0), "");
+    }
+
+    #[test]
+    fn fit_prefix_never_exceeds_the_budget_inside_a_zwj_sequence() {
+        // Cutting into the family emoji leaves a partial sequence whose string
+        // width differs from the complete glyph's; whatever prefix is kept
+        // must still fit.
+        let s = "🧑\u{200D}🤝\u{200D}🧑x";
+        for max in 0..=s.width() {
+            let kept = fit_prefix(s, max);
+            assert!(kept.width() <= max, "{kept:?} exceeds {max}");
+        }
+    }
+
+    #[test]
+    fn truncate_leaves_a_fitting_string_alone() {
+        assert_eq!(truncate("abc", 3), "abc");
+        assert_eq!(truncate("", 0), "");
+    }
+
+    #[test]
+    fn truncate_to_zero_columns_is_empty() {
+        assert_eq!(truncate("abc", 0), "");
+    }
+
+    #[test]
+    fn truncate_to_one_column_is_only_the_ellipsis() {
+        assert_eq!(truncate("abc", 1), "…");
     }
 
     // -------------------------------------------------------------------------

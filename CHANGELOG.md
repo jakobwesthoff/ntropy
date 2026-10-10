@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+
+### Fixed
+
+- The picker measures emoji sequences the same way when it cuts a title or
+  tag list and when it lines up the columns. A title with an emoji such as
+  `#️⃣` no longer pushes the date out of line, and one with a joined emoji
+  such as `🧑‍🤝‍🧑` is no longer cut short at the terminal edge.
+
 ## v2.1.1 - 2026-09-14
 
 ### Changed

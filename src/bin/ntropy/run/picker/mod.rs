@@ -33,7 +33,7 @@ use crossterm::{
     execute, queue, style, terminal,
 };
 
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_width::UnicodeWidthStr;
 
 pub use layout::align_candidates;
 use state::{PickerState, VisibleRow};
@@ -328,18 +328,19 @@ fn draw_row(tty: &mut impl Write, row: &VisibleRow<'_>, cols: u16) -> Result<()>
     }
     queue!(tty, style::Print(pointer))?;
 
-    // Truncate to the terminal width (in display columns) so a long row never
-    // wraps and breaks the layout. The matchable part is drawn first (matches in
+    // Clip to the terminal width (in display columns) so a long row never wraps
+    // and breaks the layout. The matchable part is drawn first (matches in
     // yellow), then the suffix fills whatever budget remains. The `▌ ` bar is two
     // display columns; a wide character is dropped whole rather than allowed to
-    // straddle the right edge.
-    let mut drawn = UnicodeWidthStr::width(pointer);
+    // straddle the right edge. The visible display is a character prefix, so the
+    // highlight indices still address its characters.
+    let (shown, suffix) = visible_parts(
+        row.display,
+        row.suffix,
+        width.saturating_sub(pointer.width()),
+    );
     let highlights = row.highlights;
-    for (i, c) in row.display.chars().enumerate() {
-        let w = c.width().unwrap_or(0);
-        if drawn + w > width {
-            break;
-        }
+    for (i, c) in shown.chars().enumerate() {
         let matched = highlights.binary_search(&(i as u32)).is_ok();
         if matched {
             queue!(tty, style::SetForegroundColor(style::Color::Yellow))?;
@@ -353,23 +354,15 @@ fn draw_row(tty: &mut impl Write, row: &VisibleRow<'_>, cols: u16) -> Result<()>
                 queue!(tty, style::ResetColor)?;
             }
         }
-        drawn += w;
     }
 
-    if !row.suffix.is_empty() && drawn < width {
+    if !suffix.is_empty() {
         // The ULID is dimmed on unselected rows; on the selected row it simply
         // rides the cyan body color.
         if !selected {
             queue!(tty, style::SetAttribute(Attribute::Dim))?;
         }
-        for c in row.suffix.chars() {
-            let w = c.width().unwrap_or(0);
-            if drawn + w > width {
-                break;
-            }
-            queue!(tty, style::Print(c))?;
-            drawn += w;
-        }
+        queue!(tty, style::Print(suffix))?;
         if !selected {
             queue!(tty, style::SetAttribute(Attribute::NormalIntensity))?;
         }
@@ -382,6 +375,17 @@ fn draw_row(tty: &mut impl Write, row: &VisibleRow<'_>, cols: u16) -> Result<()>
         style::ResetColor
     )?;
     Ok(())
+}
+
+/// The parts of a row's `display` and `suffix` that fit into `width` columns.
+///
+/// The display text is clipped first and the suffix gets whatever room is
+/// left. Both use the string-width measure of [`layout::fit_prefix`], the same
+/// one the layout pads with, so a row the layout sized to fit is drawn whole.
+fn visible_parts<'a>(display: &'a str, suffix: &'a str, width: usize) -> (&'a str, &'a str) {
+    let shown = layout::fit_prefix(display, width);
+    let rest = width.saturating_sub(shown.width());
+    (shown, layout::fit_prefix(suffix, rest))
 }
 
 #[cfg(test)]
@@ -438,6 +442,35 @@ mod tests {
     #[test]
     fn stats_show_an_empty_state_when_nothing_matches() {
         assert_eq!(stats_line(40, None, 0, 40), "  no matches · 40 total");
+    }
+
+    #[test]
+    fn visible_parts_keep_a_zwj_title_that_fits_by_string_width() {
+        // The family emoji plus `x` is three columns wide, although its
+        // characters' widths sum to more; it must not be cut early.
+        let display = "🧑\u{200D}🤝\u{200D}🧑x";
+        assert_eq!(visible_parts(display, "  (ID)", 3), (display, ""));
+    }
+
+    #[test]
+    fn visible_parts_cut_the_display_at_the_edge() {
+        assert_eq!(visible_parts("abcdef", "  (ID)", 4), ("abcd", ""));
+    }
+
+    #[test]
+    fn visible_parts_give_the_suffix_what_the_display_leaves() {
+        assert_eq!(visible_parts("ab", "  (ID)", 5), ("ab", "  ("));
+        assert_eq!(visible_parts("ab", "  (ID)", 20), ("ab", "  (ID)"));
+    }
+
+    #[test]
+    fn visible_parts_drop_a_wide_character_that_would_straddle_the_edge() {
+        assert_eq!(visible_parts("日本", "", 3), ("日", ""));
+    }
+
+    #[test]
+    fn visible_parts_of_zero_width_are_empty() {
+        assert_eq!(visible_parts("ab", "  (ID)", 0), ("", ""));
     }
 
     #[test]
