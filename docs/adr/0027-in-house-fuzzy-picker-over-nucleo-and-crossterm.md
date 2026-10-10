@@ -8,16 +8,9 @@ Accepted
 
 Supersedes the picker-library part of [ADR 0014](0014-interactive-by-default-cli-with-auto-output-mode.md).
 
-Amended 2026-10-10 by [ADR 0059](0059-width-aware-picker-columns.md): the
-title and tag columns split the terminal width, rows are rebuilt when the
-width changes, and the selected note's ULID shows in the stats line instead of
-at the end of every row.
+Amended 2026-10-10 by [ADR 0059](0059-width-aware-picker-columns.md).
 
-Amended 2026-10-10 at the user's request: a picker caller may add accept keys
-besides Enter. The search picker's Ctrl-Y selects the highlighted note and
-prints its path as `--print` does, whatever other flags were given. Such keys
-are hinted right-aligned at the end of the stats line, and the hints are the
-first part of the line to go when it is too narrow.
+Amended 2026-10-10 by [ADR 0060](0060-picker-accept-keys-and-ctrl-y-to-print-the-path.md).
 
 ## Context
 

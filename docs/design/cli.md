@@ -141,7 +141,8 @@ is too narrow for it, and the grid is laid out again when the width changes.
 The ULID is never matched. Type to filter; Backspace, Ctrl-W (delete
 word) and Ctrl-U (clear) edit the query; Up / Ctrl-P move toward worse matches
 and Down / Ctrl-N toward the best; Enter selects; Ctrl-Y selects and prints
-the note's path as `-p` does, whatever other flags were given (search only);
+the note's path as `-p` does, whatever other flags were given (search only,
+ADR 0060);
 Esc / Ctrl-C aborts. Matched
 characters are yellow and the selected row cyan with a `▌` bar, all from the
 terminal's own ANSI palette so the picker adapts to its theme. Each frame is
