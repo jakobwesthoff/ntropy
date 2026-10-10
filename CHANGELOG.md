@@ -8,6 +8,14 @@ and this project adheres to
 
 ## Unreleased
 
+### Changed
+
+- The picker sizes its title and tag columns to the terminal width instead
+  of cutting them at 48 and 32 columns. Titles and tag lists get an ellipsis
+  only when the terminal is too narrow for them, the note's ULID shows only
+  when it fits after them, and resizing the terminal lays the columns out
+  again.
+
 ### Fixed
 
 - The picker measures emoji sequences the same way when it cuts a title or

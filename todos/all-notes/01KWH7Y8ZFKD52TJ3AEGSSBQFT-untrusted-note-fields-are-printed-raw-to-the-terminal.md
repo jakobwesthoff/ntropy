@@ -190,9 +190,11 @@ Insertion points:
 4. `print_info` in `output.rs`, on the template name.
 5. `cmd_reconcile` in `run/mod.rs`, on the file name of `rename.from` and on
    `rewrite.from`.
-6. `align_candidates` in `picker/layout.rs`, on `candidate.title` before
-   `truncate`, and on the fields that feed `search_text`, so that `Row.display`
-   and `Row.search` are both clean.
+6. `picker/layout.rs`, on the title and the tags before `measure` takes their
+   natural widths and before `truncate` and `render_tags` cut them to the widths
+   `allocate_columns` gives, and on the fields that feed `search_text`, so that
+   `Row.display` and `Row.search` are both clean. `measure` and the cutting in
+   `align_candidates` must see the same sanitized strings.
 7. The LSP, at lower priority: `completion/link.rs` and `navigation.rs`.
 
 Sanitize first, then measure, pad and truncate. This ordering is mandatory.
@@ -200,7 +202,7 @@ The reversed order fails in three ways:
 
 - `truncate` with a raw ESC, which has width 0, keeps the string within budget.
   If sanitizing happens afterwards, ESC expands to `^[`, which is two columns, and
-  the title exceeds the cap and pushes every later column out of line.
+  the title exceeds its column width and pushes every later column out of line.
 - In the table, if `column_widths` measures raw cells but `write_row` writes
   sanitized cells, each control character leaves padding two columns short.
   Measuring and writing must see the same sanitized string, which is why the
@@ -271,9 +273,10 @@ stay unchanged. Only the new tests exercise the escape path.
   string. A path cell with C0 characters is escaped.
 - `print_warnings`: factor out a `format_warning` function and assert that a file
   name with C0 characters yields no raw control byte.
-- Picker: an ESC-bearing title gives a `Row.display` with no `0x1B` and a width
-  of at most `TITLE_CAP`. Two candidates of the same visible length still align,
-  which proves sanitize-before-truncate. A bidi-override title is escaped.
+- Picker: an ESC-bearing title gives a `Row.display` with no `0x1B` and a title
+  cell no wider than the title column width. Two candidates of the same visible
+  length still align, which proves sanitize-before-truncate. A bidi-override
+  title is escaped.
 - Reconcile: a body link `[x](01ARZ3NDEKTSV4RRFFQ69G5FAV-<ESC>evil.md)` gives a
   `relinked` line with no raw `0x1B`. Factor the report line into a formatter to
   test it.

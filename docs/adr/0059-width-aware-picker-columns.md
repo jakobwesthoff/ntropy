@@ -25,8 +25,7 @@ rebuilds every row when the width changes.
   when the terminal width changes.
 - Widths are measured over all candidates, not over the current matches.
 - The tag column first gets a third of the space left after the date and the
-  separators, or 12 columns if that is more, but never more than its widest
-  tag list.
+  separators, but never more than its widest tag list.
 - The title then takes up to 80 columns of the rest. If that leaves the title
   fewer than 24 columns (or fewer than its widest title, if shorter), the
   title takes up to that many from the tags, as far as the space allows.
@@ -41,6 +40,7 @@ rebuilds every row when the width changes.
 
 - Column positions change when the terminal width changes. ADR 0027's grid
   did not.
-- On a narrow terminal the tag column can get fewer than 12 columns, or none.
+- On a narrow terminal the title takes space from the tags first, so the tag
+  column can shrink to nothing.
 - One long tag list widens the tag column for every row and keeps the ULID
   hidden until the terminal fits it.

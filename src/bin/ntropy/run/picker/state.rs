@@ -139,24 +139,15 @@ impl<T> PickerState<T> {
 
         let pattern = Pattern::parse(query, CaseMatching::Smart, Normalization::Smart);
         let mut ranked: Vec<(u32, usize, Vec<u32>)> = Vec::new();
-        let mut highlights: Vec<u32> = Vec::new();
+        let mut buf: Vec<u32> = Vec::new();
         for (item, haystack) in self.haystacks.iter().enumerate() {
             // The score over the full content decides whether the row matches and
             // how it ranks.
             let Some(score) = pattern.score(haystack.search.slice(..), &mut self.matcher) else {
                 continue;
             };
-            // Highlights come from re-matching the displayed text; a match found
-            // only in hidden content leaves this empty.
-            highlights.clear();
-            pattern.indices(
-                haystack.display.slice(..),
-                &mut self.matcher,
-                &mut highlights,
-            );
-            highlights.sort_unstable();
-            highlights.dedup();
-            ranked.push((score, item, highlights.clone()));
+            let marks = highlights(&pattern, &haystack.display, &mut self.matcher, &mut buf);
+            ranked.push((score, item, marks));
         }
         // Best score first; equal scores keep their original newest-first order.
         ranked.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
@@ -164,6 +155,45 @@ impl<T> PickerState<T> {
             .into_iter()
             .map(|(_, item, highlights)| Scored { item, highlights })
             .collect();
+    }
+
+    /// Replace the displayed rows, e.g. after the terminal width changed and the
+    /// renderer laid the columns out anew (ADR 0059).
+    ///
+    /// Only the displayed text changes: `display`, `suffix` and the display
+    /// haystack. `Row.search` is ignored, so the renderer's search text must
+    /// not depend on the width. The ranking, the selection and the scroll
+    /// offset all stay; only the highlight positions are recomputed, since
+    /// they index into the display text that just changed.
+    pub fn set_rows(&mut self, rows: Vec<Row>) {
+        debug_assert_eq!(self.items.len(), rows.len(), "one row per item");
+        self.display.clear();
+        self.suffix.clear();
+        for (haystack, row) in self.haystacks.iter_mut().zip(rows) {
+            haystack.display = Utf32String::from(row.display.as_str());
+            self.display.push(row.display);
+            self.suffix.push(row.suffix);
+        }
+
+        let query = self.query.trim();
+        if query.is_empty() {
+            return;
+        }
+        let pattern = Pattern::parse(query, CaseMatching::Smart, Normalization::Smart);
+        let mut buf: Vec<u32> = Vec::new();
+        for scored in &mut self.scored {
+            scored.highlights = highlights(
+                &pattern,
+                &self.haystacks[scored.item].display,
+                &mut self.matcher,
+                &mut buf,
+            );
+        }
+    }
+
+    /// The candidate items, in their original order.
+    pub fn items(&self) -> &[T] {
+        &self.items
     }
 
     /// Set the viewport height (e.g. after a terminal resize), keeping the
@@ -340,6 +370,27 @@ impl<T> PickerState<T> {
         let _ = writeln!(out, "{}", format!("> {}", self.query).trim_end());
         out
     }
+}
+
+/// The characters of `display` that `pattern` matches, as sorted, deduplicated
+/// char indices for highlighting.
+///
+/// `buf` is scratch space reused across rows; it is cleared first, as
+/// `Pattern::indices` only appends. A row is scored on its full search text,
+/// so its display text may hold only some of the query's atoms. `indices`
+/// then reports no match but keeps the positions the earlier atoms pushed,
+/// and those stay highlighted.
+fn highlights(
+    pattern: &Pattern,
+    display: &Utf32String,
+    matcher: &mut Matcher,
+    buf: &mut Vec<u32>,
+) -> Vec<u32> {
+    buf.clear();
+    let _ = pattern.indices(display.slice(..), matcher, buf);
+    buf.sort_unstable();
+    buf.dedup();
+    buf.clone()
 }
 
 #[cfg(test)]
@@ -704,5 +755,154 @@ mod tests {
         let mut s = state_with_search(&[("alpha", "alpha beta")], 10);
         type_query(&mut s, "zzz");
         assert_eq!(s.counter().0, 0);
+    }
+
+    // -------------------------------------------------------------------------
+    // Replacing the rows after a width change
+    // -------------------------------------------------------------------------
+
+    /// Rows with the given display text, a fixed suffix, and `search` text.
+    fn rows(pairs: &[(&str, &str)]) -> Vec<Row> {
+        pairs
+            .iter()
+            .map(|(display, search)| Row {
+                display: display.to_string(),
+                suffix: "  (ID)".to_string(),
+                search: search.to_string(),
+            })
+            .collect()
+    }
+
+    /// The display text of the visible rows, best match first.
+    fn shown(s: &PickerState<String>) -> Vec<String> {
+        s.visible().iter().map(|r| r.display.to_string()).collect()
+    }
+
+    #[test]
+    fn items_are_the_candidates_in_their_original_order() {
+        let s = state(&["alpha", "beta"], 10);
+        assert_eq!(s.items(), ["alpha".to_string(), "beta".to_string()]);
+    }
+
+    #[test]
+    fn set_rows_replaces_display_and_suffix() {
+        let mut s = state(&["alpha", "beta"], 10);
+        s.set_rows(rows(&[("ALPHA", "alpha"), ("BETA", "beta")]));
+        let visible = s.visible();
+        assert_eq!(visible[0].display, "ALPHA");
+        assert_eq!(visible[0].suffix, "  (ID)");
+        assert_eq!(visible[1].display, "BETA");
+    }
+
+    #[test]
+    fn set_rows_keeps_the_selection_and_the_scroll_offset() {
+        let names = ["alpha", "beta", "gamma", "delta", "epsilon"];
+        let mut s = state(&names, 2);
+        for _ in 0..3 {
+            s.select_worse();
+        }
+        let rank = s.selected_rank();
+        let before = shown(&s);
+        let marked: Vec<(String, String)> = names
+            .iter()
+            .map(|n| (format!("{n}!"), n.to_string()))
+            .collect();
+        let pairs: Vec<(&str, &str)> = marked
+            .iter()
+            .map(|(d, n)| (d.as_str(), n.as_str()))
+            .collect();
+        s.set_rows(rows(&pairs));
+        assert_eq!(s.selected_rank(), rank);
+        let after: Vec<String> = before.iter().map(|d| format!("{d}!")).collect();
+        assert_eq!(shown(&s), after);
+    }
+
+    #[test]
+    fn set_rows_keeps_the_ranking_and_ignores_the_new_search_text() {
+        let mut s = state_with_search(&[("zzz", "zzz"), ("abc", "abc"), ("abx", "abx")], 10);
+        type_query(&mut s, "abc");
+        let counter = s.counter();
+        let before = shown(&s);
+        // New search text would match every row and rank them differently;
+        // the ranking still comes from the text the state was built with.
+        s.set_rows(rows(&[("zzz", "abc"), ("abc", "zzz"), ("abx", "abc")]));
+        assert_eq!(s.counter(), counter);
+        assert_eq!(shown(&s), before);
+    }
+
+    #[test]
+    fn later_queries_still_score_the_original_search_text() {
+        let mut s = state_with_search(&[("alpha", "alpha"), ("beta", "beta")], 10);
+        s.set_rows(rows(&[("alpha", "zzz"), ("beta", "zzz")]));
+        type_query(&mut s, "beta");
+        assert_eq!(shown(&s), ["beta"]);
+    }
+
+    #[test]
+    fn set_rows_moves_the_highlights_onto_the_new_display() {
+        let mut s = state_with_search(&[("first", "first"), ("xx…", "xx tailword")], 10);
+        type_query(&mut s, "tailword");
+        let position = shown(&s).iter().position(|d| d == "xx…");
+        assert!(s.visible()[0].highlights.is_empty());
+
+        s.set_rows(rows(&[("first", "first"), ("xx tailword", "xx tailword")]));
+        let visible = s.visible();
+        let row = visible
+            .iter()
+            .position(|r| r.display == "xx tailword")
+            .expect("row still matches");
+        assert_eq!(Some(row), position);
+        assert!(!visible[row].highlights.is_empty());
+    }
+
+    #[test]
+    fn set_rows_with_an_empty_query_leaves_no_highlights() {
+        let mut s = state(&["alpha", "beta"], 10);
+        s.set_rows(rows(&[("ALPHA", "alpha"), ("BETA", "beta")]));
+        assert!(s.visible().iter().all(|r| r.highlights.is_empty()));
+    }
+
+    // -------------------------------------------------------------------------
+    // Highlight pass
+    // -------------------------------------------------------------------------
+
+    fn pattern(query: &str) -> Pattern {
+        Pattern::parse(query, CaseMatching::Smart, Normalization::Smart)
+    }
+
+    #[test]
+    fn highlights_discard_what_the_buffer_held_before() {
+        let mut matcher = Matcher::new(Config::DEFAULT);
+        let mut buf = vec![99];
+        let hay = Utf32String::from("abc");
+        assert_eq!(highlights(&pattern("b"), &hay, &mut matcher, &mut buf), [1]);
+    }
+
+    #[test]
+    fn highlights_keep_the_atoms_that_matched_before_one_failed() {
+        // The display text holds only the first atom; the second matched in
+        // the full search text. The first atom's characters stay highlighted.
+        let mut matcher = Matcher::new(Config::DEFAULT);
+        let mut buf = Vec::new();
+        let hay = Utf32String::from("abc");
+        assert_eq!(
+            highlights(&pattern("ab zz"), &hay, &mut matcher, &mut buf),
+            [0, 1]
+        );
+    }
+
+    #[test]
+    fn highlights_are_sorted_and_free_of_duplicates() {
+        let mut matcher = Matcher::new(Config::DEFAULT);
+        let mut buf = Vec::new();
+        let hay = Utf32String::from("abc");
+        assert_eq!(
+            highlights(&pattern("c a"), &hay, &mut matcher, &mut buf),
+            [0, 2]
+        );
+        assert_eq!(
+            highlights(&pattern("a a"), &hay, &mut matcher, &mut buf),
+            [0]
+        );
     }
 }

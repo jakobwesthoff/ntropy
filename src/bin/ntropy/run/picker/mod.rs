@@ -41,25 +41,30 @@ use state::{PickerState, VisibleRow};
 /// One picker row split by role: searched, displayed, and display-only.
 ///
 /// Fuzzy scoring runs over `search` (the full content, which may extend past
-/// what the width-capped columns can show); match-highlighting runs over
+/// what the width-sized columns can show); match-highlighting runs over
 /// `display`; `suffix` is shown (dimmed) but never matched, so a long
 /// identifier can be visible without polluting the query or the highlight.
 pub struct Row {
     /// The displayed, highlightable text (shown first).
     pub display: String,
-    /// Trailing display-only text, e.g. a note's ULID.
+    /// Trailing display-only text, e.g. a note's ULID; empty when it does not
+    /// fit.
     pub suffix: String,
     /// The full content scored against the query, untruncated and unpadded.
+    /// It must not depend on the row width: the picker scores it once and
+    /// keeps that ranking when the terminal width changes.
     pub search: String,
 }
 
 /// Present `items` in the interactive picker and return the chosen one.
 ///
-/// `render_all` turns the whole item set into its [`Row`]s in one pass, which
-/// lets the renderer align columns across every candidate (see [`layout`]).
+/// `render_all` turns the whole item set into its [`Row`]s in one pass for a
+/// given row width in display columns, which lets the renderer align columns
+/// across every candidate and size them to the terminal (see [`layout`]). It
+/// runs at startup and again whenever the terminal width changes.
 /// Returns `Ok(None)` when there are no items or the user aborts (Esc / Ctrl-C)
 /// without selecting.
-pub fn pick<T>(items: Vec<T>, render_all: impl FnOnce(&[T]) -> Vec<Row>) -> Result<Option<T>> {
+pub fn pick<T>(items: Vec<T>, render_all: impl Fn(&[T], usize) -> Vec<Row>) -> Result<Option<T>> {
     // Nothing to pick: never touch the terminal so non-interactive callers and
     // empty result sets stay side-effect free.
     if items.is_empty() {
@@ -136,10 +141,11 @@ impl<F: FnMut()> Drop for TerminalGuard<F> {
 fn run_loop<T>(
     tty: &mut impl Write,
     items: Vec<T>,
-    render_all: impl FnOnce(&[T]) -> Vec<Row>,
+    render_all: impl Fn(&[T], usize) -> Vec<Row>,
 ) -> Result<Option<T>> {
     let (mut cols, rows) = terminal::size().context("while querying the terminal size")?;
-    let picker_rows = render_all(&items);
+    let mut built_row_width = row_width(cols);
+    let picker_rows = render_all(&items, built_row_width);
     let mut state = PickerState::new(items, picker_rows, list_height(rows));
 
     // The first frame paints a fresh alternate screen and every later frame
@@ -175,6 +181,15 @@ fn run_loop<T>(
                 }
             }
             Event::Resize(new_cols, new_rows) => {
+                // The column layout depends only on the width, so a height-only
+                // resize skips the rebuild. On Unix, crossterm reports at most
+                // one resize per read however many arrived in between, so a
+                // window drag rebuilds once per frame at most.
+                if needs_rebuild(built_row_width, new_cols) {
+                    built_row_width = row_width(new_cols);
+                    let picker_rows = render_all(state.items(), built_row_width);
+                    state.set_rows(picker_rows);
+                }
                 cols = new_cols;
                 state.set_height(list_height(new_rows));
                 clear_all = true;
@@ -194,6 +209,18 @@ const PROMPT_PREFIX: &str = "❯ ";
 /// The selected-row marker. A left bar reads as a selection gutter and stays
 /// distinct from the prompt's `❯`. Two columns wide, like the unselected `  `.
 const SELECTION_POINTER: &str = "▌ ";
+
+/// The display columns a row's content gets on a terminal `cols` wide: what is
+/// left after the selection pointer (or the matching two-space gutter).
+fn row_width(cols: u16) -> usize {
+    (cols as usize).saturating_sub(SELECTION_POINTER.width())
+}
+
+/// Whether a terminal now `new_cols` wide needs its rows laid out again, given
+/// the row width they were built for.
+fn needs_rebuild(built_row_width: usize, new_cols: u16) -> bool {
+    row_width(new_cols) != built_row_width
+}
 
 /// The number of list rows that fit above the divider/prompt/divider/stats chrome.
 fn list_height(terminal_rows: u16) -> usize {
@@ -442,6 +469,31 @@ mod tests {
     #[test]
     fn stats_show_an_empty_state_when_nothing_matches() {
         assert_eq!(stats_line(40, None, 0, 40), "  no matches · 40 total");
+    }
+
+    #[test]
+    fn row_width_leaves_room_for_the_selection_pointer() {
+        assert_eq!(row_width(80), 80 - SELECTION_POINTER.width());
+    }
+
+    #[test]
+    fn row_width_saturates_on_a_terminal_narrower_than_the_pointer() {
+        assert_eq!(row_width(0), 0);
+        assert_eq!(row_width(1), 0);
+        assert_eq!(row_width(2), 0);
+    }
+
+    #[test]
+    fn rows_are_rebuilt_only_when_the_row_width_changes() {
+        assert!(!needs_rebuild(row_width(80), 80));
+        assert!(needs_rebuild(row_width(80), 81));
+        assert!(needs_rebuild(row_width(80), 79));
+    }
+
+    #[test]
+    fn terminals_too_narrow_for_any_row_share_one_layout() {
+        // Every width up to the pointer leaves a zero-width row.
+        assert!(!needs_rebuild(row_width(0), 2));
     }
 
     #[test]

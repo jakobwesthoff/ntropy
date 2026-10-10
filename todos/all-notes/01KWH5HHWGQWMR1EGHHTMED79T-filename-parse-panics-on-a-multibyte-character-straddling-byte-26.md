@@ -98,8 +98,8 @@ The `expect_err` cannot fail: the `TooShort` guard ensures `stem.len() >= 28`, a
 | `src/bin/ntropy/run/lsp/completion/{tag,link}.rs` | Safe: `rfind` and `find` on ASCII delimiters, with guarded byte peeks. |
 | `src/bin/ntropy/run/lsp/uri.rs` (around lines 35-45) | Safe: the index comes from `find('/')`, and percent-decoding is byte-based. |
 | `src/link/code.rs` | Safe: works on `as_bytes()`. The one str slice cuts at `\n`. |
-| `src/bin/ntropy/run/picker/state.rs`, `delete_word` (around lines 190-207) | Safe: uses `rfind` and `len_utf8`, and is documented as multibyte-correct. |
-| `src/bin/ntropy/run/picker/layout.rs` (from around line 108) | Safe: display-width truncation over `chars()` and `char_indices`. |
+| `src/bin/ntropy/run/picker/state.rs`, `delete_word` | Safe: uses `rfind` and `len_utf8`, and is documented as multibyte-correct. |
+| `src/bin/ntropy/run/picker/layout.rs`, `truncate` and `fit_prefix` | Safe: cuts only at `char_indices` boundaries. |
 | `src/query/token.rs` | Safe: tokenizes over `Vec<char>`, with no byte slicing. |
 | `src/ops/select.rs`, `as_ulid` (around lines 84-91) | Safe: a length check, then a full `parse::<Id>()`. |
 | `src/view/leaf.rs` (around lines 70-78) | Safe: uses `Id::tail`. |
