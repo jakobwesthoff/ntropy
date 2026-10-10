@@ -1843,7 +1843,7 @@ dependencies = [
 
 [[package]]
 name = "ntropy"
-version = "2.1.1"
+version = "2.2.0"
 dependencies = [
  "age",
  "anyhow",
