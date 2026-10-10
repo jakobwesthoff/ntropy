@@ -16,7 +16,8 @@ The layout is bottom-anchored, like a shell prompt: the input line sits
 at the bottom and results stack upward, with the best match closest to
 the cursor. Type to filter the list live. Matched characters glow
 yellow and the current row is cyan, both colors drawn from your
-terminal's own palette so the picker follows your theme.
+terminal's own palette so the picker follows your theme. The dimmed line
+under the prompt counts the matches and shows the selected note's ULID.
 
 | Key | Action |
 |-----|--------|
