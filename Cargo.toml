@@ -7,6 +7,16 @@ description = "An opinionated Markdown note-taking and management CLI."
 homepage = "http://westhoffswelt.de"
 repository = "https://github.com/jakobwesthoff/ntropy"
 license = "MPL-2.0"
+# Docs, todos, the agent skill, shell extras and repository tooling are not
+# needed to build ntropy. Of the site frontend sources only grammars.json
+# stays, which a unit test embeds; the built frontend lives in src/site/.
+exclude = [
+    ".adr-dir", ".claude/", ".github/", "CLAUDE.md", "contrib/", "docs/", "justfile",
+    "scripts/", "skills/", "todos/",
+    "site/.bun-version", "site/biome.json", "site/build.ts", "site/bun.lock",
+    "site/node_modules/", "site/package.json", "site/src/", "site/tsconfig.json",
+    "site/vite.config.ts",
+]
 
 [features]
 default = ["encryption"]

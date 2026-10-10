@@ -1,18 +1,14 @@
 ---
-title: "Exclude internal files from the crate package and fill in its metadata"
+title: "Ignore the generated site output and fill in the crate metadata"
 kind: chore
 component: project
 origin: review
 ---
-# Exclude internal files from the crate package and fill in its metadata
+# Ignore the generated site output and fill in the crate metadata
 
-Found in the 2026-07-02 codebase review of packaging and CI. `cargo publish` packages everything that is not gitignored, so internal files reach every `cargo install ntropy` download. The generated website output also shows up as untracked noise in `git status`, and the crate metadata has gaps.
+Found in the 2026-07-02 codebase review of packaging and CI. The generated website output shows up as untracked noise in `git status`, and the crate metadata has gaps. Its finding on internal files in the published crate is fixed by the `exclude` list in `Cargo.toml`.
 
 ## Scope
-
-### Internal files in the published crate
-
-`Cargo.toml` has no `exclude` or `include` list. The package therefore contains `todos/` (planning and todo files tracked in git), `docs/pages/` and `docs/vhs/` (website source and demo tooling), and `.github/` (CI workflows). None is needed to build or use the crate, and ntropy distributes via crates.io (ADR 0022). Add an `include` list (`src`, `tests`, `examples`, `LICENSE`, `README.md`, `CHANGELOG.md` and `Cargo.toml`). `include` is the safer allowlist form than `exclude`.
 
 ### Generated website output
 
@@ -31,6 +27,5 @@ Which homepage to set, which MSRV to declare, and which keywords and categories 
 
 ## Done when
 
-- `cargo package --list` shows no `todos/`, `docs/pages/`, `docs/vhs/` or `.github/` entries.
 - `git status` is clean after a local pages build.
 - The metadata fields are decided and set, or the user has explicitly declined them.
