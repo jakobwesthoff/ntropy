@@ -130,13 +130,14 @@ DSL expression (the id-or-query rule shared with `delete`).
 The picker (ADR 0027) draws on the alternate screen, bottom-anchored: the prompt
 is framed by a blue divider line above and below it, with a dimmed stats line
 beneath the lower divider (indented under the query text, showing the cursor's
-rank within the matches, the match count and the total), and the result list
-grows upward above the top divider with the best match nearest the prompt. Rows are an aligned
-title/date/tags grid (widths in Unicode display columns) with the note's ULID
-trailing dimmed and never matched. The title and tag columns size to the
-terminal width (ADR 0059): a title or tag list gets an ellipsis only when the
-terminal is too narrow for it, the ULID shows only when it fits after them,
-and the grid is laid out again when the width changes. Type to filter; Backspace, Ctrl-W (delete
+rank within the matches, the match count, the total and the selected note's
+ULID), and the result list grows upward above the top divider with the best
+match nearest the prompt. Rows are an aligned title/date/tags grid (widths in
+Unicode display columns). The title and tag columns split the terminal width
+70/30, and a column that needs less than its share leaves the rest to the
+other (ADR 0059): a title or tag list gets an ellipsis only when the terminal
+is too narrow for it, and the grid is laid out again when the width changes.
+The ULID is never matched. Type to filter; Backspace, Ctrl-W (delete
 word) and Ctrl-U (clear) edit the query; Up / Ctrl-P move toward worse matches
 and Down / Ctrl-N toward the best; Enter selects; Esc / Ctrl-C aborts. Matched
 characters are yellow and the selected row cyan with a `▌` bar, all from the

@@ -9,8 +9,9 @@ Accepted
 Supersedes the picker-library part of [ADR 0014](0014-interactive-by-default-cli-with-auto-output-mode.md).
 
 Amended 2026-10-10 by [ADR 0059](0059-width-aware-picker-columns.md): the
-title and tag columns size from the terminal width, rows are rebuilt when the
-width changes, and the ULID shows only in space the title and tags leave over.
+title and tag columns split the terminal width, rows are rebuilt when the
+width changes, and the selected note's ULID shows in the stats line instead of
+at the end of every row.
 
 ## Context
 

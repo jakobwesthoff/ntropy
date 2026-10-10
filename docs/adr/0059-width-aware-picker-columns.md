@@ -7,7 +7,8 @@ Date: 2026-10-10
 Accepted
 
 Amends [ADR 0027](0027-in-house-fuzzy-picker-over-nucleo-and-crossterm.md),
-whose column widths came from absolute caps (title 48, tags 32 columns).
+whose column widths came from absolute caps (title 48, tags 32 columns) and
+whose rows ended in the note's ULID.
 
 ## Context
 
@@ -18,21 +19,20 @@ first and then the tags.
 
 ## Decision
 
-The picker sizes the title and tag columns from the terminal width and
-rebuilds every row when the width changes.
+The picker splits the terminal width between the title and tag columns and
+lays every row out again when the width changes.
 
 - `render_all` receives the width available for a row and is called again
   when the terminal width changes.
 - Widths are measured over all candidates, not over the current matches.
-- The tag column first gets a third of the space left after the date and the
-  separators, but never more than its widest tag list.
-- The title then takes up to 80 columns of the rest. If that leaves the title
-  fewer than 24 columns (or fewer than its widest title, if shorter), the
-  title takes up to that many from the tags, as far as the space allows.
-- The tags then get the space the title leaves, up to their widest tag list;
-  the tag column has no fixed cap.
-- The ULID is shown only when the space left after the title (up to its
-  80-column limit) and the tags (at their full width) holds it.
+- The space left after the date and the separators is split 70/30 between
+  the title and the tags. A column that needs less than its share takes only
+  what it needs and leaves the rest to the other. A title or tag list is cut
+  with an ellipsis only when its column is narrower than it.
+- The title column has no fixed upper limit.
+- The tag list is the last column and is not padded.
+- The ULID is no longer part of a row. The stats line under the prompt shows
+  the selected note's ULID.
 - A width change keeps the ranking, the selection and the scroll position,
   and recomputes the match highlights against the new rows.
 
@@ -40,7 +40,4 @@ rebuilds every row when the width changes.
 
 - Column positions change when the terminal width changes. ADR 0027's grid
   did not.
-- On a narrow terminal the title takes space from the tags first, so the tag
-  column can shrink to nothing.
-- One long tag list widens the tag column for every row and keeps the ULID
-  hidden until the terminal fits it.
+- Only the selected note's ULID is on screen.

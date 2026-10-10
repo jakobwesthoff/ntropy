@@ -10,11 +10,12 @@ and this project adheres to
 
 ### Changed
 
-- The picker sizes its title and tag columns to the terminal width instead
-  of cutting them at 48 and 32 columns. Titles and tag lists get an ellipsis
-  only when the terminal is too narrow for them, the note's ULID shows only
-  when it fits after them, and resizing the terminal lays the columns out
-  again.
+- The picker splits the terminal width between its title and tag columns
+  instead of cutting them at 48 and 32 columns. Titles and tag lists get an
+  ellipsis only when the terminal is too narrow for them, and resizing the
+  terminal lays the columns out again.
+- The picker shows the selected note's ULID in the stats line under the
+  prompt instead of at the end of every row.
 
 ### Fixed
 

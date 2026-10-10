@@ -41,10 +41,8 @@ struct Scored {
 
 /// A row currently inside the viewport, handed to the renderer (or a test).
 pub struct VisibleRow<'a> {
-    /// The displayed, highlightable part of the row (shown first).
+    /// The displayed, highlightable text of the row.
     pub display: &'a str,
-    /// Trailing text shown but never matched or highlighted (e.g. an id).
-    pub suffix: &'a str,
     /// Char positions in `display` to highlight, ascending.
     pub highlights: &'a [u32],
     /// Whether this row is the current selection.
@@ -53,12 +51,13 @@ pub struct VisibleRow<'a> {
 
 /// The picker's interaction state over an owned set of items of type `T`.
 pub struct PickerState<T> {
-    /// The candidate items, index-aligned with `display`/`suffix`/`haystacks`.
+    /// The candidate items, index-aligned with `display`/`detail`/`haystacks`.
     items: Vec<T>,
     /// The displayed, highlightable text per item.
     display: Vec<String>,
-    /// The trailing display-only text per item (shown, never matched).
-    suffix: Vec<String>,
+    /// The display-only detail per item, shown while it is selected and never
+    /// matched.
+    detail: Vec<String>,
     /// Pre-converted search and display haystacks per item.
     haystacks: Vec<Haystacks>,
     /// Reused fuzzy matcher; allocates a large scratch buffer, so it is kept.
@@ -85,7 +84,7 @@ impl<T> PickerState<T> {
     pub fn new(items: Vec<T>, rows: Vec<Row>, height: usize) -> Self {
         debug_assert_eq!(items.len(), rows.len(), "one row per item");
         let mut display: Vec<String> = Vec::with_capacity(rows.len());
-        let mut suffix: Vec<String> = Vec::with_capacity(rows.len());
+        let mut detail: Vec<String> = Vec::with_capacity(rows.len());
         let mut haystacks: Vec<Haystacks> = Vec::with_capacity(rows.len());
         for row in rows {
             haystacks.push(Haystacks {
@@ -93,12 +92,12 @@ impl<T> PickerState<T> {
                 display: Utf32String::from(row.display.as_str()),
             });
             display.push(row.display);
-            suffix.push(row.suffix);
+            detail.push(row.detail);
         }
         let mut state = Self {
             items,
             display,
-            suffix,
+            detail,
             haystacks,
             matcher: Matcher::new(Config::DEFAULT),
             query: String::new(),
@@ -160,7 +159,7 @@ impl<T> PickerState<T> {
     /// Replace the displayed rows, e.g. after the terminal width changed and the
     /// renderer laid the columns out anew (ADR 0059).
     ///
-    /// Only the displayed text changes: `display`, `suffix` and the display
+    /// Only the displayed text changes: `display`, `detail` and the display
     /// haystack. `Row.search` is ignored, so the renderer's search text must
     /// not depend on the width. The ranking, the selection and the scroll
     /// offset all stay; only the highlight positions are recomputed, since
@@ -168,11 +167,11 @@ impl<T> PickerState<T> {
     pub fn set_rows(&mut self, rows: Vec<Row>) {
         debug_assert_eq!(self.items.len(), rows.len(), "one row per item");
         self.display.clear();
-        self.suffix.clear();
+        self.detail.clear();
         for (haystack, row) in self.haystacks.iter_mut().zip(rows) {
             haystack.display = Utf32String::from(row.display.as_str());
             self.display.push(row.display);
-            self.suffix.push(row.suffix);
+            self.detail.push(row.detail);
         }
 
         let query = self.query.trim();
@@ -293,6 +292,13 @@ impl<T> PickerState<T> {
         }
     }
 
+    /// The selected row's detail (e.g. a note's ULID) for the stats line, or
+    /// `None` when nothing matches.
+    pub fn selected_detail(&self) -> Option<&str> {
+        let item = self.scored.get(self.selected)?.item;
+        Some(&self.detail[item])
+    }
+
     /// The rows currently inside the viewport, top to bottom.
     pub fn visible(&self) -> Vec<VisibleRow<'_>> {
         let end = (self.offset + self.height).min(self.scored.len());
@@ -301,7 +307,6 @@ impl<T> PickerState<T> {
                 let s = &self.scored[i];
                 VisibleRow {
                     display: &self.display[s.item],
-                    suffix: &self.suffix[s.item],
                     highlights: &s.highlights,
                     selected: i == self.selected,
                 }
@@ -337,7 +342,8 @@ impl<T> PickerState<T> {
     /// Render the visible state to a plain, deterministic string for snapshot
     /// tests, in screen order (top to bottom): each visible row prefixed with
     /// `> ` (selected) or two spaces and matched characters wrapped in `[ ]`,
-    /// then the `m/n` counter line, then the prompt at the bottom.
+    /// then the `m/n` counter line with the selected row's detail, then the
+    /// prompt at the bottom.
     ///
     /// Rows come from [`Self::list_lines`], so they are bottom-anchored (best
     /// match nearest the prompt). The top blank-fill lines are omitted here to
@@ -362,11 +368,17 @@ impl<T> PickerState<T> {
                     line.push(c);
                 }
             }
-            line.push_str(row.suffix);
             let _ = writeln!(out, "{}", format!("{pointer}{line}").trim_end());
         }
         let (m, n) = self.counter();
-        let _ = writeln!(out, "{m}/{n}");
+        match self.selected_detail().filter(|d| !d.is_empty()) {
+            Some(detail) => {
+                let _ = writeln!(out, "{m}/{n} · {detail}");
+            }
+            None => {
+                let _ = writeln!(out, "{m}/{n}");
+            }
+        }
         let _ = writeln!(out, "{}", format!("> {}", self.query).trim_end());
         out
     }
@@ -397,7 +409,7 @@ fn highlights(
 mod tests {
     use super::*;
 
-    /// A fixed candidate set rendered by its own string identity (no suffix).
+    /// A fixed candidate set rendered by its own string identity (no detail).
     ///
     /// `search` mirrors `display`, so these fixtures exercise the common case
     /// where the searched and displayed text coincide.
@@ -407,7 +419,7 @@ mod tests {
             .iter()
             .map(|s| Row {
                 display: s.clone(),
-                suffix: String::new(),
+                detail: String::new(),
                 search: s.clone(),
             })
             .collect();
@@ -426,7 +438,7 @@ mod tests {
             .iter()
             .map(|(display, search)| Row {
                 display: display.to_string(),
-                suffix: String::new(),
+                detail: String::new(),
                 search: search.to_string(),
             })
             .collect();
@@ -605,23 +617,58 @@ mod tests {
     }
 
     #[test]
-    fn suffix_is_shown_but_not_matched() {
+    fn detail_is_shown_with_the_counter_but_not_matched() {
         let items = vec!["alpha".to_string()];
         let rows = vec![Row {
             display: "alpha".to_string(),
-            suffix: "  (ZID)".into(),
+            detail: "ZID".into(),
             search: "alpha".to_string(),
         }];
         let mut s = PickerState::new(items, rows, 10);
-        // The suffix is part of the displayed row...
+        // The selected row's detail sits next to the counter, not in the row...
         insta::assert_snapshot!(s.debug_render(), @r"
-        > alpha  (ZID)
-        1/1
+        > alpha
+        1/1 · ZID
         >
         ");
-        // ...but a character that occurs only in the suffix finds no match.
+        // ...and a character that occurs only in the detail finds no match.
         s.push_char('z');
         assert_eq!(s.counter().0, 0);
+    }
+
+    #[test]
+    fn selected_detail_follows_the_selection() {
+        let items: Vec<String> = ["alpha", "beta"].iter().map(|s| s.to_string()).collect();
+        let rows = vec![
+            Row {
+                display: "alpha".to_string(),
+                detail: "ID-A".into(),
+                search: "alpha".to_string(),
+            },
+            Row {
+                display: "beta".to_string(),
+                detail: "ID-B".into(),
+                search: "beta".to_string(),
+            },
+        ];
+        let mut s = PickerState::new(items, rows, 10);
+        assert_eq!(s.selected_detail(), Some("ID-A"));
+        s.select_worse();
+        assert_eq!(s.selected_detail(), Some("ID-B"));
+    }
+
+    #[test]
+    fn selected_detail_is_none_when_nothing_matches() {
+        let mut s = state(&["alpha"], 10);
+        s.push_char('z');
+        assert_eq!(s.selected_detail(), None);
+    }
+
+    #[test]
+    fn an_empty_detail_adds_nothing_to_the_counter_line() {
+        let s = state(&["alpha"], 10);
+        assert_eq!(s.selected_detail(), Some(""));
+        assert!(s.debug_render().contains("\n1/1\n"));
     }
 
     #[test]
@@ -761,13 +808,13 @@ mod tests {
     // Replacing the rows after a width change
     // -------------------------------------------------------------------------
 
-    /// Rows with the given display text, a fixed suffix, and `search` text.
+    /// Rows with the given display text, a fixed detail, and `search` text.
     fn rows(pairs: &[(&str, &str)]) -> Vec<Row> {
         pairs
             .iter()
             .map(|(display, search)| Row {
                 display: display.to_string(),
-                suffix: "  (ID)".to_string(),
+                detail: "ID".to_string(),
                 search: search.to_string(),
             })
             .collect()
@@ -785,12 +832,12 @@ mod tests {
     }
 
     #[test]
-    fn set_rows_replaces_display_and_suffix() {
+    fn set_rows_replaces_display_and_detail() {
         let mut s = state(&["alpha", "beta"], 10);
         s.set_rows(rows(&[("ALPHA", "alpha"), ("BETA", "beta")]));
         let visible = s.visible();
         assert_eq!(visible[0].display, "ALPHA");
-        assert_eq!(visible[0].suffix, "  (ID)");
+        assert_eq!(s.selected_detail(), Some("ID"));
         assert_eq!(visible[1].display, "BETA");
     }
 

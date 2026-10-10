@@ -4,31 +4,33 @@
 
 //! Column alignment for picker rows (ADR 0027, ADR 0059).
 //!
-//! The picker shows every candidate as an aligned grid: `title │ date │ tags`
-//! followed by the display-only ULID. Aligning the columns needs the widths of
-//! *all* candidates at once (the title column is padded to the widest title,
-//! and so on), so this is a batch step over the whole candidate set rather
-//! than a per-row render. The display string carries the padding verbatim,
-//! which keeps the fuzzy match positions aligned with what is drawn.
+//! The picker shows every candidate as an aligned grid: `title │ date │ tags`.
+//! Aligning the columns needs the widths of *all* candidates at once (the
+//! title column is padded to the widest title), so this is a batch step over
+//! the whole candidate set rather than a per-row render. The display string
+//! carries the padding verbatim, which keeps the fuzzy match positions aligned
+//! with what is drawn. The note's ULID is not part of the row; it travels as
+//! the row's `detail`, which the picker shows in its stats line while the row
+//! is selected.
 //!
-//! The title and tag columns are sized from the row width the picker passes
-//! in, so a title or tag list is cut with an ellipsis only when the terminal
-//! is too narrow for it. The picker re-runs this step when the terminal width
-//! changes. The allocation is a pure function of the natural column widths and
-//! the row width ([`allocate_columns`]), so its rules are tested on numbers
-//! alone.
+//! The title and tag columns split the row width the picker passes in, so a
+//! title or tag list is cut with an ellipsis only when the terminal is too
+//! narrow for it. The picker re-runs this step when the terminal width
+//! changes. The split is a pure function of the natural column widths, the row
+//! width and the title's share ([`allocate_columns`]), so its rules are tested
+//! on numbers alone.
 
 use ntropy::ops::Candidate;
 use unicode_width::UnicodeWidthStr;
 
 use super::Row;
 
-/// The widest the title column grows, however wide the terminal. One outlier
-/// title would otherwise push the date column of every row far to the right.
-const TITLE_MAX: usize = 80;
-/// The title width that wins over the tags on a narrow terminal (or the
-/// widest title, if shorter).
-const TITLE_FLOOR: usize = 24;
+/// The percentage of the space after the date that the title column may claim
+/// when the tag lists need the rest. Whichever column needs less than its
+/// share leaves the remainder to the other.
+const TITLE_SHARE_PERCENT: usize = 70;
+const _: () = assert!(TITLE_SHARE_PERCENT <= 100, "a share is a percentage");
+
 /// The separator between two columns.
 const SEPARATOR: &str = "  ";
 
@@ -38,49 +40,44 @@ struct Natural {
     title: usize,
     tags: usize,
     date: usize,
-    suffix: usize,
 }
 
-/// The columns a row width affords: the cut widths of the title and tag
-/// columns, and whether the ULID suffix fits after them.
+/// The cut widths a row width affords the title and tag columns.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Widths {
     title: usize,
     tags: usize,
-    show_suffix: bool,
 }
 
 /// Render every candidate into an aligned [`Row`] for a row `width` columns
 /// wide (the terminal width less the selection pointer).
 ///
-/// Each title and tag list is cut to the width [`allocate_columns`] gives its
-/// column, then padded to it, so the date, tags and the trailing ULID line up.
-/// The ULID is the display-only `suffix`, never matched, and is left empty
-/// when it does not fit.
+/// Each title is cut to the width [`allocate_columns`] gives its column and
+/// padded to it, so every date starts at the same column. The tag list is the
+/// last column: it is cut to its width but not padded, so a row ends where its
+/// own content does. The ULID goes into the row's `detail`.
 pub fn align_candidates(candidates: &[Candidate], width: usize) -> Vec<Row> {
-    let widths = allocate_columns(&measure(candidates), width);
+    let widths = allocate_columns(&measure(candidates), width, TITLE_SHARE_PERCENT);
 
     candidates
         .iter()
         .map(|candidate| {
             // A zero-width column (every title empty, no candidate has tags, or
-            // a terminal too narrow to spare the column) is dropped entirely so
-            // it leaves no stray separator.
+            // a terminal too narrow to spare the column) is dropped entirely,
+            // as is a row's empty tag cell, so neither leaves a stray
+            // separator.
             let mut parts: Vec<String> = Vec::new();
             if widths.title > 0 {
                 parts.push(pad(&truncate(&candidate.title, widths.title), widths.title));
             }
             parts.push(date_cell(candidate));
-            if widths.tags > 0 {
-                parts.push(pad(&render_tags(&candidate.tags, widths.tags), widths.tags));
+            let tags = render_tags(&candidate.tags, widths.tags);
+            if !tags.is_empty() {
+                parts.push(tags);
             }
             Row {
                 display: parts.join(SEPARATOR),
-                suffix: if widths.show_suffix {
-                    suffix_cell(candidate)
-                } else {
-                    String::new()
-                },
+                detail: candidate.id.to_string(),
                 search: search_text(candidate),
             }
         })
@@ -101,24 +98,19 @@ fn measure(candidates: &[Candidate]) -> Natural {
         title: widest(&|c| c.title.clone()),
         tags: widest(&|c| bracket_tags(&c.tags)),
         date: widest(&date_cell),
-        suffix: widest(&suffix_cell),
     }
 }
 
 /// Split a row `width` between the title and tag columns (ADR 0059).
 ///
 /// The date is never cut; the title and tags share what is left after it and
-/// the separators of the columns that exist. The tags first get a third of
-/// that budget (at most their natural width), the title takes what it wants
-/// of the rest up to [`TITLE_MAX`], and the tags then get whatever the title
-/// leaves. On a narrow terminal the title takes up to [`TITLE_FLOOR`] columns
-/// from the tags' share. The ULID is shown only in space left over once both
-/// columns have their full width, so widening the terminal never shrinks a
-/// column to make room for it. No width ever exceeds the budget.
-fn allocate_columns(natural: &Natural, width: usize) -> Widths {
-    let title_want = natural.title.min(TITLE_MAX);
-    let tags_want = natural.tags;
-
+/// the separators of the columns that exist. When both columns need more than
+/// that budget, the title gets `title_share_percent` of it and the tags the
+/// rest. A column that needs less than its share takes only what it needs and
+/// leaves the remainder to the other, so no space sits unused while either
+/// column is cut. Neither width ever exceeds the budget or its natural width,
+/// and neither shrinks as `width` grows.
+fn allocate_columns(natural: &Natural, width: usize, title_share_percent: usize) -> Widths {
     // The separator budget follows the natural widths. When a narrow row
     // later drops the tag column, its two separator columns go unused.
     let separator = SEPARATOR.width();
@@ -126,35 +118,25 @@ fn allocate_columns(natural: &Natural, width: usize) -> Widths {
         + if natural.tags > 0 { separator } else { 0 };
     let budget = width.saturating_sub(natural.date + separators);
 
-    let first_tags = tags_want.min(budget / 3);
-    let mut title = title_want.min(budget.saturating_sub(first_tags));
-    if title < natural.title.min(TITLE_FLOOR) {
-        title = natural.title.min(TITLE_FLOOR).min(budget);
-    }
+    // The tags hold on to the part of their share they need, and the title
+    // takes up to everything else.
+    let title_share = budget * title_share_percent.min(100) / 100;
+    let tags_reserve = natural.tags.min(budget - title_share);
+    let title = natural.title.min(budget - tags_reserve);
 
     // The brackets alone take two columns, so a tag cell narrower than three
     // could show nothing of the list.
-    let mut tags = tags_want.min(budget - title);
+    let mut tags = natural.tags.min(budget - title);
     if tags < 3 {
         tags = 0;
     }
 
-    Widths {
-        title,
-        tags,
-        show_suffix: budget - title - tags >= natural.suffix,
-    }
+    Widths { title, tags }
 }
 
 /// The date cell, `(YYYY-MM-DD)`.
 fn date_cell(candidate: &Candidate) -> String {
     format!("({})", candidate.date)
-}
-
-/// The ULID suffix cell, carrying its own two-space separator so it can be
-/// left out without leaving one behind.
-fn suffix_cell(candidate: &Candidate) -> String {
-    format!("{SEPARATOR}({})", candidate.id)
 }
 
 /// The full content scored against the query, in display order
@@ -273,21 +255,32 @@ mod tests {
         }
     }
 
-    /// Natural widths with today's date (`(YYYY-MM-DD)`) and ULID suffix
-    /// (`"  (" + 26 + ")"`) cells.
+    /// Natural widths with today's date cell (`(YYYY-MM-DD)`).
     fn natural(title: usize, tags: usize) -> Natural {
         Natural {
             title,
             tags,
             date: 12,
-            suffix: 30,
         }
     }
 
-    /// `(title, tags, show_suffix)` of an allocation, for compact assertions.
-    fn alloc(natural: &Natural, width: usize) -> (usize, usize, bool) {
-        let w = allocate_columns(natural, width);
-        (w.title, w.tags, w.show_suffix)
+    /// The title share the allocation tests pin their numbers to. It is fixed
+    /// here rather than taken from [`TITLE_SHARE_PERCENT`], so tuning the
+    /// picker's split does not rewrite these expectations.
+    const SPLIT: usize = 70;
+
+    /// `(title, tags)` of an allocation at [`SPLIT`], for compact assertions.
+    fn alloc(natural: &Natural, width: usize) -> (usize, usize) {
+        let w = allocate_columns(natural, width, SPLIT);
+        (w.title, w.tags)
+    }
+
+    /// The budget `allocate_columns` splits: the row width less the date and
+    /// the separators of the columns that exist.
+    fn budget(natural: &Natural, width: usize) -> usize {
+        let separators =
+            if natural.title > 0 { 2 } else { 0 } + if natural.tags > 0 { 2 } else { 0 };
+        width.saturating_sub(natural.date + separators)
     }
 
     /// The display column at which the date starts (each `(` opens the date).
@@ -302,10 +295,9 @@ mod tests {
         cell.trim_end().to_string()
     }
 
-    /// The tag cell of a display row, without its padding.
+    /// The tag cell of a display row.
     fn tag_cell(display: &str) -> String {
-        let cell: String = display.chars().skip_while(|c| *c != '[').collect();
-        cell.trim_end().to_string()
+        display.chars().skip_while(|c| *c != '[').collect()
     }
 
     // -------------------------------------------------------------------------
@@ -313,45 +305,127 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[test]
-    fn everything_fits_at_natural_widths_with_the_ulid() {
-        assert_eq!(alloc(&natural(60, 40), WIDE), (60, 40, true));
+    fn everything_fits_at_natural_widths() {
+        assert_eq!(alloc(&natural(60, 40), WIDE), (60, 40));
     }
 
     #[test]
-    fn tags_are_held_to_their_share_while_the_title_is_truncated() {
-        // Row 118: budget 118 - 12 - 2 - 2 = 102, a third of it is 34.
-        let (title, tags, show_suffix) = alloc(&natural(100, 100), 118);
-        assert_eq!(tags, 34);
-        assert_eq!(title, 68);
-        assert!(!show_suffix);
+    fn a_long_title_and_long_tags_split_seventy_thirty() {
+        // Row 118: budget 118 - 12 - 2 - 2 = 102; 70% of it is 71.
+        assert_eq!(alloc(&natural(100, 100), 118), (71, 31));
     }
 
     #[test]
-    fn the_title_is_held_at_title_max_on_a_very_wide_terminal() {
-        let (title, tags, show_suffix) = alloc(&natural(200, 10), WIDE);
-        assert_eq!(title, TITLE_MAX);
-        assert_eq!(tags, 10);
-        assert!(show_suffix);
+    fn a_title_that_fits_leaves_all_the_rest_to_the_tags() {
+        // Row 98: budget 82. The 10-column title needs far less than its
+        // share, so the tags get the other 72.
+        assert_eq!(alloc(&natural(10, 150), 98), (10, 72));
     }
 
     #[test]
-    fn space_the_title_does_not_use_goes_to_the_tags() {
-        // Row 98: budget 82. The tags' first share is 27, the 10-column title
-        // leaves 72 of the budget, and the tags take all of it.
-        assert_eq!(alloc(&natural(10, 150), 98), (10, 72, false));
+    fn tags_that_fit_leave_all_the_rest_to_the_title() {
+        // Row 116: budget 100. The 10-column tag lists need less than their
+        // 30, so the title gets 90 rather than 70.
+        assert_eq!(alloc(&natural(100, 10), 116), (90, 10));
     }
 
     #[test]
-    fn the_ulid_shows_only_once_title_and_tags_fit_in_full() {
-        // 60 + 2 + 12 + 2 + 40 + 30 = 146.
-        assert_eq!(alloc(&natural(60, 40), 145), (60, 40, false));
-        assert_eq!(alloc(&natural(60, 40), 146), (60, 40, true));
+    fn the_title_has_no_fixed_cap() {
+        assert_eq!(alloc(&natural(200, 10), WIDE), (200, 10));
     }
 
     #[test]
-    fn widening_never_shrinks_a_column_or_hides_the_ulid() {
-        let titles = [0, 1, 5, 20, 23, 24, 25, 30, 60, 79, 80, 81, 100, 200];
-        let tags = [0, 3, 4, 5, 6, 12, 13, 20, 40, 150];
+    fn a_vault_like_the_screenshot_fits_in_full_at_218_columns() {
+        // Titles up to 83 columns, tag lists up to 106; the row is the
+        // terminal width less the two-column pointer.
+        assert_eq!(alloc(&natural(83, 106), 216), (83, 106));
+        assert_eq!(alloc(&natural(83, 106), 118), (71, 31));
+        assert_eq!(alloc(&natural(83, 106), 78), (43, 19));
+    }
+
+    #[test]
+    fn narrow_rows_keep_the_split() {
+        let nat = natural(60, 40);
+        assert_eq!(alloc(&nat, 0), (0, 0));
+        assert_eq!(alloc(&nat, 26), (7, 3));
+        assert_eq!(alloc(&nat, 30), (9, 5));
+        assert_eq!(alloc(&nat, 38), (15, 7));
+    }
+
+    #[test]
+    fn the_title_share_is_a_parameter() {
+        // Row 118: budget 102.
+        let nat = natural(100, 100);
+        assert_eq!(
+            allocate_columns(&nat, 118, 50),
+            Widths {
+                title: 51,
+                tags: 51
+            }
+        );
+        assert_eq!(
+            allocate_columns(&nat, 118, 100),
+            Widths {
+                title: 100,
+                tags: 0
+            }
+        );
+        assert_eq!(
+            allocate_columns(&nat, 118, 0),
+            Widths {
+                title: 2,
+                tags: 100
+            }
+        );
+    }
+
+    #[test]
+    fn rows_are_laid_out_at_the_configured_share() {
+        let cands = [candidate(
+            ULID_A,
+            &"x".repeat(100),
+            "2026-06-25",
+            &["alpha", "beta", "gamma", "delta", "epsilon", "zeta", "eta"],
+        )];
+        let width = 118;
+        let expected = allocate_columns(&measure(&cands), width, TITLE_SHARE_PERCENT);
+        let rows = align_candidates(&cands, width);
+        assert_eq!(title_cell(&rows[0].display).width(), expected.title);
+        assert_eq!(tag_cell(&rows[0].display).width(), expected.tags);
+    }
+
+    #[test]
+    fn a_tag_column_under_three_columns_is_dropped() {
+        // Row 20: budget 4 splits 2 / 2, and two columns cannot hold the
+        // brackets around a single character.
+        assert_eq!(alloc(&natural(60, 40), 20), (2, 0));
+    }
+
+    #[test]
+    fn each_column_gets_at_least_its_share_when_it_needs_it() {
+        let titles = [0, 1, 5, 20, 24, 30, 60, 83, 100, 200];
+        let tags = [0, 3, 4, 5, 6, 12, 20, 40, 106, 150];
+        for &title_nat in &titles {
+            for &tags_nat in &tags {
+                let nat = natural(title_nat, tags_nat);
+                for width in 0..WIDE {
+                    let (title, tags) = alloc(&nat, width);
+                    let budget = budget(&nat, width);
+                    let title_share = budget * SPLIT / 100;
+                    let tags_share = budget - title_share;
+                    assert!(title >= title_nat.min(title_share), "{nat:?} at {width}");
+                    if tags_nat.min(tags_share) >= 3 {
+                        assert!(tags >= tags_nat.min(tags_share), "{nat:?} at {width}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn widening_never_shrinks_a_column() {
+        let titles = [0, 1, 5, 20, 24, 30, 60, 83, 100, 200];
+        let tags = [0, 3, 4, 5, 6, 12, 20, 40, 106, 150];
         for &title_nat in &titles {
             for &tags_nat in &tags {
                 let nat = natural(title_nat, tags_nat);
@@ -362,10 +436,6 @@ mod tests {
                         current.0 >= previous.0 && current.1 >= previous.1,
                         "{nat:?} shrinks at {width}: {previous:?} -> {current:?}"
                     );
-                    assert!(
-                        current.2 || !previous.2,
-                        "{nat:?} hides the ULID at {width}"
-                    );
                     previous = current;
                 }
             }
@@ -373,33 +443,13 @@ mod tests {
     }
 
     #[test]
-    fn the_ulid_never_shows_while_a_column_is_cut_below_its_want() {
-        let titles = [0, 5, 24, 60, 80, 100, 200];
-        let tags = [0, 3, 12, 40, 150];
-        for &title_nat in &titles {
-            for &tags_nat in &tags {
-                let nat = natural(title_nat, tags_nat);
-                for width in 0..WIDE {
-                    let (title, tags, show_suffix) = alloc(&nat, width);
-                    if show_suffix {
-                        assert_eq!(title, title_nat.min(TITLE_MAX), "{nat:?} at {width}");
-                        assert_eq!(tags, tags_nat, "{nat:?} at {width}");
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn allocated_widths_never_exceed_the_budget() {
+    fn allocated_widths_never_exceed_the_budget_or_the_natural_widths() {
         for &(title_nat, tags_nat) in &[(60, 40), (10, 150), (0, 40), (200, 0), (5, 5)] {
             let nat = natural(title_nat, tags_nat);
             for width in 0..WIDE {
-                let (title, tags, _) = alloc(&nat, width);
-                let separators =
-                    if title_nat > 0 { 2 } else { 0 } + if tags_nat > 0 { 2 } else { 0 };
-                let budget = width.saturating_sub(nat.date + separators);
-                assert!(title + tags <= budget, "{nat:?} at {width}");
+                let (title, tags) = alloc(&nat, width);
+                assert!(title + tags <= budget(&nat, width), "{nat:?} at {width}");
+                assert!(title <= title_nat && tags <= tags_nat, "{nat:?} at {width}");
             }
         }
     }
@@ -408,45 +458,15 @@ mod tests {
     fn without_titles_no_title_separator_is_budgeted() {
         // Row 54: budget 54 - 12 - 2 = 40 holds the full tag list. A budgeted
         // title separator would leave 38.
-        assert_eq!(alloc(&natural(0, 40), 54), (0, 40, false));
+        assert_eq!(alloc(&natural(0, 40), 54), (0, 40));
     }
 
     #[test]
     fn without_tags_no_tag_separator_is_budgeted() {
         // Row 74: budget 74 - 12 - 2 = 60 holds the full title. A budgeted
         // tag separator would leave 58.
-        assert_eq!(alloc(&natural(60, 0), 74), (60, 0, false));
+        assert_eq!(alloc(&natural(60, 0), 74), (60, 0));
     }
-
-    #[test]
-    fn without_titles_the_ulid_stays_hidden_while_the_tags_are_cut() {
-        // 12 + 2 + 40 + 30 = 84.
-        assert_eq!(alloc(&natural(0, 40), 83), (0, 40, false));
-        assert_eq!(alloc(&natural(0, 40), 53), (0, 39, false));
-        assert_eq!(alloc(&natural(0, 40), 84), (0, 40, true));
-    }
-
-    #[test]
-    fn narrow_rows_give_the_title_its_floor_before_the_tags() {
-        let nat = natural(60, 40);
-        assert_eq!(alloc(&nat, 0), (0, 0, false));
-        assert_eq!(alloc(&nat, 38), (22, 0, false));
-        // Budget 25: the title takes 24, and the single column left for the
-        // tags cannot hold their brackets.
-        assert_eq!(alloc(&nat, 41), (24, 0, false));
-        assert_eq!(alloc(&nat, 46), (24, 6, false));
-        assert_eq!(alloc(&nat, 50), (24, 10, false));
-        assert_eq!(alloc(&nat, 54), (26, 12, false));
-    }
-
-    #[test]
-    fn a_title_shorter_than_the_floor_claims_only_its_own_width() {
-        // Row 20: budget 4. A 10-column title wants less than the floor and
-        // still gets everything the budget holds.
-        assert_eq!(alloc(&natural(10, 40), 20), (4, 0, false));
-        assert_eq!(alloc(&natural(10, 40), 40), (10, 14, false));
-    }
-
     // -------------------------------------------------------------------------
     // Measuring
     // -------------------------------------------------------------------------
@@ -461,13 +481,12 @@ mod tests {
         assert_eq!(nat.title, 120);
         assert_eq!(nat.tags, "[home, urgent]".width());
         assert_eq!(nat.date, "(2026-06-25)".width());
-        assert_eq!(nat.suffix, format!("  ({ULID_A})").width());
     }
 
     #[test]
     fn measure_of_no_candidates_is_all_zero() {
         let nat = measure(&[]);
-        assert_eq!((nat.title, nat.tags, nat.date, nat.suffix), (0, 0, 0, 0));
+        assert_eq!((nat.title, nat.tags, nat.date), (0, 0, 0));
     }
 
     // -------------------------------------------------------------------------
@@ -525,7 +544,7 @@ mod tests {
     fn an_over_long_title_is_ellipsis_truncated_to_its_column() {
         let cands = [candidate(ULID_A, &"x".repeat(60), "2026-06-25", &[])];
         let width = 60;
-        let title_w = allocate_columns(&measure(&cands), width).title;
+        let title_w = allocate_columns(&measure(&cands), width, TITLE_SHARE_PERCENT).title;
         assert!(title_w < 60);
         let title = title_cell(&align_candidates(&cands, width)[0].display);
         assert_eq!(title.width(), title_w);
@@ -541,34 +560,15 @@ mod tests {
     }
 
     #[test]
-    fn a_title_exactly_at_title_max_is_not_truncated() {
-        let exact = "y".repeat(TITLE_MAX);
-        let rows = align_candidates(&[candidate(ULID_A, &exact, "2026-06-25", &[])], WIDE);
-        assert!(rows[0].display.starts_with(&exact));
+    fn a_very_long_title_shows_in_full_when_the_terminal_fits_it() {
+        let long = "y".repeat(150);
+        let rows = align_candidates(&[candidate(ULID_A, &long, "2026-06-25", &[])], WIDE);
+        assert!(rows[0].display.starts_with(&long));
         assert!(!rows[0].display.contains('…'));
     }
 
     #[test]
-    fn a_title_one_past_title_max_is_cut_to_title_max() {
-        let long = "y".repeat(TITLE_MAX + 1);
-        let rows = align_candidates(&[candidate(ULID_A, &long, "2026-06-25", &[])], WIDE);
-        let title = title_cell(&rows[0].display);
-        assert_eq!(title.width(), TITLE_MAX);
-        assert!(title.ends_with('…'));
-    }
-
-    #[test]
-    fn a_title_past_title_max_is_cut_while_the_ulid_shows() {
-        let rows = align_candidates(
-            &[candidate(ULID_A, &"z".repeat(100), "2026-06-25", &[])],
-            WIDE,
-        );
-        assert_eq!(title_cell(&rows[0].display).width(), TITLE_MAX);
-        assert_eq!(rows[0].suffix, format!("  ({ULID_A})"));
-    }
-
-    #[test]
-    fn tags_are_bracketed_padded_and_aligned() {
+    fn tags_are_bracketed_and_end_the_row_unpadded() {
         let rows = align_candidates(
             &[
                 candidate(ULID_A, "t", "2026-06-25", &["work"]),
@@ -576,10 +576,8 @@ mod tests {
             ],
             WIDE,
         );
-        assert!(rows[0].display.contains("[work]"));
-        assert!(rows[1].display.contains("[home, urgent]"));
-        // Both ULID suffixes start at the same offset thanks to tag padding.
-        assert_eq!(rows[0].display.width(), rows[1].display.width());
+        assert!(rows[0].display.ends_with("(2026-06-25)  [work]"));
+        assert!(rows[1].display.ends_with("(2026-06-25)  [home, urgent]"));
     }
 
     #[test]
@@ -588,7 +586,7 @@ mod tests {
         let cands = [candidate(ULID_A, "t", "2026-06-25", &many)];
         let width = 40;
         let nat = measure(&cands);
-        let tags_w = allocate_columns(&nat, width).tags;
+        let tags_w = allocate_columns(&nat, width, TITLE_SHARE_PERCENT).tags;
         assert!(tags_w < nat.tags);
         let tags = tag_cell(&align_candidates(&cands, width)[0].display);
         assert_eq!(tags.width(), tags_w);
@@ -603,7 +601,7 @@ mod tests {
     }
 
     #[test]
-    fn a_tagless_row_still_aligns_with_a_tagged_one() {
+    fn a_tagless_row_among_tagged_ones_ends_at_its_date() {
         let rows = align_candidates(
             &[
                 candidate(ULID_A, "t", "2026-06-25", &["work"]),
@@ -611,8 +609,7 @@ mod tests {
             ],
             WIDE,
         );
-        // The tagless row pads its (blank) tag column so both suffixes align.
-        assert_eq!(rows[0].display.width(), rows[1].display.width());
+        assert_eq!(rows[1].display, "t  (2026-06-25)");
     }
 
     #[test]
@@ -622,15 +619,16 @@ mod tests {
     }
 
     #[test]
-    fn suffix_carries_the_dimmed_ulid() {
+    fn detail_carries_the_ulid() {
         let rows = align_candidates(&[candidate(ULID_A, "t", "2026-06-25", &[])], WIDE);
-        assert_eq!(rows[0].suffix, format!("  ({ULID_A})"));
+        assert_eq!(rows[0].detail, ULID_A);
+        assert!(!rows[0].display.contains(ULID_A));
     }
 
     #[test]
-    fn suffix_is_empty_when_the_ulid_does_not_fit() {
-        let rows = align_candidates(&[candidate(ULID_A, "title", "2026-06-25", &["work"])], 40);
-        assert!(rows[0].suffix.is_empty());
+    fn detail_carries_the_ulid_at_any_width() {
+        let rows = align_candidates(&[candidate(ULID_A, "title", "2026-06-25", &["work"])], 0);
+        assert_eq!(rows[0].detail, ULID_A);
     }
 
     #[test]
@@ -647,7 +645,7 @@ mod tests {
         // Below the date and its separators nothing but the edge cut helps.
         for width in 16..WIDE {
             for row in align_candidates(&cands, width) {
-                let used = row.display.width() + row.suffix.width();
+                let used = row.display.width();
                 assert!(used <= width, "{used} columns at width {width}");
             }
         }
@@ -657,7 +655,7 @@ mod tests {
     fn a_zero_row_width_leaves_only_the_date() {
         let rows = align_candidates(&[candidate(ULID_A, "title", "2026-06-25", &["work"])], 0);
         assert_eq!(rows[0].display, "(2026-06-25)");
-        assert!(rows[0].suffix.is_empty());
+        assert_eq!(rows[0].detail, ULID_A);
     }
 
     #[test]
@@ -675,7 +673,7 @@ mod tests {
     fn single_candidate_pads_to_its_own_width() {
         let rows = align_candidates(&[candidate(ULID_A, "solo", "2026-06-25", &["x"])], WIDE);
         assert_eq!(rows.len(), 1);
-        assert!(rows[0].display.starts_with("solo  (2026-06-25)  [x]"));
+        assert_eq!(rows[0].display, "solo  (2026-06-25)  [x]");
     }
 
     #[test]
@@ -683,7 +681,7 @@ mod tests {
         // 30 CJK chars span 60 display columns.
         let cands = [candidate(ULID_A, &"ナ".repeat(30), "2026-06-25", &[])];
         let width = 50;
-        let title_w = allocate_columns(&measure(&cands), width).title;
+        let title_w = allocate_columns(&measure(&cands), width, TITLE_SHARE_PERCENT).title;
         assert!(title_w < 60);
         let rows = align_candidates(&cands, width);
         let title = title_cell(&rows[0].display);
@@ -730,7 +728,7 @@ mod tests {
             candidate(ULID_B, "plain", "2026-06-25", &[]),
         ];
         let width = 60;
-        let title_w = allocate_columns(&measure(&cands), width).title;
+        let title_w = allocate_columns(&measure(&cands), width, TITLE_SHARE_PERCENT).title;
         let rows = align_candidates(&cands, width);
         assert_eq!(date_column(&rows[0].display), title_w + 2);
         assert_eq!(date_column(&rows[0].display), date_column(&rows[1].display));

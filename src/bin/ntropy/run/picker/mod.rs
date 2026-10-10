@@ -42,14 +42,15 @@ use state::{PickerState, VisibleRow};
 ///
 /// Fuzzy scoring runs over `search` (the full content, which may extend past
 /// what the width-sized columns can show); match-highlighting runs over
-/// `display`; `suffix` is shown (dimmed) but never matched, so a long
-/// identifier can be visible without polluting the query or the highlight.
+/// `display`; `detail` is never matched and appears only in the stats line
+/// while its row is selected, so a long identifier stays reachable without
+/// taking room on every row or polluting the query or the highlight.
 pub struct Row {
-    /// The displayed, highlightable text (shown first).
+    /// The displayed, highlightable text.
     pub display: String,
-    /// Trailing display-only text, e.g. a note's ULID; empty when it does not
-    /// fit.
-    pub suffix: String,
+    /// Display-only text about the row, e.g. a note's ULID, shown in the stats
+    /// line while the row is selected.
+    pub detail: String,
     /// The full content scored against the query, untruncated and unpadded.
     /// It must not depend on the row width: the picker scores it once and
     /// keeps that ranking when the terminal width changes.
@@ -287,7 +288,13 @@ fn draw<T>(tty: &mut impl Write, state: &PickerState<T>, cols: u16, clear_all: b
         tty,
         cursor::MoveTo(0, prompt_row + 2),
         style::SetAttribute(Attribute::Dim),
-        style::Print(stats_line(cols as usize, rank, matching, total)),
+        style::Print(stats_line(
+            cols as usize,
+            rank,
+            matching,
+            total,
+            state.selected_detail(),
+        )),
         style::SetAttribute(Attribute::Reset),
         terminal::Clear(terminal::ClearType::UntilNewLine),
     )?;
@@ -324,16 +331,27 @@ fn divider_line(width: usize, fill: char) -> String {
 
 /// The dimmed stats string, indented to sit directly under the query text (past
 /// the prompt prefix). Shows the cursor's rank within the matches plus the total
-/// candidate count, or an empty-state hint. Clipped to `width` on a narrow
-/// terminal. `rank` is the 1-based position of the selection among the matches,
-/// or `None` when nothing matches.
-fn stats_line(width: usize, rank: Option<usize>, matching: usize, total: usize) -> String {
+/// candidate count, or an empty-state hint, followed by the selected row's
+/// detail (the note's ULID) when it has one. Clipped to `width` on a narrow
+/// terminal, which cuts the detail first. `rank` is the 1-based position of the
+/// selection among the matches, or `None` when nothing matches.
+fn stats_line(
+    width: usize,
+    rank: Option<usize>,
+    matching: usize,
+    total: usize,
+    detail: Option<&str>,
+) -> String {
     let body = match rank {
         None => format!("no matches · {total} total"),
         Some(rank) => format!("{rank}/{matching} · {total} total"),
     };
     let mut line = " ".repeat(PROMPT_PREFIX.width());
     line.push_str(&body);
+    if let Some(detail) = detail.filter(|d| !d.is_empty()) {
+        line.push_str(" · ");
+        line.push_str(detail);
+    }
     if line.chars().count() > width {
         return line.chars().take(width).collect();
     }
@@ -341,9 +359,8 @@ fn stats_line(width: usize, rank: Option<usize>, matching: usize, total: usize) 
 }
 
 /// Draw a single list row. The selected row is drawn in cyan with a `▌ ` bar;
-/// matched characters are yellow on either row; the display-only ULID suffix is
-/// dimmed (or rides the cyan body on the selected row). All colors are the
-/// terminal's own ANSI palette, so the picker adapts to its theme.
+/// matched characters are yellow on either row. All colors are the terminal's
+/// own ANSI palette, so the picker adapts to its theme.
 fn draw_row(tty: &mut impl Write, row: &VisibleRow<'_>, cols: u16) -> Result<()> {
     let width = cols as usize;
     let selected = row.selected;
@@ -356,16 +373,13 @@ fn draw_row(tty: &mut impl Write, row: &VisibleRow<'_>, cols: u16) -> Result<()>
     queue!(tty, style::Print(pointer))?;
 
     // Clip to the terminal width (in display columns) so a long row never wraps
-    // and breaks the layout. The matchable part is drawn first (matches in
-    // yellow), then the suffix fills whatever budget remains. The `▌ ` bar is two
-    // display columns; a wide character is dropped whole rather than allowed to
-    // straddle the right edge. The visible display is a character prefix, so the
-    // highlight indices still address its characters.
-    let (shown, suffix) = visible_parts(
-        row.display,
-        row.suffix,
-        width.saturating_sub(pointer.width()),
-    );
+    // and breaks the layout. The `▌ ` bar is two display columns; a wide
+    // character is dropped whole rather than allowed to straddle the right
+    // edge. The clip measures like the layout's padding does (see
+    // `layout::fit_prefix`), so a row laid out to fit is drawn whole. The
+    // visible part is a character prefix, so the highlight indices still
+    // address its characters.
+    let shown = layout::fit_prefix(row.display, width.saturating_sub(pointer.width()));
     let highlights = row.highlights;
     for (i, c) in shown.chars().enumerate() {
         let matched = highlights.binary_search(&(i as u32)).is_ok();
@@ -383,18 +397,6 @@ fn draw_row(tty: &mut impl Write, row: &VisibleRow<'_>, cols: u16) -> Result<()>
         }
     }
 
-    if !suffix.is_empty() {
-        // The ULID is dimmed on unselected rows; on the selected row it simply
-        // rides the cyan body color.
-        if !selected {
-            queue!(tty, style::SetAttribute(Attribute::Dim))?;
-        }
-        queue!(tty, style::Print(suffix))?;
-        if !selected {
-            queue!(tty, style::SetAttribute(Attribute::NormalIntensity))?;
-        }
-    }
-
     // Reset styling so it never bleeds into the next line or a blank area.
     queue!(
         tty,
@@ -402,17 +404,6 @@ fn draw_row(tty: &mut impl Write, row: &VisibleRow<'_>, cols: u16) -> Result<()>
         style::ResetColor
     )?;
     Ok(())
-}
-
-/// The parts of a row's `display` and `suffix` that fit into `width` columns.
-///
-/// The display text is clipped first and the suffix gets whatever room is
-/// left. Both use the string-width measure of [`layout::fit_prefix`], the same
-/// one the layout pads with, so a row the layout sized to fit is drawn whole.
-fn visible_parts<'a>(display: &'a str, suffix: &'a str, width: usize) -> (&'a str, &'a str) {
-    let shown = layout::fit_prefix(display, width);
-    let rest = width.saturating_sub(shown.width());
-    (shown, layout::fit_prefix(suffix, rest))
 }
 
 #[cfg(test)]
@@ -460,7 +451,7 @@ mod tests {
 
     #[test]
     fn stats_align_under_the_query_text() {
-        let line = stats_line(40, Some(3), 12, 40);
+        let line = stats_line(40, Some(3), 12, 40, None);
         // Indented past the prompt prefix so it sits under the query text.
         assert_eq!(line, "  3/12 · 40 total");
         assert_eq!(line.trim_start(), "3/12 · 40 total");
@@ -468,7 +459,26 @@ mod tests {
 
     #[test]
     fn stats_show_an_empty_state_when_nothing_matches() {
-        assert_eq!(stats_line(40, None, 0, 40), "  no matches · 40 total");
+        assert_eq!(stats_line(40, None, 0, 40, None), "  no matches · 40 total");
+    }
+
+    #[test]
+    fn stats_end_with_the_selected_rows_detail() {
+        assert_eq!(
+            stats_line(80, Some(3), 12, 40, Some("01ARZ3NDEKTSV4RRFFQ69G5FAV")),
+            "  3/12 · 40 total · 01ARZ3NDEKTSV4RRFFQ69G5FAV"
+        );
+    }
+
+    #[test]
+    fn an_empty_detail_adds_no_separator() {
+        assert_eq!(stats_line(80, Some(1), 1, 1, Some("")), "  1/1 · 1 total");
+    }
+
+    #[test]
+    fn a_narrow_terminal_cuts_the_detail_first() {
+        let line = stats_line(20, Some(3), 12, 40, Some("01ARZ3NDEKTSV4RRFFQ69G5FAV"));
+        assert_eq!(line, "  3/12 · 40 total · ");
     }
 
     #[test]
@@ -497,37 +507,8 @@ mod tests {
     }
 
     #[test]
-    fn visible_parts_keep_a_zwj_title_that_fits_by_string_width() {
-        // The family emoji plus `x` is three columns wide, although its
-        // characters' widths sum to more; it must not be cut early.
-        let display = "🧑\u{200D}🤝\u{200D}🧑x";
-        assert_eq!(visible_parts(display, "  (ID)", 3), (display, ""));
-    }
-
-    #[test]
-    fn visible_parts_cut_the_display_at_the_edge() {
-        assert_eq!(visible_parts("abcdef", "  (ID)", 4), ("abcd", ""));
-    }
-
-    #[test]
-    fn visible_parts_give_the_suffix_what_the_display_leaves() {
-        assert_eq!(visible_parts("ab", "  (ID)", 5), ("ab", "  ("));
-        assert_eq!(visible_parts("ab", "  (ID)", 20), ("ab", "  (ID)"));
-    }
-
-    #[test]
-    fn visible_parts_drop_a_wide_character_that_would_straddle_the_edge() {
-        assert_eq!(visible_parts("日本", "", 3), ("日", ""));
-    }
-
-    #[test]
-    fn visible_parts_of_zero_width_are_empty() {
-        assert_eq!(visible_parts("ab", "  (ID)", 0), ("", ""));
-    }
-
-    #[test]
     fn stats_degrade_to_a_truncation_when_too_narrow() {
-        let line = stats_line(4, Some(1), 100, 200);
+        let line = stats_line(4, Some(1), 100, 200, None);
         assert_eq!(line.chars().count(), 4);
     }
 }

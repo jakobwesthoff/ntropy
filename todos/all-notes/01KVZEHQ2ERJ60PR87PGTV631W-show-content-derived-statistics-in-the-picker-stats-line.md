@@ -7,11 +7,13 @@ tags: [ux]
 ---
 # Show content-derived statistics in the picker stats line
 
-The picker's dimmed stats line under the prompt shows only index-derived
-data: cursor rank, match count, total count, and an empty-state hint
-(`stats_line` in `src/bin/ntropy/run/picker/mod.rs`). These come from
-`PickerState`, which is generic over `T` and knows only indices, the query and
-the matched set.
+The picker's dimmed stats line under the prompt shows index-derived data
+(cursor rank, match count, total count, and an empty-state hint) followed by
+the selected note's ULID (`stats_line` in `src/bin/ntropy/run/picker/mod.rs`,
+ADR 0059). The counts come from `PickerState`, which is generic over `T` and
+knows only indices, the query and the matched set. The ULID reaches it as the
+selected row's `Row.detail`, a per-row string the renderer fills; on a narrow
+terminal the line is cut from the end, so the ULID goes first.
 
 ## Goal
 
