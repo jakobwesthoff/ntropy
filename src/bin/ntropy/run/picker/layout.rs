@@ -28,7 +28,7 @@ use super::Row;
 /// The percentage of the space after the date that the title column may claim
 /// when the tag lists need the rest. Whichever column needs less than its
 /// share leaves the remainder to the other.
-const TITLE_SHARE_PERCENT: usize = 70;
+const TITLE_SHARE_PERCENT: usize = 67;
 const _: () = assert!(TITLE_SHARE_PERCENT <= 100, "a share is a percentage");
 
 /// The separator between two columns.

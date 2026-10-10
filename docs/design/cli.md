@@ -134,7 +134,7 @@ rank within the matches, the match count, the total and the selected note's
 ULID), and the result list grows upward above the top divider with the best
 match nearest the prompt. Rows are an aligned title/date/tags grid (widths in
 Unicode display columns). The title and tag columns split the terminal width
-70/30, and a column that needs less than its share leaves the rest to the
+67/33, and a column that needs less than its share leaves the rest to the
 other (ADR 0059): a title or tag list gets an ellipsis only when the terminal
 is too narrow for it, and the grid is laid out again when the width changes.
 The ULID is never matched. Type to filter; Backspace, Ctrl-W (delete

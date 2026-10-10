@@ -25,7 +25,7 @@ lays every row out again when the width changes.
 - `render_all` receives the width available for a row and is called again
   when the terminal width changes.
 - Widths are measured over all candidates, not over the current matches.
-- The space left after the date and the separators is split 70/30 between
+- The space left after the date and the separators is split 67/33 between
   the title and the tags. A column that needs less than its share takes only
   what it needs and leaves the rest to the other. A title or tag list is cut
   with an ellipsis only when its column is narrower than it.
