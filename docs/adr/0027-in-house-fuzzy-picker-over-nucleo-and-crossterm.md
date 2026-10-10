@@ -10,7 +10,7 @@ Supersedes the picker-library part of [ADR 0014](0014-interactive-by-default-cli
 
 Amended 2026-10-10 by [ADR 0059](0059-width-aware-picker-columns.md).
 
-Amended 2026-10-10 by [ADR 0060](0060-picker-accept-keys-and-ctrl-y-to-print-the-path.md).
+Amended 2026-10-10 by [ADR 0060](0060-additional-picker-actions-on-accept-keys.md).
 
 ## Context
 
