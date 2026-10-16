@@ -2,7 +2,18 @@
 {# The front page. Its content lives here, as the markup it is; the index
    note only selects this template. The why section is the last block. #}
 {% block title %}{{ site_title }}: Write Markdown. Query everything.{% endblock %}
-{% block head %}<link rel="stylesheet" href="{{ stylesheet }}">
+{% block head %}{# Link-preview tags for the front page, the address people share. #}
+<meta name="description" content="Plain Markdown notes, tagged, queryable, and materialized into directories you can browse.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="{{ site_title }}">
+<meta property="og:description" content="Plain Markdown notes, tagged, queryable, and materialized into directories you can browse.">
+<meta property="og:url" content="{{ vars.url }}">
+<meta property="og:image" content="{{ vars.url }}assets/media/og.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{{ vars.url }}assets/media/og.png">
+<link rel="stylesheet" href="{{ stylesheet }}">
 <script>try{var t=localStorage.getItem("ntropy-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
 {% for script in scripts %}<script defer src="{{ script }}"></script>
 {% endfor %}{% endblock %}

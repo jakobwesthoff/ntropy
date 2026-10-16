@@ -13,6 +13,7 @@ github = "https://github.com/jakobwesthoff/ntropy"
 crates = "https://crates.io/crates/ntropy"
 author = "Jakob Westhoff"
 author_url = "https://westhoffswelt.de"
+url = "https://ntropy.westhoffswelt.de/"
 tagline = "Your knowledge, plain and yours"
 
 [site.vars.imprint]
