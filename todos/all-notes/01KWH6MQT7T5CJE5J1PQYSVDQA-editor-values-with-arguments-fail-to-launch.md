@@ -2,7 +2,8 @@
 title: "EDITOR values with arguments fail to launch"
 kind: bug
 component: cli
-impact: high
+impact: critical
+horizon: next
 origin: review
 tags: [ux]
 ---
@@ -32,6 +33,54 @@ Two options:
 2. Split the value on whitespace, treat the first token as the program and the rest as leading arguments. This needs no shell, but breaks paths with spaces, such as `/Applications/My Editor.app/...`, which option 1 handles when quoted.
 
 Option 1 matches what git and crontab users expect and handles quoting. Prefer it unless a no-shell policy applies.
+
+## Priority
+
+Raised to critical and queued next by the user on 2026-10-28, while the
+same question came up in asqr (a `ctrl-g` that opens a field in the
+person's editor): an editor setting with arguments is common, and ntropy
+cannot open notes at all for those users.
+
+## Research from asqr, 2026-10-28
+
+Checked in the source of the `edit` crate 0.1.5, which yaw uses
+(`yaw/src/editor.rs` calls `edit::edit_file`) and asqr adopts for
+`ctrl-g`:
+
+- It reads `VISUAL`, then `EDITOR`, and splits the value into program
+  and arguments: on whitespace by default, with `shell_words::split`
+  when the `quoted-env` feature is on, falling back to whitespace when
+  the value does not parse. So `code -w` and, with `quoted-env`,
+  `"/Applications/My Editor.app/…/bin/edit" -w` both work.
+- It looks the program up in `PATH` (`which`, default feature
+  `better-path`). If the program from `VISUAL`/`EDITOR` is not found, it
+  silently moves on to the next variable and then to a hard-coded list
+  of common editors and openers. That contradicts ADR 0015's explicit
+  error when neither variable is set.
+- `edit_file` runs the editor with inherited stdin, stdout and stderr.
+  ntropy binds all three to the controlling terminal instead (ADR 0036),
+  so a pipeline such as `search -p | pbcopy` does not hand the editor a
+  redirected stdout. `edit_file` cannot do that.
+- The function that returns program and arguments (`get_editor_args`)
+  is private; the public `get_editor` returns the program alone and
+  drops the arguments.
+
+So the `edit` crate does not fit ntropy as it is: it would drop the
+terminal binding and the explicit error. What it does for splitting is
+what ntropy needs, and that part is the `shell-words` crate on its own.
+
+### A third option
+
+3. Split the value with `shell_words::split` (no shell involved): the
+   first word is the program, the rest are leading arguments, then the
+   note path. It handles quoting, so paths with spaces work when quoted,
+   which removes option 2's limitation without running a shell, and it
+   keeps `build_command`, the terminal binding and the explicit error
+   unchanged. A value that does not parse (an unclosed quote) becomes an
+   error naming the variable.
+
+Option 3 answers the open question below whichever way it goes: it
+needs no shell, and it handles quoted paths.
 
 ## Open questions
 
