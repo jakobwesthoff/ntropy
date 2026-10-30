@@ -68,16 +68,20 @@ pub fn open(path: &Path, vault_hint: Option<&Path>) -> Result<()> {
 
 /// Resolve the editor command from `$VISUAL` then `$EDITOR`.
 fn resolve_editor() -> Result<OsString> {
-    for var in ["VISUAL", "EDITOR"] {
-        if let Some(value) = std::env::var_os(var)
-            && !value.is_empty()
-        {
-            return Ok(value);
-        }
-    }
-    Err(anyhow!(
-        "no editor configured: set $VISUAL or $EDITOR to open notes"
-    ))
+    choose_editor(std::env::var_os("VISUAL"), std::env::var_os("EDITOR"))
+}
+
+/// Pick the editor from the values of `$VISUAL` and `$EDITOR`.
+///
+/// Takes the values rather than reading the environment, so the choice is
+/// testable without mutating the process environment that parallel tests
+/// share.
+fn choose_editor(visual: Option<OsString>, editor: Option<OsString>) -> Result<OsString> {
+    [visual, editor]
+        .into_iter()
+        .flatten()
+        .find(|value| !value.is_empty())
+        .ok_or_else(|| anyhow!("no editor configured: set $VISUAL or $EDITOR to open notes"))
 }
 
 #[cfg(test)]
@@ -129,6 +133,37 @@ mod tests {
                 "NTROPY_VAULT_HINT".to_string(),
                 Some("/v/vault".to_string())
             )]
+        );
+    }
+
+    fn os(value: &str) -> Option<OsString> {
+        Some(OsString::from(value))
+    }
+
+    #[test]
+    fn visual_wins_over_editor() {
+        let chosen = choose_editor(os("hx"), os("vim")).expect("an editor is set");
+        assert_eq!(chosen, "hx");
+    }
+
+    #[test]
+    fn editor_is_used_when_visual_is_unset_or_empty() {
+        assert_eq!(
+            choose_editor(None, os("vim")).expect("EDITOR is set"),
+            "vim"
+        );
+        assert_eq!(
+            choose_editor(os(""), os("vim")).expect("EDITOR is set"),
+            "vim"
+        );
+    }
+
+    #[test]
+    fn neither_set_is_an_error() {
+        let error = choose_editor(None, os("")).expect_err("no editor is set");
+        assert_eq!(
+            error.to_string(),
+            "no editor configured: set $VISUAL or $EDITOR to open notes"
         );
     }
 
