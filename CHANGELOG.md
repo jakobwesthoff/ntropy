@@ -9,7 +9,7 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
-## Unreleased
+## v2.4.0 - 2026-10-30
 
 ### Changed
 
