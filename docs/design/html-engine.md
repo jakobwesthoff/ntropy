@@ -73,7 +73,11 @@ the page's code blocks need, and under `files/<vault path>` the images
 and files the note references, resolved against the note's directory
 and copied as the site copies them; a file that is missing or lies
 outside the vault is a warning and stays unresolved, as does a fence
-language without a grammar. The theme is selected as the site selects
+language without a grammar. A path that starts with `/` is read from the
+vault root, its `.` and `..` parts resolved as a relative path's are, so
+one that climbs above the root lies outside the vault too
+([ADR 0072](../adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)).
+The theme is selected as the site selects
 it, `--theme` then `[site] theme`, resolved in `.ntropy/themes/site/`;
 the `pdf` and `typst` formats keep `[render] theme` and
 `.ntropy/themes/typst/`.

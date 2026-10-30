@@ -95,3 +95,4 @@ made.
 - [0067. Duplicate note IDs](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0067-duplicate-note-ids.md)
 - [0068. Unique view leaf names per directory, ignoring case](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0068-unique-view-leaf-names-per-directory-ignoring-case.md)
 - [0069. Picker paging keys and a hand-drawn renderer](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0069-picker-paging-keys-and-a-hand-drawn-renderer.md)
+- [0072. Export paths stay inside the vault and the output](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)

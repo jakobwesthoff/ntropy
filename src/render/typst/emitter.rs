@@ -398,9 +398,11 @@ fn indent_continuation(body: &str, marker: &str) -> String {
 /// same time.
 ///
 /// A path that is already root-absolute is the author addressing the vault
-/// directly and passes through. So does one that climbs out of the root
-/// altogether, which cannot be expressed as a root-absolute path; the compiler
-/// rejects it by name rather than by an invented substitute.
+/// directly; its `.` and `..` parts are resolved the same way, without the
+/// note's directory. A path that climbs out of the root altogether, from the
+/// note or from the root, cannot be expressed as a root-absolute path and
+/// passes through as written; the compiler rejects it by name rather than by
+/// an invented substitute.
 fn resolve_asset(base: &str, dest: &str) -> String {
     // Textual resolution against the root-absolute `base` is what Typst's own
     // root-relative lookup does; a path that escapes the root stays as
@@ -994,11 +996,28 @@ mod tests {
     }
 
     #[test]
-    fn an_already_absolute_image_path_is_left_alone() {
-        // The author is addressing the vault root directly.
+    fn an_already_absolute_image_path_is_resolved_from_the_vault_root() {
+        // The author is addressing the vault root directly, so the note's
+        // directory plays no part.
         assert_eq!(
             resolve_asset("/all-notes", "/assets/logo.svg"),
             "/assets/logo.svg"
+        );
+    }
+
+    #[test]
+    fn a_root_absolute_image_path_is_normalized() {
+        assert_eq!(
+            resolve_asset("/all-notes", "/assets/./logo.svg"),
+            "/assets/logo.svg"
+        );
+    }
+
+    #[test]
+    fn a_root_absolute_image_path_climbing_out_is_left_for_the_compiler() {
+        assert_eq!(
+            resolve_asset("/all-notes", "/../outside.png"),
+            "/../outside.png"
         );
     }
 

@@ -999,15 +999,13 @@ impl<'a, O: Output> Walker<'a, O> {
 
 /// Resolve `dest`, a path as written in a note, against `base`, the note's
 /// directory as a root-absolute path such as `/all-notes`, into a
-/// root-absolute path. `.` and `..` are resolved textually; there is no
-/// filesystem to consult. A `dest` that is already root-absolute passes
-/// through. `None` means `dest` climbs out of the root, which no
-/// root-absolute path can express.
+/// root-absolute path. A `dest` that starts with `/` is a path from the
+/// root and does not use `base`. Either way `.` and `..` are resolved
+/// textually; there is no filesystem to consult. `None` means `dest` climbs
+/// out of the root, which no root-absolute path can express (ADR 0072).
 pub fn resolve_root_relative(base: &str, dest: &str) -> Option<String> {
-    if dest.starts_with('/') {
-        return Some(dest.to_string());
-    }
-    let mut parts: Vec<&str> = base.split('/').filter(|part| !part.is_empty()).collect();
+    let start = if dest.starts_with('/') { "" } else { base };
+    let mut parts: Vec<&str> = start.split('/').filter(|part| !part.is_empty()).collect();
     for part in dest.split('/') {
         match part {
             "" | "." => {}
@@ -1527,6 +1525,36 @@ mod tests {
         assert_eq!(
             resolve_root_relative("/", "x.png").as_deref(),
             Some("/x.png")
+        );
+    }
+
+    #[test]
+    fn a_root_absolute_path_climbing_out_of_the_root_is_none() {
+        // A leading `/` names the vault root, so a `..` above it leaves the
+        // vault exactly as a relative path climbing too far does.
+        assert_eq!(resolve_root_relative("/all-notes", "/../outside.png"), None);
+        assert_eq!(resolve_root_relative("/all-notes", "/.."), None);
+        assert_eq!(
+            resolve_root_relative("/all-notes", "/assets/../../outside.png"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_root_absolute_path_is_normalized_without_the_base() {
+        assert_eq!(
+            resolve_root_relative("/all-notes", "/assets/./icons/../logo.svg").as_deref(),
+            Some("/assets/logo.svg")
+        );
+        // The resolution is textual: a directory that does not exist is
+        // stepped out of all the same.
+        assert_eq!(
+            resolve_root_relative("/all-notes", "/missing/../x.png").as_deref(),
+            Some("/x.png")
+        );
+        assert_eq!(
+            resolve_root_relative("/all-notes", "/").as_deref(),
+            Some("/")
         );
     }
 

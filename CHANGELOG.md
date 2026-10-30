@@ -133,6 +133,13 @@ and this project adheres to
   view is now skipped with a warning, which `--strict` makes `reconcile` fail
   on, and `view add` and `vault encrypt` refuse it. A symlink
   swapped in while a sync is running is not caught.
+- An image or link path in a note that started with `/` and climbed above
+  the vault with `..` made `render --to html` and `site` copy files from
+  outside the vault into the export, and with enough `..` write those
+  copies outside the files directory or the output directory; a link to
+  the directory above the vault copied all of it. Such a path now counts
+  as outside the vault, like a relative one: the export warns and copies
+  nothing.
 
 ## v2.2.0 - 2026-10-10
 

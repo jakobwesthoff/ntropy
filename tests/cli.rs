@@ -15,7 +15,7 @@
 //! stable across runs.
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use insta_cmd::assert_cmd_snapshot;
@@ -2297,6 +2297,169 @@ fn site_theme_init_rejects_a_traversing_name() {
     let output = cmd.output().expect("run site theme init");
     assert!(!output.status.success());
     assert!(!dir.path().join(".ntropy/themes/escape").exists());
+}
+
+// ---------------------------------------------------------------------------
+// Paths that climb out of the vault (ADR 0072)
+// ---------------------------------------------------------------------------
+
+/// A temporary directory holding a vault at `vault/` and `outside.svg` beside
+/// it, so a path climbing above the vault root names a real file. The vault's
+/// one note, `Climber`, has `body` as its body.
+fn vault_beside_a_file(body: &str) -> tempfile::TempDir {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = dir.path().join("vault");
+    scaffold_vault(&vault);
+    fs::write(dir.path().join("outside.svg"), "<svg/>").expect("the file beside the vault");
+    write_note(
+        &vault,
+        ULID_A,
+        "climber",
+        &format!("---\ntitle: Climber\n---\n{body}\n"),
+    );
+    dir
+}
+
+/// Every file named `name` under `root`, at any depth, sorted.
+fn files_named(root: &Path, name: &str) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(dir) = pending.pop() {
+        for entry in fs::read_dir(&dir).expect("read a directory of the test") {
+            let path = entry.expect("read a directory entry").path();
+            if path.is_dir() {
+                pending.push(path);
+            } else if path.file_name().is_some_and(|file| file == name) {
+                found.push(path);
+            }
+        }
+    }
+    found.sort();
+    found
+}
+
+/// `render --to html` of the climbing note into `render/out.html` beside the
+/// vault: the command's output and the page.
+fn render_climber(dir: &Path) -> (std::process::Output, String) {
+    fs::create_dir_all(dir.join("render")).expect("render dir");
+    let artifact = dir.join("render/out.html");
+    let output = render_to_html(
+        &dir.join("vault"),
+        ULID_A,
+        &["-o", &artifact.to_string_lossy()],
+    );
+    let page = fs::read_to_string(&artifact).unwrap_or_default();
+    (output, page)
+}
+
+/// `site` of the vault into `site/` beside it: the command's output and the
+/// climbing note's page.
+fn site_climber(dir: &Path) -> (std::process::Output, String) {
+    let out = dir.join("site");
+    let output = site(&dir.join("vault"), &["-o", &out.to_string_lossy()]);
+    let page = fs::read_to_string(out.join("notes/climber.html")).unwrap_or_default();
+    (output, page)
+}
+
+/// The export copied nothing from outside the vault, succeeded, warned about
+/// `dest`, and left `attribute` in the page as written.
+fn assert_not_copied(
+    dir: &Path,
+    output: &std::process::Output,
+    page: &str,
+    dest: &str,
+    attribute: &str,
+) {
+    assert_eq!(
+        files_named(dir, "outside.svg"),
+        [dir.join("outside.svg")],
+        "a file from outside the vault was copied"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        stderr.contains(&format!(
+            "`{dest}` points outside the vault and is not copied"
+        )),
+        "{stderr}"
+    );
+    assert!(page.contains(attribute), "{page}");
+}
+
+#[test]
+fn render_to_html_does_not_copy_an_image_above_the_vault_root() {
+    let dir = vault_beside_a_file("![out](/../outside.svg)");
+    let (output, page) = render_climber(dir.path());
+    assert_not_copied(
+        dir.path(),
+        &output,
+        &page,
+        "/../outside.svg",
+        "src=\"/../outside.svg\"",
+    );
+}
+
+#[test]
+fn render_to_html_does_not_copy_a_linked_file_above_the_vault_root() {
+    let dir = vault_beside_a_file("[out](/../outside.svg)");
+    let (output, page) = render_climber(dir.path());
+    assert_not_copied(
+        dir.path(),
+        &output,
+        &page,
+        "/../outside.svg",
+        "href=\"/../outside.svg\"",
+    );
+}
+
+#[test]
+fn render_to_html_does_not_mirror_the_directory_above_the_vault_root() {
+    let dir = vault_beside_a_file("[up](/..)");
+    let (output, page) = render_climber(dir.path());
+    assert_not_copied(dir.path(), &output, &page, "/..", "href=\"/..\"");
+    assert_eq!(
+        files_named(dir.path(), "config.toml"),
+        [dir.path().join("vault/.ntropy/config.toml")],
+        "the vault was mirrored from above"
+    );
+}
+
+#[test]
+fn site_does_not_copy_an_image_above_the_vault_root() {
+    let dir = vault_beside_a_file("![out](/../outside.svg)");
+    let (output, page) = site_climber(dir.path());
+    assert_not_copied(
+        dir.path(),
+        &output,
+        &page,
+        "/../outside.svg",
+        "src=\"/../outside.svg\"",
+    );
+}
+
+#[test]
+fn site_does_not_copy_a_linked_file_above_the_vault_root() {
+    let dir = vault_beside_a_file("[out](/../outside.svg)");
+    let (output, page) = site_climber(dir.path());
+    assert_not_copied(
+        dir.path(),
+        &output,
+        &page,
+        "/../outside.svg",
+        "href=\"/../outside.svg\"",
+    );
+}
+
+#[test]
+fn site_does_not_mirror_the_directory_above_the_vault_root() {
+    let dir = vault_beside_a_file("[up](/..)");
+    let (output, page) = site_climber(dir.path());
+    assert_not_copied(dir.path(), &output, &page, "/..", "href=\"/..\"");
+    assert_eq!(
+        files_named(dir.path(), "config.toml"),
+        [dir.path().join("vault/.ntropy/config.toml")],
+        "the vault was mirrored from above"
+    );
 }
 
 /// A vault with one note and a `corporate` theme configured vault-wide.

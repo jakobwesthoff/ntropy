@@ -244,6 +244,10 @@ the link resolves in the site as it does in the vault; an empty directory
 is a warning. Local asset paths in note bodies are rewritten relative to
 the page. A reference to a file outside the vault is a warning and the
 file is not copied, as is a reference to a path that does not exist.
+A path that starts with `/` is read from the vault root, its `.` and `..`
+parts resolved as a relative path's are; one that climbs above the root
+is outside the vault, and the page keeps it as written
+([ADR 0072](../adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)).
 Remote images stay remote.
 
 ## Themes
