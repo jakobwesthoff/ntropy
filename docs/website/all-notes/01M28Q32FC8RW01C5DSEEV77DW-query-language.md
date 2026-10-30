@@ -55,8 +55,13 @@ precise matching, reach for a typed term:
   pattern containing an uppercase letter only matches that case exactly.
 
 Quote a value that contains spaces, such as `status:"in progress"`. A
-quoted string may also contain regex metacharacters, and a literal quote
-or backslash inside one can be written as `\"` or `\\`.
+dot needs no quotes, so `tag:milestone/0.13` works as it is; other
+punctuation such as `+` and `#` does (`tag:"c++"`). A quoted string may
+also contain regex metacharacters, and a literal quote or backslash inside
+one can be written as `\"` or `\\`. A bare word with a dot in it that is not
+a value, such as `foo.bar`, is a search word like any other and a regex, so
+its dot matches any character. The search box of an exported site reads the
+same word as plain text.
 
 ## Combining terms
 

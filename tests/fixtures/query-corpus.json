@@ -58,6 +58,18 @@
         ]
       },
       "body": "Numbers as tags.\n"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FD1",
+      "frontmatter": {
+        "title": "Punctuated tags",
+        "tags": [
+          "milestone/0.14",
+          "C++",
+          "Node.JS"
+        ]
+      },
+      "body": "fooXbar is not the dotted name.\n"
     }
   ],
   "cases": [
@@ -278,7 +290,8 @@
       "expect": [
         "01ARZ3NDEKTSV4RRFFQ69G5FA2",
         "01ARZ3NDEKTSV4RRFFQ69G5FA3",
-        "01ARZ3NDEKTSV4RRFFQ69G5FC1"
+        "01ARZ3NDEKTSV4RRFFQ69G5FC1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FD1"
       ]
     },
     {
@@ -421,7 +434,9 @@
     },
     {
       "query": "ratio:1.5",
-      "error": true
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
     },
     {
       "query": "borrow checker and",
@@ -458,6 +473,71 @@
     {
       "query": "tag:2025",
       "expect": []
+    },
+    {
+      "query": "tag:milestone/0.14",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FD1"
+      ]
+    },
+    {
+      "query": "tag:0.14",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FD1"
+      ]
+    },
+    {
+      "query": "tag:0.13",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FC1"
+      ]
+    },
+    {
+      "query": "tag:milestone/014",
+      "expect": []
+    },
+    {
+      "query": "tag:milestone/0-14",
+      "expect": []
+    },
+    {
+      "query": "tag:\"c++\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FD1"
+      ]
+    },
+    {
+      "query": "tag:c++",
+      "error": true
+    },
+    {
+      "query": "tag:node.js",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FD1"
+      ]
+    },
+    {
+      "query": "tag:Node.JS",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FD1"
+      ]
+    },
+    {
+      "query": "tag:nodejs",
+      "expect": []
+    },
+    {
+      "query": "foo.bar",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FD1"
+      ]
+    },
+    {
+      "query": "\"foo\\.bar\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
     }
   ]
 }

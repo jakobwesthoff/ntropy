@@ -8,6 +8,8 @@ Accepted
 
 Amended 2026-10-30 by [ADR 0076](0076-adjacent-terms-in-a-query-are-an-implicit-and.md).
 
+Amended 2026-10-30 by [ADR 0077](0077-punctuation-in-slugs-and-tags.md).
+
 ## Context
 
 Filtering needs boolean expressions (`tag:foo and not tag:bar`) from the start,

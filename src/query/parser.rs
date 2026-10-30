@@ -504,4 +504,23 @@ mod tests {
         let err = parse("(a b").expect_err("unbalanced");
         assert_eq!(err.position(), Some(4));
     }
+
+    #[test]
+    fn a_dotted_tag_value_needs_no_quotes() {
+        assert_eq!(
+            parse_ok("tag:milestone/0.13"),
+            Query::Tag("milestone/0.13".into())
+        );
+    }
+
+    #[test]
+    fn a_dotted_field_value_needs_no_quotes() {
+        assert_eq!(
+            parse_ok("version:1.5"),
+            Query::Field {
+                name: "version".into(),
+                value: "1.5".into()
+            }
+        );
+    }
 }

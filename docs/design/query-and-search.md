@@ -30,14 +30,18 @@ Precedence: `not` > `and` > `or`. Parentheses override.
         | value                        -- bare term: shorthand for text:value
         | string                       -- bare quoted phrase: shorthand for text:phrase
 
-`value` is a bare word (Unicode letters, digits, `/`, `_`, `-`); `string` is
+`value` is a bare word (Unicode letters, digits, `/`, `_`, `-`, `.`); `string` is
 double-quoted and may contain spaces and regex metacharacters (with `\"` and
 `\\` escapes). Any predicate value may be either form, so a multi-word value is
 written quoted (`status:"in progress"`). Keywords (`and`/`or`/`not`) are lexed
 as ordinary words and disambiguated by position, so `field:or` is a valid
 predicate. A bare word or quoted string that is not followed by `:` is
 shorthand for a `text:` predicate, so `ntropy search foobar` searches bodies and
-`foobar and tag:work` combines with operators.
+`foobar and tag:work` combines with operators. The dot makes `tag:milestone/0.13`
+a valid unquoted query; other punctuation such as `+` and `#` stays quoted
+(`tag:"c++"`) ([ADR 0077](../adr/0077-punctuation-in-slugs-and-tags.md)). A
+bare term with a dot is a regex like any other, so `.` matches any character
+in `foo.bar`.
 
 Two operands side by side are an `and` that binds like the written one (ADR
 0076): `borrow checker` is `borrow and checker`, `a b or c` is

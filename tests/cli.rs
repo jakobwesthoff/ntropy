@@ -4508,6 +4508,13 @@ fn a_dotted_tag_is_found_by_its_quoted_query() {
 }
 
 #[test]
+fn a_dotted_tag_is_found_by_its_unquoted_query() {
+    let dir = vault_with_a_version_tag();
+    let found = stdout_of(ntropy(dir.path()).args(["-n", "search", "-p", "tag:milestone/0.13"]));
+    assert!(found.contains("plan.md"), "{found}");
+}
+
+#[test]
 fn the_path_form_of_a_dotted_tag_finds_nothing() {
     let dir = vault_with_a_version_tag();
     let output = ntropy(dir.path())

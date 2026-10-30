@@ -24,6 +24,19 @@ describe("tokenize", () => {
     ]);
   });
 
+  it("keeps a dot inside a word", () => {
+    expect(tokenize("tag:milestone/0.13")).toEqual([
+      { kind: "word", value: "tag", pos: 0 },
+      { kind: "colon", pos: 3 },
+      { kind: "word", value: "milestone/0.13", pos: 4 },
+    ]);
+  });
+
+  it("still refuses a plus and a hash in a word", () => {
+    expect(() => tokenize("tag:c++")).toThrow(QueryError);
+    expect(() => tokenize("tag:c#")).toThrow(QueryError);
+  });
+
   it("resolves quote and backslash escapes and keeps other backslashes", () => {
     expect(tokenize('"a\\"b\\\\c\\.d"')).toEqual([
       { kind: "string", value: 'a"b\\c\\.d', pos: 0 },

@@ -55,7 +55,7 @@ type Token =
   | { kind: "string"; value: string; pos: number };
 
 function isWordChar(ch: string): boolean {
-  return /[\p{L}\p{N}/_-]/u.test(ch);
+  return /[\p{L}\p{N}/_.-]/u.test(ch);
 }
 
 export function tokenize(input: string): Token[] {

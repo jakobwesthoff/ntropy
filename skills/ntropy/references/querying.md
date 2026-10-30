@@ -29,7 +29,9 @@ the written one (`a b or c` is `(a and b) or c`). A word that is not an
 operator is a search word, so a mistyped operator (`tag:work nd status:done`)
 or a doubled one (`a and and b`) searches bodies for that word instead of
 failing. Values are bare words (Unicode letters, digits, `/`, `_`,
-`-`) or double-quoted strings for anything with spaces or regex metacharacters.
+`-`, `.`) or double-quoted strings for anything with spaces, other punctuation
+(`tag:"c++"`) or regex metacharacters. `tag:milestone/0.13` needs no quotes.
+A bare search word with a dot is a regex, so `foo.bar` matches `fooXbar` too.
 
 ```bash
 ntropy search -n tag:work and not status:done

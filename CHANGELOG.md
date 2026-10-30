@@ -34,6 +34,12 @@ change in any release
   hold such characters and relinks the notes that point at them. The default
   `render` file name and the site's note page URL follow the new filename
   ([ADR 0077](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0077-punctuation-in-slugs-and-tags.md)).
+- A bare query value may contain a dot, so `tag:milestone/0.13` and
+  `version:1.5` work without quotes. Other punctuation such as `+` and `#`
+  still needs quotes (`tag:"c++"`). A bare search word with a dot, such as
+  `foo.bar`, used to be a syntax error and is now a regex whose dot matches any
+  character
+  ([ADR 0077](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0077-punctuation-in-slugs-and-tags.md)).
 
 ### Fixed
 

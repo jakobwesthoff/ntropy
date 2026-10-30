@@ -29,7 +29,7 @@ pub enum TokenKind {
     RParen,
     /// `:`
     Colon,
-    /// A bare word: the `value` production (letters, digits, `/`, `_`, `-`).
+    /// A bare word: the `value` production (letters, digits, `/`, `_`, `-`, `.`).
     Word(String),
     /// A double-quoted string with its quotes and escapes resolved.
     Str(String),
@@ -38,11 +38,12 @@ pub enum TokenKind {
 /// Whether `c` may appear in a bare `value` word.
 ///
 /// Unicode alphanumerics are allowed so non-ASCII tag values lex (they are
-/// normalized downstream); `/`, `_` and `-` round out the set per the grammar.
-/// Anything else (`.`, `+`, `&`, …) is not a word character, so such patterns
-/// must be quoted to reach the regex engine.
+/// normalized downstream); `/`, `_`, `-` and `.` round out the set per the
+/// grammar, the dot so that a version tag such as `milestone/0.13` needs no
+/// quotes (ADR 0077). Anything else (`+`, `#`, `&`, …) is not a word
+/// character, so such patterns must be quoted to reach the regex engine.
 fn is_word_char(c: char) -> bool {
-    c.is_alphanumeric() || c == '/' || c == '_' || c == '-'
+    c.is_alphanumeric() || matches!(c, '/' | '_' | '-' | '.')
 }
 
 /// Tokenize a query string.
@@ -273,6 +274,30 @@ mod tests {
     #[test]
     fn unterminated_string_is_error() {
         let err = tokenize(r#"text:"unterminated"#).expect_err("should fail");
+        assert_eq!(err.position(), Some(5));
+    }
+
+    #[test]
+    fn a_dot_belongs_to_a_bare_word() {
+        assert_eq!(
+            kinds("tag:milestone/0.13"),
+            vec![
+                TokenKind::Word("tag".into()),
+                TokenKind::Colon,
+                TokenKind::Word("milestone/0.13".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_plus_still_ends_a_bare_word() {
+        let err = tokenize("tag:c++").expect_err("should fail");
+        assert_eq!(err.position(), Some(5));
+    }
+
+    #[test]
+    fn a_hash_still_ends_a_bare_word() {
+        let err = tokenize("tag:c#").expect_err("should fail");
         assert_eq!(err.position(), Some(5));
     }
 }

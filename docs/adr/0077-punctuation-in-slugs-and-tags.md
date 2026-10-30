@@ -8,8 +8,10 @@ Accepted
 
 Amends [ADR 0023](0023-slug-tag-and-disambiguator-normalization-rules.md),
 whose step 4 removes every character outside `[a-z0-9-]` from a slug and from
-a tag segment, and [ADR 0009](0009-generic-group-by-field-view-definitions.md),
-which gives grouping values the normalization of tags.
+a tag segment, [ADR 0009](0009-generic-group-by-field-view-definitions.md),
+which gives grouping values the normalization of tags, and
+[ADR 0012](0012-query-dsl-with-hand-rolled-parser.md), whose bare value holds
+no dot.
 
 ## Context
 
@@ -63,6 +65,13 @@ inside it stay unique by ADR 0068. The site page names every member value in
 its heading and sidebar label, sorted and joined with `, `, and its search
 entry lists them all.
 
+### Queries
+
+A bare query value may contain a dot, so `tag:milestone/0.13` needs no quotes.
+Other punctuation, such as `+` and `#`, stays quoted: `tag:"c++"`. The site's
+search lexes bare values the same way, and the shared query corpus pins both
+implementations.
+
 ## Consequences
 
 - A title that contains an ASCII character outside `[a-z0-9-]` other than the
@@ -84,3 +93,6 @@ entry lists them all.
   note table does not distinguish from two tags.
 - The language server inserts a tag that would not read back as the same
   string from a YAML list (`0.13`, `true`, `a,b`) as a double-quoted string.
+- A bare term that holds a dot is a regex like every bare term: in `foo.bar`
+  the dot matches any character, and the site's search reads the same term as
+  a plain substring.
