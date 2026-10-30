@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! The engine behind the `html` format of `render` (ADR 0046, ADR 0057).
 //!
 //! The site's page for one note, without the parts that need a site:
