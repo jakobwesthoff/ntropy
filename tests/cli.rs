@@ -3364,36 +3364,46 @@ fn query_parse_error_is_reported() {
 /// the Unix CLI convention, rather than panic in `println!`'s write-error
 /// path.
 ///
-/// The read end is closed before the child is even spawned, so the child's
-/// first stdout write always lands on an already-closed pipe: the outcome
-/// does not depend on the pipe buffer size or on winning a race against a
-/// reader process.
+/// The child creates the pipe itself, between fork and exec, and closes the
+/// read end before ntropy starts. Its first stdout write therefore always lands
+/// on a pipe without a reader: the outcome does not depend on the pipe buffer
+/// size or on a race against a reader process. Created in the parent, the read
+/// end could leak into a child that a parallel test forks before it is closed,
+/// and that child would keep the pipe readable.
 #[cfg(unix)]
 #[test]
 fn broken_stdout_pipe_exits_via_sigpipe_not_panic() {
-    use std::os::fd::FromRawFd;
-    use std::os::unix::process::ExitStatusExt;
+    use std::io;
+    use std::os::unix::process::{CommandExt, ExitStatusExt};
     use std::process::Stdio;
 
     let dir = setup_vault();
 
-    let mut fds = [0i32; 2];
-    // SAFETY: `fds` is a valid pointer to two `i32`s, as `pipe(2)` requires.
-    let rc = unsafe { libc::pipe(fds.as_mut_ptr()) };
-    assert_eq!(rc, 0, "pipe() failed");
-    let [read_fd, write_fd] = fds;
-    // SAFETY: `read_fd` was just returned by `pipe(2)` above and has not been
-    // closed yet, so it is a valid, open file descriptor.
-    let close_rc = unsafe { libc::close(read_fd) };
-    assert_eq!(close_rc, 0, "close(read_fd) failed");
-
     let mut cmd = ntropy(dir.path());
     cmd.arg("info");
-    // SAFETY: `write_fd` was just returned by `pipe(2)` above, is still open
-    // (only `read_fd` was closed), and is not owned by any other `Stdio`/`File`
-    // in this process, so `Stdio` taking ownership of it is sound.
-    cmd.stdout(unsafe { Stdio::from_raw_fd(write_fd) });
+    // Replaced by the reader-less pipe below; std applies this first.
+    cmd.stdout(Stdio::null());
     cmd.stderr(Stdio::piped());
+    // SAFETY: the closure runs in the forked child before `exec` and calls only
+    // `pipe`, `close` and `dup2`, which are async-signal-safe and allocate
+    // nothing. fd 1 is open (the null device) when it runs, so the new pipe's
+    // descriptors are never 1 and `dup2` cannot close one of them.
+    unsafe {
+        cmd.pre_exec(|| {
+            let mut fds = [0; 2];
+            if libc::pipe(fds.as_mut_ptr()) == -1 {
+                return Err(io::Error::last_os_error());
+            }
+            let [read_fd, write_fd] = fds;
+            if libc::close(read_fd) == -1
+                || libc::dup2(write_fd, 1) == -1
+                || libc::close(write_fd) == -1
+            {
+                return Err(io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
 
     let child = cmd.spawn().expect("spawn ntropy");
     let output = child.wait_with_output().expect("wait for ntropy");
