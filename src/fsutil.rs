@@ -226,9 +226,25 @@ pub fn remove_dir_if_empty(path: &Path) -> Result<()> {
     if entries.next().is_some() {
         return Ok(());
     }
+    remove_empty_dir(path)
+}
+
+/// Remove the directory `path`, which was empty when last looked at.
+///
+/// Another process, such as the language server syncing views on save, can
+/// add an entry or remove the directory between that look and this removal,
+/// so both outcomes are the same no-op the emptiness check would have chosen.
+fn remove_empty_dir(path: &Path) -> Result<()> {
     match std::fs::remove_dir(path) {
         Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e)
+            if matches!(
+                e.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::DirectoryNotEmpty
+            ) =>
+        {
+            Ok(())
+        }
         Err(e) => Err(FsError::new("removing directory", path, e)),
     }
 }
@@ -412,6 +428,41 @@ mod tests {
         let dir = tempfile::tempdir().expect("temp dir");
         let missing = dir.path().join("nope");
         remove_dir_if_empty(&missing).expect("missing is not an error");
+    }
+
+    #[test]
+    fn remove_dir_reports_directory_not_empty_for_a_populated_dir() {
+        // The error kind `remove_empty_dir` relies on, as macOS and Linux
+        // report it (ADR 0020).
+        let dir = tempfile::tempdir().expect("temp dir");
+        let group = dir.path().join("group");
+        std::fs::create_dir(&group).expect("mkdir");
+        std::fs::write(group.join("a.md"), b"x").expect("seed");
+        let err = std::fs::remove_dir(&group).expect_err("populated");
+        assert_eq!(err.kind(), std::io::ErrorKind::DirectoryNotEmpty);
+    }
+
+    #[test]
+    fn remove_empty_dir_leaves_a_dir_that_became_populated() {
+        // The state a concurrent view sync leaves when it adds an entry after
+        // the emptiness check: the removal must still be a no-op.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let group = dir.path().join("group");
+        std::fs::create_dir(&group).expect("mkdir");
+        std::fs::write(group.join("a.md"), b"x").expect("seed");
+        remove_empty_dir(&group).expect("a populated directory is not an error");
+        assert!(group.join("a.md").is_file());
+    }
+
+    #[test]
+    fn remove_empty_dir_reports_any_other_failure() {
+        // A regular file is not a directory to remove; only an entry or a
+        // missing directory is tolerated.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let file = dir.path().join("a.md");
+        std::fs::write(&file, b"x").expect("seed");
+        let err = remove_empty_dir(&file).expect_err("not a directory");
+        assert!(err.to_string().contains("removing directory"), "{err}");
     }
 
     #[test]

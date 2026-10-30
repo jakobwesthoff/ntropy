@@ -20,6 +20,10 @@ and this project adheres to
   26th byte, such as `aaaaaaaaaaaaaaaaaaaaaaaaaé-xx.md`, no longer makes
   every command that scans the vault crash. It is skipped with a warning,
   like any other file whose name does not start with a ULID.
+- Refreshing views no longer fails with "Directory not empty" when another
+  ntropy process, such as the language server refreshing on save, adds a
+  note to a view directory while the refresh removes that directory as
+  empty.
 
 ## v2.2.0 - 2026-10-10
 
