@@ -43,9 +43,19 @@ Two operands side by side are an `and` that binds like the written one (ADR
 0076): `borrow checker` is `borrow and checker`, `a b or c` is
 `(a and b) or c`, `(a) b` is `(a) and b`, and `not a b` is `(not a) and b`. A
 keyword where an operand is expected is a search word, so `and b` and
-`a and and b` search bodies for `and`. A phrase is a quoted string inside the
-query: on the command line `ntropy search '"borrow checker"'`, since the shell
-removes plain double quotes.
+`a and and b` search bodies for `and`.
+
+On the command line each trailing argument is read on its own (ADR 0076). An
+argument with whitespace and no query syntax (no `:`, parenthesis or `"`, and
+none of the words `and`, `or`, `not` in any letter case) is a phrase: its words
+in order with any whitespace, a line break included, between them, and every
+other character literal. So `ntropy search "borrow checker"` is a phrase, and
+`ntropy search 'tag:work and not status:done'` stays a query. Beside other
+arguments, an argument that is a complete query is wrapped in parentheses, so
+`search 'a or b' c` is `(a or b) and c`; a piece of a query split at a space
+joins as it is. Blank arguments are dropped. A phrase that contains query
+syntax is a quoted string inside the query, `ntropy search '"page not found"'`;
+that quoted form is a plain regex and does not match across a line break.
 
 ### Predicate semantics
 

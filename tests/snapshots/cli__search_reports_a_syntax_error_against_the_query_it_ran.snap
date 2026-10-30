@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - search
+    - node.js tips
+    - "foo,bar"
+    - "-n"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while resolving the selector: query syntax error at position 23: unexpected character `,` (quote the term; a quoted full-text term is a regex, so escape regex metacharacters with `\`)

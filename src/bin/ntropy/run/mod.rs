@@ -101,7 +101,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         } => cmd_search(
             &cli.global,
             &session,
-            join(&query),
+            ntropy::query::from_arguments(&query),
             print,
             print_content,
             interactive,
@@ -115,9 +115,12 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Command::Today { print } => cmd_today(&session, print, interactive),
         Command::Write { target } => cmd_write(&cli.global, &session, &target),
         Command::Reconcile => cmd_reconcile(&cli.global, &session),
-        Command::Delete { selector, force } => {
-            cmd_delete(&session, join(&selector), force, interactive)
-        }
+        Command::Delete { selector, force } => cmd_delete(
+            &session,
+            ntropy::query::from_arguments(&selector),
+            force,
+            interactive,
+        ),
         Command::Render {
             selector,
             to,
@@ -129,7 +132,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         } => render::cmd_render(
             &cli.global,
             &session,
-            join(&selector),
+            ntropy::query::from_arguments(&selector),
             to,
             engine,
             output,
@@ -153,7 +156,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             &cli.global,
             &session,
             output.expect("clap requires -o when no subcommand is given"),
-            join(&query),
+            ntropy::query::from_arguments(&query),
             theme,
             force,
             print,

@@ -17,11 +17,11 @@ ntropy search text:deadline and tag:meeting
 # Everything still in progress, or anything that's on fire.
 ntropy search 'status:"in progress" or tag:urgent'
 
-# A note that mentions both "borrow" and "checker".
-ntropy search borrow checker
+# I know I wrote the phrase "borrow checker" somewhere in here.
+ntropy search "borrow checker"
 
-# I know I wrote the exact phrase "borrow checker" somewhere in here.
-ntropy search '"borrow checker"'
+# A note that mentions both "borrow" and "checker", apart or in any order.
+ntropy search borrow checker
 
 # Just show me the whole pile.
 ntropy search
@@ -30,10 +30,16 @@ ntropy search
 ## Terms
 
 A bare word or quoted phrase that is not followed by `:` searches the
-note body, so `ntropy search borrow checker` finds notes that contain
-both words, anywhere in the body and in any order. A phrase needs double
-quotes inside the query. The shell removes plain double quotes, so wrap
-them in single quotes: `ntropy search '"borrow checker"'`. For more
+note body. Each argument you type is read on its own. Several words
+inside one argument, as in `ntropy search "borrow checker"`, are a phrase:
+the words in that order with any whitespace between them, a line break
+included, and every character literal, so `"c++ tips"` is not a pattern.
+Separate arguments, as in `ntropy search borrow checker`, find notes that
+contain every word, anywhere in the body and in any order. An argument
+that is a whole query, such as `'tag:work and not status:done'`, stays a
+query, and a phrase that holds a `:`, a parenthesis, a quote or the word
+`and`, `or` or `not` is one too. Write such a phrase with double quotes
+inside single quotes: `ntropy search '"page not found"'`. For more
 precise matching, reach for a typed term:
 
 - `tag:x` matches hierarchically. `x` and each note tag are split on
@@ -63,6 +69,10 @@ default order isn't what you mean. Two terms side by side are an `and`:
 ```bash
 ntropy search '(tag:work or tag:side-project) and not status:done'
 ```
+
+Beside other arguments, an argument that holds a whole query is grouped:
+`ntropy search 'a or b' c` is `(a or b) and c`. Blank arguments are
+ignored.
 
 A word that is not an operator is always a search word. A mistyped
 operator, as in `tag:work nd status:done`, is therefore not an error but

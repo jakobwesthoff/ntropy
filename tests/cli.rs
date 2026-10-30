@@ -942,40 +942,188 @@ fn search_with_two_bare_words_needs_both() {
     });
 }
 
-#[test]
-fn search_splits_a_spaced_argument_into_words_and_keeps_a_quoted_phrase() {
+/// The stdout of `ntropy search -n <args>` run in `vault`, with the output
+/// attached to the assertion message of the caller through `rendered`.
+fn search_listing(vault: &Path, args: &[&str]) -> (String, std::process::Output) {
+    let output = ntropy(vault)
+        .arg("search")
+        .args(args)
+        .arg("-n")
+        .output()
+        .expect("run ntropy");
+    (String::from_utf8_lossy(&output.stdout).into_owned(), output)
+}
+
+/// A vault whose two notes hold the words `borrow` and `checker`: the first
+/// as a phrase, the second apart and in the other order.
+fn phrase_vault() -> tempfile::TempDir {
     let dir = setup_vault();
     write_note(
         dir.path(),
         ULID_A,
         "phrase",
-        "---\ntitle: Phrase\n---\nthe borrow checker complains\n",
+        "---\ntitle: Phrase\ntags: [work]\n---\nthe borrow checker complains\n",
     );
     write_note(
         dir.path(),
         ULID_B,
-        "reversed",
-        "---\ntitle: Reversed\n---\nchecker and borrow apart\n",
+        "apart",
+        "---\ntitle: Apart\ntags: [work]\n---\nchecker and borrow apart\n",
+    );
+    dir
+}
+
+#[test]
+fn search_reads_a_spaced_argument_as_a_phrase() {
+    let dir = phrase_vault();
+
+    let (listing, output) = search_listing(dir.path(), &["borrow checker"]);
+
+    assert!(listing.contains(ULID_A), "{}", rendered(&output));
+    assert!(!listing.contains(ULID_B), "{}", rendered(&output));
+}
+
+#[test]
+fn search_reads_separate_arguments_as_all_words_in_any_order() {
+    let dir = phrase_vault();
+
+    let (listing, output) = search_listing(dir.path(), &["borrow", "checker"]);
+
+    assert!(listing.contains(ULID_A), "{}", rendered(&output));
+    assert!(listing.contains(ULID_B), "{}", rendered(&output));
+}
+
+#[test]
+fn search_still_reads_a_double_quoted_phrase_inside_the_query() {
+    let dir = phrase_vault();
+
+    let (listing, output) = search_listing(dir.path(), &["\"borrow checker\""]);
+
+    assert!(listing.contains(ULID_A), "{}", rendered(&output));
+    assert!(!listing.contains(ULID_B), "{}", rendered(&output));
+}
+
+#[test]
+fn search_phrase_argument_matches_across_a_line_break() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wrapped",
+        "---\ntitle: Wrapped\n---\nthe borrow\nchecker complains\n",
     );
 
-    // The shell strips plain double quotes, so ntropy receives the single
-    // argument `borrow checker`: two words, in any order.
-    let words = ntropy(dir.path())
-        .args(["search", "borrow checker", "-n"])
-        .output()
-        .expect("run ntropy");
-    let words_out = String::from_utf8_lossy(&words.stdout);
-    assert!(words_out.contains(ULID_A), "{}", rendered(&words));
-    assert!(words_out.contains(ULID_B), "{}", rendered(&words));
+    let (listing, output) = search_listing(dir.path(), &["borrow checker"]);
 
-    // The quotes that make a phrase must reach ntropy itself.
-    let phrase = ntropy(dir.path())
-        .args(["search", "\"borrow checker\"", "-n"])
-        .output()
-        .expect("run ntropy");
-    let phrase_out = String::from_utf8_lossy(&phrase.stdout);
-    assert!(phrase_out.contains(ULID_A), "{}", rendered(&phrase));
-    assert!(!phrase_out.contains(ULID_B), "{}", rendered(&phrase));
+    assert!(listing.contains(ULID_A), "{}", rendered(&output));
+}
+
+#[test]
+fn search_phrase_argument_matches_regex_characters_literally() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "plus",
+        "---\ntitle: Plus\n---\nlearn c++ tips\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "dot",
+        "---\ntitle: Dot\n---\nnodexjs tips\n",
+    );
+
+    let (plus, plus_output) = search_listing(dir.path(), &["c++ tips"]);
+    let (dot, dot_output) = search_listing(dir.path(), &["node.js tips"]);
+
+    assert!(plus.contains(ULID_A), "{}", rendered(&plus_output));
+    assert!(!dot.contains(ULID_B), "{}", rendered(&dot_output));
+}
+
+#[test]
+fn search_combines_a_phrase_argument_with_other_arguments() {
+    let dir = phrase_vault();
+
+    let (both, both_output) = search_listing(dir.path(), &["borrow checker", "tag:work"]);
+    let (either, either_output) =
+        search_listing(dir.path(), &["borrow checker", "or", "tag:nothing"]);
+
+    assert!(both.contains(ULID_A), "{}", rendered(&both_output));
+    assert!(!both.contains(ULID_B), "{}", rendered(&both_output));
+    assert!(either.contains(ULID_A), "{}", rendered(&either_output));
+    assert!(!either.contains(ULID_B), "{}", rendered(&either_output));
+}
+
+#[test]
+fn search_groups_a_query_argument_beside_other_arguments() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "alpha",
+        "---\ntitle: Alpha\n---\nalpha\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "beta",
+        "---\ntitle: Beta\n---\nbeta gamma\n",
+    );
+
+    // `alpha or beta gamma` would also list the note holding only `alpha`.
+    let (listing, output) = search_listing(dir.path(), &["alpha or beta", "gamma"]);
+
+    assert!(!listing.contains(ULID_A), "{}", rendered(&output));
+    assert!(listing.contains(ULID_B), "{}", rendered(&output));
+}
+
+#[test]
+fn search_keeps_a_whole_query_in_one_argument() {
+    let dir = phrase_vault();
+
+    let (listing, output) = search_listing(dir.path(), &["tag:work and not apart"]);
+
+    assert!(listing.contains(ULID_A), "{}", rendered(&output));
+    assert!(!listing.contains(ULID_B), "{}", rendered(&output));
+}
+
+#[test]
+fn search_reads_a_phrase_with_query_syntax_as_a_query() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "missing",
+        "---\ntitle: Missing\n---\npage not found\n",
+    );
+
+    let (as_query, query_output) = search_listing(dir.path(), &["page not found"]);
+    let (as_phrase, phrase_output) = search_listing(dir.path(), &["\"page not found\""]);
+
+    // `page not found` is `page and (not found)`, which the note does not satisfy.
+    assert!(!as_query.contains(ULID_A), "{}", rendered(&query_output));
+    assert!(as_phrase.contains(ULID_A), "{}", rendered(&phrase_output));
+}
+
+#[test]
+fn search_with_an_empty_argument_lists_all_notes() {
+    let dir = phrase_vault();
+
+    let (listing, output) = search_listing(dir.path(), &[""]);
+
+    assert!(listing.contains(ULID_A), "{}", rendered(&output));
+    assert!(listing.contains(ULID_B), "{}", rendered(&output));
+}
+
+#[test]
+fn search_reports_a_syntax_error_against_the_query_it_ran() {
+    let dir = phrase_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "node.js tips", "foo,bar", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
 }
 
 #[test]
@@ -3945,6 +4093,65 @@ fn delete_with_two_bare_words_still_needs_exactly_one_match() {
     assert!(String::from_utf8_lossy(&out.stderr).contains("is ambiguous (2 matches)"));
     assert!(vault.join(format!("all-notes/{ULID_A}-a.md")).exists());
     assert!(vault.join(format!("all-notes/{ULID_B}-b.md")).exists());
+}
+
+#[test]
+fn delete_with_a_phrase_argument_deletes_the_phrase_match() {
+    let dir = phrase_vault();
+    let vault = dir.path();
+
+    let out = ntropy(vault)
+        .args(["delete", "borrow checker", "-f", "-n"])
+        .output()
+        .expect("run ntropy");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(!vault.join(format!("all-notes/{ULID_A}-phrase.md")).exists());
+    assert!(vault.join(format!("all-notes/{ULID_B}-apart.md")).exists());
+}
+
+#[test]
+fn delete_reports_the_query_it_ran_when_nothing_matches() {
+    let dir = phrase_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["delete", "no such phrase", "-f", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn render_with_a_phrase_argument_renders_the_phrase_match() {
+    let dir = phrase_vault();
+    let target = dir.path().join("rendered.html");
+
+    let out = ntropy(dir.path())
+        .args(["render", "borrow checker", "--to", "html", "-n", "-o"])
+        .arg(&target)
+        .output()
+        .expect("run ntropy");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let page = fs::read_to_string(&target).expect("the rendered page");
+    assert!(page.contains("the borrow checker complains"), "{page}");
+}
+
+#[test]
+fn site_with_a_phrase_argument_exports_the_phrase_match() {
+    let dir = site_vault();
+    write_note(
+        dir.path(),
+        ULID_C,
+        "reversed",
+        "---\ntitle: Reversed\n---\nguide the reader.\n",
+    );
+
+    let output = site(dir.path(), &["-o", "out", "the guide"]);
+
+    assert!(output.status.success(), "{}", rendered(&output));
+    let out = dir.path().join("out");
+    assert!(out.join("notes/rust-tips.html").is_file());
+    assert!(!out.join("notes/reversed.html").exists());
 }
 
 #[test]

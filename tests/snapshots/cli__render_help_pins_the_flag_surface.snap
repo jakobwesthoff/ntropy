@@ -22,7 +22,7 @@ Usage: ntropy render [OPTIONS] [ID|QUERY]...
 
 Arguments:
   [ID|QUERY]...
-          A full ULID or a query DSL expression (joined from trailing arguments; omitted = choose from all notes)
+          A full ULID or a query DSL expression, as trailing arguments that are each read on their own; words in one argument form a phrase (omitted = choose from all notes)
 
 Options:
       --to <FORMAT>

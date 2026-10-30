@@ -17,9 +17,15 @@ change in any release
   one, so `ntropy search borrow checker` finds notes holding both words
   instead of failing with a syntax error, and `a b or c` is `(a and b) or c`.
   A mistyped operator, as in `tag:work nd status:done`, is no longer an
-  error: `nd` is searched as a word. A phrase on the command line is written
-  `ntropy search '"borrow checker"'`
+  error: `nd` is searched as a word
   ([ADR 0076](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md)).
+- `search`, `delete`, `render` and `site` read each query argument on its
+  own. An argument with several words and no query syntax is a phrase, so
+  `ntropy search "borrow checker"` finds those words in order, a line break
+  included, and `"c++ tips"` is searched literally. An argument that is a
+  query stays one, and beside other arguments it is grouped:
+  `search tag:work and 'status:open or status:new'` now means
+  `tag:work and (status:open or status:new)`. Blank arguments are ignored.
 
 ## v2.3.0 - 2026-10-30
 

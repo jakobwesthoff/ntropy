@@ -50,8 +50,12 @@ and the query DSL in [query-and-search.md](query-and-search.md).
   positional argument, so it may carry arguments and shell quoting
   (ADR 0066).
 - **Bare `ntropy`:** with no subcommand, prints help.
-- **Free-text args:** `search` and `new` join their trailing arguments into one
-  string (the query / the title).
+- **Free-text args:** `new` joins its trailing arguments into the title with
+  spaces. `search`, `delete`, `render` and `site` read each trailing argument
+  of the query on its own (ADR 0076): an argument with several words and no
+  query syntax is a phrase, so `ntropy search "borrow checker"` finds those
+  words in order, and an argument that is a query stays one, so a whole query
+  in one quoted argument works. Arguments side by side are an `and`.
 - **Encryption:** `--identity <path>` / `-i` (or `$NTROPY_IDENTITY`) names an
   age identity file to use instead of the OS credential store, and
   `--passphrase-file <path>` supplies a vault passphrase from a file's first
@@ -176,8 +180,9 @@ Examples:
     ntropy search                       # all notes
     ntropy search tag:work
     ntropy search 01ARZ3NDEKTSV4RRFFQ69G5FAV    # open a note by id
-    ntropy search tag:work and not status:done   # trailing args joined
-    ntropy search 'text:"deadline"'     # quote phrases for the shell
+    ntropy search tag:work and not status:done   # arguments side by side
+    ntropy search "borrow checker"      # a phrase
+    ntropy search 'text:"deadline"'     # quote for the shell when the query has quotes
     ntropy search tag:work -n           # print, don't pick
     ntropy edit 01ARZ3NDEKTSV4RRFFQ69G5FAV      # `edit` is a hidden alias
 

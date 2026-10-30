@@ -11,6 +11,7 @@
 //! a string straight to something it can match notes against. Both surface a
 //! single [`QueryError`].
 
+mod arguments;
 mod ast;
 mod error;
 mod eval;
@@ -18,6 +19,7 @@ mod parser;
 mod text_search;
 mod token;
 
+pub use arguments::from_arguments;
 pub use ast::Query;
 pub use error::QueryError;
 pub use eval::Prepared;

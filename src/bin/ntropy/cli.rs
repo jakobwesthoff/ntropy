@@ -5,10 +5,11 @@
 //! The clap command surface (ADR 0018, `docs/design/cli.md`).
 //!
 //! Global flags (`--vault`, `-n/--non-interactive`, `--strict`) are available
-//! on every subcommand. `new`, `search` and `delete` take their free text as
-//! repeated positional arguments which the `run` layer joins into one string
-//! (the title / query / selector). `edit` is a hidden alias of `search`
-//! (ADR 0031). A bare `ntropy` prints help.
+//! on every subcommand. `new` takes its title as repeated positional arguments
+//! which the `run` layer joins with spaces. `search`, `delete`, `render` and
+//! `site` take a query or selector as repeated positional arguments, each read
+//! on its own by `ntropy::query::from_arguments` (ADR 0076). `edit` is a hidden
+//! alias of `search` (ADR 0031). A bare `ntropy` prints help.
 
 use std::path::PathBuf;
 
@@ -109,8 +110,9 @@ pub enum Command {
     /// hidden alias for this command (ADR 0031).
     #[command(visible_alias = "list", alias = "edit")]
     Search {
-        /// A full ULID or a query DSL expression (joined from trailing
-        /// arguments; omitted = all notes).
+        /// A full ULID or a query DSL expression, as trailing arguments that are
+        /// each read on their own; words in one argument form a phrase
+        /// (omitted = all notes).
         #[arg(value_name = "ID|QUERY")]
         query: Vec<String>,
         /// Print the selected note's path instead of opening the editor.
@@ -153,8 +155,8 @@ pub enum Command {
 
     /// Delete a note by id or query.
     Delete {
-        /// A full ULID or a query DSL expression (joined from trailing
-        /// arguments).
+        /// A full ULID or a query DSL expression, as trailing arguments that are
+        /// each read on their own; words in one argument form a phrase.
         #[arg(required = true, value_name = "ID|QUERY")]
         selector: Vec<String>,
         /// Skip the confirmation prompt.
@@ -175,8 +177,9 @@ pub enum Command {
     /// and `typst`; `[site] theme`, a directory in `.ntropy/themes/site/`,
     /// for `html`. `--theme` overrides it for one invocation.
     Render {
-        /// A full ULID or a query DSL expression (joined from trailing
-        /// arguments; omitted = choose from all notes).
+        /// A full ULID or a query DSL expression, as trailing arguments that are
+        /// each read on their own; words in one argument form a phrase
+        /// (omitted = choose from all notes).
         #[arg(value_name = "ID|QUERY")]
         selector: Vec<String>,
         /// The output format: `pdf` (default), `typst`, or `html`.
@@ -223,8 +226,9 @@ pub enum Command {
         /// `--force` empties it first.
         #[arg(short = 'o', long, value_name = "DIR", required = true)]
         output: Option<PathBuf>,
-        /// A query DSL expression restricting the exported notes (joined from
-        /// trailing arguments; omitted = every note).
+        /// A query DSL expression restricting the exported notes, as trailing
+        /// arguments that are each read on their own; words in one argument
+        /// form a phrase (omitted = every note).
         #[arg(value_name = "QUERY")]
         query: Vec<String>,
         /// Export with this site theme instead of the vault's configured one.

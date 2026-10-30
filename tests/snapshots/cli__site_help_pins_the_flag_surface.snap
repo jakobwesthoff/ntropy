@@ -27,7 +27,7 @@ Commands:
 
 Arguments:
   [QUERY]...
-          A query DSL expression restricting the exported notes (joined from trailing arguments; omitted = every note)
+          A query DSL expression restricting the exported notes, as trailing arguments that are each read on their own; words in one argument form a phrase (omitted = every note)
 
 Options:
       --vault <PATH>

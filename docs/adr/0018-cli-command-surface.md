@@ -6,6 +6,8 @@ Date: 2026-06-24
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0076](0076-adjacent-terms-in-a-query-are-an-implicit-and.md).
+
 The `edit` command is superseded by
 [ADR 0031](0031-merge-edit-into-search.md), which folds it into `search` as a
 hidden alias. The `--no-edit`/`--print` flag naming is superseded by

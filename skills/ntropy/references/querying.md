@@ -14,7 +14,8 @@ open entry point. Filtering and full-text search are one mechanism: a query
 expression evaluated in a single pass over `all-notes/`. `delete` takes the
 same selector.
 
-The selector is optional and joined from all trailing arguments:
+The selector is optional and read from all trailing arguments, each on its
+own:
 
 - **omitted** — all notes
 - **a full 26-character ULID** — exactly that note
@@ -35,13 +36,18 @@ ntropy search -n tag:work and not status:done
 ntropy search -n 'status:"in progress" or tag:urgent'
 ntropy search -n '(tag:work or tag:side-project) and not status:done'
 ntropy search -n borrow checker            # both words in the body, any order
-ntropy search -n '"borrow checker"'        # the exact phrase
+ntropy search -n "borrow checker"          # the phrase, words in that order
 ```
 
 Quote the whole query for the shell whenever it contains `(`, `)`, or double
-quotes. A phrase needs its double quotes inside the query, so wrap them in
-single quotes: `'"borrow checker"'`. Plain `"borrow checker"` reaches ntropy
-as the two words `borrow checker`.
+quotes. An argument with several words and no query syntax (no `:`,
+parenthesis or `"`, and no `and`, `or`, `not` in any case) is a phrase: its
+words in order with any whitespace between them, a line break included, every
+character literal. `'tag:work and not status:done'` in one argument stays a
+query, and next to other arguments a whole-query argument is grouped, so
+`search 'a or b' c` is `(a or b) and c`. A phrase that contains query syntax is
+written with double quotes inside single quotes: `'"page not found"'`. Blank
+arguments are ignored.
 
 ### Predicate semantics
 
