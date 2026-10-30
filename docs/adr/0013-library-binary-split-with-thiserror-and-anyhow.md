@@ -6,6 +6,8 @@ Date: 2026-06-24
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0075](0075-version-numbers-cover-the-cli-not-the-library.md).
+
 ## Context
 
 ntropy needs a clear boundary between domain logic and the CLI, and a

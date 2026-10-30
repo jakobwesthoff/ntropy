@@ -100,3 +100,4 @@ made.
 - [0072. Export paths stay inside the vault and the output](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)
 - [0073. What html and site exports copy from the vault](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0073-what-html-and-site-exports-copy-from-the-vault.md)
 - [0074. typst runs in ntropy's working directory](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0074-typst-runs-in-ntropys-working-directory.md)
+- [0075. Version numbers cover the CLI, not the library](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)

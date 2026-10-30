@@ -4,7 +4,10 @@ All notable changes to ntropy are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
-[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html) for the `ntropy`
+command-line program. The crate's library is internal and its API can
+change in any release
+([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
 ## Unreleased
 
@@ -22,6 +25,9 @@ and this project adheres to
 
 ### Changed
 
+- Version numbers and semantic versioning cover the `ntropy` CLI only. The
+  crate's library is internal, and its API can change in any release; pin
+  an exact version to build on it.
 - The crate declares its minimum Rust version, 1.92, which Cargo checks
   before it builds. Its crates.io entry links the project page and lists
   keywords and categories.

@@ -4,6 +4,11 @@
 
 //! ntropy: an opinionated Markdown note-taking and management library.
 //!
+//! The library holds the business logic of the `ntropy` CLI so that other
+//! front ends can share it. It is not a public interface: version numbers
+//! and semantic versioning cover the CLI only, and the API here can change
+//! in any release (ADR 0075). Pin an exact version to build on it.
+//!
 //! The crate is organized into layers, lowest (pure, no I/O) to highest
 //! (orchestration), so dependencies only ever point downward:
 //!

@@ -20,6 +20,12 @@ ntropy is licensed under the Mozilla Public License 2.0
 and every source file starts with the MPL header comment, as the
 repository's `CLAUDE.md` requires.
 
+The crate splits into a library with the business logic and the `ntropy`
+binary on top of it, so that other front ends can share that logic. The
+library is not a public interface: version numbers and semantic versioning
+cover the CLI only, and the library's API can change in any release
+([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
+
 ## Building from source
 
 ```bash
