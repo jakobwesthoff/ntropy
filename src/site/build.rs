@@ -34,7 +34,7 @@ use crate::note::Note;
 use crate::query::Query;
 use crate::render::html::{self, Targets, frontmatter};
 use crate::render::markdown::resolve_root_relative;
-use crate::render::{LinkTarget, RenderError, ResolvedLink};
+use crate::render::{LinkTarget, RenderError, ResolvedLink, join_within};
 use crate::view::ViewDef;
 
 use super::SiteOptions;
@@ -442,20 +442,41 @@ pub(crate) fn mirrored(
 }
 
 /// Write a built site into `dir`, creating directories as needed.
+///
+/// Every target must lie inside `dir` (ADR 0072). All of them are checked
+/// before the first file is written, so a site with one target outside
+/// `dir` fails without writing any file.
 pub fn write(built: &Built, dir: &Path) -> std::io::Result<()> {
-    for file in &built.files {
-        let path = dir.join(&file.path);
+    let inside = |relative: &str| {
+        join_within(dir, relative).ok_or_else(|| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("`{relative}` would be written outside the output directory"),
+            )
+        })
+    };
+    let files = built
+        .files
+        .iter()
+        .map(|file| Ok((inside(&file.path)?, &file.contents)))
+        .collect::<std::io::Result<Vec<_>>>()?;
+    let copies = built
+        .copies
+        .iter()
+        .map(|copy| Ok((inside(&copy.to)?, &copy.from)))
+        .collect::<std::io::Result<Vec<_>>>()?;
+
+    for (path, contents) in files {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, &file.contents)?;
+        std::fs::write(path, contents)?;
     }
-    for copy in &built.copies {
-        let path = dir.join(&copy.to);
+    for (path, from) in copies {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::copy(&copy.from, path)?;
+        std::fs::copy(from, path)?;
     }
     Ok(())
 }
@@ -1797,5 +1818,69 @@ mod tests {
             std::fs::read(out.path().join("files/assets/logo.svg")).expect("copied"),
             b"svg"
         );
+    }
+
+    /// A site holding `files` and `copies` and nothing else.
+    fn handmade(files: &[&str], copies: Vec<Copy>) -> Built {
+        Built {
+            files: files
+                .iter()
+                .map(|path| OutputFile {
+                    path: path.to_string(),
+                    contents: b"page".to_vec(),
+                })
+                .collect(),
+            copies,
+            warnings: Vec::new(),
+        }
+    }
+
+    /// Write `built` into `<tmp>/out` and return the refusal it must end in.
+    fn refused(tmp: &Path, built: &Built) -> std::io::Error {
+        let err = write(built, &tmp.join("out")).expect_err("the target is refused");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput, "{err}");
+        err
+    }
+
+    #[test]
+    fn write_refuses_a_page_outside_the_output_directory() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let err = refused(tmp.path(), &handmade(&["../escape.html"], Vec::new()));
+        assert!(err.to_string().contains("`../escape.html`"), "{err}");
+        assert!(!tmp.path().join("escape.html").exists());
+    }
+
+    #[test]
+    fn write_refuses_a_copy_outside_the_output_directory() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let source = tmp.path().join("source.txt");
+        std::fs::write(&source, b"source").expect("source");
+        let copy = Copy {
+            from: source,
+            to: "files/../../escape.txt".to_string(),
+        };
+        refused(tmp.path(), &handmade(&[], vec![copy]));
+        assert!(!tmp.path().join("escape.txt").exists());
+    }
+
+    #[test]
+    fn write_refuses_an_absolute_target() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        let elsewhere = tmp.path().join("elsewhere/escape.html");
+        refused(
+            tmp.path(),
+            &handmade(&[&elsewhere.to_string_lossy()], Vec::new()),
+        );
+        assert!(!elsewhere.exists());
+    }
+
+    #[test]
+    fn write_writes_no_file_when_a_later_target_is_refused() {
+        let tmp = tempfile::tempdir().expect("temp dir");
+        refused(
+            tmp.path(),
+            &handmade(&["index.html", "../escape.html"], Vec::new()),
+        );
+        assert!(!tmp.path().join("out/index.html").exists());
     }
 }

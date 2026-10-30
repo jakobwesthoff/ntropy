@@ -409,9 +409,14 @@ impl ProcessContext {
     }
 
     /// The path of `relative` inside the files directory, its parent
-    /// directories created.
+    /// directories created. A `relative` that leaves the files directory is
+    /// refused (ADR 0072).
     fn file_path(&self, relative: &str) -> Result<PathBuf, RenderError> {
-        let path = self.files.join(relative);
+        let path = ntropy::render::join_within(&self.files, relative).ok_or_else(|| {
+            RenderError::OutsideFilesDir {
+                name: relative.to_string(),
+            }
+        })?;
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent).map_err(|source| RenderError::WriteFile {
                 name: relative.to_string(),
@@ -733,6 +738,49 @@ mod tests {
             .write_output(b"body")
             .expect_err("an unwritable path errors");
         assert!(matches!(err, RenderError::WriteOutput { .. }));
+    }
+
+    #[test]
+    fn write_file_writes_inside_the_files_directory() {
+        let tmp = tempfile::TempDir::new().expect("temp dir");
+        let mut ctx = ProcessContext::new(tmp.path().join("out.html")).expect("context");
+        ctx.write_file("grammars/x.js", b"grammar")
+            .expect("a path below the files directory is written");
+        assert_eq!(
+            std::fs::read(tmp.path().join("out_files/grammars/x.js")).expect("written"),
+            b"grammar"
+        );
+    }
+
+    #[test]
+    fn write_file_refuses_a_path_leaving_the_files_directory() {
+        let tmp = tempfile::TempDir::new().expect("temp dir");
+        let mut ctx = ProcessContext::new(tmp.path().join("out.html")).expect("context");
+        let err = ctx
+            .write_file("../escape.txt", b"escaped")
+            .expect_err("a path above the files directory is refused");
+        assert!(
+            matches!(&err, RenderError::OutsideFilesDir { name } if name == "../escape.txt"),
+            "{err:?}"
+        );
+        assert!(!tmp.path().join("escape.txt").exists());
+    }
+
+    #[test]
+    fn copy_file_refuses_an_absolute_path() {
+        let tmp = tempfile::TempDir::new().expect("temp dir");
+        let source = tmp.path().join("source.txt");
+        std::fs::write(&source, b"source").expect("source");
+        let elsewhere = tmp.path().join("elsewhere/x");
+        let mut ctx = ProcessContext::new(tmp.path().join("out.html")).expect("context");
+        let err = ctx
+            .copy_file(&source, &elsewhere.to_string_lossy())
+            .expect_err("an absolute target is refused");
+        assert!(
+            matches!(err, RenderError::OutsideFilesDir { .. }),
+            "{err:?}"
+        );
+        assert!(!elsewhere.exists());
     }
 
     #[test]

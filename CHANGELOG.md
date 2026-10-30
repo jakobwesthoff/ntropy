@@ -139,7 +139,8 @@ and this project adheres to
   copies outside the files directory or the output directory; a link to
   the directory above the vault copied all of it. Such a path now counts
   as outside the vault, like a relative one: the export warns and copies
-  nothing.
+  nothing. Both commands also refuse to write any file outside their
+  output.
 
 ## v2.2.0 - 2026-10-10
 

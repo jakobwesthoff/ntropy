@@ -77,7 +77,9 @@ language without a grammar. A path that starts with `/` is read from the
 vault root, its `.` and `..` parts resolved as a relative path's are, so
 one that climbs above the root lies outside the vault too
 ([ADR 0072](../adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)).
-The theme is selected as the site selects
+Every file the engine writes besides the page lies inside
+`<stem>_files/`; a target outside it fails the render. The theme is
+selected as the site selects
 it, `--theme` then `[site] theme`, resolved in `.ntropy/themes/site/`;
 the `pdf` and `typst` formats keep `[render] theme` and
 `.ntropy/themes/typst/`.

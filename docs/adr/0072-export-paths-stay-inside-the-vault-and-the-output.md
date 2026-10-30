@@ -31,8 +31,19 @@ copies nothing, and the page keeps the path as written. The `typst`
 emitter writes such a path as written, for the compiler to reject, as it
 does a relative one (ADR 0045).
 
+Every file the `html` engine writes into its files directory, and every
+file the site export writes, must lie inside that directory. A target
+that is absolute or has a `..` part fails the render or the export. The
+site export checks every target before it writes the first. The check is
+lexical, since every target is built from a path string.
+
 ## Consequences
 
-- Paths are resolved lexically. A symlink inside the vault is followed: a
-  referenced path that is or passes through one is read and copied from
-  where it points.
+- Paths and targets are checked lexically. A symlink inside the vault is
+  followed: a referenced path that is or passes through one is read and
+  copied from where it points.
+- A target outside the output is an error, not a warning. A `render --to
+  html` that fails on one may leave part of the files directory written.
+  A site export checks every target first, so one that fails on such a
+  target writes no file into its output directory; a forced output
+  directory is emptied before the build.

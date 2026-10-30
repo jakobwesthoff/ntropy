@@ -18,7 +18,7 @@
 use std::ffi::OsString;
 use std::io;
 use std::ops::Range;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::id::Id;
 
@@ -65,7 +65,10 @@ pub trait RenderContext {
 
     /// Write a file into the artifact's files directory (ADR 0057),
     /// `<stem>_files/` beside the artifact, at `relative` inside it with `/`
-    /// separators, creating directories as needed.
+    /// separators, creating directories as needed. A `relative` that would
+    /// not name a file inside the directory (absolute, with a `..` part, or
+    /// empty) is refused with [`RenderError::OutsideFilesDir`];
+    /// [`join_within`] does the check (ADR 0072).
     fn write_file(&mut self, relative: &str, contents: &[u8]) -> Result<(), RenderError>;
 
     /// Copy `from` into the artifact's files directory at `relative`, as
@@ -90,6 +93,24 @@ pub fn files_dir(artifact: &Path) -> PathBuf {
         .map(|stem| stem.to_string_lossy().into_owned())
         .unwrap_or_default();
     artifact.with_file_name(format!("{stem}_files"))
+}
+
+/// `relative`, a `/`-separated path an export writes below `dir`, joined onto
+/// `dir`; `None` when it would not name a file inside `dir`: it is absolute,
+/// has a `..` part, or names nothing below `dir` (ADR 0072). The check is
+/// lexical, since every target an export writes is built from a path string.
+pub fn join_within(dir: &Path, relative: &str) -> Option<PathBuf> {
+    let mut named = false;
+    for component in Path::new(relative).components() {
+        match component {
+            Component::Normal(_) => named = true,
+            Component::CurDir => {}
+            // A `..` is refused even where it would stay inside: no target an
+            // export builds has one, so any one is a path that escaped.
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => return None,
+        }
+    }
+    named.then(|| dir.join(relative))
 }
 
 /// An engine: a strategy that turns a [`PreparedDocument`] into an artifact by
@@ -282,6 +303,11 @@ pub enum RenderError {
         source: io::Error,
     },
 
+    /// A file the engine writes beside the artifact would land outside its
+    /// files directory (ADR 0072).
+    #[error("`{name}` would be written outside the artifact's files directory")]
+    OutsideFilesDir { name: String },
+
     /// Writing or copying a file into the artifact's files directory failed.
     #[error("while writing `{name}` beside the artifact")]
     WriteFile {
@@ -357,6 +383,46 @@ mod tests {
             source: io::Error::new(io::ErrorKind::PermissionDenied, "denied"),
         };
         insta::assert_snapshot!(err, @"while writing the output artifact");
+    }
+
+    #[test]
+    fn outside_files_dir_message() {
+        let err = RenderError::OutsideFilesDir {
+            name: "../escape.txt".to_string(),
+        };
+        insta::assert_snapshot!(err, @"`../escape.txt` would be written outside the artifact's files directory");
+    }
+
+    #[test]
+    fn join_within_keeps_a_relative_path_below_the_directory() {
+        let dir = Path::new("/out");
+        assert_eq!(
+            join_within(dir, "grammars/rust.js"),
+            Some(PathBuf::from("/out/grammars/rust.js"))
+        );
+        assert_eq!(join_within(dir, "./a"), Some(PathBuf::from("/out/./a")));
+    }
+
+    #[test]
+    fn join_within_refuses_a_parent_part() {
+        let dir = Path::new("/out");
+        assert_eq!(join_within(dir, "../escape.txt"), None);
+        assert_eq!(join_within(dir, "files/../../escape.txt"), None);
+        // Stays inside lexically, yet no target an export builds has a `..`,
+        // so any one is refused.
+        assert_eq!(join_within(dir, "files/../x"), None);
+    }
+
+    #[test]
+    fn join_within_refuses_an_absolute_path() {
+        assert_eq!(join_within(Path::new("/out"), "/elsewhere/x"), None);
+    }
+
+    #[test]
+    fn join_within_refuses_a_path_naming_nothing() {
+        let dir = Path::new("/out");
+        assert_eq!(join_within(dir, ""), None);
+        assert_eq!(join_within(dir, "."), None);
     }
 
     #[test]

@@ -248,7 +248,9 @@ A path that starts with `/` is read from the vault root, its `.` and `..`
 parts resolved as a relative path's are; one that climbs above the root
 is outside the vault, and the page keeps it as written
 ([ADR 0072](../adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)).
-Remote images stay remote.
+Remote images stay remote. Every file the export writes lies inside the
+output directory. The export checks every target before it writes the
+first file and fails without writing any on one outside it.
 
 ## Themes
 
