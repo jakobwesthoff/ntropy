@@ -1,7 +1,8 @@
 name: Release
 
-permissions:
-  contents: write
+# Each job grants its token only what that job needs. The called CI reads;
+# only the two release jobs can write.
+permissions: {}
 
 on:
   push:
@@ -21,8 +22,14 @@ jobs:
   create-release:
     needs: ci
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
+      # The release actions call gh with the explicit token below and run
+      # no git command that needs credentials.
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - uses: taiki-e/create-gh-release-action@eba8ea96c86cca8a37f1b56e94b4d13301fba651 # v1.11.0
         with:
           # The release notes are the tag's section of the changelog; a tag
@@ -48,8 +55,12 @@ jobs:
             os: ubuntu-latest
 
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - uses: taiki-e/upload-rust-binary-action@f0d45ae91ee7b8ee928de7a9d04d893a08bcbec6 # v1.30.2
         with:
           bin: ntropy

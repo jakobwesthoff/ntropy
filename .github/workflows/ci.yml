@@ -8,6 +8,9 @@ on:
   # The release workflow runs these checks before it publishes anything.
   workflow_call:
 
+permissions:
+  contents: read
+
 jobs:
   check:
     strategy:
@@ -20,6 +23,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       # rust-toolchain has no versioned releases. Its only tag, v1, marks
       # a commit on master, so updating this pin may need a manual bump.
       - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # v1
@@ -43,6 +48,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: site/.bun-version
