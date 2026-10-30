@@ -34,15 +34,17 @@ Text from the vault is escaped before it is shown, by one function,
   which emoji subdivision flags such as England's are made of. A backslash
   or quote is shown as it is.
 
-Each escape is ASCII, and the aligned table measures and pads the escaped
-text.
+Each escape is ASCII, and the aligned table and the picker measure, pad
+and cut the escaped text.
 
 Escaping applies whether or not the output is a terminal, so the output is
 the same everywhere (ADR 0033). It covers table cells, note references in
 prompts and messages, warnings, the reconcile and `init` reports, `info`,
-the vault's path in status lines and passphrase prompts, and error
-messages. In an error message line breaks are kept, so a message that spans
-lines, such as an external tool's output, keeps its lines.
+the vault's path in status lines and passphrase prompts, error messages,
+and the picker's rows, whose search text is escaped too, so the match
+highlights point at what is drawn. In an error message line breaks are
+kept, so a message that spans lines, such as an external tool's output,
+keeps its lines.
 
 A path printed for a script (`-p`, `write`, the picker's print-path key) is
 printed as it is, so it names the file on disk. A path that would need
@@ -70,3 +72,4 @@ escaped with the rest of it.
 - A note whose file name holds an escaped character has no `-p` path until
   `ntropy reconcile` renames it. In a vault whose own path holds one, no
   `-p` path is printed at all.
+- The picker matches the query against the escaped title.

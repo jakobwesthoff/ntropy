@@ -21,6 +21,11 @@ under the prompt counts the matches and shows the selected note's ULID,
 with a reminder of extra keys such as `^Y path` at its right end when the
 terminal is wide enough.
 
+A control character or bidi override in a title shows escaped, such as
+`\u{1b}`, and you match against that escaped form; nothing in a title
+can move the cursor or redraw the screen. The `^Y` key does not print a
+path that holds such a character; `ntropy reconcile` renames the note.
+
 | Key | Action |
 |-----|--------|
 | _type_ | Filter the list |

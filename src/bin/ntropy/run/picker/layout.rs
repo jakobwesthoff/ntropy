@@ -20,7 +20,10 @@
 //! width and the title's share ([`allocate_columns`]), so its rules are tested
 //! on numbers alone.
 
+use std::borrow::Cow;
+
 use ntropy::ops::Candidate;
+use ntropy::text::escape_controls;
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
@@ -69,7 +72,10 @@ pub fn align_candidates(candidates: &[Candidate], width: usize) -> Vec<Row> {
             // separator.
             let mut parts: Vec<String> = Vec::new();
             if widths.title > 0 {
-                parts.push(pad(&truncate(&candidate.title, widths.title), widths.title));
+                parts.push(pad(
+                    &truncate(&shown_title(candidate), widths.title),
+                    widths.title,
+                ));
             }
             parts.push(date_cell(candidate));
             let tags = render_tags(&candidate.tags, widths.tags);
@@ -96,7 +102,7 @@ fn measure(candidates: &[Candidate]) -> Natural {
             .unwrap_or(0)
     };
     Natural {
-        title: widest(&|c| c.title.clone()),
+        title: widest(&|c| shown_title(c).into_owned()),
         tags: widest(&|c| bracket_tags(&c.tags)),
         date: widest(&date_cell),
     }
@@ -135,6 +141,16 @@ fn allocate_columns(natural: &Natural, width: usize, title_share_percent: usize)
     Widths { title, tags }
 }
 
+/// The title as the picker shows it, escaped (ADR 0071).
+///
+/// Measuring, cutting, padding and the search text all take the title from
+/// here, so they see the same string, and the match highlights, which index
+/// into the row's display, point at what is drawn. Tags are normalized slugs
+/// (ADR 0023) and carry nothing to escape.
+fn shown_title(candidate: &Candidate) -> Cow<'_, str> {
+    escape_controls(&candidate.title)
+}
+
 /// The date cell, `(YYYY-MM-DD)`.
 fn date_cell(candidate: &Candidate) -> String {
     format!("({})", candidate.date)
@@ -147,15 +163,12 @@ fn date_cell(candidate: &Candidate) -> String {
 /// display-only `suffix`.
 fn search_text(candidate: &Candidate) -> String {
     let tags = candidate.tags.join(", ");
-    [
-        candidate.title.as_str(),
-        candidate.date.as_str(),
-        tags.as_str(),
-    ]
-    .into_iter()
-    .filter(|field| !field.is_empty())
-    .collect::<Vec<_>>()
-    .join("  ")
+    let title = shown_title(candidate);
+    [title.as_ref(), candidate.date.as_str(), tags.as_str()]
+        .into_iter()
+        .filter(|field| !field.is_empty())
+        .collect::<Vec<_>>()
+        .join("  ")
 }
 
 /// The full bracketed tag list (`[a, b]`), or empty when the note has no tags.
@@ -931,5 +944,71 @@ mod tests {
         // or trailing separator.
         let rows = align_candidates(&[candidate(ULID_A, "", "2026-06-25", &[])], WIDE);
         assert_eq!(rows[0].search, "2026-06-25");
+    }
+
+    // -------------------------------------------------------------------------
+    // Titles from the vault are escaped before they are laid out (ADR 0071)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn a_hostile_title_reaches_the_row_escaped() {
+        let rows = align_candidates(
+            &[candidate(
+                ULID_A,
+                "Evil\u{1b}]0;pwned\u{7}",
+                "2026-06-25",
+                &[],
+            )],
+            WIDE,
+        );
+        assert!(!rows[0].display.contains('\u{1b}'), "{:?}", rows[0].display);
+        assert!(
+            rows[0].display.starts_with("Evil\\u{1b}]0;pwned\\u{7}"),
+            "{:?}",
+            rows[0].display
+        );
+    }
+
+    #[test]
+    fn a_line_break_in_a_title_stays_out_of_the_row() {
+        let rows = align_candidates(&[candidate(ULID_A, "Two\nLines", "2026-06-25", &[])], WIDE);
+        assert!(!rows[0].display.contains('\n'), "{:?}", rows[0].display);
+    }
+
+    #[test]
+    fn a_bidi_override_in_a_title_is_escaped() {
+        let rows = align_candidates(
+            &[candidate(
+                ULID_A,
+                "invoice\u{202e}fdp.exe",
+                "2026-06-25",
+                &[],
+            )],
+            WIDE,
+        );
+        assert!(
+            rows[0].display.starts_with("invoice\\u{202e}fdp.exe"),
+            "{:?}",
+            rows[0].display
+        );
+    }
+
+    #[test]
+    fn the_search_text_is_escaped_too() {
+        let rows = align_candidates(&[candidate(ULID_A, "a\u{1b}b", "2026-06-25", &[])], WIDE);
+        assert_eq!(rows[0].search, "a\\u{1b}b  2026-06-25");
+    }
+
+    #[test]
+    fn an_escaped_title_is_cut_to_its_column() {
+        // Measuring, cutting and padding all see the escaped title, so its
+        // date starts where the clean title's does. This pins the order: an
+        // escape applied after the cut would push the date out of line.
+        let cands = [
+            candidate(ULID_A, "a\u{1b}bcdefghijklmnop", "2026-06-25", &[]),
+            candidate(ULID_B, "abcdefghijklmnopqrstuvwxyz", "2026-06-25", &[]),
+        ];
+        let rows = align_candidates(&cands, 30);
+        assert_eq!(date_column(&rows[0].display), date_column(&rows[1].display));
     }
 }

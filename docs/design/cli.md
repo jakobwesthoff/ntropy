@@ -150,7 +150,8 @@ rank within the matches, the match count, the total and the selected note's
 ULID, with the picker's extra keys hinted at its right end, the first part to
 go on a narrow terminal), and the result list grows upward above the top divider with the best
 match nearest the prompt. Rows are an aligned title/date/tags grid (widths in
-Unicode display columns). The title and tag columns split the terminal width
+Unicode display columns). A title is escaped before it is measured, cut and
+matched (ADR 0071). The title and tag columns split the terminal width
 67/33, and a column that needs less than its share leaves the rest to the
 other (ADR 0059): a title or tag list gets an ellipsis only when the terminal
 is too narrow for it, and the grid is laid out again when the width changes.
