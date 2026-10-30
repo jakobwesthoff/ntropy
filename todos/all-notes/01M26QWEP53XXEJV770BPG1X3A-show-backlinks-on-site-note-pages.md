@@ -36,5 +36,5 @@ link table, so the inverse index is a fold over them.
 
 ## Relations
 
-- Relates to: [Show backlinks through textDocument/references](01KVZKK1BVQNHFX3V6W7W80YTD-show-backlinks-through-textdocumentreferences.md), the same backlink computation
+- Relates to: [Show backlinks through textDocument/references](01KVZKK1BVQNHFX3V6W7W80YTD-show-backlinks-through-textdocument-references.md), the same backlink computation
 - Relates to: [Add CLI commands to insert links and list backlinks](01KW4BDQKQFN8EP41CET8B1AVZ-add-cli-commands-to-insert-links-and-list-backlinks.md), the same backlink computation

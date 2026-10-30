@@ -26,5 +26,5 @@ Deferred during the first linking iteration, which shipped the link format
 
 ## Relations
 
-- Relates to: [Show backlinks through textDocument/references](01KVZKK1BVQNHFX3V6W7W80YTD-show-backlinks-through-textdocumentreferences.md),
+- Relates to: [Show backlinks through textDocument/references](01KVZKK1BVQNHFX3V6W7W80YTD-show-backlinks-through-textdocument-references.md),
   same backlink computation, with the language server caching the scan.
