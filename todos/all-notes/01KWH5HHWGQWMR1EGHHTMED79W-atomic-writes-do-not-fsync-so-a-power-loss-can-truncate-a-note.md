@@ -44,3 +44,4 @@ The full report, with tables, intervals and the scripts, is kept outside the rep
 ## Decisions
 
 - 2026-10-30, user: yes, flush the file and its directory on ordinary note writes, but only after measuring the cost on a vault of 30,000 to 50,000 notes. The measurement comes first and decides whether the cost is acceptable.
+- 2026-10-30, user, on the measured numbers: single writes flush the file and its directory with `F_FULLFSYNC` (`File::sync_all`); bulk operations (`reconcile`, `vault encrypt` and any other command writing many notes) write everything first and flush once at the end, as `vault encrypt` already does, and `reconcile`'s note renames become durable as well. Reason: durable against power loss at a cost a single write does not show, without making bulk operations 5 to 15 times slower. The bulk cost is measured again once it is built.
