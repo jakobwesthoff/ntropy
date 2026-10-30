@@ -90,3 +90,4 @@ made.
 - [0059. Width-aware picker columns](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0059-width-aware-picker-columns.md)
 - [0060. Additional picker actions on accept keys](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0060-additional-picker-actions-on-accept-keys.md)
 - [0066. Editor value run through the shell](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0066-editor-value-run-through-the-shell.md)
+- [0069. Picker paging keys and a hand-drawn renderer](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0069-picker-paging-keys-and-a-hand-drawn-renderer.md)

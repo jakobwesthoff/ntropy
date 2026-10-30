@@ -9,6 +9,8 @@ Accepted
 Amends [ADR 0027](0027-in-house-fuzzy-picker-over-nucleo-and-crossterm.md),
 whose picker ended a selection only with Enter.
 
+Amended 2026-10-30 by [ADR 0069](0069-picker-paging-keys-and-a-hand-drawn-renderer.md).
+
 ## Context
 
 What a command does with the note chosen in the picker is fixed before the

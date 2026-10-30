@@ -145,13 +145,14 @@ Unicode display columns). The title and tag columns split the terminal width
 67/33, and a column that needs less than its share leaves the rest to the
 other (ADR 0059): a title or tag list gets an ellipsis only when the terminal
 is too narrow for it, and the grid is laid out again when the width changes.
-The ULID is never matched. Type to filter; Backspace, Ctrl-W (delete
-word) and Ctrl-U (clear) edit the query, and a query wider than the terminal
-shows its end; Up / Ctrl-P move toward worse matches
-and Down / Ctrl-N toward the best; Enter selects; Ctrl-Y selects and prints
-the note's path as `-p` does, whatever other flags were given (search only,
-ADR 0060);
-Esc / Ctrl-C aborts. Matched
+The ULID is never matched. Type to filter; Backspace and Ctrl-W (delete
+word) edit the query, and a query wider than the terminal shows its end;
+Up / Ctrl-P move toward worse matches and Down / Ctrl-N toward the best;
+Ctrl-U and PageUp move half and a full list height toward worse matches,
+Ctrl-D and PageDown toward the best, the selected row keeping its place on
+the screen until the list reaches an end (ADR 0069); Enter selects; Ctrl-Y
+selects and prints the note's path as `-p` does, whatever other flags were
+given (search only, ADR 0060); Esc / Ctrl-C aborts. Matched
 characters are yellow and the selected row cyan with a `▌` bar, all from the
 terminal's own ANSI palette so the picker adapts to its theme. Each frame is
 delivered to the terminal as one buffered write bracketed by a synchronized

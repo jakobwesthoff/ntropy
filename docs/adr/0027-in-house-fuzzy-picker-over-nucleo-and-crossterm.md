@@ -12,6 +12,8 @@ Amended 2026-10-10 by [ADR 0059](0059-width-aware-picker-columns.md).
 
 Amended 2026-10-10 by [ADR 0060](0060-additional-picker-actions-on-accept-keys.md).
 
+Amended 2026-10-30 by [ADR 0069](0069-picker-paging-keys-and-a-hand-drawn-renderer.md).
+
 ## Context
 
 ADR 0014 embedded the interactive picker with `nucleo-picker`. That crate

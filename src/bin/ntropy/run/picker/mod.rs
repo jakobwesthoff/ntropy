@@ -36,7 +36,7 @@ use crossterm::{
 use unicode_width::UnicodeWidthStr;
 
 pub use layout::align_candidates;
-use state::{PickerState, VisibleRow};
+use state::{Page, PickerState, VisibleRow};
 
 /// One picker row split by role: searched, displayed, and display-only.
 ///
@@ -72,7 +72,7 @@ pub struct AcceptKey<A> {
 
 /// The Ctrl keys the picker itself handles. An [`AcceptKey`] on one of them
 /// is ignored, so a caller cannot take away aborting or moving the selection.
-const BUILT_IN_CTRL_KEYS: [char; 5] = ['c', 'n', 'p', 'u', 'w'];
+const BUILT_IN_CTRL_KEYS: [char; 6] = ['c', 'd', 'n', 'p', 'u', 'w'];
 
 /// The action of the accept key a key press matches, if any.
 fn accept_key<A: Copy>(keys: &[AcceptKey<A>], code: KeyCode, modifiers: KeyModifiers) -> Option<A> {
@@ -274,12 +274,16 @@ fn handle_key<T, A: Copy>(
         KeyCode::Char('c') if ctrl => return Flow::Abort,
         // The list is bottom-anchored with the best match at the bottom, so Up
         // moves toward worse matches (up the screen) and Down toward the best
-        // (down toward the prompt).
+        // (down toward the prompt). The page keys follow the same directions,
+        // Ctrl-U and Ctrl-D as in vim.
         KeyCode::Up => state.select_worse(),
         KeyCode::Down => state.select_better(),
         KeyCode::Char('p') if ctrl => state.select_worse(),
         KeyCode::Char('n') if ctrl => state.select_better(),
-        KeyCode::Char('u') if ctrl => state.clear_query(),
+        KeyCode::Char('u') if ctrl => state.page_worse(Page::Half),
+        KeyCode::Char('d') if ctrl => state.page_better(Page::Half),
+        KeyCode::PageUp => state.page_worse(Page::Full),
+        KeyCode::PageDown => state.page_better(Page::Full),
         KeyCode::Char('w') if ctrl => state.delete_word(),
         KeyCode::Backspace => state.backspace(),
         // Plain typing (no Ctrl/Alt) edits the query. TODO: no intra-query
@@ -722,6 +726,17 @@ mod tests {
     }
 
     #[test]
+    fn an_accept_key_cannot_shadow_ctrl_d() {
+        let shadowing = [AcceptKey {
+            ctrl: 'd',
+            hint: "nope",
+            action: Action::First,
+        }];
+        let ctrl = KeyModifiers::CONTROL;
+        assert_eq!(accept_key(&shadowing, KeyCode::Char('d'), ctrl), None);
+    }
+
+    #[test]
     fn key_hints_name_each_key_and_its_purpose() {
         assert_eq!(key_hints(&KEYS), "^Y path  ^O other");
         assert_eq!(key_hints::<Action>(&[]), "");
@@ -918,11 +933,43 @@ mod tests {
         assert_eq!(s.query(), "al ");
     }
 
+    // A list two rows tall pages one row per half page and two per full page,
+    // so a swapped page size or direction lands on a different rank.
+
     #[test]
-    fn ctrl_u_clears_the_query() {
-        let mut s = picker(10);
+    fn ctrl_u_pages_half_toward_worse_matches_and_keeps_the_query() {
+        let mut s = picker(2);
         feed(&mut s, &[press(KeyCode::Char('a')), ctrl('u')]);
-        assert_eq!(s.query(), "");
+        assert_eq!(s.query(), "a");
+        assert_eq!(s.selected_rank(), Some(2));
+    }
+
+    #[test]
+    fn page_up_pages_a_full_page_toward_worse_matches() {
+        let mut s = picker(2);
+        feed(&mut s, &[press(KeyCode::PageUp)]);
+        assert_eq!(s.selected_rank(), Some(3));
+    }
+
+    #[test]
+    fn ctrl_d_pages_half_toward_the_best() {
+        let mut s = picker(2);
+        feed(&mut s, &[press(KeyCode::Up), press(KeyCode::Up), ctrl('d')]);
+        assert_eq!(s.selected_rank(), Some(2));
+    }
+
+    #[test]
+    fn page_down_pages_a_full_page_toward_the_best() {
+        let mut s = picker(2);
+        feed(
+            &mut s,
+            &[
+                press(KeyCode::Up),
+                press(KeyCode::Up),
+                press(KeyCode::PageDown),
+            ],
+        );
+        assert_eq!(s.selected_rank(), Some(1));
     }
 
     #[test]

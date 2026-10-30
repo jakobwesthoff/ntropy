@@ -26,8 +26,9 @@ terminal is wide enough.
 | _type_ | Filter the list |
 | `Down` / `Ctrl-N` | Move toward the best match |
 | `Up` / `Ctrl-P` | Move toward worse matches |
+| `Ctrl-D` / `Ctrl-U` | Move half a page toward the best / worse matches |
+| `PageDown` / `PageUp` | Move a full page toward the best / worse matches |
 | `Ctrl-W` | Delete the last word |
-| `Ctrl-U` | Clear the query |
 | `Enter` | Open the selected note |
 | `Ctrl-Y` | Print the selected note's path instead, as if you had passed `-p` |
 | `Esc` / `Ctrl-C` | Abort |

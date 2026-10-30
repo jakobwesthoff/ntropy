@@ -15,6 +15,10 @@ and this project adheres to
   as unset.
 - The library re-exports `FsError`, the payload of `Error::Fs`, as
   `ntropy::FsError`, so code using the library can name it.
+- The picker pages through long result lists. Ctrl-D and PageDown move the
+  selection toward the best match, Ctrl-U and PageUp toward worse matches,
+  by half a page and a full page. The selected row keeps its place on the
+  screen while the list scrolls.
 
 ### Changed
 
@@ -37,6 +41,9 @@ and this project adheres to
   `ntropy view remove <name>` and `ntropy view add <new-name> --field <field>`,
   then delete the old directory. `vault encrypt` refuses to start until it is
   removed.
+- Ctrl-U in the picker moves the selection half a page toward worse matches
+  instead of clearing the query. Backspace and Ctrl-W still edit the
+  query.
 
 ### Fixed
 
@@ -66,6 +73,13 @@ and this project adheres to
   A `Meeting.MD` was listed as `Meeting`, which `new --template Meeting`
   could not find on a case-sensitive filesystem, and a directory named like
   a template was listed although it cannot be loaded.
+- The picker no longer cuts an emoji apart at a column edge, such as
+  keeping `#` without the rest of `#️⃣` or half of a flag.
+- A query wider than the terminal no longer breaks the picker's frame. The
+  prompt shows the end of the query, where you type, and the cursor stays
+  on the screen.
+- Growing the terminal while the picker shows the end of a long list no
+  longer leaves blank rows above the list. The list fills the new rows.
 
 ### Security
 
@@ -84,16 +98,6 @@ and this project adheres to
   view is now skipped with a warning, which `--strict` makes `reconcile` fail
   on, and `view add` and `vault encrypt` refuse it. A symlink
   swapped in while a sync is running is not caught.
-
-### Fixed
-
-- The picker no longer cuts an emoji apart at a column edge, such as
-  keeping `#` without the rest of `#️⃣` or half of a flag.
-- A query wider than the terminal no longer breaks the picker's frame. The
-  prompt shows the end of the query, where you type, and the cursor stays
-  on the screen.
-- Growing the terminal while the picker shows the end of a long list no
-  longer leaves blank rows above the list. The list fills the new rows.
 
 ## v2.2.0 - 2026-10-10
 

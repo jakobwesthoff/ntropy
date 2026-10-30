@@ -49,6 +49,13 @@ pub struct VisibleRow<'a> {
     pub selected: bool,
 }
 
+/// How far a page move goes: half the viewport height or all of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Page {
+    Half,
+    Full,
+}
+
 /// The picker's interaction state over an owned set of items of type `T`.
 pub struct PickerState<T> {
     /// The candidate items, index-aligned with `display`/`detail`/`haystacks`.
@@ -242,12 +249,6 @@ impl<T> PickerState<T> {
         self.recompute();
     }
 
-    /// Clear the entire query.
-    pub fn clear_query(&mut self) {
-        self.query.clear();
-        self.recompute();
-    }
-
     /// Move the selection toward the better-ranked end (index 0).
     ///
     /// In the bottom-anchored layout the best match is drawn at the bottom, so
@@ -267,6 +268,43 @@ impl<T> PickerState<T> {
         if self.selected + 1 < self.scored.len() {
             self.selected += 1;
             self.scroll_to_selection();
+        }
+    }
+
+    /// Move the selection a page toward the worse-ranked end (up the screen),
+    /// what Ctrl-U and PageUp map to.
+    ///
+    /// The viewport scrolls by the same number of rows as the selection, so
+    /// the selected row keeps its place on the screen and every press shows a
+    /// new page; only at the end of the list do the two stop, each at its own
+    /// limit. The offset limit `len - height` is the one every other writer of
+    /// `offset` keeps too (`set_height` included), so the arithmetic never
+    /// meets an offset above it.
+    pub fn page_worse(&mut self, page: Page) {
+        if self.scored.is_empty() {
+            return;
+        }
+        let rows = self.page_rows(page);
+        self.selected = (self.selected + rows).min(self.scored.len() - 1);
+        self.offset = (self.offset + rows).min(self.scored.len().saturating_sub(self.height));
+        self.scroll_to_selection();
+    }
+
+    /// Move the selection a page toward the best-ranked end (down the screen),
+    /// what Ctrl-D and PageDown map to. The viewport scrolls with it as in
+    /// [`Self::page_worse`].
+    pub fn page_better(&mut self, page: Page) {
+        let rows = self.page_rows(page);
+        self.selected = self.selected.saturating_sub(rows);
+        self.offset = self.offset.saturating_sub(rows);
+        self.scroll_to_selection();
+    }
+
+    /// The rows one page move covers; half a page is at least one row.
+    fn page_rows(&self, page: Page) -> usize {
+        match page {
+            Page::Half => (self.height / 2).max(1),
+            Page::Full => self.height,
         }
     }
 
@@ -554,6 +592,102 @@ mod tests {
         assert_eq!(s.offset, 15);
     }
 
+    // -------------------------------------------------------------------------
+    // Paging
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn half_page_worse_moves_half_the_height_and_keeps_the_screen_row() {
+        let mut s = twenty(10);
+        s.page_worse(Page::Half);
+        assert_eq!((s.selected_rank(), s.offset), (Some(6), 5));
+    }
+
+    #[test]
+    fn full_page_worse_moves_the_height() {
+        let mut s = twenty(10);
+        s.page_worse(Page::Full);
+        assert_eq!((s.selected_rank(), s.offset), (Some(11), 10));
+    }
+
+    #[test]
+    fn page_better_moves_back_toward_the_best() {
+        let mut s = twenty(10);
+        for _ in 0..19 {
+            s.select_worse();
+        }
+        assert_eq!((s.selected, s.offset), (19, 10));
+        s.page_better(Page::Half);
+        assert_eq!((s.selected_rank(), s.offset), (Some(15), 5));
+    }
+
+    #[test]
+    fn paging_worse_stops_at_the_last_match() {
+        let names: Vec<String> = (0..12).map(|i| format!("r{i}")).collect();
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        let mut s = state(&refs, 10);
+        s.page_worse(Page::Full);
+        s.page_worse(Page::Full);
+        assert_eq!((s.selected_rank(), s.offset), (Some(12), 2));
+    }
+
+    #[test]
+    fn paging_better_stops_at_the_best_match() {
+        let mut s = twenty(10);
+        for _ in 0..3 {
+            s.select_worse();
+        }
+        s.page_better(Page::Half);
+        assert_eq!((s.selected_rank(), s.offset), (Some(1), 0));
+    }
+
+    #[test]
+    fn a_half_page_of_a_one_row_viewport_is_one_row() {
+        let mut s = state(&["a", "b", "c"], 1);
+        s.page_worse(Page::Half);
+        assert_eq!((s.selected_rank(), s.offset), (Some(2), 1));
+    }
+
+    #[test]
+    fn paging_with_fewer_matches_than_rows_selects_the_last() {
+        let mut s = state(&["a", "b", "c"], 10);
+        s.page_worse(Page::Full);
+        assert_eq!((s.selected_rank(), s.offset), (Some(3), 0));
+    }
+
+    #[test]
+    fn paging_after_the_viewport_grew_moves_by_the_page() {
+        let mut s = twenty(5);
+        for _ in 0..12 {
+            s.select_worse();
+        }
+        s.set_height(10);
+        assert_eq!((s.selected, s.offset), (12, 8));
+        s.page_worse(Page::Half);
+        assert_eq!((s.selected, s.offset), (17, 10));
+        s.page_worse(Page::Half);
+        assert_eq!((s.selected, s.offset), (19, 10));
+    }
+
+    #[test]
+    fn a_page_that_reaches_no_end_keeps_the_screen_row() {
+        let mut s = twenty(10);
+        for _ in 0..3 {
+            s.select_worse();
+        }
+        s.page_worse(Page::Half);
+        assert_eq!((s.selected, s.offset), (8, 5));
+    }
+
+    #[test]
+    fn paging_without_matches_is_a_no_op() {
+        let mut s = state(&["alpha"], 10);
+        s.push_char('z');
+        s.page_worse(Page::Full);
+        s.page_better(Page::Full);
+        assert_eq!(s.selected_rank(), None);
+    }
+
     #[test]
     fn typing_resets_selection_to_the_top() {
         let mut s = state(&["alpha", "alps", "also"], 10);
@@ -627,16 +761,6 @@ mod tests {
             s.push_char(c);
         }
         s.delete_word();
-        assert_eq!(s.query(), "");
-    }
-
-    #[test]
-    fn clear_query_empties_the_input() {
-        let mut s = state(&["x"], 10);
-        for c in "abc".chars() {
-            s.push_char(c);
-        }
-        s.clear_query();
         assert_eq!(s.query(), "");
     }
 
