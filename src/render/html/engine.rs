@@ -77,11 +77,12 @@ impl Renderer for Html {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
         let note_dir = build::root_absolute_dir(&doc.vault_root, &doc.path);
-        // The artifact and its files directory may land inside the vault; a
-        // link to a directory holding them must not mirror them into
-        // themselves.
+        // The rendered note is the whole export, so it is the one note the
+        // files directory may carry (ADR 0073). The artifact and its files
+        // directory may land inside the vault; a link to a directory holding
+        // them must not mirror them into themselves.
         let artifact = ctx.output_path().to_path_buf();
-        let scope = ExportScope::new(&doc.vault_root, &[&artifact, &files_path]);
+        let scope = ExportScope::new(&doc.vault_root, &[&doc.path], &[&artifact, &files_path]);
         let targets = DocumentTargets {
             files: &files,
             note_dir: &note_dir,
@@ -556,6 +557,42 @@ mod tests {
         assert_eq!(
             ctx.notes,
             ["referenced directory `/`: left out 2 never-copied entries (`.DS_Store`, `.git`)"]
+        );
+    }
+
+    /// A vault holding the rendered note and another one in `all-notes/`.
+    fn two_notes(body: &str) -> (tempfile::TempDir, PreparedDocument) {
+        let (vault, document) = linking(body);
+        std::fs::create_dir_all(vault.path().join("all-notes")).expect("all-notes");
+        std::fs::write(&document.path, "---\ntitle: Linker\n---\n").expect("the note");
+        std::fs::write(vault.path().join("all-notes/other.md"), "private\n").expect("other");
+        (vault, document)
+    }
+
+    #[test]
+    fn a_linked_notes_directory_copies_only_the_rendered_note() {
+        let (_vault, document) = two_notes("[notes](/all-notes)\n");
+        let mut ctx = FakeContext::new();
+        Html::new(DocumentSettings::default())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        let copies: Vec<&str> = ctx.copies.iter().map(|(_, to)| to.as_str()).collect();
+        assert_eq!(copies, ["files/all-notes/note.md"]);
+    }
+
+    #[test]
+    fn a_link_to_another_note_file_stays_as_written_in_the_artifact() {
+        let (_vault, document) = two_notes("[other](/all-notes/other.md)\n");
+        let mut ctx = FakeContext::new();
+        Html::new(DocumentSettings::default())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert!(ctx.copies.is_empty(), "{:?}", ctx.copies);
+        assert!(
+            ctx.page()
+                .contains("<a href=\"/all-notes/other.md\">other</a>"),
+            "{}",
+            ctx.page()
         );
     }
 

@@ -78,8 +78,9 @@ vault root, its `.` and `..` parts resolved as a relative path's are, so
 one that climbs above the root lies outside the vault too
 ([ADR 0072](../adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)).
 A linked directory and the theme leave out what the site leaves out, the
-never-copied entries, every hidden entry below the linked directory and
-every file that resolves outside the vault (for the theme: outside the
+never-copied entries, every note but the rendered one, every hidden
+entry below the linked directory and every file that resolves outside the
+vault (for the theme: outside the
 theme and the vault), reported as the site reports it, a `note:` line never counting toward
 `--strict`
 ([ADR 0073](../adr/0073-what-html-and-site-exports-copy-from-the-vault.md));

@@ -175,6 +175,12 @@ and this project adheres to
   `assets -> ~/Pictures` and the images beside the notes of a symlinked
   `all-notes/` are no longer copied, so copy such files into the vault. A
   theme whose stylesheet, icon or template points outside fails to load.
+- A link to `all-notes/`, to a view directory or to a note's file made
+  `render --to html` and `site` copy notes the export leaves out: for
+  `site`, the notes its query does not select; for `render --to html`, every
+  note but the rendered one. Those are now left out with a warning, and a
+  link to one keeps its text in the page; the exported notes are copied as
+  before.
 - Note titles, file names, link targets in note bodies, template names,
   view names, `.gitignore` entries and the vault's path reached the terminal
   unchanged. A vault you did not write could use them to send escape

@@ -20,7 +20,10 @@ whole tree ([ADR 0057](0057-html-artifact-as-a-page-with-a-files-directory.md));
 copied the vault's `.ntropy/`, with its configuration and, in an encrypted
 vault, the passphrase-protected identity, and, in a vault that is a git
 checkout, `.git/`, whose history holds deleted notes and notes the export
-leaves out. Symlinks were followed, so a file or folder in the vault that
+leaves out. A link to `all-notes/`, to a view directory or to one note's
+file copied notes the export leaves out: for `site`, those its query does
+not select; for `render --to html`, every note but the rendered one.
+Symlinks were followed, so a file or folder in the vault that
 pointed elsewhere on the machine was copied from there, and a theme's
 stylesheet, icons and templates were read from wherever their symlinks
 pointed. A note that carries such a link may come from someone else.
@@ -90,14 +93,34 @@ The site theme loader applies the same containment to `style.css`,
 theme's directory and the vault fails the load with an error naming it,
 since a dropped template would render a different site.
 
+### Notes outside the export
+
+An export never copies a note outside the export, whether a link names its
+file or the file sits in a mirrored directory; the notes of the export are
+copied as before. For `site` the export is the notes its query selects, for
+`render --to html` the rendered note. For this rule a note is a regular file
+directly in `all-notes/` whose extension is `.md` or `.age` in any letter
+case, whatever the vault's storage form. That is wider than what the scan
+reads as a note: a stray plaintext note in an encrypted vault, an `.age`
+file left by an interrupted conversion and a case variant hold note text all
+the same. Whether a file is such a note is decided where it resolves,
+compared by device and inode with `all-notes/`, so a view's leaf is the note
+it links to. A theme carries no note, so a theme file that resolves to one
+is left out.
+
 ### Reporting
 
 A link to a listed path, or to one that resolves outside the vault or
 does not resolve, copies nothing, gets a warning, and the page keeps the
 link as written, as a path outside the vault does (ADR 0072).
 
+A link to a note outside the export is a warning that calls it a note
+only when the scan reads it as one; any other such file is named as a file
+directly in `all-notes/`.
+
 Inside a mirrored directory or a theme, what is left out is reported once
-per linked directory, at one of two levels. Entries that resolve outside,
+per linked directory, at one of two levels. Notes outside the export,
+entries that resolve outside,
 entries that do not resolve and symlinked directories are counted in a
 warning, and a `.ntropy` entry is named in it by its path. Hidden entries
 and the other listed entries are a `note:` line that counts them and names
@@ -114,6 +137,11 @@ directory for `render --to html`, the output directory for `site`.
 
 ## Consequences
 
+- A `.MD` or `.age` file kept directly in `all-notes/` as an attachment
+  counts as a note for an export and is copied only when it is the rendered
+  or an exported note.
+- A copy of a note elsewhere in the vault, outside `all-notes/`, is an
+  ordinary file and is copied.
 - Hard links into `.ntropy` are not caught. git and sync tools do not carry
   hard links, and creating one takes local write access to the vault.
 - Earlier renders and site exports stored inside the vault are ordinary

@@ -2771,6 +2771,73 @@ fn render_to_html_refuses_a_symlink_out_of_the_vault() {
     assert!(output.status.success(), "{stderr}");
 }
 
+/// A vault whose note `Climber`, tagged `pub`, has `body` as its body, beside
+/// a second note, `Private`, which an export of `tag:pub` leaves out.
+fn vault_with_a_private_note(body: &str) -> tempfile::TempDir {
+    let dir = vault_beside_a_file(body);
+    let vault = dir.path().join("vault");
+    write_note(
+        &vault,
+        ULID_A,
+        "climber",
+        &format!("---\ntitle: Climber\ntags: [pub]\n---\n{body}\n"),
+    );
+    write_note(
+        &vault,
+        ULID_B,
+        "private",
+        "---\ntitle: Private\n---\nsecret plans\n",
+    );
+    dir
+}
+
+#[test]
+fn site_leaves_unexported_notes_out() {
+    let dir = vault_with_a_private_note(&format!(
+        "[notes](/all-notes) [private](/all-notes/{ULID_B}-private.md)"
+    ));
+    let out = dir.path().join("site");
+    let output = site(
+        &dir.path().join("vault"),
+        &["-o", &out.to_string_lossy(), "tag:pub"],
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_none_named(&out, &format!("{ULID_B}-private.md"));
+    assert!(
+        stderr.contains(
+            "warning: referenced directory `/all-notes`: left out 1 note outside the export"
+        ),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains(&format!(
+            "warning: referenced note `/all-notes/{ULID_B}-private.md` is not among the exported notes; not copied"
+        )),
+        "{stderr}"
+    );
+    let page = fs::read_to_string(out.join("notes/climber.html")).expect("the page");
+    assert!(
+        page.contains(&format!("href=\"/all-notes/{ULID_B}-private.md\"")),
+        "{page}"
+    );
+    assert!(output.status.success(), "{stderr}");
+}
+
+#[test]
+fn render_to_html_leaves_other_notes_out() {
+    let dir = vault_with_a_private_note("[notes](/all-notes)");
+    let (output, _page) = render_climber(dir.path());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let files = dir.path().join("render/out_files");
+    assert_none_named(&files, &format!("{ULID_B}-private.md"));
+    assert_eq!(
+        files_named(&files, &format!("{ULID_A}-climber.md")).len(),
+        1,
+        "the rendered note's own file is copied"
+    );
+    assert!(output.status.success(), "{stderr}");
+}
+
 /// A vault with one note and a `corporate` theme configured vault-wide.
 fn themed_vault() -> tempfile::TempDir {
     let dir = setup_vault();

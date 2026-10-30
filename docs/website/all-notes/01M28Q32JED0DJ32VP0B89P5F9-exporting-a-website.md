@@ -66,6 +66,12 @@ sit in a linked folder or in the site theme, at any depth:
 - credentials: `.aws`, `.env`, `.gnupg`, `.netrc`, `.ssh`;
 - file-manager metadata: `.DS_Store`, `Thumbs.db`.
 
+Notes the export leaves out are never copied either: a link to
+`all-notes/` or to a view's folder copies the files of the exported notes
+only, and a link to another note's file keeps its text with a warning. For
+this, every file directly in `all-notes/` ending in `.md` or `.age`, in any
+letter case, counts as a note.
+
 Names match in any letter case, except `CVS`, so a folder `CVs` is
 copied. A linked folder also leaves out every hidden file and folder in
 it; a hidden file that a note links by name is copied unless it is on the

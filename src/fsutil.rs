@@ -246,6 +246,26 @@ pub fn rename(from: &Path, to: &Path) -> Result<()> {
     std::fs::rename(from, to).map_err(|e| FsError::new("renaming", from, e))
 }
 
+/// A file's identity: its device and inode. Two paths with the same
+/// identity name one file, whatever symlinks or letter case lead there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct FileId {
+    device: u64,
+    inode: u64,
+}
+
+/// The identity of the file `path` names, following symlinks, or `None`
+/// when it cannot be read.
+pub fn file_id(path: &Path) -> Option<FileId> {
+    use std::os::unix::fs::MetadataExt;
+
+    let metadata = std::fs::metadata(path).ok()?;
+    Some(FileId {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    })
+}
+
 /// Whether `existing`, the metadata found at a rename's destination, is the
 /// entry `from` names.
 fn is_same_entry(from: &Path, existing: &std::fs::Metadata) -> bool {

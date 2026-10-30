@@ -138,7 +138,10 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     let mut files = Vec::new();
     let mut copies = Vec::new();
     let excluded: Vec<&Path> = input.output_dir.into_iter().collect();
-    let scope = ExportScope::new(input.vault_root, &excluded);
+    // The notes the export holds may be copied as files; every other note
+    // stays out (ADR 0073).
+    let exported: Vec<&Path> = input.notes.iter().map(|note| note.path.as_path()).collect();
+    let scope = ExportScope::new(input.vault_root, &exported, &excluded);
     // Every page inlines the selected theme's icon sprite and renders with
     // its templates, parsed once here.
     let theme = SiteTheme::selected(input.theme.map(|(theme, _)| theme));
@@ -452,9 +455,7 @@ pub(crate) fn mirrored(
     for path in referenced {
         let from = scope.vault_path(path);
         if let Err(refusal) = scope.verdict(&from) {
-            mirror
-                .warnings
-                .push(refusal.message("referenced path", path));
+            mirror.warnings.push(refusal.message("referenced", path));
         } else if from.is_file() {
             copy(&mut mirror, from, format!("{FILES_DIR}{path}"));
         } else if from.is_dir() {
@@ -2498,5 +2499,152 @@ mod tests {
         );
         let built = site_with_theme(vault.path(), &theme_dir);
         assert_eq!(targets(&built), ["assets/pic.png", "assets/style.css"]);
+    }
+
+    // =========================================================
+    // Notes outside the export (ADR 0073)
+    // =========================================================
+
+    /// A vault holding, on disk, the exported note `Linker` (A) and the note
+    /// `Gone` (D) the export leaves out, a `by-status` view linking both, and
+    /// a Markdown file in a folder below `all-notes/`, which is no note.
+    fn notes_vault() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp dir");
+        write_files(
+            dir.path(),
+            &[
+                (
+                    &format!("all-notes/{A}-linker.md"),
+                    "---\ntitle: Linker\n---\n",
+                ),
+                (
+                    &format!("all-notes/{D}-gone.md"),
+                    "---\ntitle: Gone\n---\nprivate\n",
+                ),
+                ("all-notes/assets/readme.md", "# Not a note\n"),
+            ],
+        );
+        symlink(
+            Path::new(&format!("../../all-notes/{A}-linker.md")),
+            &dir.path().join("by-status/open/2026-10-30-linker.md"),
+        );
+        symlink(
+            Path::new(&format!("../../all-notes/{D}-gone.md")),
+            &dir.path().join("by-status/open/2026-10-30-gone.md"),
+        );
+        dir
+    }
+
+    #[test]
+    fn a_linked_notes_directory_copies_only_exported_notes() {
+        let vault = notes_vault();
+        let built = site_linking(vault.path(), "[notes](/all-notes)\n");
+        assert_eq!(
+            targets(&built),
+            [
+                format!("files/all-notes/{A}-linker.md"),
+                "files/all-notes/assets/readme.md".to_string()
+            ]
+        );
+        assert_eq!(
+            built.warnings,
+            ["referenced directory `/all-notes`: left out 1 note outside the export"]
+        );
+    }
+
+    #[test]
+    fn a_link_to_an_unexported_note_file_is_not_copied_and_stays_as_written() {
+        let vault = notes_vault();
+        let body = format!("[gone](/all-notes/{D}-gone.md)\n");
+        let built = site_linking(vault.path(), &body);
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+        let page = text(&built, "notes/linker.html");
+        assert!(
+            page.contains(&format!("<a href=\"/all-notes/{D}-gone.md\">gone</a>")),
+            "{page}"
+        );
+        assert_eq!(
+            built.warnings,
+            [format!(
+                "referenced note `/all-notes/{D}-gone.md` is not among the exported notes; not copied"
+            )]
+        );
+    }
+
+    #[test]
+    fn a_link_to_an_exported_note_file_is_copied() {
+        let vault = notes_vault();
+        let body = format!("[source](/all-notes/{A}-linker.md)\n");
+        let built = site_linking(vault.path(), &body);
+        assert_eq!(targets(&built), [format!("files/all-notes/{A}-linker.md")]);
+    }
+
+    #[test]
+    fn a_view_directory_carries_no_unexported_note() {
+        let vault = notes_vault();
+        let built = site_linking(vault.path(), "[open](/by-status)\n");
+        assert_eq!(
+            targets(&built),
+            ["files/by-status/open/2026-10-30-linker.md"]
+        );
+    }
+
+    #[test]
+    fn an_age_file_in_all_notes_counts_as_a_note() {
+        let vault = notes_vault();
+        write_files(vault.path(), &[(&format!("all-notes/{C}.age"), "age")]);
+        let body = format!("[sealed](/all-notes/{C}.age)\n");
+        let built = site_linking(vault.path(), &body);
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+    }
+
+    #[test]
+    fn a_file_the_scan_would_not_read_is_not_called_a_note() {
+        let vault = notes_vault();
+        write_files(vault.path(), &[(&format!("all-notes/{C}.age"), "age")]);
+        let built = site_linking(vault.path(), "[notes](/all-notes)\n");
+        assert_eq!(
+            built.warnings,
+            [
+                "referenced directory `/all-notes`: left out 1 note outside the export, 1 file directly in all-notes/ outside the export"
+            ]
+        );
+    }
+
+    #[test]
+    fn an_upper_case_extension_counts_as_a_note() {
+        let vault = notes_vault();
+        write_files(
+            vault.path(),
+            &[(&format!("all-notes/{C}-shout.MD"), "LOUD")],
+        );
+        let built = site_linking(vault.path(), "[notes](/all-notes)\n");
+        assert!(
+            !targets(&built).iter().any(|to| to.ends_with(".MD")),
+            "{:?}",
+            targets(&built)
+        );
+    }
+
+    #[test]
+    fn a_markdown_file_below_all_notes_is_no_note() {
+        let vault = notes_vault();
+        let built = site_linking(vault.path(), "[readme](/all-notes/assets)\n");
+        assert_eq!(targets(&built), ["files/all-notes/assets/readme.md"]);
+    }
+
+    #[test]
+    fn a_directory_named_like_a_note_is_walked() {
+        let vault = notes_vault();
+        write_files(
+            vault.path(),
+            &[(&format!("all-notes/{C}-folder.md/inside.png"), "png")],
+        );
+        let body = format!("[folder](/all-notes/{C}-folder.md)\n");
+        let built = site_linking(vault.path(), &body);
+        assert_eq!(
+            targets(&built),
+            [format!("files/all-notes/{C}-folder.md/inside.png")]
+        );
     }
 }

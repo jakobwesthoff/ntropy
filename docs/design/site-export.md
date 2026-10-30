@@ -251,16 +251,18 @@ has nothing to copy is a warning. Some paths are never copied
 an entry on the never-copied list (the vault's `.ntropy`, version-control
 directories, sync and trash folders, credentials, file-manager metadata),
 with everything below it, at any depth, judged on the path as written and
-on the path it resolves to; and, below a linked directory, every hidden
-entry. A link that names such a path directly is a warning and the page
+on the path it resolves to; a note outside the exported set, a regular
+file directly in `all-notes/` ending in `.md` or `.age` in any case, judged
+where it resolves, so a view's leaf is its note; and, below a linked
+directory, every hidden entry. A link that names such a path directly is a warning and the page
 keeps it as written; a link that names a hidden file that is not listed
 copies it. A file is copied only when it resolves inside the vault (a
 theme's file: inside the theme or the vault), compared by path components,
 whatever symlink leads there, a symlinked `all-notes/` or asset folder
 included; a path that exists but does not resolve is refused, and a
 symlink to a directory found while mirroring is not followed. What a
-linked directory or the theme left out is reported once per link: entries
-that resolve outside or not at all, symlinked directories and a `.ntropy`
+linked directory or the theme left out is reported once per link: notes
+outside the export, entries that resolve outside or not at all, symlinked directories and a `.ntropy`
 entry as a warning, the rest as a `note:` line that `--strict` does not
 count. Each file is copied once, however many links
 reach it, and the output directory itself is never mirrored. Local asset

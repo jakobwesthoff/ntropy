@@ -9,16 +9,17 @@
 //! [`ExportScope`] answers, for every path an export is about to copy,
 //! whether it may: only what resolves inside the vault (for a theme file:
 //! inside the theme or the vault), an entry on [`NEVER_COPIED`] never, at
-//! any depth, and, below a mirrored directory, no hidden entry either. A
+//! any depth, a note outside the export never, and, below a mirrored
+//! directory, no hidden entry either. A
 //! path named directly is judged by [`ExportScope::verdict`], a directory by
 //! [`ExportScope::walk`].
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::path::{Component, Path, PathBuf};
 
-use crate::fsutil::{self, FsError};
-use crate::vault::layout::{NTROPY_DIR, POINTER_FILE};
+use crate::fsutil::{self, FileId, FsError};
+use crate::vault::layout::{self, ALL_NOTES_DIR, NTROPY_DIR, POINTER_FILE};
 
 // =========================================================
 // The names never copied
@@ -144,22 +145,32 @@ pub enum Refusal {
     /// The path exists but does not resolve: a dangling symlink, a loop, a
     /// directory on the way that cannot be read.
     Unresolvable,
+    /// The path resolves to a note outside the export. `scanned` tells
+    /// whether the scan reads the file as a note, so a warning does not call
+    /// a file a note that ntropy itself never reads as one.
+    Unexported { scanned: bool },
 }
 
 impl Refusal {
-    /// The warning for a path named directly, `subject` saying what named it
-    /// (`referenced path`) and `shown` the path as the reader knows it.
-    pub fn message(&self, subject: &str, shown: &str) -> String {
+    /// The warning for a path named directly, `by` saying what named it
+    /// (`referenced`) and `shown` the path as the reader knows it.
+    pub fn message(&self, by: &str, shown: &str) -> String {
         match self {
             Refusal::Listed(component) => format!(
-                "{subject} `{shown}` is or lies inside `{component}`, which exports never copy; not copied"
+                "{by} path `{shown}` is or lies inside `{component}`, which exports never copy; not copied"
             ),
             Refusal::Outside(reach) => {
-                format!("{subject} `{shown}` resolves outside {reach}; not copied")
+                format!("{by} path `{shown}` resolves outside {reach}; not copied")
             }
             Refusal::Unresolvable => {
-                format!("{subject} `{shown}` cannot be resolved; not copied")
+                format!("{by} path `{shown}` cannot be resolved; not copied")
             }
+            Refusal::Unexported { scanned: true } => {
+                format!("{by} note `{shown}` is not among the exported notes; not copied")
+            }
+            Refusal::Unexported { scanned: false } => format!(
+                "{by} file `{shown}` sits directly in {ALL_NOTES_DIR}/ and is not among the exported notes; not copied"
+            ),
         }
     }
 }
@@ -184,6 +195,11 @@ pub struct Walk {
     pub unresolvable: usize,
     /// How many symlinks to a directory were not followed.
     pub symlinked_dirs: usize,
+    /// How many notes outside the export were left out.
+    pub unexported: usize,
+    /// How many files directly in `all-notes/` that the scan would not read
+    /// as notes were left out as notes outside the export.
+    pub unscanned: usize,
     /// What the export may read from, for the warning's wording.
     pub reach: &'static str,
 }
@@ -202,12 +218,35 @@ impl Walk {
         }
     }
 
+    /// Record a note outside the export.
+    fn unexported_note(&mut self, scanned: bool) {
+        if scanned {
+            self.unexported += 1;
+        } else {
+            self.unscanned += 1;
+        }
+    }
+
     /// The warning about what this walk left out, if anything worth one:
     /// what `subject` (such as ``referenced directory `/x` ``) left out,
     /// counted by kind in a fixed order, and the `.ntropy` entries named by
     /// their path below `shown`.
     pub fn warning(&self, subject: &str, shown: &str) -> Option<String> {
         let mut parts = Vec::new();
+        if self.unexported > 0 {
+            parts.push(counted(
+                self.unexported,
+                "note outside the export",
+                "notes outside the export",
+            ));
+        }
+        if self.unscanned > 0 {
+            parts.push(counted(
+                self.unscanned,
+                &format!("file directly in {ALL_NOTES_DIR}/ outside the export"),
+                &format!("files directly in {ALL_NOTES_DIR}/ outside the export"),
+            ));
+        }
         if self.outside > 0 {
             let reach = self.reach;
             parts.push(counted(
@@ -282,6 +321,15 @@ fn counted(count: usize, singular: &str, plural: &str) -> String {
     format!("{count} {}", if count == 1 { singular } else { plural })
 }
 
+/// The extension the scan reads the notes of the vault at `root` by.
+fn scanned_extension(root: &Path) -> &'static str {
+    if layout::is_encrypted(root) {
+        "age"
+    } else {
+        "md"
+    }
+}
+
 /// The resolved form of each of `dirs` that can be resolved.
 fn resolved(dirs: &[&Path]) -> Vec<PathBuf> {
     dirs.iter()
@@ -314,12 +362,20 @@ pub struct ExportScope {
     /// The export's own output, never walked: `(resolved parent, name)`,
     /// since the output may not exist yet when the walk runs.
     excluded: Vec<(PathBuf, OsString)>,
+    /// The vault's notes directory, `None` when it cannot be read.
+    notes_dir: Option<FileId>,
+    /// The extension the scan reads notes by in this vault: `age` in an
+    /// encrypted vault, `md` in a plaintext one.
+    scanned_extension: &'static str,
+    /// The note files the export holds; every other note stays out.
+    exported: HashSet<FileId>,
 }
 
 impl ExportScope {
-    /// The scope of the files notes reference, below the vault root,
-    /// leaving out `excluded`, the export's own output.
-    pub fn new(vault_root: &Path, excluded: &[&Path]) -> Self {
+    /// The scope of the files notes reference, below the vault root:
+    /// `exported` are the files of the notes the export holds, `excluded`
+    /// the export's own output.
+    pub fn new(vault_root: &Path, exported: &[&Path], excluded: &[&Path]) -> Self {
         let excluded = excluded
             .iter()
             .filter_map(|path| {
@@ -332,18 +388,28 @@ impl ExportScope {
             boundaries: resolved(&[vault_root]),
             reach: "the vault",
             excluded,
+            notes_dir: fsutil::file_id(&vault_root.join(ALL_NOTES_DIR)),
+            scanned_extension: scanned_extension(vault_root),
+            exported: exported
+                .iter()
+                .filter_map(|path| fsutil::file_id(path))
+                .collect(),
         }
     }
 
     /// The scope of a theme's files: below its directory, resolving into it
     /// or into the vault. The second boundary lets a theme reach a vault
-    /// asset; the first keeps a theme kept outside the vault usable.
+    /// asset; the first keeps a theme kept outside the vault usable. A
+    /// theme carries no note, so every note it reaches stays out.
     pub fn for_theme(theme_dir: &Path, vault_root: &Path) -> Self {
         ExportScope {
             base: theme_dir.to_path_buf(),
             boundaries: resolved(&[theme_dir, vault_root]),
             reach: "the theme and the vault",
             excluded: Vec::new(),
+            notes_dir: fsutil::file_id(&vault_root.join(ALL_NOTES_DIR)),
+            scanned_extension: scanned_extension(vault_root),
+            exported: HashSet::new(),
         }
     }
 
@@ -375,7 +441,8 @@ impl ExportScope {
     /// resolve, and one that resolves outside every boundary (compared by
     /// path components, so `/vault2` does not count as inside `/vault`). A
     /// path that resolves inside is checked by name below the boundary that
-    /// holds it, which catches a symlink to a listed entry.
+    /// holds it, which catches a symlink to a listed entry, and by the note
+    /// rule, which catches a view's leaf to a note outside the export.
     pub fn resolve(&self, path: &Path) -> Result<Option<PathBuf>, Refusal> {
         match std::fs::symlink_metadata(path) {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -387,10 +454,48 @@ impl ExportScope {
             .iter()
             .find_map(|boundary| resolved.strip_prefix(boundary).ok())
             .ok_or(Refusal::Outside(self.reach))?;
-        match listed_component(below) {
-            Some(component) => Err(Refusal::Listed(component)),
+        if let Some(component) = listed_component(below) {
+            return Err(Refusal::Listed(component));
+        }
+        let in_notes_dir = resolved
+            .parent()
+            .is_some_and(|parent| self.is_notes_dir(parent));
+        match self.unexported(&resolved, in_notes_dir) {
+            Some(refusal) => Err(refusal),
             None => Ok(Some(resolved)),
         }
+    }
+
+    /// Whether `dir` is the vault's notes directory, by identity, so a
+    /// symlink or a case variant leading there counts too.
+    fn is_notes_dir(&self, dir: &Path) -> bool {
+        self.notes_dir
+            .is_some_and(|notes_dir| fsutil::file_id(dir) == Some(notes_dir))
+    }
+
+    /// The refusal for `file` when it is a note outside the export. A note,
+    /// for an export, is a regular file directly in `all-notes/` ending in
+    /// `.md` or `.age` in any letter case, whatever the vault's storage
+    /// form: wider than what the scan reads, since a stray plaintext note in
+    /// an encrypted vault, an `.age` file left by an interrupted conversion
+    /// and a case variant hold note text all the same.
+    fn unexported(&self, file: &Path, in_notes_dir: bool) -> Option<Refusal> {
+        if !in_notes_dir {
+            return None;
+        }
+        let extension = file.extension()?;
+        if !(extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("age")) {
+            return None;
+        }
+        if !std::fs::metadata(file).is_ok_and(|metadata| metadata.is_file()) {
+            return None;
+        }
+        // A note whose identity cannot be read is not known to be part of
+        // the export, so it stays out.
+        let exported = fsutil::file_id(file).is_some_and(|id| self.exported.contains(&id));
+        (!exported).then_some(Refusal::Unexported {
+            scanned: extension == self.scanned_extension,
+        })
     }
 
     /// The root-absolute vault path a page links for `dest`, written in a
@@ -423,6 +528,9 @@ impl ExportScope {
         } else {
             std::fs::canonicalize(dir).ok()
         };
+        // Only a file directly in `all-notes/` can be a note; asked once per
+        // directory rather than once per file.
+        let in_notes_dir = self.is_notes_dir(dir);
         for (path, file_type) in fsutil::read_dir_entries(dir)? {
             let name = path
                 .file_name()
@@ -456,6 +564,7 @@ impl ExportScope {
                 match self.resolve(&path) {
                     Err(Refusal::Listed(component)) => walk.left_out(component, relative),
                     Err(Refusal::Outside(_)) => walk.outside += 1,
+                    Err(Refusal::Unexported { scanned }) => walk.unexported_note(scanned),
                     // A symlink entry exists, so `Ok(None)`, "not found",
                     // cannot come back; counted with the unresolvable
                     // ones all the same rather than copied.
@@ -465,6 +574,10 @@ impl ExportScope {
                 }
             } else if file_type.is_dir() {
                 self.walk_into(&path, &relative, walk)?;
+            } else if let Some(Refusal::Unexported { scanned }) =
+                self.unexported(&path, in_notes_dir)
+            {
+                walk.unexported_note(scanned);
             } else {
                 walk.files.push((relative, path));
             }
@@ -503,7 +616,7 @@ mod tests {
 
     #[test]
     fn every_never_copied_entry_is_refused_as_directory_and_file_at_any_depth() {
-        let scope = ExportScope::new(Path::new("/no-such-vault"), &[]);
+        let scope = ExportScope::new(Path::new("/no-such-vault"), &[], &[]);
         for entry in &NEVER_COPIED {
             let name = entry.text();
             for written in [
@@ -557,7 +670,7 @@ mod tests {
 
     #[test]
     fn a_path_that_does_not_exist_passes_unless_its_name_is_listed() {
-        let scope = ExportScope::new(Path::new("/no-such-vault"), &[]);
+        let scope = ExportScope::new(Path::new("/no-such-vault"), &[], &[]);
         assert_eq!(
             scope.verdict(&scope.vault_path("/assets/missing.png")),
             Ok(())
@@ -566,7 +679,7 @@ mod tests {
 
     #[test]
     fn href_path_keeps_a_refused_or_climbing_link_as_written() {
-        let scope = ExportScope::new(Path::new("/no-such-vault"), &[]);
+        let scope = ExportScope::new(Path::new("/no-such-vault"), &[], &[]);
         assert_eq!(
             scope.href_path("/all-notes", "../assets/x.png").as_deref(),
             Some("/assets/x.png")
@@ -583,7 +696,7 @@ mod tests {
         std::fs::write(parent.path().join("vault2/x.png"), "png").expect("file");
         std::os::unix::fs::symlink("../vault2/x.png", parent.path().join("vault/x.png"))
             .expect("symlink");
-        let scope = ExportScope::new(&parent.path().join("vault"), &[]);
+        let scope = ExportScope::new(&parent.path().join("vault"), &[], &[]);
         assert_eq!(
             scope.verdict(&scope.vault_path("/x.png")),
             Err(Refusal::Outside("the vault"))
@@ -593,7 +706,7 @@ mod tests {
     #[test]
     fn a_vault_root_that_cannot_be_resolved_refuses_what_exists() {
         let elsewhere = tempfile::tempdir().expect("temp dir");
-        let scope = ExportScope::new(Path::new("/no-such-vault"), &[]);
+        let scope = ExportScope::new(Path::new("/no-such-vault"), &[], &[]);
         assert_eq!(
             scope.verdict(elsewhere.path()),
             Err(Refusal::Outside("the vault"))
@@ -605,7 +718,7 @@ mod tests {
         let vault = tempfile::tempdir().expect("temp dir");
         std::os::unix::fs::symlink("b", vault.path().join("a")).expect("symlink a");
         std::os::unix::fs::symlink("a", vault.path().join("b")).expect("symlink b");
-        let scope = ExportScope::new(vault.path(), &[]);
+        let scope = ExportScope::new(vault.path(), &[], &[]);
         assert_eq!(
             scope.verdict(&scope.vault_path("/a")),
             Err(Refusal::Unresolvable)
@@ -613,6 +726,51 @@ mod tests {
         let walk = scope.walk(vault.path()).expect("the walk reads the vault");
         assert_eq!(walk.unresolvable, 2);
         assert!(walk.files.is_empty(), "{:?}", walk.files);
+    }
+
+    #[test]
+    fn a_note_is_called_one_by_the_storage_form_the_scan_reads() {
+        let vault = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(vault.path().join("all-notes")).expect("all-notes");
+        std::fs::write(vault.path().join("all-notes/sealed.age"), "age").expect("age");
+        std::fs::write(vault.path().join("all-notes/plain.md"), "md").expect("md");
+        let plaintext = ExportScope::new(vault.path(), &[], &[]);
+        assert_eq!(
+            plaintext.verdict(&plaintext.vault_path("/all-notes/sealed.age")),
+            Err(Refusal::Unexported { scanned: false })
+        );
+        assert_eq!(
+            plaintext.verdict(&plaintext.vault_path("/all-notes/plain.md")),
+            Err(Refusal::Unexported { scanned: true })
+        );
+
+        std::fs::create_dir_all(vault.path().join(".ntropy")).expect(".ntropy");
+        std::fs::write(vault.path().join(".ntropy/identity.pub"), "age1").expect("recipient");
+        let encrypted = ExportScope::new(vault.path(), &[], &[]);
+        assert_eq!(
+            encrypted.verdict(&encrypted.vault_path("/all-notes/sealed.age")),
+            Err(Refusal::Unexported { scanned: true })
+        );
+        assert_eq!(
+            encrypted.verdict(&encrypted.vault_path("/all-notes/plain.md")),
+            Err(Refusal::Unexported { scanned: false })
+        );
+    }
+
+    #[test]
+    fn a_theme_reaches_no_note() {
+        let vault = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(vault.path().join("all-notes")).expect("all-notes");
+        std::fs::create_dir_all(vault.path().join("theme")).expect("theme");
+        std::fs::write(vault.path().join("all-notes/note.md"), "md").expect("note");
+        std::os::unix::fs::symlink("../all-notes/note.md", vault.path().join("theme/note.md"))
+            .expect("symlink");
+        let scope = ExportScope::for_theme(&vault.path().join("theme"), vault.path());
+        let walk = scope
+            .walk(&vault.path().join("theme"))
+            .expect("the walk reads the theme");
+        assert!(walk.files.is_empty(), "{:?}", walk.files);
+        assert_eq!(walk.unexported, 1);
     }
 
     #[test]
@@ -665,7 +823,7 @@ mod tests {
         std::fs::write(vault.path().join("pic.png"), "png").expect("asset");
         let files_dir = vault.path().join("x_files");
         let artifact = vault.path().join("x.html");
-        let scope = ExportScope::new(vault.path(), &[&artifact, &files_dir]);
+        let scope = ExportScope::new(vault.path(), &[], &[&artifact, &files_dir]);
         let walk = scope.walk(vault.path()).expect("the walk reads the vault");
         let files: Vec<&str> = walk
             .files
