@@ -240,10 +240,11 @@ synced directory. `vault encrypt` removes existing view trees at the point of
 no return. A tree it could not remove safely would keep its link names, and
 with them note titles, in plaintext inside the vault, so a fresh `vault
 encrypt` refuses to start, before it writes the keypair, while a configured
-view has an invalid name (ADR 0064); the message names `ntropy view remove`
-for it, and the old directory is the user's to delete. A resumed conversion
-is past that check and skips such a view, reporting that its directory was
-left in place. `ntropy view add` is refused rather than accepted-and-inert: a
+view has an invalid name, a symlink on the path to its directory, or a path
+that cannot be inspected (ADR 0064). For an invalid name the message names
+`ntropy view remove` and leaves the old directory to the user; for a symlink
+it says to remove the symlink itself. A resumed conversion is past that check
+and skips such a view, reporting that its directory was left in place. `ntropy view add` is refused rather than accepted-and-inert: a
 command that reports success and produces no directory is worse for a user's
 mental model than one that explains itself. `view list` and `view remove` keep
 working, so a vault encrypted after the fact can still be inspected and

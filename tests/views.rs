@@ -308,3 +308,52 @@ fn a_reserved_prefix_view_name_cannot_touch_the_notes() {
 
     assert_all_exist(&guard, &[resource]);
 }
+
+// A valid name is not enough when a symlink planted in the vault, for example
+// in a cloned tree, sits on the way to the view's directory.
+
+#[test]
+fn a_symlinked_view_root_is_skipped() {
+    let (guard, base, vault) = nested_vault(&[("by-tag", "tags")]);
+    write_note(
+        &vault,
+        ULID_A,
+        "note",
+        "---\ntitle: Note\ntags: [work]\n---\nbody\n",
+    );
+    let victims = plant_victims(&base.join("decoy"));
+    std::os::unix::fs::symlink(base.join("decoy"), vault.root().join("by-tag"))
+        .expect("plant symlink");
+
+    let report = reconcile::reconcile(&vault).expect("reconcile");
+
+    assert_all_exist(&guard, &victims);
+    let skipped: Vec<&str> = report
+        .skipped_views
+        .iter()
+        .map(|v| v.name.as_str())
+        .collect();
+    assert_eq!(skipped, ["by-tag"]);
+    assert_eq!(report.views_synced, 0);
+    // Still configured and valid, so it stays ignored.
+    let gitignore = std::fs::read_to_string(vault.layout().gitignore_file()).expect("read");
+    assert!(gitignore.contains("/by-tag/"), "{gitignore}");
+}
+
+#[test]
+fn a_symlinked_intermediate_segment_is_skipped() {
+    let (guard, base, vault) = nested_vault(&[("area/work", "tags")]);
+    let victims = plant_victims(&base.join("decoy").join("work"));
+    std::os::unix::fs::symlink(base.join("decoy"), vault.root().join("area"))
+        .expect("plant symlink");
+
+    let refresh = reconcile::refresh_views(&vault).expect("refresh");
+
+    assert_all_exist(&guard, &victims);
+    let skipped: Vec<&str> = refresh
+        .skipped_views
+        .iter()
+        .map(|v| v.name.as_str())
+        .collect();
+    assert_eq!(skipped, ["area/work"]);
+}

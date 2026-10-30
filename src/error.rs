@@ -68,6 +68,10 @@ pub enum Error {
     #[error(transparent)]
     ViewAdmin(#[from] ViewAdminError),
 
+    /// A view's directory could not be used safely.
+    #[error(transparent)]
+    View(#[from] crate::view::ViewDirError),
+
     /// A note could not be rendered to an output artifact.
     #[error(transparent)]
     Render(#[from] RenderError),

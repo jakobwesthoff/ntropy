@@ -89,8 +89,9 @@ pub fn refresh_views(session: &VaultSession) -> Result<ViewRefresh> {
         return Ok(ViewRefresh::default());
     }
     let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
-    let (views, skipped_views) = load_views(session)?;
-    sync_views_and_gitignore(session, &views, &skipped_views, &scan.notes)?;
+    let (views, mut skipped_views) = load_views(session)?;
+    let (_, unsafe_views) = sync_views_and_gitignore(session, &views, &skipped_views, &scan.notes)?;
+    skipped_views.extend(unsafe_views);
     Ok(ViewRefresh {
         warnings: scan.warnings,
         skipped_views,
@@ -103,14 +104,18 @@ pub fn refresh_views(session: &VaultSession) -> Result<ViewRefresh> {
 /// and the ignore file — live here so every sync path shares them and they
 /// cannot drift. The `view` layer stays unaware of `.gitignore`; the composition
 /// is owned here.
+///
+/// Returns the views the sync skipped for an unsafe directory. Their names are
+/// valid and still configured, so they keep their `.gitignore` entries.
 fn sync_views_and_gitignore(
     vault: &Vault,
     views: &[ViewDef],
     skipped: &[SkippedView],
     notes: &[Note],
-) -> Result<gitignore::SyncReport> {
-    view::sync_all(vault, views, notes)?;
-    sync_gitignore(vault, views, skipped)
+) -> Result<(gitignore::SyncReport, Vec<SkippedView>)> {
+    let unsafe_views = view::sync_all(vault, views, notes)?;
+    let gitignore = sync_gitignore(vault, views, skipped)?;
+    Ok((gitignore, unsafe_views))
 }
 
 /// Bring `.gitignore` in step with the configured views.
@@ -187,7 +192,7 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
         warnings.retain(|warning| !fixed.contains(&warning.path.as_path()));
     }
 
-    let (views, skipped_views) = load_views(session)?;
+    let (views, mut skipped_views) = load_views(session)?;
     let (views_synced, gitignore, skipped_views) = if session.is_encrypted() {
         // Views are disabled here, and `.gitignore` is left alone: pruning its
         // managed entries would report "stopped ignoring /by-tag/" about a
@@ -195,11 +200,11 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
         // reported as skipped either.
         (0, gitignore::SyncReport::default(), Vec::new())
     } else {
-        (
-            views.len(),
-            sync_views_and_gitignore(session, &views, &skipped_views, &notes)?,
-            skipped_views,
-        )
+        let (gitignore, unsafe_views) =
+            sync_views_and_gitignore(session, &views, &skipped_views, &notes)?;
+        let views_synced = views.len() - unsafe_views.len();
+        skipped_views.extend(unsafe_views);
+        (views_synced, gitignore, skipped_views)
     };
 
     Ok(ReconcileReport {

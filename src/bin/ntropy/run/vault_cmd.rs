@@ -18,7 +18,7 @@ use ntropy::crypto::age_io;
 use ntropy::keys;
 use ntropy::migrate::{self, Marker, Migration, NoHooks, Operation};
 use ntropy::session::VaultSession;
-use ntropy::vault::{Vault, layout};
+use ntropy::vault::{Vault, escape_controls, layout};
 use ntropy::view::{SkipReason, SkippedView};
 
 use crate::cli::{GlobalArgs, VaultCommand};
@@ -142,12 +142,21 @@ fn blocking_views_message(blocking: &[SkippedView]) -> String {
     let mut message =
         String::from("these views cannot be removed safely, so the vault was not encrypted:");
     for view in blocking {
-        let name = view.name.escape_debug();
+        let name = escape_controls(&view.name);
         match &view.reason {
             SkipReason::InvalidName(reason) => message.push_str(&format!(
                 "\n  view `{name}`: {reason}; remove it with `ntropy view remove {}`, \
                  delete its directory, then encrypt again",
                 shell_quote(&view.name)
+            )),
+            SkipReason::Symlinked(path) => message.push_str(&format!(
+                "\n  view `{name}`: `{}` is a symlink; remove the symlink itself \
+                 (not what it points to), then encrypt again",
+                path.display()
+            )),
+            SkipReason::Unreadable { path, source } => message.push_str(&format!(
+                "\n  view `{name}`: `{}` could not be inspected: {source}",
+                path.display()
             )),
         }
     }
@@ -369,4 +378,40 @@ fn hooks(_global: &GlobalArgs) -> &'static dyn migrate::MigrationHooks {
 #[cfg(not(debug_assertions))]
 fn hooks(_global: &GlobalArgs) -> &'static dyn migrate::MigrationHooks {
     &NoHooks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ntropy::vault::ViewName;
+    use ntropy::view::ViewDirError;
+
+    #[test]
+    fn the_refusal_tells_what_to_remove_for_each_cause() {
+        let name = ViewName::parse("by-tag").expect("valid view name");
+        let (_, invalid) = ntropy::view::parse_defs([("it's", "tags")]);
+        let mut blocking = invalid;
+        blocking.push(SkippedView::unsafe_dir(
+            &name,
+            ViewDirError::Symlinked("/v/by-tag".into()),
+        ));
+        blocking.push(SkippedView::unsafe_dir(
+            &name,
+            ViewDirError::Inspect {
+                path: "/v/by-tag".into(),
+                source: std::io::Error::other("name too long"),
+            },
+        ));
+
+        assert_eq!(
+            blocking_views_message(&blocking),
+            "these views cannot be removed safely, so the vault was not encrypted:\n  \
+             view `it's`: the segment `it's` may only hold lowercase letters, digits and \
+             single dashes, at most 72 characters; remove it with \
+             `ntropy view remove 'it'\\''s'`, delete its directory, then encrypt again\n  \
+             view `by-tag`: `/v/by-tag` is a symlink; remove the symlink itself (not what it \
+             points to), then encrypt again\n  \
+             view `by-tag`: `/v/by-tag` could not be inspected: name too long"
+        );
+    }
 }

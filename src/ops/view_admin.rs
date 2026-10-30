@@ -11,6 +11,8 @@
 //! tree in place for the user to remove, pruning only the managed ignore entry.
 //! Editing a view is intentionally absent in v1 (it is remove + add).
 
+use std::path::PathBuf;
+
 use crate::config::{PerVaultConfig, ViewConfig};
 use crate::error::Result;
 use crate::fsutil;
@@ -18,8 +20,8 @@ use crate::gitignore;
 use crate::reconcile;
 use crate::scan;
 use crate::session::VaultSession;
-use crate::vault::{InvalidViewName, Vault, ViewName};
-use crate::view::{self, SkippedView, ViewDef};
+use crate::vault::{InvalidViewName, Vault, ViewName, escape_controls};
+use crate::view::{self, SkippedView, ViewDef, ViewDirError};
 
 /// Why a view administration command was rejected.
 #[derive(Debug, thiserror::Error)]
@@ -27,7 +29,7 @@ pub enum ViewAdminError {
     /// The name would not stay a view directory of its own (ADR 0064).
     #[error(
         "`{}` is not a valid view name: {reason}{}",
-        .name.escape_debug(),
+        escape_controls(.name),
         suggestion_hint(.suggestion)
     )]
     InvalidName {
@@ -35,6 +37,13 @@ pub enum ViewAdminError {
         reason: InvalidViewName,
         suggestion: Option<ViewName>,
     },
+    /// The name is valid, but a symlink sits on the way to its directory.
+    #[error(
+        "`{}` is a symlink, and syncing a view through it could reach outside the vault; \
+         remove the symlink itself (not what it points to) or pick another name",
+        .0.display()
+    )]
+    SymlinkedDir(PathBuf),
     #[error("a view named `{0}` already exists")]
     Duplicate(String),
     #[error("no view named `{0}`")]
@@ -91,6 +100,15 @@ pub fn add_view(session: &VaultSession, name: &str, field: &str) -> Result<ViewC
         reason,
         suggestion: ViewName::suggest(name),
     })?;
+    // A valid name still leads outside the vault when a symlink sits on its
+    // path, so that too is refused before anything is written.
+    match view::contained_dir(session.layout(), &view_name) {
+        Ok(_) => {}
+        Err(ViewDirError::Symlinked(path)) => {
+            return Err(ViewAdminError::SymlinkedDir(path).into());
+        }
+        Err(other) => return Err(other.into()),
+    }
 
     let config_path = session.layout().config_file();
     let mut config = PerVaultConfig::load(&config_path)?;
@@ -262,6 +280,54 @@ mod tests {
         assert!(!v.root().join("By_Tag").exists());
         assert!(!v.layout().gitignore_file().exists());
         assert!(base.starts_with(guard.path()));
+    }
+
+    #[test]
+    fn add_refuses_a_symlinked_view_root_or_segment() {
+        for (view, link) in [("by-tag", "by-tag"), ("area/work", "area")] {
+            let (guard, base, v) = nested_vault();
+            let decoy = base.join("decoy");
+            std::fs::create_dir_all(decoy.join("work")).expect("decoy");
+            std::fs::write(decoy.join("work/keep.txt"), "keep").expect("decoy file");
+            std::fs::write(decoy.join("keep.txt"), "keep").expect("decoy file");
+            std::os::unix::fs::symlink(&decoy, v.root().join(link)).expect("plant symlink");
+
+            let err = add_view(&v, view, "tags").expect_err("a symlinked path is refused");
+            match err {
+                Error::ViewAdmin(ViewAdminError::SymlinkedDir(path)) => {
+                    assert_eq!(path, v.root().join(link));
+                }
+                other => panic!("{view}: expected a symlink refusal, got {other:?}"),
+            }
+            assert!(decoy.join("keep.txt").exists(), "{view}: decoy deleted");
+            assert!(
+                decoy.join("work/keep.txt").exists(),
+                "{view}: decoy deleted"
+            );
+            assert!(
+                list_views(&v).expect("list").is_empty(),
+                "{view}: config written"
+            );
+            assert!(decoy.starts_with(guard.path()));
+        }
+    }
+
+    #[test]
+    fn add_reports_a_directory_it_cannot_inspect() {
+        let (_g, v) = temp_vault();
+        let view = crate::test_support::uninspectable_view(v.root());
+        let err = add_view(&v, view.as_str(), "tags").expect_err("refused");
+        assert!(
+            matches!(err, Error::View(ViewDirError::Inspect { .. })),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn the_symlink_refusal_says_what_to_remove() {
+        let message = ViewAdminError::SymlinkedDir("/v/by-tag".into()).to_string();
+        assert!(message.starts_with("`/v/by-tag` is a symlink"), "{message}");
+        assert!(message.contains("remove the symlink itself"), "{message}");
     }
 
     #[test]

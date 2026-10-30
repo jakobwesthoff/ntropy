@@ -155,6 +155,14 @@ other views carry on; `--strict` turns that warning into a failure of
 `reconcile` and `site`. `view list` and `view remove` work on any configured
 name, so a damaged configuration can be inspected and repaired.
 
+A valid name stays inside the vault only while no symlink sits on its path.
+Before a view is synced, each segment of its path below the vault root is
+inspected without following it; if one is a symlink, the view is skipped with
+the same warning, and `view add` refuses the name and says to remove the
+symlink itself. Such a view keeps its `.gitignore` entry. The check and the
+sync are separate lookups by path, so a symlink swapped in while a sync runs
+is not caught (ADR 0064).
+
 A valid name still names a directory ntropy owns (ADR 0007): if it is also the
 name of an existing directory of the vault, or lies inside another view's
 directory, it is synced like any other view.

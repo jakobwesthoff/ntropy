@@ -78,6 +78,12 @@ and this project adheres to
   the named directory outright. A name with two `..` parts made `site` write
   pages outside its output directory, and a name with a line break added lines
   to `.gitignore`. View names are now validated before they become paths.
+- A view's directory that was a symlink, or sat below one, as a cloned or
+  synced tree can carry, led the view sync to empty whatever the link pointed
+  to, and `vault encrypt` to delete the tree behind a linked parent. Such a
+  view is now skipped with a warning, which `--strict` makes `reconcile` fail
+  on, and `view add` and `vault encrypt` refuse it. A symlink
+  swapped in while a sync is running is not caught.
 
 ## v2.2.0 - 2026-10-10
 

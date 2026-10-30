@@ -37,7 +37,7 @@ use crate::reconcile;
 use crate::scan::{self, ScanError};
 use crate::session::VaultSession;
 use crate::vault::Vault;
-use crate::view::SkippedView;
+use crate::view::{self, SkippedView};
 
 /// Why a conversion could not run or complete.
 #[derive(Debug, thiserror::Error)]
@@ -298,17 +298,16 @@ fn reads_back_as(cipher: &dyn NoteCipher, path: &Path, expected: &str) -> bool {
 ///
 /// Done at commit rather than up front so an interrupted conversion leaves the
 /// vault's views intact and usable. A view whose tree cannot be removed safely
-/// is skipped and reported, never an error: this runs after the sources are
-/// gone, and failing here would leave the conversion marker behind.
+/// is skipped and reported rather than failing the run: this runs after the
+/// sources are gone, and failing here would leave the conversion marker
+/// behind.
 fn remove_view_trees(
     session: &VaultSession,
 ) -> Result<(Vec<PathBuf>, Vec<SkippedView>), MigrateError> {
-    let config = crate::config::PerVaultConfig::load(&session.layout().config_file())?;
-    let (views, skipped) = reconcile::configured_views(&config);
+    let (dirs, skipped) = removable_view_dirs(session)?;
 
     let mut removed = Vec::new();
-    for view in &views {
-        let dir = session.layout().view_dir(&view.name);
+    for dir in dirs {
         if dir.is_dir() {
             fsutil::remove_dir_all(&dir)?;
             removed.push(dir);
@@ -324,9 +323,25 @@ fn remove_view_trees(
 /// out note titles in plaintext, so `vault encrypt` asks for this before it
 /// writes anything and refuses while the list is not empty.
 pub fn views_blocking_encrypt(vault: &Vault) -> Result<Vec<SkippedView>, MigrateError> {
-    let config = crate::config::PerVaultConfig::load(&vault.layout().config_file())?;
-    let (_, skipped) = reconcile::configured_views(&config);
+    let (_, skipped) = removable_view_dirs(vault)?;
     Ok(skipped)
+}
+
+/// The directories of the configured views that can be removed safely, and
+/// the views that cannot: those with an invalid name, and those whose
+/// directory sits behind a symlink or cannot be inspected.
+fn removable_view_dirs(vault: &Vault) -> Result<(Vec<PathBuf>, Vec<SkippedView>), MigrateError> {
+    let config = crate::config::PerVaultConfig::load(&vault.layout().config_file())?;
+    let (views, mut skipped) = reconcile::configured_views(&config);
+
+    let mut dirs = Vec::new();
+    for view in &views {
+        match view::contained_dir(vault.layout(), &view.name) {
+            Ok(dir) => dirs.push(dir),
+            Err(error) => skipped.push(SkippedView::unsafe_dir(&view.name, error)),
+        }
+    }
+    Ok((dirs, skipped))
 }
 
 #[cfg(test)]
@@ -655,6 +670,107 @@ mod tests {
             .collect();
         assert_eq!(skipped, ["../decoy"]);
         assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn encrypt_leaves_a_symlinked_view_root_and_reports_it() {
+        let (guard, base, session) = nested_plaintext_vault();
+        let decoy = base.join("decoy");
+        std::fs::create_dir_all(&decoy).expect("decoy");
+        std::fs::write(decoy.join("keep.txt"), "keep").expect("decoy file");
+        let link = session.root().join("by-tag");
+        std::os::unix::fs::symlink(&decoy, &link).expect("plant symlink");
+        configure_views(&session, &[("by-tag", "tags")]);
+
+        let report = encrypt(&session);
+
+        assert!(decoy.join("keep.txt").exists());
+        assert!(decoy.starts_with(guard.path()));
+        // The link is the user's to remove: ntropy reports it rather than
+        // touching a path that leads out of the vault.
+        assert!(link.symlink_metadata().is_ok(), "the link was removed");
+        assert!(report.views_removed.is_empty());
+        let skipped: Vec<&str> = report
+            .views_skipped
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(skipped, ["by-tag"]);
+        assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn encrypt_never_removes_a_tree_behind_a_symlinked_segment() {
+        let (guard, base, session) = nested_plaintext_vault();
+        let victim = base.join("decoy").join("work").join("keep.txt");
+        std::fs::create_dir_all(victim.parent().expect("a victim has a parent")).expect("decoy");
+        std::fs::write(&victim, "keep me").expect("victim");
+        std::os::unix::fs::symlink(base.join("decoy"), session.root().join("area"))
+            .expect("plant symlink");
+        configure_views(&session, &[("area/work", "tags")]);
+
+        let report = encrypt(&session);
+
+        assert!(victim.starts_with(guard.path()));
+        assert!(victim.exists(), "the tree behind the symlink was removed");
+        let skipped: Vec<&str> = report
+            .views_skipped
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(skipped, ["area/work"]);
+        assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn a_regular_file_in_a_view_path_does_not_stop_the_commit() {
+        let (_guard, session) = plaintext_vault();
+        std::fs::write(session.root().join("area"), "a file").expect("file");
+        configure_views(&session, &[("area/work", "tags")]);
+
+        let report = encrypt(&session);
+
+        assert!(report.views_removed.is_empty());
+        assert!(report.views_skipped.is_empty());
+        assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn a_view_path_that_cannot_be_inspected_does_not_stop_the_commit() {
+        let (_guard, session) = plaintext_vault();
+        let view = crate::test_support::uninspectable_view(session.root());
+        configure_views(&session, &[(view.as_str(), "tags")]);
+
+        let report = encrypt(&session);
+
+        assert_eq!(report.views_skipped.len(), 1);
+        assert!(matches!(
+            report.views_skipped[0].reason,
+            crate::view::SkipReason::Unreadable { .. }
+        ));
+        assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn unsafe_view_directories_block_encrypt() {
+        let (_guard, base, session) = nested_plaintext_vault();
+        std::fs::create_dir_all(base.join("decoy")).expect("decoy");
+        std::os::unix::fs::symlink(base.join("decoy"), session.root().join("by-tag"))
+            .expect("plant symlink");
+        let long = crate::test_support::uninspectable_view(session.root());
+        configure_views(&session, &[("by-tag", "tags"), (long.as_str(), "tags")]);
+
+        let blocking = views_blocking_encrypt(&session).expect("check");
+
+        assert_eq!(blocking.len(), 2);
+        assert!(matches!(
+            blocking[0].reason,
+            crate::view::SkipReason::Symlinked(_)
+        ));
+        assert!(matches!(
+            blocking[1].reason,
+            crate::view::SkipReason::Unreadable { .. }
+        ));
     }
 
     #[test]

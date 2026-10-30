@@ -80,6 +80,10 @@ look wrong, reconcile before investigating anything else.
   `reconcile` and `site` fail. Fix it with `ntropy view remove <name>`, then
   `view add` under a valid name; the old directory is left for you to delete.
   `vault encrypt` refuses to start until such a view is removed.
+- A view whose directory, or a directory above it, is a symlink is skipped
+  with the same warning when views sync (`reconcile --strict` fails on it),
+  and `view add` and `vault encrypt` refuse it. NEVER delete the
+  link's target to fix it; remove the symlink itself (`rm <link>`, no `-r`).
 
 ## View or query?
 

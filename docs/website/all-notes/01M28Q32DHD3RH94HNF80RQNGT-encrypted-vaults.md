@@ -29,7 +29,7 @@ ntropy vault rekey        # re-encrypt everything to a fresh key (same passphras
 ntropy vault passphrase   # change the passphrase; notes are untouched
 ```
 
-`encrypt`, `decrypt` and `rekey` rewrite the whole vault, so each asks first (`-y` skips) and each is safe to interrupt: every note is written in its new form and verified against the old one before anything is deleted, so a conversion killed halfway leaves both copies on disk. The next command refuses to touch the vault and tells you to finish with `--resume`. `vault encrypt` also removes the view trees, since views are disabled in an encrypted vault. It refuses to start while a configured view has an [invalid name](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md), because it could not remove that view's tree; the message tells you how to remove the view first.
+`encrypt`, `decrypt` and `rekey` rewrite the whole vault, so each asks first (`-y` skips) and each is safe to interrupt: every note is written in its new form and verified against the old one before anything is deleted, so a conversion killed halfway leaves both copies on disk. The next command refuses to touch the vault and tells you to finish with `--resume`. `vault encrypt` also removes the view trees, since views are disabled in an encrypted vault. It refuses to start while a configured view has an [invalid name](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md) or a symlink in place of its directory, because it could not remove that view's tree safely; the message tells you what to remove first.
 
 `vault passphrase` rewrites only the file holding the wrapped key; the notes stay as they are. `vault rekey` keeps the current passphrase unless `--new-passphrase-file` names a new one.
 

@@ -64,8 +64,11 @@ Non-interactive output, in `src/bin/ntropy/run/output.rs`:
   `Deleted {reference}` line and the ambiguous-match list.
 - `print_warnings` writes the skipped file's name to stderr unchanged.
 - `print_info` writes template names unchanged. Top-tag names are safe.
-- `print_views` writes the view name and field unchanged. This is the display
-  side of the hostile view name in the view name fix (see Relations).
+- `print_views` writes the view name and field unchanged. `view list` shows
+  every configured name, including the invalid ones ADR 0064 keeps out of
+  paths, so a hostile name reaches the terminal here. The skipped-view
+  warnings and the `view add` error already show names through
+  `escape_debug`.
 
 Reconcile report, in `src/bin/ntropy/run/mod.rs`, `cmd_reconcile`:
 
@@ -293,10 +296,9 @@ stay unchanged. Only the new tests exercise the escape path.
 
 - Sanitize the full `note.path` cell in `output.rs`, not only the file name.
   Directory segments inside the vault can carry control bytes too.
-- The view name and field cells are the display side of the view name fix (see
-  Relations). The two fixes are independent. Sanitizing the display does
-  nothing for traversal, and the path fix does nothing for display. Neither
-  should be assumed to cover the other.
+- The view name and field cells are the display side of the view names that
+  ADR 0064 validates before they become paths. Validation does nothing for
+  display, and sanitizing the display would do nothing for paths.
 - Do not move sanitization into `draw_row`. It breaks the highlight index
   alignment described above.
 - A secondary sweep is still needed. Check that no `bail!`, `context` or `?`
@@ -327,5 +329,4 @@ stay unchanged. Only the new tests exercise the escape path.
 
 ## Relations
 
-- Relates to: [View names are used as unvalidated paths, so a config can delete files outside the vault](01KWH7Y8ZFKD52TJ3AEGSSBQFR-view-names-are-used-as-unvalidated-paths-so-a-config-can-delete-files.md), the view name and field cells share the root cause. The fixes are independent.
 - Relates to: [Document the trust model of walk-up vault discovery](01KWH7Y8ZFKD52TJ3AEGSSBQFS-document-the-trust-model-of-walk-up-vault-discovery.md), walk-up discovery is what makes a hostile vault reachable without a deliberate open.

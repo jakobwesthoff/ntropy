@@ -24,6 +24,9 @@ use crate::vault::layout;
 pub struct ViewName(String);
 
 /// Why a string is not a valid view name.
+///
+/// The segments these variants carry hold no control character: a name with
+/// one is rejected as a whole before any segment is looked at.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum InvalidViewName {
     #[error("the name is empty")]
@@ -32,16 +35,33 @@ pub enum InvalidViewName {
     ControlCharacter,
     #[error("the name starts or ends with `/` or contains `//`")]
     EmptySegment,
-    #[error("`{}` is reserved by ntropy", .0.escape_debug())]
+    #[error("`{0}` is reserved by ntropy")]
     Reserved(String),
-    #[error("the segment `{}` starts with a dot", .0.escape_debug())]
+    #[error("the segment `{0}` starts with a dot")]
     DotSegment(String),
     #[error(
-        "the segment `{}` may only hold lowercase letters, digits and single dashes, at most {} characters",
-        .0.escape_debug(),
-        slug::MAX_SLUG_LEN
+        "the segment `{0}` may only hold lowercase letters, digits and single dashes, at most {max} characters",
+        max = slug::MAX_SLUG_LEN
     )]
     NotNormalized(String),
+}
+
+/// `raw` with its control characters escaped, for quoting a name that has
+/// not been validated in a message.
+///
+/// Only control characters are escaped, so the quoted name stays as written
+/// otherwise, and an escape sequence in a hostile name never reaches the
+/// terminal.
+pub fn escape_controls(raw: &str) -> String {
+    raw.chars()
+        .map(|ch| {
+            if ch.is_control() {
+                ch.escape_debug().to_string()
+            } else {
+                ch.to_string()
+            }
+        })
+        .collect()
 }
 
 impl ViewName {
@@ -278,12 +298,18 @@ mod tests {
     }
 
     #[test]
-    fn messages_escape_what_they_quote() {
+    fn messages_quote_segments_as_written() {
         // A control character never reaches a segment message (it is
-        // rejected first), but a backslash does and must stay readable.
+        // rejected first), so the rest is quoted unchanged.
         assert_eq!(
-            rejected("a\\b").to_string(),
-            "the segment `a\\\\b` may only hold lowercase letters, digits and single dashes, at most 72 characters"
+            rejected("it's").to_string(),
+            "the segment `it's` may only hold lowercase letters, digits and single dashes, at most 72 characters"
         );
+    }
+
+    #[test]
+    fn escape_controls_escapes_only_control_characters() {
+        assert_eq!(escape_controls("by\ntag\x1b[2J"), "by\\ntag\\u{1b}[2J");
+        assert_eq!(escape_controls("it's a\\b"), "it's a\\b");
     }
 }

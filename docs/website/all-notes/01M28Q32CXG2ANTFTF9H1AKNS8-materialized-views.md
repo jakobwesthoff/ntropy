@@ -67,6 +67,8 @@ rm -r By_Tag
 
 `vault encrypt` refuses to start while such a view is configured, because the old directory's link names would keep your note titles readable inside the encrypted vault.
 
+A view's directory must also be a real directory. If it, or a directory above it, is a symlink, for example one that came along with a cloned repository, ntropy skips the view with a warning instead of following the link and emptying whatever it points to. `view add` and `vault encrypt` refuse in that case. Remove the symlink itself, not what it points to, and the view syncs again.
+
 ## How notes are grouped
 
 - A list-valued field (like `tags`) fans a note out into every value it holds.

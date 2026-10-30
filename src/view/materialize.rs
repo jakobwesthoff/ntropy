@@ -43,7 +43,7 @@ type DirSet = BTreeSet<PathBuf>;
 /// from-scratch build would produce — stale and drifted links removed, emptied
 /// group directories pruned — but unchanged links keep their identity (ADR 0008).
 pub fn sync_view(vault: &Vault, view: &ViewDef, notes: &[Note]) -> Result<()> {
-    let view_dir = vault.layout().view_dir(&view.name);
+    let view_dir = super::contained_dir(vault.layout(), &view.name)?;
 
     let desired = desired_links(&view_dir, view, notes)?;
     let (actual, dirs) = actual_state(&view_dir)?;

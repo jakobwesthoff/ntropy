@@ -10,7 +10,7 @@
 //! configured views. These helpers build that scaffold so each test module does
 //! not carry its own copy.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tempfile::TempDir;
 
@@ -60,6 +60,40 @@ pub(crate) fn write_note(session: &VaultSession, name: &str, content: &str) -> P
     let path = session.layout().all_notes().join(name);
     std::fs::write(&path, content).expect("write note");
     path
+}
+
+/// A valid view name whose directory under `root` cannot be inspected,
+/// whatever user the test runs as.
+///
+/// Real directories are created below `root` until the path is a few bytes
+/// short of the platform's `PATH_MAX`; the returned name is that path plus
+/// one more segment, so inspecting it fails with `ENAMETOOLONG`. A
+/// permission-based setup would not do: as root, permissions do not stop a
+/// lookup.
+pub(crate) fn uninspectable_view(root: &Path) -> crate::vault::ViewName {
+    let path_max = usize::try_from(libc::PATH_MAX).expect("PATH_MAX is positive");
+    // Short of the limit, so creating the prefix succeeds, but closer to it
+    // than one more segment, so the next lookup exceeds it.
+    let target = path_max - 8;
+    let full = "a".repeat(crate::text::slug::MAX_SLUG_LEN);
+
+    let mut segments: Vec<String> = Vec::new();
+    let mut length = root.as_os_str().len();
+    while length < target {
+        let room = target - length - 1;
+        let segment = if room >= full.len() {
+            full.clone()
+        } else {
+            "a".repeat(room.max(1))
+        };
+        length += segment.len() + 1;
+        segments.push(segment);
+    }
+    let prefix = segments.join("/");
+    std::fs::create_dir_all(root.join(&prefix)).expect("create the long prefix");
+
+    let name = format!("{prefix}/{full}");
+    crate::vault::ViewName::parse(&name).expect("every segment is a valid slug")
 }
 
 /// Fixtures for vaults whose notes are encrypted.

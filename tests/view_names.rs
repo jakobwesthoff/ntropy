@@ -284,6 +284,26 @@ fn site_gives_a_view_with_an_invalid_name_no_pages() {
     assert_eq!(strict.status.code(), Some(1), "{}", stderr(&strict));
 }
 
+#[test]
+fn reconcile_skips_a_view_behind_a_symlink() {
+    // A cloned tree can carry a symlink where a view's directory belongs.
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault", &[("by-tag", "tags")]);
+    let victim = plant_decoy(&dir, &dir.path().join("decoy"));
+    std::os::unix::fs::symlink(dir.path().join("decoy"), vault.join("by-tag"))
+        .expect("plant symlink");
+
+    let output = run(ntropy(&vault).args(["reconcile", "--strict"]));
+    assert!(victim.exists(), "the decoy was deleted");
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(
+        stderr(&output).contains("warning: skipped view `by-tag`: `")
+            && stderr(&output).contains("by-tag` is a symlink"),
+        "{}",
+        stderr(&output)
+    );
+}
+
 /// `vault encrypt` against vaults whose views it could not remove.
 #[cfg(feature = "encryption")]
 mod encrypt {
@@ -334,6 +354,26 @@ mod encrypt {
         let encrypted = run(ntropy_convert(&vault).args(["vault", "encrypt", "-y"]));
         assert!(encrypted.status.success(), "{}", stderr(&encrypted));
         assert!(vault.join(".ntropy/identity.pub").is_file());
+    }
+
+    #[test]
+    fn encrypt_refuses_a_view_behind_a_symlink() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let vault = vault_at(dir.path(), "vault", &[("by-tag", "tags")]);
+        let victim = plant_decoy(&dir, &dir.path().join("decoy"));
+        std::os::unix::fs::symlink(dir.path().join("decoy"), vault.join("by-tag"))
+            .expect("plant symlink");
+
+        let refused = run(ntropy_convert(&vault).args(["vault", "encrypt", "-y"]));
+        assert!(!refused.status.success());
+        assert!(
+            stderr(&refused).contains("remove the symlink itself (not what it points to)"),
+            "{}",
+            stderr(&refused)
+        );
+        assert!(victim.exists(), "the decoy was deleted");
+        assert!(!vault.join(".ntropy/identity.pub").exists());
+        assert!(!vault.join(".ntropy/migration.toml").exists());
     }
 
     #[test]

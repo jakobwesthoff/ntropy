@@ -12,7 +12,7 @@ Found in the 2026-07-02 security review of vault discovery. ntropy finds its vau
 
 ## Outcome
 
-Document, do not gate. The security triage ran after the code review on 2026-07-02, verified the execution surface and found no reason for a trust boundary. The primitives get hardened (the view-name, terminal-escape and frontmatter-parser fixes, each in its own todo, see Relations), and the work of this todo is a new ADR on the trust model of vault discovery with the invariant "nothing in a vault is ever executed", plus the design doc. The ADR is titled "Trust model for discovered vaults" and follows the sketch below.
+Document, do not gate. The security triage ran after the code review on 2026-07-02, verified the execution surface and found no reason for a trust boundary. The primitives get hardened (view names are validated before they become paths and view directories behind a symlink are skipped, ADR 0064; the terminal-escape and frontmatter-parser fixes have their own todos, see Relations), and the work of this todo is a new ADR on the trust model of vault discovery with the invariant "nothing in a vault is ever executed", plus the design doc. The ADR is titled "Trust model for discovered vaults" and follows the sketch below.
 
 Five gate options were considered (no gate, uid ownership check, pointer restriction, trust store, walk-up opt-in) and rejected. Each protects only against low-severity misdirection and costs either the default walk-up behaviour (ADR 0016) or machinery out of proportion for a single-user, local notes CLI. The reason git has `safe.directory` does not carry over: repository-local config there selects executables (hooks, `core.pager`, `core.fsmonitor`), and CVE-2022-24765 was code execution, while ntropy's config selects no executable (verified below). The uid ownership check stays the pre-decided escalation if a trigger fires: it catches a foreign-uid `.ntropy/` in a world-writable ancestor and archives extracted as root, but misses the dominant case of a repository you cloned or a folder you synced.
 
@@ -24,7 +24,7 @@ Five gate options were considered (no gate, uid ownership check, pointer restric
 
 ### The pointer file
 
-`resolve_pointer` (around lines 137-161) reads the first line of `.ntropy-vault` as a path. The path may be absolute, relative to the pointer's directory, or `~`-expanded (`expand_tilde`, around lines 164-175). The only constraint is that the target must already be a vault. A `.ntropy-vault` committed into a cloned repository can therefore redirect ntropy to any existing vault. Once redirected, everything (config, templates and notes) comes from the target vault, and the hostile tree contributes only the redirect. A redirect to the user's own vault yields only ordinary operations on that vault, and after the view-name fix those cannot escape it. This is no worse than plain `.ntropy/` adoption. Restricting pointer targets was rejected because it removes the reason for ADR 0026 (a vault that lives elsewhere, external), and `ntropy info` already shows the source (`ResolveSource::Pointer`, `resolve.rs`, around lines 39-40; `run/mod.rs`, around lines 339-347).
+`resolve_pointer` (around lines 137-161) reads the first line of `.ntropy-vault` as a path. The path may be absolute, relative to the pointer's directory, or `~`-expanded (`expand_tilde`, around lines 164-175). The only constraint is that the target must already be a vault. A `.ntropy-vault` committed into a cloned repository can therefore redirect ntropy to any existing vault. Once redirected, everything (config, templates and notes) comes from the target vault, and the hostile tree contributes only the redirect. A redirect to the user's own vault yields only ordinary operations on that vault, and with view names validated (ADR 0064) those cannot escape it. This is no worse than plain `.ntropy/` adoption. Restricting pointer targets was rejected because it removes the reason for ADR 0026 (a vault that lives elsewhere, external), and `ntropy info` already shows the source (`ResolveSource::Pointer`, `resolve.rs`, around lines 39-40; `run/mod.rs`, around lines 339-347).
 
 ### Execution-influence surface: verified empty
 
@@ -32,7 +32,7 @@ The triage swept `src/` for process spawns (`Command`, `spawn`, `exec`, `.status
 
 - There is exactly one subprocess spawn in the binary: `Command::new(&editor)` in `src/bin/ntropy/run/editor.rs` (around line 20). The editor comes only from `$VISUAL`, then `$EDITOR` (around lines 35-46). There is no config fallback and no built-in default, and a missing variable is a hard error (around lines 43-45). The other hits are crossterm's `execute!` terminal macro (`src/bin/ntropy/run/picker/mod.rs`, around lines 72 and 79) and `thread::spawn` in LSP tests only.
 - The complete environment-read inventory is `VISUAL` and `EDITOR` (`editor.rs`, around line 37), `NTROPY_VAULT` (`src/bin/ntropy/run/mod.rs`, around line 97), and `current_dir` (`run/mod.rs`, around lines 98 and 122). Nothing else.
-- The complete per-vault config schema (`src/config/per_vault.rs`, around lines 19-31) is `views: Vec<ViewConfig { name, field }>`. `name` becomes a path component (see the view-name todo). `field` is only a frontmatter-key lookup (`src/view/materialize.rs`, around lines 167-186). The global config (`src/config/global.rs`, around lines 27-32) holds only `default_vault: Option<PathBuf>`, validated through `require_vault`. It lives in the user's OS config directory, which an attacker cannot write to. There is no pager, no hook, no shell and no "open with" anywhere.
+- The complete per-vault config schema (`src/config/per_vault.rs`, around lines 19-31) is `views: Vec<ViewConfig { name, field }>`. `name` becomes a path component, only after validation (ADR 0064). `field` is only a frontmatter-key lookup (`src/view/materialize.rs`, around lines 167-186). The global config (`src/config/global.rs`, around lines 27-32) holds only `default_vault: Option<PathBuf>`, validated through `require_vault`. It lives in the user's OS config directory, which an attacker cannot write to. There is no pager, no hook, no shell and no "open with" anywhere.
 - Templates: `render` (`src/template.rs`, around lines 115-157) substitutes `{{key}}` in one pass against a closed set of four keys (`title`, `id`, `date`, `slug`). There is no evaluation, inclusion or command mechanism. `load_named` rejects empty names and path separators (around lines 93-98).
 - LSP: the server has a read-only request surface (completion, definition, documentLink, workspaceSymbol; `src/bin/ntropy/run/lsp/mod.rs`, around lines 224-232). `for_document` sets only `start_dir` and has no environment or global fallback (`lsp/vault.rs`, around lines 36-40). No `fs::write` or `create_dir_all` in the LSP tree runs outside tests.
 
@@ -44,7 +44,7 @@ ntropy opens attacker-authored content in the user's editor. A single-match `sea
 
 ## Residual risk
 
-The finding was first rated medium as an amplifier. It drops to low once the view-name, terminal-escape and frontmatter-parser fixes land. It cannot escalate to code execution, and its blast radius is data integrity, denial of service and display, which those three fixes cover. What remains:
+The finding was first rated medium as an amplifier. View names are validated (ADR 0064), and it drops to low once the terminal-escape and frontmatter-parser fixes land too. It cannot escalate to code execution, and its blast radius is data integrity, denial of service and display, which ADR 0064 and those two fixes cover. What remains:
 
 - Write misdirection: commands act on a vault the user did not consciously choose. This stays within legitimate vault operations (note creation, `reconcile` renames, view sync, `.gitignore` sync). `delete` still needs a selector and confirmation, or `--force` (`run/mod.rs`, around lines 296-304).
 - Mild self-disclosure: notes created in a planted vault land in an attacker-readable location, for example under a `/tmp` ancestor, since walk-up runs to `/`. There is no network, so there is no exfiltration channel.
@@ -54,16 +54,16 @@ The finding was first rated medium as an amplifier. It drops to low once the vie
 
 Standalone, this reduces to a documentation and invariant item, not a code change.
 
-## Interaction with the view-name fix
+## Interaction with view-name validation
 
-With view names validated (the `ViewName` newtype from the view-name todo), the destructive residual is effectively gone. Plain adoption confines view sync to validated directories under the adopted root, which is the attacker's own tree. A pointer redirect syncs the target vault with the target's own config, which is the user's trusted config. Hostile config never mixes with user data, so nothing left justifies a gate.
+With view names validated and view directories behind a symlink skipped (ADR 0064), the destructive residual is effectively gone, apart from a symlink swapped in while a sync runs, which ADR 0064 records as a known limit. Plain adoption confines view sync to validated directories under the adopted root, which is the attacker's own tree. A pointer redirect syncs the target vault with the target's own config, which is the user's trusted config. Hostile config never mixes with user data, so nothing left justifies a gate.
 
 ## ADR sketch
 
 The ADR is titled "Trust model for discovered vaults":
 
 1. Precedence, restated with references to ADRs 0016 and 0026 rather than a copy of them.
-2. The trust assumption, stated plainly: a vault found by walk-up is trusted to the same degree as the working directory's contents. ntropy treats everything inside a vault as untrusted data, never as instructions. Display is sanitized (the terminal-escape todo), view names are validated before they become paths (the view-name todo), frontmatter parsing is bounded (the frontmatter-parser todo), and templates are inert placeholder substitution.
+2. The trust assumption, stated plainly: a vault found by walk-up is trusted to the same degree as the working directory's contents. ntropy treats everything inside a vault as untrusted data, never as instructions. Display is sanitized (the terminal-escape todo), view names are validated before they become paths (ADR 0064), frontmatter parsing is bounded (the frontmatter-parser todo), and templates are inert placeholder substitution.
 3. The binding invariant: no configuration value, per-vault or global, may name an executable, a shell command, a hook, a pager, or an argument passed to a spawned process. The only subprocess ntropy launches is the editor, resolved only from `$VISUAL` and `$EDITOR`. Any feature that breaks this invariant must supersede the ADR and first introduce a trust boundary (a uid check or a trust store).
 4. Accepted residuals, named: committed `.ntropy-vault` misdirection (operations use the target vault's own config, and `delete` stays behind a selector and confirmation); a planted vault in a world-writable ancestor can be adopted, since walk-up runs to `/`; auto-opened content may be attacker-authored, and editor-side execution is out of scope.
 5. Non-goals: no trust store, no ownership check and no opt-in walk-up in v1.
@@ -79,7 +79,7 @@ The ADR is titled "Trust model for discovered vaults":
 
 ## Done when
 
-- The ADR is written per the sketch, with the no-execution-in-config invariant as its centerpiece and the uid ownership check named as the pre-decided escalation. It cross-references the view-name, terminal-escape and frontmatter-parser todos.
+- The ADR is written per the sketch, with the no-execution-in-config invariant as its centerpiece and the uid ownership check named as the pre-decided escalation. It cross-references ADR 0064 and the terminal-escape and frontmatter-parser todos.
 - The design doc describes the trust model of vault discovery.
 
 ## Decisions
@@ -89,4 +89,3 @@ The ADR is titled "Trust model for discovered vaults":
 ## Relations
 
 - Relates to: [Unbounded frontmatter size lets one note slow every scan](01KWH7Y8ZFKD52TJ3AEGSSBQFQ-unbounded-frontmatter-size-lets-one-note-slow-every-scan.md), a primitive fix this recommendation relies on
-- Relates to: [View names are used as unvalidated paths, so a config can delete files outside the vault](01KWH7Y8ZFKD52TJ3AEGSSBQFR-view-names-are-used-as-unvalidated-paths-so-a-config-can-delete-files.md), the view-name fix that removes the destructive residual

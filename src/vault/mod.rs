@@ -22,7 +22,7 @@ use std::path::{Path, PathBuf};
 
 pub use layout::Layout;
 pub use resolve::{ResolveError, ResolveOptions, ResolveSource};
-pub use view_name::{InvalidViewName, ViewName};
+pub use view_name::{InvalidViewName, ViewName, escape_controls};
 
 /// A resolved vault.
 #[derive(Debug, Clone, PartialEq, Eq)]
