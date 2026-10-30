@@ -10,7 +10,16 @@ on:
       - "v[0-9]+.[0-9]+.[0-9]+-rc[0-9]+"
 
 jobs:
+  # A release ships only from a commit that passes the same checks as CI.
+  # Tag pushes do not trigger ci.yml on their own, so the release calls it,
+  # and nothing is published until it succeeds.
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   create-release:
+    needs: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

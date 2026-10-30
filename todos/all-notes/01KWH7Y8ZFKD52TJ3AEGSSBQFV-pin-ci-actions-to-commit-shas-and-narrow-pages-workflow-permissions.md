@@ -150,6 +150,10 @@ updates:
 - The `github-pages` environment's branch policy is adequate for a solo repository. Required reviewers would be theater when one person approves every deploy.
 - In `project-page-starter`, which is out of scope here and should be raised with the user: start tagging releases, so ntropy's future pins can read `ref: <sha> # v0.x.y`. Keep `bun.lock` committed, which is already true.
 
+## Musl build in the CI check
+
+The release runs `ci.yml` before `create-release`, but CI builds only on `ubuntu-latest` (glibc) and `macos-latest`. The `x86_64-unknown-linux-musl` and `aarch64-unknown-linux-musl` binaries are first built in `upload-assets`, which runs after `create-release`, so a musl-only build break leaves a published release without its Linux assets. A musl build in `ci.yml` (for example `cargo build --target x86_64-unknown-linux-musl`) fails such a tag before the release object exists, and catches the break on `main` already.
+
 ## Done when
 
 - Every `uses:` in the three workflows is a full commit SHA with a `# vX.Y.Z` comment, and the generator checkout has a SHA `ref:`.
@@ -158,3 +162,4 @@ updates:
 - `.github/dependabot.yml` exists for `github-actions`, or Dependabot is explicitly declined.
 - The leftover `pages.yml` header is removed.
 - Deferred items are recorded: release attestation and the toolchain pin (later), and release tagging in `project-page-starter` (in that repository).
+- `ci.yml` builds at least one musl target, or the musl build in CI is explicitly declined.
