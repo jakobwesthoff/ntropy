@@ -168,13 +168,15 @@ step:
    command, so a half-converted vault is never silently scanned or synced
    further.
 2. Every target file is produced as a sibling of its source, written via
-   write-temp-rename, leaving the sources untouched.
+   write-temp-rename, leaving the sources untouched. The targets are flushed
+   to disk together before any is renamed into place, and their directory is
+   flushed before any source is touched (ADR 0079).
 3. Each produced file is verified by decrypting it and comparing against its
    source. Only when every note verifies does the point of no return arrive:
    the sources are deleted (for `encrypt`, the view trees as well, since
-   views are disabled in encrypted vaults) and the marker is removed. A
-   rekey installs its new keypair between the deletion and the removal of the
-   marker.
+   views are disabled in encrypted vaults), the deletions and renames are
+   flushed to disk, and the marker is removed. A rekey installs its new
+   keypair between the deletion and the removal of the marker.
 
 A crash before the first deletion leaves both forms on disk, and `--resume`
 is idempotent: produce whatever lacks a verified target, then finish the

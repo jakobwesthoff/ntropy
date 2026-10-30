@@ -242,6 +242,23 @@ mod tests {
     }
 
     #[test]
+    fn every_file_init_writes_is_durable() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let root = dir.path().join("vault");
+
+        let (report, events) =
+            crate::fsutil::trace::capture(dir.path(), || init_vault(&root).expect("init"));
+
+        // The created files, and the `.gitignore` that view syncing writes.
+        let files = report.created.iter().filter(|p| p.is_file()).count();
+        assert_eq!(
+            crate::test_support::assert_every_write_is_durable(&events),
+            files + 1,
+            "events were: {events:?}"
+        );
+    }
+
+    #[test]
     fn readme_names_the_tooling_and_how_to_install_it() {
         let dir = tempfile::tempdir().expect("temp dir");
         init_vault(dir.path()).expect("init");

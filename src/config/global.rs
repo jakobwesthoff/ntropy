@@ -160,6 +160,19 @@ mod tests {
         assert_eq!(load_at(&path).expect("load"), cfg);
     }
 
+    #[test]
+    fn write_at_is_durable() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("ntropy").join("config.toml");
+
+        let (result, events) =
+            crate::fsutil::trace::capture(dir.path(), || write_at(&path, &GlobalConfig::default()));
+
+        result.expect("write");
+        let written = crate::test_support::assert_one_durable_write(&events, "ntropy");
+        assert_eq!(written, "ntropy/config.toml");
+    }
+
     fn sample() -> GlobalConfig {
         GlobalConfig {
             default_vault: Some(PathBuf::from("/Users/jakob/notes")),

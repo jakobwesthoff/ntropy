@@ -11,7 +11,14 @@
 //! symlink assumption lives in one place (ADRs 0008, 0020). Plain reads and
 //! metadata lookups, private temporary files, and the files `render` and
 //! `site` export to a destination the user names call `std::fs` directly.
+//!
+//! A write or rename here is on stable storage when it returns, so a power
+//! loss cannot leave a note truncated (ADR 0079). A bulk operation opens a
+//! [`FlushScope`] to flush once at its end instead of once per file.
 
+use std::cell::RefCell;
+use std::collections::{BTreeSet, VecDeque};
+use std::marker::PhantomData;
 use std::path::{Component, Path, PathBuf};
 
 use ulid::Ulid;
@@ -89,32 +96,23 @@ pub fn read_to_string_if_exists(path: &Path) -> Result<Option<String>> {
 // File writes
 // =============================================================================
 
-/// Write `contents` to `path` atomically.
+/// Write `contents` to `path` atomically and durably.
 ///
 /// The bytes are first written to a uniquely named sibling temp file and then
 /// renamed over the destination. `rename(2)` is atomic on a single filesystem,
 /// so a reader either sees the old file or the fully written new one, never a
 /// half-written note. The temp file is a sibling (same directory) so the rename
 /// never crosses a filesystem boundary.
+///
+/// The temp file is flushed to stable storage before the rename and the
+/// directory after it. Without the first flush a power loss can persist the
+/// rename but not the data, leaving a truncated or empty note; without the
+/// second the new name can be lost. A [`FlushScope`] postpones both flushes
+/// for a bulk operation.
 pub fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
-
-    // A ULID suffix keeps concurrent or repeated writes from clobbering each
-    // other's temp file while still landing in the same directory.
-    let tmp_name = match path.file_name() {
-        Some(name) => format!("{}.{}.tmp", name.to_string_lossy(), Ulid::generate()),
-        None => format!("{}.tmp", Ulid::generate()),
-    };
-    let tmp_path = parent.join(tmp_name);
-
+    let tmp_path = temp_sibling(path);
     std::fs::write(&tmp_path, contents).map_err(|e| FsError::new("writing", &tmp_path, e))?;
-
-    rename_raw(&tmp_path, path).map_err(|e| {
-        // Best-effort cleanup so a failed rename does not leave the temp file
-        // behind; the rename failure is the error we report.
-        let _ = std::fs::remove_file(&tmp_path);
-        FsError::new("renaming into place", path, e)
-    })
+    place(&tmp_path, path)
 }
 
 /// Write `contents` to `path` atomically, readable only by its owner.
@@ -130,62 +128,75 @@ pub fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
 pub fn atomic_write_private(path: &Path, contents: &[u8]) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
-    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    let tmp_path = temp_sibling(path);
+    std::fs::write(&tmp_path, contents).map_err(|e| FsError::new("writing", &tmp_path, e))?;
+
+    if let Err(e) = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600)) {
+        discard(&tmp_path);
+        return Err(FsError::new("setting permissions on", &tmp_path, e));
+    }
+
+    place(&tmp_path, path)
+}
+
+/// A uniquely named temp path beside `path`.
+///
+/// A ULID suffix keeps concurrent or repeated writes from clobbering each
+/// other's temp file while still landing in the same directory.
+fn temp_sibling(path: &Path) -> PathBuf {
     let tmp_name = match path.file_name() {
         Some(name) => format!("{}.{}.tmp", name.to_string_lossy(), Ulid::generate()),
         None => format!("{}.tmp", Ulid::generate()),
     };
-    let tmp_path = parent.join(tmp_name);
+    parent_dir(path).join(tmp_name)
+}
 
-    std::fs::write(&tmp_path, contents).map_err(|e| FsError::new("writing", &tmp_path, e))?;
+/// The directory holding `path`: `.` for a bare file name, whose parent is
+/// the empty path, which cannot be opened to flush.
+fn parent_dir(path: &Path) -> &Path {
+    match path.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => parent,
+        _ => Path::new("."),
+    }
+}
 
-    if let Err(e) = std::fs::set_permissions(&tmp_path, std::fs::Permissions::from_mode(0o600)) {
-        let _ = std::fs::remove_file(&tmp_path);
-        return Err(FsError::new("setting permissions on", &tmp_path, e));
+/// Best-effort removal of a temp file that will not be placed. The failure
+/// that made it unusable is the error worth reporting.
+fn discard(tmp_path: &Path) {
+    let _ = std::fs::remove_file(tmp_path);
+}
+
+/// Move the written temp file `tmp_path` over `destination` so that the data
+/// is on stable storage before the name points at it.
+///
+/// Inside a [`FlushScope`] the placement waits for [`FlushScope::finish`],
+/// which keeps this order for every file of the batch.
+fn place(tmp_path: &Path, destination: &Path) -> Result<()> {
+    let deferred = with_open_scope(|scope| {
+        scope
+            .placements
+            .push_back((tmp_path.to_path_buf(), destination.to_path_buf()));
+    });
+    if deferred.is_some() {
+        return Ok(());
     }
 
-    rename_raw(&tmp_path, path).map_err(|e| {
-        let _ = std::fs::remove_file(&tmp_path);
-        FsError::new("renaming into place", path, e)
-    })
+    sync_file(tmp_path).inspect_err(|_| discard(tmp_path))?;
+    rename_raw(tmp_path, destination).map_err(|e| {
+        discard(tmp_path);
+        FsError::new("renaming into place", destination, e)
+    })?;
+    flush_directories(&[parent_dir(destination)])
 }
 
 /// Flush `path`'s contents all the way to stable storage.
 ///
-/// [`atomic_write`] guarantees a reader sees either the old file or the whole
-/// new one, which holds against a process dying. It does not hold against power
-/// loss: `rename(2)` can reach the disk before the data it points at, leaving a
-/// present but empty or truncated file. Only an explicit flush closes that gap.
-///
-/// On macOS `fsync` merely hands the data to the drive's write cache, so
-/// `F_FULLFSYNC` is used instead — slower, and the only thing that actually
-/// survives losing power.
-///
-/// Reserved for the whole-vault conversions, which delete the only other copy
-/// of a note once they believe the new one is safe. Ordinary note writes keep
-/// the cheaper guarantee.
-#[cfg(feature = "encryption")]
+/// On Apple targets `File::sync_all` is `fcntl(F_FULLFSYNC)`, which flushes
+/// the drive's write cache; plain `fsync` there only hands the data to the
+/// drive, and only the former survives losing power. Elsewhere it is `fsync`.
 pub fn sync_file(path: &Path) -> Result<()> {
     let file = std::fs::File::open(path).map_err(|e| FsError::new("opening to flush", path, e))?;
-
-    #[cfg(target_os = "macos")]
-    {
-        use std::os::fd::AsRawFd;
-        // SAFETY: `F_FULLFSYNC` takes no argument beyond the descriptor, and
-        // the file is open for the duration of the call.
-        if unsafe { libc::fcntl(file.as_raw_fd(), libc::F_FULLFSYNC) } == -1 {
-            return Err(FsError::new(
-                "flushing to disk",
-                path,
-                std::io::Error::last_os_error(),
-            ));
-        }
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    file.sync_all()
-        .map_err(|e| FsError::new("flushing to disk", path, e))?;
-
+    tolerate_unsupported(file.sync_all()).map_err(|e| FsError::new("flushing to disk", path, e))?;
     #[cfg(test)]
     trace::record(trace::Event::Flush(path.to_path_buf()));
     Ok(())
@@ -196,14 +207,194 @@ pub fn sync_file(path: &Path) -> Result<()> {
 /// Flushing a file makes its *contents* durable; the directory entry that
 /// names it is separate metadata and needs its own flush, or a crash can lose
 /// the fact that the file exists at all.
-#[cfg(feature = "encryption")]
 pub fn sync_dir(path: &Path) -> Result<()> {
     let dir = std::fs::File::open(path).map_err(|e| FsError::new("opening to flush", path, e))?;
-    dir.sync_all()
+    tolerate_unsupported(dir.sync_all())
         .map_err(|e| FsError::new("flushing directory to disk", path, e))?;
     #[cfg(test)]
     trace::record(trace::Event::FlushDir(path.to_path_buf()));
     Ok(())
+}
+
+/// Treat "this filesystem cannot flush" as success.
+///
+/// Mounts such as exFAT, SMB, NFS and FUSE can answer a flush with `EINVAL`,
+/// `ENOTSUP` or `ENOTTY`. Failing every write there would leave the vault
+/// unusable, so those mounts get no durability and no error. Every other
+/// failure, such as `EIO` or `ENOSPC`, means the data may not be on disk and
+/// stays an error.
+fn tolerate_unsupported(result: std::io::Result<()>) -> std::io::Result<()> {
+    match result {
+        Err(e)
+            if matches!(
+                e.raw_os_error(),
+                Some(libc::EINVAL | libc::ENOTSUP | libc::ENOTTY)
+            ) =>
+        {
+            Ok(())
+        }
+        other => other,
+    }
+}
+
+/// Make the names in `directories` durable now, or at the end of the open
+/// [`FlushScope`].
+fn flush_directories(directories: &[&Path]) -> Result<()> {
+    let deferred = with_open_scope(|scope| {
+        scope
+            .directories
+            .extend(directories.iter().map(|d| d.to_path_buf()));
+    });
+    if deferred.is_some() {
+        return Ok(());
+    }
+
+    for (index, directory) in directories.iter().enumerate() {
+        if !directories[..index].contains(directory) {
+            sync_dir(directory)?;
+        }
+    }
+    Ok(())
+}
+
+/// Make the existing file `path`, and the name it is listed under, durable.
+///
+/// For a file written earlier whose flush is still owed, such as a conversion
+/// target that a resumed run found already in place. Inside a [`FlushScope`]
+/// the flush waits for [`FlushScope::finish`].
+///
+/// Only the conversions resume, so it is compiled only where they exist.
+#[cfg(feature = "encryption")]
+pub fn make_durable(path: &Path) -> Result<()> {
+    let deferred = with_open_scope(|scope| scope.files.push(path.to_path_buf()));
+    if deferred.is_none() {
+        sync_file(path)?;
+    }
+    flush_directories(&[parent_dir(path)])
+}
+
+// =============================================================================
+// Deferred flushing for bulk operations
+// =============================================================================
+
+/// The writes of a bulk operation, held back so they can be flushed together.
+///
+/// Flushing after every write makes each one wait for the drive, which turns
+/// a command that rewrites tens of thousands of notes from seconds into
+/// minutes. The scope instead holds every written temp file back, and
+/// [`FlushScope::finish`] flushes them all, then renames them, then flushes
+/// each affected directory once. The order is what keeps a note whole after a
+/// power loss at any point of the batch: a destination name only ever points
+/// at data that was flushed before the rename, exactly as for a single write.
+#[derive(Default)]
+struct Deferred {
+    /// Temp files written but not yet in place, as `(temp, destination)`, in
+    /// the order they were written.
+    placements: VecDeque<(PathBuf, PathBuf)>,
+    /// Existing files whose contents must be flushed at the end.
+    files: Vec<PathBuf>,
+    /// Directories whose entries changed.
+    directories: BTreeSet<PathBuf>,
+}
+
+impl Deferred {
+    /// Flush the files, rename the temp files into place, flush the
+    /// directories.
+    fn commit(mut self) -> Result<()> {
+        for path in self
+            .placements
+            .iter()
+            .map(|(tmp, _)| tmp)
+            .chain(&self.files)
+        {
+            sync_file(path)?;
+        }
+        while let Some((tmp_path, destination)) = self.placements.front() {
+            rename_raw(tmp_path, destination)
+                .map_err(|e| FsError::new("renaming into place", destination, e))?;
+            self.directories
+                .insert(parent_dir(destination).to_path_buf());
+            self.placements.pop_front();
+        }
+        for directory in &self.directories {
+            sync_dir(directory)?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for Deferred {
+    /// Temp files still waiting belong to a batch that did not finish; they
+    /// hold content nobody asked to keep.
+    fn drop(&mut self) {
+        for (tmp_path, _) in &self.placements {
+            discard(tmp_path);
+        }
+    }
+}
+
+thread_local! {
+    static OPEN_SCOPE: RefCell<Option<Deferred>> = const { RefCell::new(None) };
+}
+
+/// Run `f` on the open scope of this thread, if there is one.
+fn with_open_scope<T>(f: impl FnOnce(&mut Deferred) -> T) -> Option<T> {
+    OPEN_SCOPE.with(|scope| scope.borrow_mut().as_mut().map(f))
+}
+
+/// Defers the flushes of every write on this thread until [`finish`].
+///
+/// Open one around a bulk operation and finish it before anything reads back
+/// what the operation wrote: a deferred [`atomic_write`] leaves the old file
+/// in place until then. Dropping the scope instead abandons the pending
+/// writes and removes their temp files.
+///
+/// The state is per thread, and the guard cannot leave its thread, so a write
+/// made elsewhere is never deferred; it flushes at once. A scope cannot be
+/// opened inside another one.
+///
+/// [`finish`]: FlushScope::finish
+#[derive(Debug)]
+pub struct FlushScope {
+    _not_send: PhantomData<*const ()>,
+}
+
+impl FlushScope {
+    /// Start deferring on this thread.
+    ///
+    /// # Panics
+    ///
+    /// When a scope is already open on this thread.
+    pub fn open() -> Self {
+        OPEN_SCOPE.with(|scope| {
+            let mut scope = scope.borrow_mut();
+            assert!(
+                scope.is_none(),
+                "a flush scope is already open on this thread"
+            );
+            *scope = Some(Deferred::default());
+        });
+        Self {
+            _not_send: PhantomData,
+        }
+    }
+
+    /// Flush everything written since [`FlushScope::open`]: the temp files,
+    /// then the renames into place, then each affected directory once.
+    pub fn finish(self) -> Result<()> {
+        let deferred = OPEN_SCOPE
+            .with(|scope| scope.borrow_mut().take())
+            .expect("the scope's state lives until the scope ends");
+        deferred.commit()
+    }
+}
+
+impl Drop for FlushScope {
+    fn drop(&mut self) {
+        // Dropping the taken state removes the temp files of an abandoned
+        // batch. After `finish` there is nothing left to take.
+        drop(OPEN_SCOPE.with(|scope| scope.borrow_mut().take()));
+    }
 }
 
 /// Remove `dir` and everything under it.
@@ -216,7 +407,8 @@ pub fn remove_dir_all(dir: &Path) -> Result<()> {
     std::fs::remove_dir_all(dir).map_err(|e| FsError::new("removing directory tree", dir, e))
 }
 
-/// Rename `from` to `to`, refusing to replace anything already at `to`.
+/// Rename `from` to `to`, refusing to replace anything already at `to`, and
+/// flush the directories involved so the new name survives a power loss.
 ///
 /// `rename(2)` silently replaces an existing destination, which for a note
 /// file deletes another note's content (ADR 0067). The one existing
@@ -249,7 +441,8 @@ pub fn rename(from: &Path, to: &Path) -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(FsError::new("checking", to, e)),
     }
-    rename_raw(from, to).map_err(|e| FsError::new("renaming", from, e))
+    rename_raw(from, to).map_err(|e| FsError::new("renaming", from, e))?;
+    flush_directories(&[parent_dir(to), parent_dir(from)])
 }
 
 /// The one place a file is renamed, so the test trace sees every rename.
@@ -299,6 +492,17 @@ pub fn remove_file(path: &Path) -> Result<()> {
     #[cfg(test)]
     trace::record(trace::Event::Remove(path.to_path_buf()));
     Ok(())
+}
+
+/// Remove `path` and flush its directory, so that the removal cannot be
+/// undone by a power loss.
+///
+/// For a file whose other copy has just been made durable: a removal that
+/// comes back after a crash leaves two notes where one was meant. Inside a
+/// [`FlushScope`] the directory is flushed by [`FlushScope::finish`].
+pub fn remove_file_durably(path: &Path) -> Result<()> {
+    remove_file(path)?;
+    flush_directories(&[parent_dir(path)])
 }
 
 // =============================================================================
@@ -818,7 +1022,14 @@ mod tests {
             remove_file(&dir.path().join("second.md")).expect("remove");
         });
 
-        assert_eq!(events, ["rename first.md -> second.md", "remove second.md"]);
+        assert_eq!(
+            events,
+            [
+                "rename first.md -> second.md",
+                "flush-dir .",
+                "remove second.md"
+            ]
+        );
     }
 
     #[test]
@@ -829,7 +1040,14 @@ mod tests {
             atomic_write(&dir.path().join("note.md"), b"x").expect("write");
         });
 
-        assert_eq!(events, ["rename note.md.tmp -> note.md"]);
+        assert_eq!(
+            events,
+            [
+                "flush note.md.tmp",
+                "rename note.md.tmp -> note.md",
+                "flush-dir ."
+            ]
+        );
     }
 
     #[cfg(feature = "encryption")]
@@ -857,5 +1075,384 @@ mod tests {
         let ((), events) = trace::capture(dir.path(), || {});
 
         assert!(events.is_empty(), "events were: {events:?}");
+    }
+
+    // ---- durable writes -------------------------------------------------
+
+    fn temp_dir() -> tempfile::TempDir {
+        tempfile::tempdir().expect("temp dir")
+    }
+
+    fn names(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .expect("read dir")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    #[test]
+    fn atomic_write_flushes_the_file_then_renames_then_flushes_the_directory() {
+        let dir = temp_dir();
+
+        let (result, events) = trace::capture(dir.path(), || {
+            atomic_write(&dir.path().join("note.md"), b"x")
+        });
+
+        result.expect("write");
+        assert_eq!(
+            events,
+            [
+                "flush note.md.tmp",
+                "rename note.md.tmp -> note.md",
+                "flush-dir ."
+            ]
+        );
+    }
+
+    #[cfg(feature = "encryption")]
+    #[test]
+    fn atomic_write_private_flushes_like_atomic_write_and_keeps_the_mode() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = temp_dir();
+        let path = dir.path().join("identity.age");
+
+        let (result, events) = trace::capture(dir.path(), || atomic_write_private(&path, b"x"));
+
+        result.expect("write");
+        assert_eq!(
+            events,
+            [
+                "flush identity.age.tmp",
+                "rename identity.age.tmp -> identity.age",
+                "flush-dir ."
+            ]
+        );
+        let mode = std::fs::metadata(&path).expect("stat").permissions().mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+
+    #[test]
+    fn rename_flushes_the_directory_after_renaming() {
+        let dir = temp_dir();
+        let from = dir.path().join("a.md");
+        std::fs::write(&from, b"x").expect("seed");
+
+        let (result, events) =
+            trace::capture(dir.path(), || rename(&from, &dir.path().join("b.md")));
+
+        result.expect("rename");
+        assert_eq!(events, ["rename a.md -> b.md", "flush-dir ."]);
+    }
+
+    #[test]
+    fn rename_across_directories_flushes_both() {
+        let dir = temp_dir();
+        std::fs::create_dir(dir.path().join("sub")).expect("mkdir");
+        let from = dir.path().join("sub").join("a.md");
+        std::fs::write(&from, b"x").expect("seed");
+
+        let (result, events) =
+            trace::capture(dir.path(), || rename(&from, &dir.path().join("a.md")));
+
+        result.expect("rename");
+        assert_eq!(
+            events,
+            ["rename sub/a.md -> a.md", "flush-dir .", "flush-dir sub"]
+        );
+    }
+
+    #[test]
+    fn rename_refusing_a_taken_destination_flushes_nothing() {
+        let dir = temp_dir();
+        let from = dir.path().join("a.md");
+        let taken = dir.path().join("b.md");
+        std::fs::write(&from, b"x").expect("seed");
+        std::fs::write(&taken, b"y").expect("seed");
+
+        let (result, events) = trace::capture(dir.path(), || rename(&from, &taken));
+
+        assert!(result.is_err());
+        assert!(events.is_empty(), "events were: {events:?}");
+    }
+
+    #[test]
+    fn atomic_write_removes_the_temp_file_when_the_rename_fails() {
+        let dir = temp_dir();
+        let destination = dir.path().join("note.md");
+        std::fs::create_dir(&destination).expect("mkdir");
+        std::fs::write(destination.join("inside"), b"x").expect("seed");
+
+        let (result, _) = trace::capture(dir.path(), || atomic_write(&destination, b"x"));
+
+        assert!(result.is_err(), "a non-empty directory cannot be replaced");
+        assert_eq!(names(dir.path()), ["note.md"]);
+    }
+
+    // ---- the deferred flush scope ---------------------------------------
+
+    #[test]
+    fn a_scope_defers_every_flush_until_it_finishes() {
+        let dir = temp_dir();
+        let scope = FlushScope::open();
+
+        let (result, during) = trace::capture(dir.path(), || {
+            atomic_write(&dir.path().join("a.md"), b"a")?;
+            atomic_write(&dir.path().join("b.md"), b"b")
+        });
+        result.expect("writes");
+        let (finished, at_finish) = trace::capture(dir.path(), || scope.finish());
+
+        finished.expect("finish");
+        assert!(during.is_empty(), "events while open: {during:?}");
+        assert_eq!(
+            at_finish,
+            [
+                "flush a.md.tmp",
+                "flush b.md.tmp",
+                "rename a.md.tmp -> a.md",
+                "rename b.md.tmp -> b.md",
+                "flush-dir ."
+            ]
+        );
+    }
+
+    #[test]
+    fn a_scope_flushes_each_directory_once() {
+        let dir = temp_dir();
+        std::fs::create_dir(dir.path().join("sub")).expect("mkdir");
+        let scope = FlushScope::open();
+        atomic_write(&dir.path().join("y.md"), b"y").expect("write");
+        atomic_write(&dir.path().join("sub").join("x.md"), b"x").expect("write");
+        atomic_write(&dir.path().join("z.md"), b"z").expect("write");
+
+        let (finished, events) = trace::capture(dir.path(), || scope.finish());
+
+        finished.expect("finish");
+        let flushed: Vec<&String> = events
+            .iter()
+            .filter(|e| e.starts_with("flush-dir"))
+            .collect();
+        assert_eq!(flushed, ["flush-dir .", "flush-dir sub"]);
+    }
+
+    #[test]
+    fn a_scope_renames_only_after_flushing_every_file() {
+        let dir = temp_dir();
+        let scope = FlushScope::open();
+        for name in ["a", "b", "c", "d", "e"] {
+            atomic_write(&dir.path().join(format!("{name}.md")), b"x").expect("write");
+        }
+
+        let (finished, events) = trace::capture(dir.path(), || scope.finish());
+
+        finished.expect("finish");
+        let last_flush = events
+            .iter()
+            .rposition(|e| e.starts_with("flush "))
+            .expect("flush");
+        let first_rename = events
+            .iter()
+            .position(|e| e.starts_with("rename "))
+            .expect("rename");
+        assert!(last_flush < first_rename, "events were: {events:?}");
+        assert_eq!(events.iter().filter(|e| e.starts_with("flush ")).count(), 5);
+    }
+
+    #[test]
+    fn a_scope_leaves_the_destinations_old_until_it_finishes() {
+        let dir = temp_dir();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, b"old").expect("seed");
+        let scope = FlushScope::open();
+
+        atomic_write(&path, b"new").expect("write");
+        assert_eq!(std::fs::read(&path).expect("read"), b"old");
+        scope.finish().expect("finish");
+
+        assert_eq!(std::fs::read(&path).expect("read"), b"new");
+    }
+
+    #[test]
+    fn dropping_a_scope_removes_pending_temp_files() {
+        let dir = temp_dir();
+        let scope = FlushScope::open();
+        atomic_write(&dir.path().join("a.md"), b"a").expect("write");
+
+        let ((), events) = trace::capture(dir.path(), || drop(scope));
+
+        assert!(events.is_empty(), "events were: {events:?}");
+        assert!(
+            names(dir.path()).is_empty(),
+            "left: {:?}",
+            names(dir.path())
+        );
+    }
+
+    #[test]
+    fn a_dropped_scope_lets_the_next_write_flush_at_once() {
+        let dir = temp_dir();
+        drop(FlushScope::open());
+
+        let (result, events) =
+            trace::capture(dir.path(), || atomic_write(&dir.path().join("a.md"), b"a"));
+
+        result.expect("write");
+        assert_eq!(events.len(), 3, "events were: {events:?}");
+    }
+
+    #[test]
+    fn a_failed_finish_removes_the_temps_it_did_not_rename() {
+        let dir = temp_dir();
+        let blocked = dir.path().join("b.md");
+        std::fs::create_dir(&blocked).expect("mkdir");
+        std::fs::write(blocked.join("inside"), b"x").expect("seed");
+        let scope = FlushScope::open();
+        atomic_write(&dir.path().join("a.md"), b"a").expect("write");
+        atomic_write(&blocked, b"b").expect("write is deferred");
+        atomic_write(&dir.path().join("c.md"), b"c").expect("write");
+
+        let result = scope.finish();
+
+        assert!(result.is_err());
+        assert_eq!(names(dir.path()), ["a.md", "b.md"]);
+    }
+
+    #[cfg(feature = "encryption")]
+    #[test]
+    fn make_durable_flushes_the_file_and_its_directory() {
+        let dir = temp_dir();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, b"x").expect("seed");
+
+        let (result, events) = trace::capture(dir.path(), || make_durable(&path));
+
+        result.expect("flush");
+        assert_eq!(events, ["flush note.md", "flush-dir ."]);
+    }
+
+    #[cfg(feature = "encryption")]
+    #[test]
+    fn make_durable_in_a_scope_waits_for_finish() {
+        let dir = temp_dir();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, b"x").expect("seed");
+        let scope = FlushScope::open();
+
+        let (result, during) = trace::capture(dir.path(), || make_durable(&path));
+        result.expect("register");
+        let (finished, at_finish) = trace::capture(dir.path(), || scope.finish());
+
+        finished.expect("finish");
+        assert!(during.is_empty(), "events while open: {during:?}");
+        assert_eq!(at_finish, ["flush note.md", "flush-dir ."]);
+    }
+
+    #[test]
+    fn remove_file_durably_flushes_the_directory_after_removing() {
+        let dir = temp_dir();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, b"x").expect("seed");
+
+        let (result, events) = trace::capture(dir.path(), || remove_file_durably(&path));
+
+        result.expect("remove");
+        assert_eq!(events, ["remove note.md", "flush-dir ."]);
+    }
+
+    #[test]
+    fn remove_file_durably_in_a_scope_flushes_the_directory_at_finish() {
+        let dir = temp_dir();
+        let path = dir.path().join("note.md");
+        std::fs::write(&path, b"x").expect("seed");
+        let scope = FlushScope::open();
+
+        let (result, during) = trace::capture(dir.path(), || remove_file_durably(&path));
+        result.expect("remove");
+        let (finished, at_finish) = trace::capture(dir.path(), || scope.finish());
+
+        finished.expect("finish");
+        assert_eq!(during, ["remove note.md"]);
+        assert_eq!(at_finish, ["flush-dir ."]);
+    }
+
+    #[test]
+    fn a_scope_with_nothing_pending_flushes_nothing() {
+        let dir = temp_dir();
+        let scope = FlushScope::open();
+
+        let (finished, events) = trace::capture(dir.path(), || scope.finish());
+
+        finished.expect("finish");
+        assert!(events.is_empty(), "events were: {events:?}");
+    }
+
+    #[test]
+    #[should_panic(expected = "already open")]
+    fn opening_a_scope_inside_a_scope_panics() {
+        let _outer = FlushScope::open();
+        let _inner = FlushScope::open();
+    }
+
+    #[test]
+    fn a_scope_does_not_defer_writes_of_other_threads() {
+        let dir = temp_dir();
+        let scope = FlushScope::open();
+        let root = dir.path().to_path_buf();
+        let (sender, receiver) = std::sync::mpsc::channel();
+
+        let writer = std::thread::spawn(move || {
+            let (result, events) = trace::capture(&root, || atomic_write(&root.join("x.md"), b"x"));
+            sender
+                .send((result.is_ok(), events))
+                .expect("the receiver outlives the thread");
+        });
+        let (ok, events) = receiver.recv().expect("the thread reports");
+        writer.join().expect("thread ends");
+
+        assert!(ok);
+        assert_eq!(
+            events,
+            ["flush x.md.tmp", "rename x.md.tmp -> x.md", "flush-dir ."]
+        );
+        drop(scope);
+    }
+
+    #[test]
+    fn a_bare_file_name_lives_in_the_current_directory() {
+        // `Path::new("note.md").parent()` is the empty path, which cannot be
+        // opened to flush; a file without a name, such as `/`, has none at all.
+        assert_eq!(parent_dir(Path::new("note.md")), Path::new("."));
+        assert_eq!(parent_dir(Path::new("/")), Path::new("."));
+        assert_eq!(parent_dir(Path::new("notes/note.md")), Path::new("notes"));
+    }
+
+    #[test]
+    fn a_temp_file_lands_beside_its_destination() {
+        let named = temp_sibling(Path::new("notes/note.md"));
+        assert_eq!(named.parent(), Some(Path::new("notes")));
+        let file = named.file_name().expect("name").to_string_lossy();
+        assert!(
+            file.starts_with("note.md.") && file.ends_with(".tmp"),
+            "{file}"
+        );
+
+        let nameless = temp_sibling(Path::new("/"));
+        assert!(nameless.to_string_lossy().ends_with(".tmp"));
+    }
+
+    #[test]
+    fn only_unsupported_flush_errors_are_tolerated() {
+        for tolerated in [libc::EINVAL, libc::ENOTSUP, libc::ENOTTY] {
+            let result = tolerate_unsupported(Err(std::io::Error::from_raw_os_error(tolerated)));
+            assert!(result.is_ok(), "errno {tolerated} must be tolerated");
+        }
+        for fatal in [libc::EIO, libc::ENOSPC, libc::EBADF] {
+            let result = tolerate_unsupported(Err(std::io::Error::from_raw_os_error(fatal)));
+            assert!(result.is_err(), "errno {fatal} must be an error");
+        }
+        assert!(tolerate_unsupported(Ok(())).is_ok());
     }
 }

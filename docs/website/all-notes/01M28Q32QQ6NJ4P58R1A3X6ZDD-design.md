@@ -104,4 +104,5 @@ made.
 - [0076. Adjacent terms in a query are an implicit and](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md)
 - [0077. Punctuation in slugs and tags](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0077-punctuation-in-slugs-and-tags.md)
 - [0078. Field predicates ignore name case and compare numbers by their spelling](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0078-field-predicates-ignore-name-case-and-compare-numbers-by-their-spelling.md)
+- [0079. Note writes are flushed to disk](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0079-note-writes-are-flushed-to-disk.md)
 - [0081. Numbers and booleans in titles and tags read as text](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0081-numbers-and-booleans-in-titles-and-tags-read-as-text.md)

@@ -303,6 +303,19 @@ mod tests {
     }
 
     #[test]
+    fn plaintext_cipher_write_is_durable() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("note.md");
+
+        let (result, events) =
+            crate::fsutil::trace::capture(dir.path(), || PlaintextCipher.write(&path, "body"));
+
+        result.expect("write");
+        let written = crate::test_support::assert_one_durable_write(&events, ".");
+        assert_eq!(written, "note.md");
+    }
+
+    #[test]
     fn plaintext_cipher_read_of_a_missing_file_is_a_filesystem_error() {
         let dir = tempfile::tempdir().expect("temp dir");
         let result = PlaintextCipher.read(&dir.path().join("no-such-note.md"));
@@ -483,6 +496,21 @@ mod tests {
                 .expect("write");
 
             assert_eq!(entries(dir.path()), ["note.age"]);
+        }
+
+        #[test]
+        fn age_cipher_write_is_durable() {
+            let dir = tempfile::tempdir().expect("temp dir");
+            let path = dir.path().join("note.age");
+            let (_, recipient) = age_io::generate_keypair();
+            let cipher = AgeCipher::new(recipient, None);
+
+            let (result, events) =
+                crate::fsutil::trace::capture(dir.path(), || cipher.write(&path, "body"));
+
+            result.expect("write");
+            let written = crate::test_support::assert_one_durable_write(&events, ".");
+            assert_eq!(written, "note.age");
         }
 
         #[test]

@@ -186,6 +186,26 @@ mod tests {
     }
 
     #[test]
+    fn adding_and_removing_a_view_write_config_and_ignore_file_durably() {
+        let (guard, v) = temp_vault();
+
+        let (_, added) = crate::fsutil::trace::capture(guard.path(), || {
+            add_view(&v, "by-status", "status").expect("add")
+        });
+        let (_, removed) = crate::fsutil::trace::capture(guard.path(), || {
+            remove_view(&v, "by-status").expect("remove")
+        });
+
+        for events in [added, removed] {
+            assert_eq!(
+                crate::test_support::assert_every_write_is_durable(&events),
+                2,
+                "config and .gitignore: {events:?}"
+            );
+        }
+    }
+
+    #[test]
     fn add_writes_gitignore_entry() {
         let (_g, v) = temp_vault();
         add_view(&v, "by-status", "status").expect("add");

@@ -11,17 +11,18 @@
 //!
 //! 1. **Produce.** Each converted note is written as a sibling of the note it
 //!    came from. Nothing is removed, so at every instant the vault holds a
-//!    complete copy of itself in at least one form.
+//!    complete copy of itself in at least one form. The produced files are
+//!    flushed to stable storage together, then renamed into place, then their
+//!    directory is flushed, so every source has a durable replacement before
+//!    anything is removed.
 //! 2. **Verify.** Every produced file is read back and compared against its
 //!    source's plaintext. A mismatch aborts while both forms are still on disk.
-//! 3. **Commit.** The produced files are flushed to stable storage, then the
-//!    sources are deleted and the marker removed. This is the point of no
-//!    return, and nothing before it loses information.
+//! 3. **Commit.** The sources are deleted, a rekey's produced files take their
+//!    final names, the directory is flushed, and the marker is removed. This
+//!    is the point of no return, and nothing before it loses information.
 //!
 //! `--resume` re-verifies by reading and comparing, never by checking that a
-//! target exists. A file that was renamed into place but whose contents never
-//! reached the disk exists and is wrong, which is precisely the case the
-//! existence check would wave through.
+//! target exists: an existing file is not proof that it is right.
 
 pub mod marker;
 pub mod plan;
@@ -117,13 +118,6 @@ pub enum MigrateError {
         quoted_list(.0)
     )]
     StrandedNotes(Vec<PathBuf>),
-
-    #[error("could not move the migration marker into place at `{}`", .path.display())]
-    MarkerRename {
-        path: PathBuf,
-        #[source]
-        source: std::io::Error,
-    },
 
     #[error("could not serialize the migration marker")]
     Serialize(#[from] toml::ser::Error),
@@ -366,14 +360,20 @@ pub fn run(
     // Produce
     // -------------------------------------------------------------------------
 
+    // Every target is made durable before any source is touched, and the
+    // scope does that in one pass at its end: all targets flushed, then
+    // renamed into place, then the directory flushed, rather than a flush
+    // per note. Verify below reads the targets, so the scope ends first.
+    let produced = fsutil::FlushScope::open();
     for conversion in &conversions {
         let plaintext = migration.source.read(&conversion.source)?;
 
         // On a resume, a target that already reads back correctly is left
-        // alone. The check is a comparison and not an existence test: a file
-        // that was renamed into place but whose contents never reached the
-        // disk exists and is wrong.
+        // alone, but still flushed: an earlier run may have been interrupted
+        // before it got to. The check is a comparison and not an existence
+        // test, because an existing file is not proof that it is right.
         if migration.resume && reads_back_as(migration.target, &conversion.target, &plaintext) {
+            fsutil::make_durable(&conversion.target)?;
             report.already_done += 1;
             continue;
         }
@@ -381,6 +381,7 @@ pub fn run(
         migration.target.write(&conversion.target, &plaintext)?;
         report.produced += 1;
     }
+    produced.finish()?;
 
     migration.hooks.after_produce()?;
 
@@ -412,27 +413,23 @@ pub fn run(
     // Commit: the point of no return
     // -------------------------------------------------------------------------
 
-    // One barrier over everything produced, rather than a flush per file. The
-    // guarantee is identical — every target is durable before any source is
-    // removed — and the I/O scheduler gets to coalesce the work instead of
-    // being made to wait once per note.
-    for conversion in &conversions {
-        fsutil::sync_file(&conversion.target)?;
-    }
-    fsutil::sync_dir(&all_notes)?;
-
+    // The removals and renames share one directory flush, and it happens
+    // before the marker goes: a removal that came back after a crash would
+    // leave a vault with both forms of a note and no marker to say why.
+    let removed = fsutil::FlushScope::open();
     for conversion in &conversions {
         // A rekey's produced file wears a temporary name, because its source
         // occupies the one it wants.
         if conversion.needs_rename() {
-            fsutil::remove_file(&conversion.source)?;
+            fsutil::remove_file_durably(&conversion.source)?;
             fsutil::rename(&conversion.target, &conversion.final_target)?;
         } else {
-            fsutil::remove_file(&conversion.source)?;
+            fsutil::remove_file_durably(&conversion.source)?;
         }
         report.deleted += 1;
         migration.hooks.after_commit_step(report.deleted)?;
     }
+    removed.finish()?;
 
     migration.hooks.after_commit()?;
 
@@ -1594,5 +1591,175 @@ mod tests {
             marker::read_at(&session.layout().migration_file()).expect("read"),
             Some(rekeying)
         );
+    }
+    // -------------------------------------------------------------------------
+    // Flush order
+    // -------------------------------------------------------------------------
+
+    fn positions(events: &[String], prefix: &str) -> Vec<usize> {
+        events
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| e.starts_with(prefix))
+            .map(|(index, _)| index)
+            .collect()
+    }
+
+    /// Assert the order every conversion keeps: all produced files flushed
+    /// before their first rename into place, the directory flushed before the
+    /// first source goes, and the directory flushed again after the last
+    /// source is gone, before the marker is removed.
+    fn assert_conversion_flush_order(events: &[String]) {
+        let flushed_temps: Vec<usize> = positions(events, "flush all-notes/")
+            .into_iter()
+            .filter(|i| events[*i].ends_with(".tmp"))
+            .collect();
+        let temp_renames: Vec<usize> = positions(events, "rename all-notes/")
+            .into_iter()
+            .filter(|i| events[*i].contains(".tmp -> "))
+            .collect();
+        let directory_flushes = positions(events, "flush-dir all-notes");
+        let removals = positions(events, "remove all-notes/");
+        let marker_removal = positions(events, "remove .ntropy/migration.toml");
+
+        assert!(!flushed_temps.is_empty(), "events were: {events:?}");
+        assert!(
+            flushed_temps.iter().max() < temp_renames.iter().min(),
+            "a file was renamed before every file was flushed: {events:?}"
+        );
+        assert_eq!(directory_flushes.len(), 2, "events were: {events:?}");
+        assert!(
+            temp_renames.iter().max() < directory_flushes.first()
+                && directory_flushes.first() < removals.iter().min(),
+            "the directory is flushed once all targets are in place and before any source goes: {events:?}"
+        );
+        assert!(
+            removals.iter().max() < directory_flushes.last()
+                && directory_flushes.last() < marker_removal.first(),
+            "the removals are flushed before the marker goes: {events:?}"
+        );
+    }
+
+    #[test]
+    fn encrypt_flushes_every_target_before_any_source_goes_and_the_removals_before_the_marker() {
+        let (guard, session) = plaintext_vault();
+
+        let (_, events) = crate::fsutil::trace::capture(guard.path(), || encrypt(&session));
+
+        assert_conversion_flush_order(&events);
+    }
+
+    #[test]
+    fn decrypt_flushes_every_target_before_any_source_goes_and_the_removals_before_the_marker() {
+        let (guard, session) = plaintext_vault();
+        let (identity, recipient) = age_io::generate_keypair();
+        let encrypted = AgeCipher::new(recipient.clone(), Some(identity));
+        run(
+            &session,
+            &Migration {
+                operation: Operation::Encrypt,
+                source: &PlaintextCipher,
+                target: &encrypted,
+                resume: false,
+                marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
+                hooks: &NoHooks,
+                handover: None,
+            },
+        )
+        .expect("encrypt");
+
+        let (_, events) = crate::fsutil::trace::capture(guard.path(), || {
+            run(
+                &session,
+                &Migration {
+                    operation: Operation::Decrypt,
+                    source: &encrypted,
+                    target: &PlaintextCipher,
+                    resume: false,
+                    marker: marker_for(Operation::Decrypt, None),
+                    hooks: &NoHooks,
+                    handover: None,
+                },
+            )
+            .expect("decrypt")
+        });
+
+        assert_conversion_flush_order(&events);
+    }
+
+    #[test]
+    fn rekey_renames_and_removals_share_one_directory_flush_before_the_marker_goes() {
+        let fixture = encrypted_vault();
+        let session = &fixture.session;
+        for ulid in [ULID_A, ULID_B] {
+            crate::test_support::encrypted::write_encrypted_note(
+                session,
+                ulid,
+                "---\ntitle: Note\n---\nbody\n",
+            );
+        }
+        let (new_identity, new_recipient) = age_io::generate_keypair();
+        let target = AgeCipher::new(new_recipient.clone(), Some(new_identity));
+
+        let (_, events) = crate::fsutil::trace::capture(session.root(), || {
+            run(
+                session,
+                &Migration {
+                    operation: Operation::Rekey,
+                    source: session.cipher(),
+                    target: &target,
+                    resume: false,
+                    marker: marker_for(Operation::Rekey, Some(new_recipient.as_str())),
+                    hooks: &NoHooks,
+                    handover: None,
+                },
+            )
+            .expect("rekey")
+        });
+
+        let directory_flushes = positions(&events, "flush-dir all-notes");
+        assert_eq!(directory_flushes.len(), 2, "events were: {events:?}");
+        let last_rename_into_place = positions(&events, "rename all-notes/")
+            .into_iter()
+            .filter(|i| events[*i].ends_with(".age"))
+            .max()
+            .expect("rename");
+        let marker_removal = positions(&events, "remove .ntropy/migration.toml");
+        assert!(
+            last_rename_into_place < directory_flushes[1]
+                && Some(&directory_flushes[1]) < marker_removal.first(),
+            "events were: {events:?}"
+        );
+    }
+
+    #[test]
+    fn a_resumed_conversion_flushes_the_targets_it_skips() {
+        let (guard, session) = plaintext_vault();
+        let (identity, recipient) = age_io::generate_keypair();
+        let cipher = AgeCipher::new(identity.to_public(), Some(identity));
+        let migration = |resume, hooks: &'static dyn MigrationHooks| Migration {
+            operation: Operation::Encrypt,
+            source: &PlaintextCipher,
+            target: &cipher,
+            resume,
+            marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
+            hooks,
+            handover: None,
+        };
+        run(&session, &migration(false, &FailAfter(Phase::Produce))).expect_err("interrupted");
+
+        let (report, events) = crate::fsutil::trace::capture(guard.path(), || {
+            run(&session, &migration(true, &NoHooks)).expect("resume")
+        });
+
+        assert_eq!(report.already_done, 2);
+        let first_removal = positions(&events, "remove all-notes/")[0];
+        for ulid in [ULID_A, ULID_B] {
+            let flush = events
+                .iter()
+                .position(|e| *e == format!("flush all-notes/{ulid}.age"))
+                .unwrap_or_else(|| panic!("{ulid}.age was not flushed: {events:?}"));
+            assert!(flush < first_removal, "events were: {events:?}");
+        }
     }
 }

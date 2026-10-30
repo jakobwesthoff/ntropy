@@ -963,6 +963,44 @@ mod tests {
     // -------------------------------------------------------------------------
 
     #[test]
+    fn writing_the_keypair_flushes_both_files() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let (identity, _) = age_io::generate_keypair();
+
+        let (result, events) = crate::fsutil::trace::capture(dir.path(), || {
+            write_keypair_at(
+                &dir.path().join("identity.pub"),
+                &dir.path().join("identity.age"),
+                &identity,
+                &Passphrase::new("pw"),
+            )
+        });
+
+        result.expect("write keypair");
+        assert_eq!(
+            crate::test_support::assert_every_write_is_durable(&events),
+            2
+        );
+    }
+
+    #[test]
+    fn changing_the_passphrase_flushes_the_rewrapped_identity() {
+        let fixture = Fixture::new("old");
+
+        let (result, events) = crate::fsutil::trace::capture(fixture.dir.path(), || {
+            change_passphrase_at(
+                fixture.wrapped_path(),
+                &Passphrase::new("old"),
+                &Passphrase::new("new"),
+            )
+        });
+
+        result.expect("change");
+        let written = crate::test_support::assert_one_durable_write(&events, ".");
+        assert_eq!(written, "identity.age");
+    }
+
+    #[test]
     fn changing_the_passphrase_preserves_the_identity() {
         let fixture = Fixture::new("old");
         change_passphrase_at(

@@ -240,6 +240,37 @@ A realignment never replaces an existing file. If a file already holds the
 name a note's title calls for, the note keeps its old name and the command
 warns about the rename it did not make (ADR 0067).
 
+## Durability
+
+A write ntropy makes into a vault is on stable storage when the command
+returns (ADR 0079). A note is written to a sibling temp file, the temp file is
+flushed, it is renamed over the destination, and the directory is flushed. A
+power loss therefore leaves the old note or the new one. It cannot leave a
+truncated or empty file, because the data is on disk before the name points at
+it. On macOS the flush is `F_FULLFSYNC`, which empties the drive's write
+cache; plain `fsync` there does not.
+
+`reconcile` and the conversions `vault encrypt`, `vault decrypt` and
+`vault rekey` write many notes. They write every temp file first, then flush
+each one, rename them all into place, and flush each directory they touched
+once. A name still only points at flushed data, and the cost is one flush per
+file plus one per directory. The renames `reconcile` makes for drifted
+filenames are flushed with those directories.
+
+`reconcile` adopting stray plaintext notes into an encrypted vault is the
+exception: it flushes each note and its source removal before moving on to the
+next, because a crash with all the plaintext sources still next to their
+encrypted twins would make the next run give every one of them a new ULID.
+
+A process killed during a batch leaves its temp files (`<name>.<ULID>.tmp`),
+up to one per written note. The scan ignores them, as only `.md` and `.age`
+names are notes, and nothing deletes them. The notes they would have replaced
+are intact.
+
+A filesystem that answers a flush with `EINVAL`, `ENOTSUP` or `ENOTTY` gets
+no durability and no error. Removals by `delete` and the view symlinks are
+not flushed.
+
 ## Version control
 
 A vault is plain files, so committing it to git is a first-class use case. The

@@ -186,6 +186,26 @@ mod tests {
     }
 
     #[test]
+    fn write_note_is_durable() {
+        let (guard, session) = temp_vault();
+        let created = create_note(&session, "Durable", None).expect("create");
+
+        let (result, events) = crate::fsutil::trace::capture(guard.path(), || {
+            write_note(&session, created.path.to_str().expect("utf-8"), NOTE)
+        });
+
+        result.expect("write");
+        let written = crate::test_support::assert_one_durable_write(&events, "all-notes");
+        assert_eq!(
+            written,
+            format!(
+                "all-notes/{}",
+                created.path.file_name().unwrap().to_string_lossy()
+            )
+        );
+    }
+
+    #[test]
     fn a_bare_ulid_finds_the_note() {
         let (_guard, session) = temp_vault();
         let created = create_note(&session, "By Identity", None).expect("create");

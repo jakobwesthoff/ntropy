@@ -408,6 +408,56 @@ mod tests {
     }
 
     #[test]
+    fn create_note_is_durable() {
+        let (guard, session) = temp_vault();
+
+        let (note, events) = crate::fsutil::trace::capture(guard.path(), || {
+            create_note(&session, "Durable", None).expect("create")
+        });
+
+        let written = crate::test_support::assert_one_durable_write(&events, "all-notes");
+        assert_eq!(
+            written,
+            format!(
+                "all-notes/{}",
+                note.path.file_name().unwrap().to_string_lossy()
+            )
+        );
+    }
+
+    #[test]
+    fn create_empty_note_is_durable() {
+        let (guard, session) = temp_vault();
+
+        let (path, events) = crate::fsutil::trace::capture(guard.path(), || {
+            create_empty_note(&session, "Durable").expect("create")
+        });
+
+        let written = crate::test_support::assert_one_durable_write(&events, "all-notes");
+        assert_eq!(
+            written,
+            format!("all-notes/{}", path.file_name().unwrap().to_string_lossy())
+        );
+    }
+
+    #[test]
+    fn today_note_is_durable() {
+        let (guard, session) = temp_vault();
+        std::fs::create_dir_all(session.layout().templates_dir()).expect("templates");
+        std::fs::write(
+            session.layout().today_template(),
+            crate::vault::seed::TODAY_TEMPLATE,
+        )
+        .expect("seed today");
+
+        let (outcome, events) =
+            crate::fsutil::trace::capture(guard.path(), || today_note(&session).expect("today"));
+
+        assert!(outcome.created);
+        crate::test_support::assert_one_durable_write(&events, "all-notes");
+    }
+
+    #[test]
     fn today_note_requires_today_template() {
         let (_guard, session) = temp_vault();
         let err = today_note(&session).expect_err("missing today template");

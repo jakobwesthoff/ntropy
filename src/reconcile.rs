@@ -181,6 +181,13 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
     let scan = scan::scan_notes_dir(&all_notes, session.cipher())?;
     let mut notes = scan.notes;
 
+    // Every rename and link rewrite up to the end of the rewriting below is
+    // flushed together once, rather than once per note, which on a vault of
+    // tens of thousands of notes is the difference between seconds and
+    // minutes. Nothing in between reads a rewritten note back: the rewriting
+    // works from the notes in memory.
+    let flush = fsutil::FlushScope::open();
+
     // Copies first: once each has its own ULID, every note's canonical name
     // is its own, and the realignment below cannot be asked to rename one
     // file onto another.
@@ -216,6 +223,7 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
     } else {
         rewrite_links(&notes)?
     };
+    flush.finish()?;
 
     // A note dropped into an encrypted vault as plaintext is the one thing the
     // vault exists to prevent, so `reconcile` folds it in rather than leaving
@@ -322,8 +330,14 @@ fn adopt_plaintext_notes(session: &VaultSession) -> Result<Adoption> {
     for note in to_adopt {
         let target = encrypted_path(&note.id);
         let content = format!("{}{}", note.raw_header, note.body);
+        // One note at a time, each flushed on its own, on purpose. Batching
+        // the writes would leave every plaintext source next to its durable
+        // encrypted twin until the batch ends, and a crash there is read by
+        // the next run as N copies, each given a new ULID. A locked vault
+        // cannot compare contents to tell a leftover from a copy. Adoption
+        // handles the strays of a hand-edited vault, not thousands of notes.
         session.cipher().write(&target, &content)?;
-        fsutil::remove_file(&note.path)?;
+        fsutil::remove_file_durably(&note.path)?;
         adopted.push(Adopted {
             from: note.path,
             to: target,
@@ -1183,6 +1197,122 @@ mod tests {
         assert!(content.contains(&format!("[a]({ULID}-alpha-one.md)")));
     }
 
+    const ULID_C: &str = "01CX5ZZKBKACTAV9WEVGEMMVRZ";
+
+    /// A drifted note and two notes linking to it by its old filename, so one
+    /// `reconcile` makes one rename and two link rewrites.
+    fn drifted_target_with_two_linkers(session: &VaultSession) {
+        write_note(
+            session,
+            &format!("{ULID}-old.md"),
+            "---\ntitle: Alpha One\n---\nx\n",
+        );
+        for (ulid, name) in [(ULID_B, "first"), (ULID_C, "second")] {
+            write_note(
+                session,
+                &format!("{ulid}-{name}.md"),
+                &format!("---\ntitle: {name}\n---\n[a]({ULID}-old.md)\n"),
+            );
+        }
+    }
+
+    #[test]
+    fn reconcile_flushes_every_rewritten_note_before_renaming_any_temp_file() {
+        let (guard, session) = vault_with_view();
+        drifted_target_with_two_linkers(&session);
+
+        let (report, events) =
+            crate::fsutil::trace::capture(guard.path(), || reconcile(&session).expect("reconcile"));
+
+        assert_eq!(report.links_rewritten.len(), 2);
+        let flushed: Vec<&String> = events
+            .iter()
+            .filter(|e| e.starts_with("flush all-notes/"))
+            .collect();
+        assert_eq!(
+            flushed,
+            [
+                &format!("flush all-notes/{ULID_C}-second.md.tmp"),
+                &format!("flush all-notes/{ULID_B}-first.md.tmp"),
+            ]
+        );
+        let last_flush = events
+            .iter()
+            .rposition(|e| e.starts_with("flush all-notes/"))
+            .expect("flush");
+        let first_temp_rename = events
+            .iter()
+            .position(|e| e.starts_with("rename all-notes/") && e.contains(".tmp -> "))
+            .expect("temp rename");
+        assert!(last_flush < first_temp_rename, "events were: {events:?}");
+    }
+
+    #[test]
+    fn reconcile_flushes_the_notes_directory_once_after_its_renames_and_rewrites() {
+        let (guard, session) = vault_with_view();
+        drifted_target_with_two_linkers(&session);
+
+        let (_, events) =
+            crate::fsutil::trace::capture(guard.path(), || reconcile(&session).expect("reconcile"));
+
+        let directory_flushes: Vec<usize> = events
+            .iter()
+            .enumerate()
+            .filter(|(_, e)| *e == "flush-dir all-notes")
+            .map(|(index, _)| index)
+            .collect();
+        assert_eq!(directory_flushes.len(), 1, "events were: {events:?}");
+        let last_note_rename = events
+            .iter()
+            .rposition(|e| e.starts_with("rename all-notes/"))
+            .expect("rename");
+        assert!(
+            last_note_rename < directory_flushes[0],
+            "events were: {events:?}"
+        );
+    }
+
+    #[test]
+    fn reconcile_makes_a_filename_realignment_durable() {
+        let (guard, session) = vault_with_view();
+        write_note(
+            &session,
+            &format!("{ULID}-old.md"),
+            "---\ntitle: Brand New\n---\nbody\n",
+        );
+
+        let (_, events) =
+            crate::fsutil::trace::capture(guard.path(), || reconcile(&session).expect("reconcile"));
+
+        let rename = events
+            .iter()
+            .position(|e| e.starts_with("rename all-notes/"))
+            .expect("rename");
+        assert_eq!(events[rename + 1], "flush-dir all-notes");
+    }
+
+    #[test]
+    fn realign_makes_its_rename_durable() {
+        let (guard, session) = vault_with_view();
+        let drifted = write_note(
+            &session,
+            &format!("{ULID_B}-stale.md"),
+            "---\ntitle: Fresh Title\n---\nbody\n",
+        );
+
+        let (result, events) =
+            crate::fsutil::trace::capture(guard.path(), || realign(&session, &drifted));
+
+        result.expect("realign");
+        assert_eq!(
+            events,
+            [
+                format!("rename all-notes/{ULID_B}-stale.md -> all-notes/{ULID_B}-fresh-title.md"),
+                "flush-dir all-notes".to_string(),
+            ]
+        );
+    }
+
     #[test]
     fn reconcile_link_rewrite_is_idempotent() {
         let (_guard, session) = vault_with_view();
@@ -1330,6 +1460,59 @@ mod tests {
                 "---\ntitle: Hand Added\n---\nbody\n",
                 "adoption must preserve the note byte-for-byte"
             );
+        }
+
+        /// The events of adopting two stray notes, in the order each note's
+        /// target is made durable before its plaintext source goes and the
+        /// removal itself is made durable.
+        fn expected_adoption_events() -> Vec<String> {
+            let mut expected = Vec::new();
+            for (ulid, name) in [(ULID_B, "second"), (ULID, "first")] {
+                expected.extend([
+                    format!("flush all-notes/{ulid}.age.tmp"),
+                    format!("rename all-notes/{ulid}.age.tmp -> all-notes/{ulid}.age"),
+                    "flush-dir all-notes".to_string(),
+                    format!("remove all-notes/{ulid}-{name}.md"),
+                    "flush-dir all-notes".to_string(),
+                ]);
+            }
+            expected
+        }
+
+        fn plant_two_stray_notes(session: &VaultSession) {
+            for (ulid, name) in [(ULID, "first"), (ULID_B, "second")] {
+                write_note(
+                    session,
+                    &format!("{ulid}-{name}.md"),
+                    &format!("---\ntitle: {name}\n---\nbody\n"),
+                );
+            }
+        }
+
+        #[test]
+        fn adoption_makes_each_target_durable_before_removing_its_source() {
+            let fixture = encrypted_vault();
+            plant_two_stray_notes(&fixture.session);
+
+            let (report, events) = crate::fsutil::trace::capture(fixture.session.root(), || {
+                reconcile(&fixture.session).expect("reconcile")
+            });
+
+            assert_eq!(report.adopted.len(), 2);
+            assert_eq!(events, expected_adoption_events());
+        }
+
+        #[test]
+        fn adoption_on_a_locked_vault_orders_its_flushes_the_same_way() {
+            let fixture = encrypted_vault();
+            plant_two_stray_notes(&fixture.session);
+
+            let (report, events) = crate::fsutil::trace::capture(fixture.session.root(), || {
+                reconcile(&fixture.locked()).expect("reconcile while locked")
+            });
+
+            assert_eq!(report.adopted.len(), 2);
+            assert_eq!(events, expected_adoption_events());
         }
 
         #[test]

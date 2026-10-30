@@ -44,6 +44,9 @@ and the query DSL in [query-and-search.md](query-and-search.md).
   escaping is not printed: a single one is an error, and `search -n -p`
   leaves it out with a warning and exits non-zero. `--print-content` prints
   the note unchanged.
+- **Durability:** a write into the vault is on stable storage when the command
+  returns. `reconcile` and the `vault` conversions flush once at the end of the
+  run instead of once per note (ADR 0079).
 - **Ordering:** results are newest first (creation time descending) by default.
 - **Editor:** `$VISUAL` then `$EDITOR`; a value that is empty or only
   whitespace counts as unset, and an error if neither is set. The value runs

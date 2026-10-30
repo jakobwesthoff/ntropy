@@ -135,26 +135,14 @@ pub fn read_at(path: &Path) -> Result<Option<Marker>, MigrateError> {
 ///
 /// Flushed before it is relied upon: the marker is what stops the next command
 /// from touching a vault mid-conversion, and a marker that did not reach the
-/// disk protects nothing. The temporary file is flushed before the rename, so
-/// a power loss leaves the old marker or the whole new one. A marker that
+/// disk protects nothing. Every write through [`fsutil::atomic_write`] flushes
+/// the temporary file before the rename, so a power loss leaves the old marker
+/// or the whole new one, and flushes the directory after it. A marker that
 /// reads as empty blocks every command and a resume alike, and a rekey
 /// rewrites its marker at a point where no note is readable without it.
 pub fn write_at(path: &Path, marker: &Marker) -> Result<(), MigrateError> {
     let text = toml::to_string_pretty(marker)?;
-
-    let mut staging = path.as_os_str().to_os_string();
-    staging.push(".tmp");
-    let staging = PathBuf::from(staging);
-
-    fsutil::atomic_write(&staging, text.as_bytes())?;
-    fsutil::sync_file(&staging)?;
-    std::fs::rename(&staging, path).map_err(|source| MigrateError::MarkerRename {
-        path: path.to_path_buf(),
-        source,
-    })?;
-    if let Some(parent) = path.parent() {
-        fsutil::sync_dir(parent)?;
-    }
+    fsutil::atomic_write(path, text.as_bytes())?;
     Ok(())
 }
 
@@ -189,6 +177,19 @@ mod tests {
         let path = dir.path().join("migration.toml");
         write_at(&path, &marker()).expect("write");
         assert_eq!(read_at(&path).expect("read"), Some(marker()));
+    }
+
+    #[test]
+    fn the_marker_is_written_durably() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("migration.toml");
+
+        let (result, events) =
+            crate::fsutil::trace::capture(dir.path(), || write_at(&path, &marker()));
+
+        result.expect("write");
+        let written = crate::test_support::assert_one_durable_write(&events, ".");
+        assert_eq!(written, "migration.toml");
     }
 
     #[test]
@@ -276,7 +277,7 @@ mod tests {
 
         assert!(matches!(
             write_at(&path, &marker()),
-            Err(MigrateError::MarkerRename { .. })
+            Err(MigrateError::Fs(_))
         ));
     }
 

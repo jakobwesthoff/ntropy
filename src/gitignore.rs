@@ -398,6 +398,19 @@ secrets/
     }
 
     #[test]
+    fn sync_writes_the_ignore_file_durably() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let v = Vault::new(dir.path());
+
+        let (result, events) =
+            crate::fsutil::trace::capture(dir.path(), || sync(&v, &[&name("by-tag")], &[]));
+
+        result.expect("sync");
+        let written = crate::test_support::assert_one_durable_write(&events, ".");
+        assert_eq!(written, ".gitignore");
+    }
+
+    #[test]
     fn sync_is_idempotent_on_disk() {
         let dir = tempfile::tempdir().expect("temp dir");
         let v = Vault::new(dir.path());

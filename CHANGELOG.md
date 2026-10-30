@@ -23,6 +23,12 @@ change in any release
   `vault decrypt --resume` and `vault encrypt --resume` refuse to finish a
   rekey, and `vault passphrase` refuses while a conversion is unfinished
   ([ADR 0080](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0080-a-rekey-stages-its-new-key-before-replacing-notes.md)).
+- A note written just before a power loss can no longer be left truncated or
+  empty. Every write and every rename of a note is flushed to disk, the file
+  before it is renamed into place and the directory after. `reconcile` and
+  `vault encrypt|decrypt|rekey` write everything first and flush once at the
+  end of the run
+  ([ADR 0079](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0079-note-writes-are-flushed-to-disk.md)).
 
 ## v2.4.0 - 2026-10-30
 

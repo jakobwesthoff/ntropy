@@ -46,6 +46,71 @@ pub(crate) fn vault_with_views(views: &[(&str, &str)]) -> (TempDir, VaultSession
     (dir, session)
 }
 
+/// Assert that `events` (from [`crate::fsutil::trace::capture`]) are exactly one
+/// durable write into `dir`: the temp file flushed, renamed into place, then the
+/// directory flushed. Returns the written file's name relative to the capture
+/// root.
+pub(crate) fn assert_one_durable_write(events: &[String], dir: &str) -> String {
+    assert_eq!(events.len(), 3, "events were: {events:?}");
+    let renamed = events[1]
+        .strip_prefix("rename ")
+        .unwrap_or_else(|| panic!("second event is not a rename: {events:?}"));
+    let (temp, destination) = renamed
+        .split_once(" -> ")
+        .unwrap_or_else(|| panic!("rename without target: {events:?}"));
+    assert_eq!(
+        temp,
+        format!("{destination}.tmp"),
+        "events were: {events:?}"
+    );
+    assert_eq!(
+        events[0],
+        format!("flush {temp}"),
+        "events were: {events:?}"
+    );
+    assert_eq!(
+        events[2],
+        format!("flush-dir {dir}"),
+        "events were: {events:?}"
+    );
+    destination.to_string()
+}
+
+/// Assert that every file written into place in `events` was flushed right
+/// before its rename and had its directory flushed right after it, and return
+/// how many files that was.
+///
+/// For commands that write several files one after another, where each write
+/// is its own single write.
+pub(crate) fn assert_every_write_is_durable(events: &[String]) -> usize {
+    let mut writes = 0;
+    for (index, event) in events.iter().enumerate() {
+        let Some((temp, destination)) = event
+            .strip_prefix("rename ")
+            .and_then(|renamed| renamed.split_once(" -> "))
+            .filter(|(temp, _)| temp.ends_with(".tmp"))
+        else {
+            continue;
+        };
+        let directory = std::path::Path::new(destination)
+            .parent()
+            .map(|p| p.display().to_string())
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| ".".to_string());
+        assert!(
+            index > 0 && events[index - 1] == format!("flush {temp}"),
+            "{temp} was renamed without being flushed first: {events:?}"
+        );
+        assert_eq!(
+            events.get(index + 1),
+            Some(&format!("flush-dir {directory}")),
+            "{destination} was not followed by a directory flush: {events:?}"
+        );
+        writes += 1;
+    }
+    writes
+}
+
 /// Build a temporary vault with a single `by-tag` view grouping by `tags`.
 pub(crate) fn vault_with_view() -> (TempDir, VaultSession) {
     vault_with_views(&[("by-tag", "tags")])
