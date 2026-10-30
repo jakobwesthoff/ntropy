@@ -47,6 +47,13 @@ and this project adheres to
 
 ### Fixed
 
+- `reconcile`, and the filename realignment after an edit or a `write`, no
+  longer rename a note over an existing file. Two files sharing a ULID and a
+  title, such as a note copied by hand, were renamed to one name, and the
+  file that held it lost its content; such copies now get their own ULID
+  (below). A rename whose destination is still taken, for example by a file
+  without frontmatter, is skipped with a warning, which `--strict` makes
+  fail, and both files keep their content.
 - Two note files that share a ULID, such as a note file copied by hand, are
   detected. The one with the shorter file name keeps the ULID, and every
   command that reads the vault skips the other with a warning naming it,
@@ -75,11 +82,6 @@ and this project adheres to
   `review-fav` beside a tail `FAV`, no longer stops the view sync with "File
   exists". Leaf names in a group directory are now unique ignoring case; the
   site export's page names follow the same rule.
-- `reconcile`, and the filename realignment after an edit or a `write`, no
-  longer rename a note over an existing file. Two files sharing a ULID and a
-  title, such as a note copied by hand, could be renamed to one name, and the
-  file that held it lost its content. Such a rename is now skipped with a
-  warning, which `--strict` makes fail, and both files keep their content.
 - `$VISUAL` and `$EDITOR` can carry arguments, such as `EDITOR="code -w"` or
   `EDITOR="emacsclient -t"`. Before, ntropy took the whole value as the
   editor's program name and could not start it.
