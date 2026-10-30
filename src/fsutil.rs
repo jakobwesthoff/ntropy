@@ -109,7 +109,7 @@ pub fn atomic_write(path: &Path, contents: &[u8]) -> Result<()> {
 
     std::fs::write(&tmp_path, contents).map_err(|e| FsError::new("writing", &tmp_path, e))?;
 
-    std::fs::rename(&tmp_path, path).map_err(|e| {
+    rename_raw(&tmp_path, path).map_err(|e| {
         // Best-effort cleanup so a failed rename does not leave the temp file
         // behind; the rename failure is the error we report.
         let _ = std::fs::remove_file(&tmp_path);
@@ -144,7 +144,7 @@ pub fn atomic_write_private(path: &Path, contents: &[u8]) -> Result<()> {
         return Err(FsError::new("setting permissions on", &tmp_path, e));
     }
 
-    std::fs::rename(&tmp_path, path).map_err(|e| {
+    rename_raw(&tmp_path, path).map_err(|e| {
         let _ = std::fs::remove_file(&tmp_path);
         FsError::new("renaming into place", path, e)
     })
@@ -180,12 +180,15 @@ pub fn sync_file(path: &Path) -> Result<()> {
                 std::io::Error::last_os_error(),
             ));
         }
-        Ok(())
     }
 
     #[cfg(not(target_os = "macos"))]
     file.sync_all()
-        .map_err(|e| FsError::new("flushing to disk", path, e))
+        .map_err(|e| FsError::new("flushing to disk", path, e))?;
+
+    #[cfg(test)]
+    trace::record(trace::Event::Flush(path.to_path_buf()));
+    Ok(())
 }
 
 /// Flush a directory entry so the names inside it are durable.
@@ -197,7 +200,10 @@ pub fn sync_file(path: &Path) -> Result<()> {
 pub fn sync_dir(path: &Path) -> Result<()> {
     let dir = std::fs::File::open(path).map_err(|e| FsError::new("opening to flush", path, e))?;
     dir.sync_all()
-        .map_err(|e| FsError::new("flushing directory to disk", path, e))
+        .map_err(|e| FsError::new("flushing directory to disk", path, e))?;
+    #[cfg(test)]
+    trace::record(trace::Event::FlushDir(path.to_path_buf()));
+    Ok(())
 }
 
 /// Remove `dir` and everything under it.
@@ -243,7 +249,18 @@ pub fn rename(from: &Path, to: &Path) -> Result<()> {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
         Err(e) => return Err(FsError::new("checking", to, e)),
     }
-    std::fs::rename(from, to).map_err(|e| FsError::new("renaming", from, e))
+    rename_raw(from, to).map_err(|e| FsError::new("renaming", from, e))
+}
+
+/// The one place a file is renamed, so the test trace sees every rename.
+fn rename_raw(from: &Path, to: &Path) -> std::io::Result<()> {
+    std::fs::rename(from, to)?;
+    #[cfg(test)]
+    trace::record(trace::Event::Rename {
+        from: from.to_path_buf(),
+        to: to.to_path_buf(),
+    });
+    Ok(())
 }
 
 /// A file's identity: its device and inode. Two paths with the same
@@ -278,7 +295,10 @@ fn is_same_entry(from: &Path, existing: &std::fs::Metadata) -> bool {
 
 /// Remove `path` if it is a regular file or symlink.
 pub fn remove_file(path: &Path) -> Result<()> {
-    std::fs::remove_file(path).map_err(|e| FsError::new("removing file", path, e))
+    std::fs::remove_file(path).map_err(|e| FsError::new("removing file", path, e))?;
+    #[cfg(test)]
+    trace::record(trace::Event::Remove(path.to_path_buf()));
+    Ok(())
 }
 
 // =============================================================================
@@ -418,6 +438,70 @@ pub fn relative_path(from_dir: &Path, target: &Path) -> PathBuf {
         result.push(".");
     }
     result
+}
+
+/// A recording of the flushes, renames and removals the primitives make, so
+/// tests can pin their order. A power loss cannot be simulated, but the order
+/// of these calls is what decides whether a note survives one.
+///
+/// The recording is per thread: a write made on another thread is missing from
+/// it, which is how the tests notice a bulk write that left its thread.
+#[cfg(test)]
+pub(crate) mod trace {
+    use std::cell::RefCell;
+    use std::path::{Path, PathBuf};
+
+    #[derive(Debug)]
+    pub(crate) enum Event {
+        Flush(PathBuf),
+        FlushDir(PathBuf),
+        Rename { from: PathBuf, to: PathBuf },
+        Remove(PathBuf),
+    }
+
+    thread_local! {
+        static EVENTS: RefCell<Vec<Event>> = const { RefCell::new(Vec::new()) };
+    }
+
+    pub(crate) fn record(event: Event) {
+        EVENTS.with(|events| events.borrow_mut().push(event));
+    }
+
+    /// Run `f` and return its result with the events it caused, one line each:
+    /// `flush <path>`, `flush-dir <path>`, `rename <from> -> <to>`,
+    /// `remove <path>`. Paths are relative to `root` (`.` for `root` itself)
+    /// and a temp file's `.<ULID>.tmp` suffix reads as `.tmp`.
+    pub(crate) fn capture<T>(root: &Path, f: impl FnOnce() -> T) -> (T, Vec<String>) {
+        let outer = EVENTS.with(|events| std::mem::take(&mut *events.borrow_mut()));
+        let result = f();
+        let events = EVENTS.with(|events| std::mem::replace(&mut *events.borrow_mut(), outer));
+        (result, events.iter().map(|e| describe(root, e)).collect())
+    }
+
+    fn describe(root: &Path, event: &Event) -> String {
+        match event {
+            Event::Flush(path) => format!("flush {}", short(root, path)),
+            Event::FlushDir(path) => format!("flush-dir {}", short(root, path)),
+            Event::Rename { from, to } => {
+                format!("rename {} -> {}", short(root, from), short(root, to))
+            }
+            Event::Remove(path) => format!("remove {}", short(root, path)),
+        }
+    }
+
+    fn short(root: &Path, path: &Path) -> String {
+        let relative = path.strip_prefix(root).unwrap_or(path);
+        let text = relative.display().to_string();
+        let text = if text.is_empty() {
+            ".".to_string()
+        } else {
+            text
+        };
+        match text.strip_suffix(".tmp").and_then(|s| s.rsplit_once('.')) {
+            Some((stem, ulid)) if ulid.len() == 26 => format!("{stem}.tmp"),
+            _ => text,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -721,5 +805,57 @@ mod tests {
         assert!(err.to_string().contains("checking"), "message was: {err}");
         assert!(!err.is_destination_taken());
         assert!(from.exists());
+    }
+
+    #[test]
+    fn the_trace_lists_renames_and_removals_in_the_order_they_happen() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let first = dir.path().join("first.md");
+        std::fs::write(&first, b"x").expect("seed");
+
+        let ((), events) = trace::capture(dir.path(), || {
+            rename(&first, &dir.path().join("second.md")).expect("rename");
+            remove_file(&dir.path().join("second.md")).expect("remove");
+        });
+
+        assert_eq!(events, ["rename first.md -> second.md", "remove second.md"]);
+    }
+
+    #[test]
+    fn the_trace_names_a_temp_file_without_its_ulid() {
+        let dir = tempfile::tempdir().expect("temp dir");
+
+        let ((), events) = trace::capture(dir.path(), || {
+            atomic_write(&dir.path().join("note.md"), b"x").expect("write");
+        });
+
+        assert_eq!(events, ["rename note.md.tmp -> note.md"]);
+    }
+
+    #[cfg(feature = "encryption")]
+    #[test]
+    fn the_trace_lists_flushes_of_files_and_directories() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let file = dir.path().join("note.md");
+        std::fs::write(&file, b"x").expect("seed");
+
+        let ((), events) = trace::capture(dir.path(), || {
+            sync_file(&file).expect("flush file");
+            sync_dir(dir.path()).expect("flush directory");
+        });
+
+        assert_eq!(events, ["flush note.md", "flush-dir ."]);
+    }
+
+    #[test]
+    fn a_trace_does_not_include_events_from_before_or_after_it() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let note = dir.path().join("note.md");
+        std::fs::write(&note, b"x").expect("seed");
+        remove_file(&note).expect("remove before");
+
+        let ((), events) = trace::capture(dir.path(), || {});
+
+        assert!(events.is_empty(), "events were: {events:?}");
     }
 }
