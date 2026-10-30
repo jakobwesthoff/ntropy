@@ -4172,6 +4172,46 @@ fn delete_with_two_pasted_ulids_deletes_nothing() {
     assert!(vault.join(format!("all-notes/{ULID_B}-b.md")).exists());
 }
 
+/// Runs `delete -n -f` with `arguments` in a vault of one note and asserts that
+/// the refusal for an empty selector fires and the note survives.
+fn assert_delete_refuses_empty_selector(arguments: &[&str]) {
+    let dir = setup_vault();
+    let vault = dir.path();
+    write_note(vault, ULID_A, "a", "---\ntitle: A\n---\nbody\n");
+
+    let out = ntropy(vault)
+        .args(["delete", "-n", "-f"])
+        .args(arguments)
+        .output()
+        .expect("run ntropy");
+
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("error: the selector is empty"),
+        "{}",
+        rendered(&out)
+    );
+    assert!(vault.join(format!("all-notes/{ULID_A}-a.md")).exists());
+}
+
+#[test]
+fn delete_refuses_an_empty_selector() {
+    // An unset shell variable arrives as one empty argument.
+    assert_delete_refuses_empty_selector(&[""]);
+}
+
+#[test]
+fn delete_refuses_a_selector_of_only_blank_arguments() {
+    assert_delete_refuses_empty_selector(&[" ", ""]);
+}
+
+#[test]
+fn delete_refuses_an_empty_quoted_phrase() {
+    // `""` is a text term that matches every body.
+    assert_delete_refuses_empty_selector(&["\"\""]);
+}
+
 #[test]
 fn edit_by_ulid_lists_both_files_that_share_it() {
     let dir = setup_vault();

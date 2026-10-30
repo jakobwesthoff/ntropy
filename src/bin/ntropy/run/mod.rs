@@ -707,6 +707,18 @@ fn cmd_delete(
     force: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
+    // An empty selector matches every note, and a vault of one note would
+    // delete it without a prompt. This is typically an unset shell variable
+    // (`ntropy delete -f "$ID"`), so it is refused before any lookup or picker.
+    // A parse error is left to `resolve_selection` to report.
+    let is_empty_text_term = matches!(
+        ntropy::query::parse(&selector),
+        Ok(ntropy::query::Query::Text(pattern)) if pattern.is_empty()
+    );
+    if selector.trim().is_empty() || is_empty_text_term {
+        bail!("the selector is empty");
+    }
+
     let matches =
         ops::resolve_selection(session, &selector).context("while resolving the selector")?;
     output::print_warnings(&matches.warnings);

@@ -205,7 +205,9 @@ redirected streams can neither swallow the question nor feed the answer
 (ADR 0036). Unlike `search`, `delete` must resolve to exactly one note: an
 ambiguous selector opens the picker pre-filtered interactively, and errors
 with a non-zero exit under `-n` (ADR 0025). In non-interactive mode `--force`
-is required, since there is no prompt.
+is required, since there is no prompt. An empty selector (no argument text, or
+the empty term `""`) is refused with an error before any lookup, so it neither
+matches every note nor opens the picker.
 
 ### `render [id|query]`
 

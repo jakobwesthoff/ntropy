@@ -131,4 +131,8 @@ the candidate list and a non-zero exit. Non-interactive deletion requires
 `search -n` first, confirm the single intended ULID, then `delete -n -f
 <ulid>`. NEVER delete by a broad query; pass the ULID.
 
+`delete` refuses an empty selector with `error: the selector is empty`, with
+no lookup and no picker. An unset shell variable (`delete -n -f "$ID"`)
+therefore cannot delete a note.
+
 Deleting removes the canonical file and refreshes the views.

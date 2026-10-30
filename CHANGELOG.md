@@ -27,6 +27,10 @@ change in any release
   `search tag:work and 'status:open or status:new'` now means
   `tag:work and (status:open or status:new)`. Blank arguments are ignored.
 
+### Fixed
+
+- `delete` refuses an empty selector instead of matching every note.
+
 ## v2.3.0 - 2026-10-30
 
 ### Added

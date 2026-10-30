@@ -154,6 +154,8 @@ pub enum Command {
     Reconcile,
 
     /// Delete a note by id or query.
+    ///
+    /// An empty selector is refused instead of matching every note.
     Delete {
         /// A full ULID or a query DSL expression, as trailing arguments that are
         /// each read on their own; words in one argument form a phrase.
