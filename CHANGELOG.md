@@ -85,6 +85,11 @@ and this project adheres to
   on, and `view add` and `vault encrypt` refuse it. A symlink
   swapped in while a sync is running is not caught.
 
+### Fixed
+
+- The picker no longer cuts an emoji apart at a column edge, such as
+  keeping `#` without the rest of `#️⃣` or half of a flag.
+
 ## v2.2.0 - 2026-10-10
 
 ### Added

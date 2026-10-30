@@ -21,6 +21,7 @@
 //! on numbers alone.
 
 use ntropy::ops::Candidate;
+use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use super::Row;
@@ -194,24 +195,30 @@ fn truncate(s: &str, max: usize) -> String {
     out
 }
 
-/// The longest character prefix of `s` that is at most `max` display columns
-/// wide.
+/// The longest prefix of `s` that ends on a grapheme boundary and is at most
+/// `max` display columns wide.
+///
+/// The cut falls only between grapheme clusters: `#` without its VS16 or one
+/// regional indicator of a flag draws as a different glyph than the whole
+/// cluster, so a cluster that does not fit is dropped whole. The prefix is
+/// still a character prefix, so character indices into `s` stay valid for it.
 ///
 /// Width is the *string* width, the same measure `measure` and `pad` use, so
 /// a cut cell lines up with the padding around it. It differs from the sum of
 /// per-character widths for emoji sequences: `#` plus VS16 is one two-column
 /// glyph whose characters sum to one, and a ZWJ family emoji is two columns
-/// whose characters sum to more. Prefix widths are therefore not monotonic (a
-/// half-built ZWJ sequence can be wider than the finished one), so every
-/// character boundary is checked rather than stopping at the first prefix that
-/// overflows. Only strings that do not fit pay for that scan.
+/// whose characters sum to more. Prefix widths are therefore not monotonic
+/// even between grapheme boundaries (two regional-indicator pairs joined by a
+/// ZWJ are two graphemes but one two-column glyph), so every boundary is
+/// checked rather than stopping at the first prefix that overflows. Only
+/// strings that do not fit pay for that scan.
 pub(super) fn fit_prefix(s: &str, max: usize) -> &str {
     if s.width() <= max {
         return s;
     }
     let mut end = 0;
-    for (i, c) in s.char_indices() {
-        let next = i + c.len_utf8();
+    for (i, grapheme) in s.grapheme_indices(true) {
+        let next = i + grapheme.len();
         if s[..next].width() <= max {
             end = next;
         }
@@ -781,6 +788,24 @@ mod tests {
             let kept = fit_prefix(s, max);
             assert!(kept.width() <= max, "{kept:?} exceeds {max}");
         }
+    }
+
+    #[test]
+    fn fit_prefix_keeps_a_keycap_whole() {
+        // `#` and VS16 are one two-column grapheme; one column holds none of
+        // it, and `#` alone would draw as a different, narrow glyph.
+        assert_eq!(fit_prefix("#\u{FE0F}xyz", 1), "");
+    }
+
+    #[test]
+    fn fit_prefix_keeps_a_flag_whole() {
+        // A lone regional indicator is a different glyph from the flag.
+        assert_eq!(fit_prefix("🇩🇪x", 1), "");
+    }
+
+    #[test]
+    fn fit_prefix_keeps_a_zwj_sequence_with_vs16_whole() {
+        assert_eq!(fit_prefix("🏳\u{FE0F}\u{200D}🌈x", 1), "");
     }
 
     #[test]
