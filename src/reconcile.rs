@@ -11,16 +11,22 @@
 //! catch-up after out-of-band edits. A single-note realignment ([`realign`]) is
 //! exposed for the editor flow, where only the touched note is realigned so a
 //! stray edit elsewhere is never renamed silently (ADR 0004).
+//!
+//! Both [`reconcile`] and [`realign`] also give a copied note, a second file
+//! carrying another note's ULID, an identity of its own (ADR 0067).
 
+use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use crate::config::PerVaultConfig;
 use crate::error::Result;
 use crate::fsutil;
 use crate::gitignore;
+use crate::id::Id;
 use crate::link;
 use crate::note::Note;
-use crate::note::duplicate::Duplicate;
+use crate::note::duplicate::{self, Duplicate};
+use crate::note::filename;
 use crate::scan::{self, ScanWarning};
 use crate::session::VaultSession;
 use crate::vault::{Vault, ViewName};
@@ -31,6 +37,17 @@ use crate::view::{self, SkippedView, ViewDef};
 pub struct Rename {
     pub from: PathBuf,
     pub to: PathBuf,
+}
+
+/// A copied note given a ULID of its own (ADR 0067).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reassignment {
+    /// The copy under the ULID it shared.
+    pub from: PathBuf,
+    /// The copy under its new ULID.
+    pub to: PathBuf,
+    /// The file that keeps the shared ULID.
+    pub keeper: PathBuf,
 }
 
 /// A link target refreshed in a note body because its slug had drifted.
@@ -51,6 +68,8 @@ pub struct ReconcileReport {
     pub notes_scanned: usize,
     /// Number of materialized views synced.
     pub views_synced: usize,
+    /// Copied notes given a ULID of their own.
+    pub reassigned: Vec<Reassignment>,
     /// Files renamed because their slug had drifted.
     pub renamed: Vec<Rename>,
     /// Realignments not made because a file already holds the new name; each
@@ -141,7 +160,8 @@ pub fn sync_gitignore(
     gitignore::sync(vault, &names, &retained)
 }
 
-/// Realign drifted filenames, adopt stray plaintext notes, then sync views.
+/// Give copies their own ULIDs, realign drifted filenames, adopt stray
+/// plaintext notes, then sync views.
 ///
 /// On a locked encrypted vault only adoption runs: encrypting a note needs the
 /// public recipient alone, so a machine that can create notes can also fold in
@@ -149,15 +169,30 @@ pub fn sync_gitignore(
 /// to have one lying around.
 pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
     if session.is_encrypted() && !session.is_unlocked() {
-        let adopted = adopt_plaintext_notes(session)?;
+        let adoption = adopt_plaintext_notes(session)?;
         return Ok(ReconcileReport {
-            adopted,
+            adopted: adoption.adopted,
+            reassigned: adoption.reassigned,
             ..Default::default()
         });
     }
 
-    let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
+    let all_notes = session.layout().all_notes();
+    let scan = scan::scan_notes_dir(&all_notes, session.cipher())?;
     let mut notes = scan.notes;
+
+    // Copies first: once each has its own ULID, every note's canonical name
+    // is its own, and the realignment below cannot be asked to rename one
+    // file onto another.
+    let mut taken = taken_ids(&all_notes)?;
+    let mut reassigned = Vec::new();
+    for copy in scan.duplicates {
+        let mut note = copy.note;
+        reassigned.push(reassign(&mut note, copy.keeper, &mut taken)?);
+        notes.push(note);
+    }
+    notes.sort_by_key(|n| std::cmp::Reverse(n.id));
+
     let mut renamed = Vec::new();
     let mut refused = Vec::new();
 
@@ -185,15 +220,20 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
     // A note dropped into an encrypted vault as plaintext is the one thing the
     // vault exists to prevent, so `reconcile` folds it in rather than leaving
     // it to be warned about forever.
-    let adopted = adopt_plaintext_notes(session)?;
+    let adoption = adopt_plaintext_notes(session)?;
+    reassigned.extend(adoption.reassigned);
+    let adopted = adoption.adopted;
+
+    // The warnings were produced before the copies were reassigned and the
+    // plaintext notes adopted, so the ones resolved here would otherwise fail
+    // a `--strict` run that had, in the same breath, fixed the problem.
     let mut warnings = scan.warnings;
-    if !adopted.is_empty() {
-        // The warnings were produced before adoption ran, so the ones it just
-        // resolved would otherwise fail a `--strict` run that had, in the same
-        // breath, fixed the problem.
-        let fixed: Vec<&Path> = adopted.iter().map(|a| a.from.as_path()).collect();
-        warnings.retain(|warning| !fixed.contains(&warning.path.as_path()));
-    }
+    let fixed: Vec<&Path> = adopted
+        .iter()
+        .map(|a| a.from.as_path())
+        .chain(reassigned.iter().map(|r| r.from.as_path()))
+        .collect();
+    warnings.retain(|warning| !fixed.contains(&warning.path.as_path()));
 
     let (views, mut skipped_views) = load_views(session)?;
     let (views_synced, gitignore, skipped_views) = if session.is_encrypted() {
@@ -213,6 +253,7 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
     Ok(ReconcileReport {
         notes_scanned: notes.len(),
         views_synced,
+        reassigned,
         renamed,
         refused,
         links_rewritten,
@@ -233,30 +274,53 @@ pub struct Adopted {
     pub to: PathBuf,
 }
 
+/// What adopting the plaintext notes of an encrypted vault did.
+#[derive(Debug, Default)]
+struct Adoption {
+    adopted: Vec<Adopted>,
+    reassigned: Vec<Reassignment>,
+}
+
 /// Encrypt any well-formed plaintext note sitting in an encrypted vault.
 ///
 /// Only files that already parse as notes are taken: a valid `<ulid>-<slug>.md`
 /// name and frontmatter carrying a title. Anything else is left byte-for-byte
 /// alone and stays a scan warning, exactly as it would in a plaintext vault,
 /// which never renames or rewrites a file it cannot parse. Adoption fixes where
-/// a note is stored, never what it says or what it is called.
-fn adopt_plaintext_notes(session: &VaultSession) -> Result<Vec<Adopted>> {
+/// a note is stored, never what it says.
+///
+/// A plaintext note whose ULID an encrypted note already has, or that is a
+/// copy of another plaintext note, gets a ULID of its own first (ADR 0067):
+/// encrypting it under the shared one would overwrite a note. The encrypted
+/// file of the shared ULID, existing or about to be adopted, keeps it. Taken
+/// ULIDs come from the file names, so this works on a locked vault too.
+fn adopt_plaintext_notes(session: &VaultSession) -> Result<Adoption> {
     if !session.is_encrypted() {
-        return Ok(Vec::new());
+        return Ok(Adoption::default());
     }
 
     let all_notes = session.layout().all_notes();
     let plaintext = scan::scan_notes_dir(&all_notes, &crate::cipher::PlaintextCipher)?;
+    let encrypted_path = |id: &Id| all_notes.join(filename::build_encrypted(id));
+
+    let (mut conflicting, free): (Vec<Note>, Vec<Note>) = plaintext
+        .notes
+        .into_iter()
+        .partition(|note| encrypted_path(&note.id).exists());
+    conflicting.extend(plaintext.duplicates.into_iter().map(|copy| copy.note));
+
+    let mut taken = taken_ids(&all_notes)?;
+    let mut reassigned = Vec::new();
+    let mut to_adopt = free;
+    for mut note in conflicting {
+        let keeper = encrypted_path(&note.id);
+        reassigned.push(reassign(&mut note, keeper, &mut taken)?);
+        to_adopt.push(note);
+    }
 
     let mut adopted = Vec::new();
-    for note in plaintext.notes {
-        let target = all_notes.join(crate::note::filename::build_encrypted(&note.id));
-        if target.exists() {
-            // Two files claiming one identity. Overwriting either would lose a
-            // note, so both are left in place and the scan keeps warning.
-            continue;
-        }
-
+    for note in to_adopt {
+        let target = encrypted_path(&note.id);
         let content = format!("{}{}", note.raw_header, note.body);
         session.cipher().write(&target, &content)?;
         fsutil::remove_file(&note.path)?;
@@ -266,7 +330,47 @@ fn adopt_plaintext_notes(session: &VaultSession) -> Result<Vec<Adopted>> {
         });
     }
     adopted.sort_by(|a, b| a.from.cmp(&b.from));
-    Ok(adopted)
+    reassigned.sort_by(|a, b| a.from.cmp(&b.from));
+    Ok(Adoption {
+        adopted,
+        reassigned,
+    })
+}
+
+/// Every ULID a file in `all_notes` claims, whichever form its name has.
+///
+/// Read from the names alone, so the ULIDs of encrypted notes count on a
+/// locked vault, and a file that does not parse as a note still holds its
+/// ULID against reassignment.
+fn taken_ids(all_notes: &Path) -> Result<HashSet<Id>> {
+    Ok(fsutil::read_dir_entries(all_notes)?
+        .into_iter()
+        .filter_map(|(path, _)| {
+            let name = path.file_name()?.to_str()?;
+            filename::parse_any(name).ok().map(|parsed| parsed.id)
+        })
+        .collect())
+}
+
+/// Give `note`, a copy of the note at `keeper`, a ULID of its own and move it
+/// to the canonical name for that ULID (ADR 0067).
+///
+/// Only the name changes: identity lives in the filename alone (ADR 0004), so
+/// the content stays as it was. The new ULID is recorded in `taken`.
+fn reassign(note: &mut Note, keeper: PathBuf, taken: &mut HashSet<Id>) -> Result<Reassignment> {
+    let copy_name = note
+        .path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let new_id = note.id.reassigned(&copy_name, taken);
+    let from = note.path.clone();
+    note.id = new_id;
+    let to = canonical_sibling(&from, &note.canonical_filename());
+    fsutil::rename(&from, &to)?;
+    taken.insert(new_id);
+    note.path = to.clone();
+    Ok(Reassignment { from, to, keeper })
 }
 
 /// Rewrite stale link targets in every note body to the current filenames.
@@ -336,6 +440,9 @@ pub struct Realignment {
     /// The rename that was due but not made, because a file already holds
     /// the new name. The note kept its old name; the caller warns about it.
     pub refused: Option<Rename>,
+    /// Copies among the note and the other files carrying its ULID, each
+    /// given a ULID of its own; the note itself may be one of them.
+    pub reassigned: Vec<Reassignment>,
 }
 
 /// Realign one note's filename if its slug has drifted from its title.
@@ -345,6 +452,11 @@ pub struct Realignment {
 /// `write`, both of which have already saved the note, so a rename that is
 /// refused is reported rather than failing them.
 ///
+/// When other files carry the note's ULID, the copies among them get ULIDs of
+/// their own first, by the rule the scan uses to tell the keeper (ADR 0067),
+/// whether the edited note is the keeper or a copy. That also frees the
+/// keeper's canonical name if a copy held it.
+///
 /// Inert in an encrypted vault, where a filename is derived from the identity
 /// alone and has nothing that can drift.
 pub fn realign(session: &VaultSession, path: &Path) -> Result<Realignment> {
@@ -352,25 +464,74 @@ pub fn realign(session: &VaultSession, path: &Path) -> Result<Realignment> {
         path: path.to_path_buf(),
         renamed: None,
         refused: None,
+        reassigned: Vec::new(),
     };
     if session.is_encrypted() {
         return Ok(realignment);
     }
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return Ok(realignment);
-    };
-    let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok();
-    let Ok(mut note) = Note::parse(path.to_path_buf(), &content, modified) else {
+    let Some(note) = read_note(path) else {
         return Ok(realignment);
     };
 
-    match realign_note(&mut note)? {
-        None => {}
-        Some(RenameOutcome::Renamed(change)) => realignment.renamed = Some(change),
-        Some(RenameOutcome::Refused(change)) => realignment.refused = Some(change),
+    let all_notes = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut taken = taken_ids(all_notes)?;
+    let mut group = same_id_siblings(path, note.id)?;
+    group.push(note);
+    let (mut kept, copies) = duplicate::split(group);
+
+    for copy in copies {
+        let edited = copy.note.path == path;
+        let mut note = copy.note;
+        realignment
+            .reassigned
+            .push(reassign(&mut note, copy.keeper, &mut taken)?);
+        if edited {
+            // A reassigned copy already has its canonical name.
+            realignment.path = note.path;
+        }
     }
-    realignment.path = note.path;
+
+    let mut keeper = kept
+        .pop()
+        .expect("the group holds at least the edited note, so it has a keeper");
+    if keeper.path == path {
+        match realign_note(&mut keeper)? {
+            None => {}
+            Some(RenameOutcome::Renamed(change)) => realignment.renamed = Some(change),
+            Some(RenameOutcome::Refused(change)) => realignment.refused = Some(change),
+        }
+        realignment.path = keeper.path;
+    }
     Ok(realignment)
+}
+
+/// Read and parse the plaintext note at `path`, or `None` when it is gone or
+/// does not parse.
+fn read_note(path: &Path) -> Option<Note> {
+    let content = std::fs::read_to_string(path).ok()?;
+    let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok();
+    Note::parse(path.to_path_buf(), &content, modified).ok()
+}
+
+/// The other notes in `path`'s directory that carry `id`.
+///
+/// Admitted by the scan's own rule, a regular file with the `.md` extension
+/// that parses as a note, so `realign` sees the same copies as `reconcile`
+/// and picks the same keeper.
+fn same_id_siblings(path: &Path, id: Id) -> Result<Vec<Note>> {
+    let all_notes = path.parent().unwrap_or_else(|| Path::new("."));
+    let mut siblings = Vec::new();
+    for (entry, file_type) in fsutil::read_dir_entries(all_notes)? {
+        let name = entry.file_name().unwrap_or_default();
+        let candidate = file_type.is_file()
+            && Some(name) != path.file_name()
+            && filename::has_md_extension(&entry)
+            && filename::parse(&name.to_string_lossy()).is_ok_and(|parsed| parsed.id == id);
+        if candidate && let Some(note) = read_note(&entry) {
+            siblings.push(note);
+        }
+    }
+    Ok(siblings)
 }
 
 /// The path of `filename` in the same directory as `path`.
@@ -547,12 +708,13 @@ mod tests {
 
         let drifted = write_note(
             &session,
-            &format!("{ULID}-stale.md"),
+            &format!("{ULID_B}-stale.md"),
             "---\ntitle: Fresh Title\n---\nbody\n",
         );
         let realignment = realign(&session, &drifted).expect("realign");
         let rename = realignment.renamed.expect("renamed");
-        assert!(rename.to.ends_with(format!("{ULID}-fresh-title.md")));
+        assert!(rename.to.ends_with(format!("{ULID_B}-fresh-title.md")));
+        assert!(aligned.exists(), "the other note is not touched");
         assert_eq!(realignment.path, rename.to);
         assert!(!drifted.exists());
     }
@@ -593,32 +755,191 @@ mod tests {
         );
     }
 
-    #[test]
-    fn reconcile_keeps_both_files_that_share_a_ulid_and_a_title() {
-        // A note copied by hand: both files parse, the copy's name has
-        // drifted from the shared title, and its canonical name is the
-        // original's.
-        let (_guard, session) = vault_with_view();
+    /// The files in `all-notes/`, sorted by name.
+    fn note_files(session: &VaultSession) -> Vec<String> {
+        let mut names: Vec<String> = std::fs::read_dir(session.layout().all_notes())
+            .expect("read all-notes")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// The one file in `all-notes/` that carries a ULID with `ULID`'s time
+    /// part but not `ULID` itself: a copy's new identity.
+    fn reassigned_file(session: &VaultSession) -> PathBuf {
+        let time_part = &ULID[..10];
+        let found: Vec<String> = note_files(session)
+            .into_iter()
+            .filter(|name| name.starts_with(time_part) && !name.starts_with(ULID))
+            .collect();
+        assert_eq!(found.len(), 1, "expected one reassigned file: {found:?}");
+        session.layout().all_notes().join(&found[0])
+    }
+
+    /// A note and a copy of it made by hand, both titled `Plan`; the copy's
+    /// name is the longer one. Returns (original, copy).
+    fn copied_note(session: &VaultSession, tags: &str) -> (PathBuf, PathBuf) {
         let original = write_note(
-            &session,
+            session,
             &format!("{ULID}-plan.md"),
-            "---\ntitle: Plan\n---\noriginal\n",
+            &format!("---\ntitle: Plan\ntags: [{tags}]\n---\noriginal\n"),
         );
         let copy = write_note(
-            &session,
+            session,
             &format!("{ULID}-plan-b.md"),
-            "---\ntitle: Plan\n---\ncopy\n",
+            &format!("---\ntitle: Plan\ntags: [{tags}]\n---\ncopy\n"),
         );
+        (original, copy)
+    }
+
+    #[test]
+    fn reconcile_gives_a_copy_a_new_ulid() {
+        let (_guard, session) = vault_with_view();
+        let (original, copy) = copied_note(&session, "t");
 
         reconcile(&session).expect("reconcile");
 
         assert_eq!(
             std::fs::read_to_string(&original).expect("read original"),
-            "---\ntitle: Plan\n---\noriginal\n"
+            "---\ntitle: Plan\ntags: [t]\n---\noriginal\n",
+            "the keeper is left as it was"
+        );
+        assert!(!copy.exists(), "the copy no longer carries the ULID");
+        let moved = reassigned_file(&session);
+        assert!(
+            moved.to_string_lossy().ends_with("-plan.md"),
+            "the copy is named for its title: {}",
+            moved.display()
         );
         assert_eq!(
-            std::fs::read_to_string(&copy).expect("read copy"),
-            "---\ntitle: Plan\n---\ncopy\n"
+            std::fs::read_to_string(&moved).expect("read the reassigned copy"),
+            "---\ntitle: Plan\ntags: [t]\n---\ncopy\n",
+            "the copy's content is unchanged"
+        );
+    }
+
+    #[test]
+    fn reconcile_reports_the_reassignment_and_clears_its_warning() {
+        let (_guard, session) = vault_with_view();
+        let (original, copy) = copied_note(&session, "t");
+
+        let report = reconcile(&session).expect("reconcile");
+
+        assert_eq!(
+            report.reassigned,
+            [Reassignment {
+                from: copy,
+                to: reassigned_file(&session),
+                keeper: original,
+            }]
+        );
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        assert!(report.renamed.is_empty(), "the copy needs no second rename");
+        assert_eq!(report.notes_scanned, 2);
+    }
+
+    #[test]
+    fn links_to_a_reassigned_id_point_at_the_keeper() {
+        // The link names the copy's old file, but identity is the ULID, and
+        // the keeper is the one that kept it.
+        let (_guard, session) = vault_with_view();
+        copied_note(&session, "t");
+        let linker = write_note(
+            &session,
+            &format!("{ULID_B}-linker.md"),
+            &format!("---\ntitle: Linker\n---\n[plan]({ULID}-plan-b.md)\n"),
+        );
+
+        reconcile(&session).expect("reconcile");
+
+        assert!(
+            std::fs::read_to_string(&linker)
+                .expect("read linker")
+                .contains(&format!("[plan]({ULID}-plan.md)"))
+        );
+    }
+
+    #[test]
+    fn a_reassigned_copy_appears_in_the_views() {
+        let (_guard, session) = vault_with_view();
+        copied_note(&session, "t");
+
+        reconcile(&session).expect("reconcile");
+
+        let leaves = std::fs::read_dir(session.root().join("by-tag/t"))
+            .expect("read the group")
+            .count();
+        assert_eq!(leaves, 2);
+    }
+
+    #[test]
+    fn realign_gives_the_edited_copy_a_new_ulid() {
+        let (_guard, session) = vault_with_view();
+        let (original, copy) = copied_note(&session, "t");
+
+        let realignment = realign(&session, &copy).expect("realign");
+
+        assert!(original.exists(), "the keeper keeps its name");
+        assert!(!copy.exists(), "the copy no longer carries the ULID");
+        let moved = reassigned_file(&session);
+        assert_eq!(realignment.path, moved);
+        assert_eq!(
+            realignment.reassigned,
+            [Reassignment {
+                from: copy,
+                to: moved,
+                keeper: original,
+            }]
+        );
+        assert!(realignment.renamed.is_none() && realignment.refused.is_none());
+    }
+
+    #[test]
+    fn realign_gives_the_other_copy_a_new_ulid_when_the_keeper_is_edited() {
+        let (_guard, session) = vault_with_view();
+        let (original, copy) = copied_note(&session, "t");
+
+        let realignment = realign(&session, &original).expect("realign");
+
+        assert!(original.exists(), "the edited keeper stays put");
+        assert_eq!(realignment.path, original);
+        assert!(!copy.exists(), "the copy no longer carries the ULID");
+        assert_eq!(realignment.reassigned.len(), 1);
+        assert_eq!(realignment.reassigned[0].from, copy);
+        assert_eq!(realignment.reassigned[0].to, reassigned_file(&session));
+    }
+
+    #[test]
+    fn realign_after_retitling_the_keeper_keeps_its_ulid() {
+        // The keeper is retitled in the editor: its name drifts while the
+        // copy's stays aligned. The keeper still keeps the ULID, and only
+        // then is renamed to its new title.
+        let (_guard, session) = vault_with_view();
+        let original = write_note(
+            &session,
+            &format!("{ULID}-plan.md"),
+            "---\ntitle: Plan v1\n---\noriginal\n",
+        );
+        let copy = write_note(
+            &session,
+            &format!("{ULID}-plan-v2.md"),
+            "---\ntitle: Plan v2\n---\ncopy\n",
+        );
+
+        let realignment = realign(&session, &original).expect("realign");
+
+        let retitled = session
+            .layout()
+            .all_notes()
+            .join(format!("{ULID}-plan-v1.md"));
+        assert_eq!(realignment.path, retitled);
+        assert!(retitled.exists());
+        assert!(!copy.exists(), "the copy no longer carries the ULID");
+        assert!(
+            reassigned_file(&session)
+                .to_string_lossy()
+                .ends_with("-plan-v2.md")
         );
     }
 
@@ -1024,10 +1345,28 @@ mod tests {
             );
         }
 
+        /// The `.age` files in `all-notes/` other than `<ULID>.age`, read
+        /// through the vault's cipher.
+        fn other_encrypted_notes(session: &VaultSession) -> Vec<String> {
+            let mut contents: Vec<String> = note_files(session)
+                .into_iter()
+                .filter(|name| name.ends_with(".age") && !name.starts_with(ULID))
+                .map(|name| {
+                    session
+                        .cipher()
+                        .read(&session.layout().all_notes().join(name))
+                        .expect("read")
+                })
+                .collect();
+            contents.sort();
+            contents
+        }
+
         #[test]
-        fn adoption_refuses_when_the_identity_is_already_taken() {
-            // Two files claiming one identity: overwriting either loses a note,
-            // so both stay put and the scan keeps warning.
+        fn adoption_reassigns_when_the_identity_is_already_taken() {
+            // The encrypted note keeps the ULID; the plaintext file claiming it
+            // gets one of its own and is encrypted under it, so neither is
+            // overwritten and nothing is left to warn about.
             let fixture = encrypted_vault();
             let session = &fixture.session;
             let encrypted =
@@ -1039,14 +1378,86 @@ mod tests {
             );
 
             let report = reconcile(session).expect("reconcile");
-            assert!(report.adopted.is_empty());
-            assert!(stray.exists(), "the stray file must be left alone");
+
+            assert!(!stray.exists(), "the plaintext file is taken in");
             assert_eq!(
                 session.cipher().read(&encrypted).expect("read"),
                 "---\ntitle: Original\n---\nkeep\n",
                 "the existing note must not be overwritten"
             );
-            assert_eq!(report.warnings.len(), 1);
+            assert_eq!(
+                other_encrypted_notes(session),
+                ["---\ntitle: Collision\n---\nother\n"]
+            );
+            assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+            assert_eq!(report.reassigned.len(), 1);
+            assert_eq!(report.reassigned[0].from, stray);
+            assert_eq!(report.reassigned[0].keeper, encrypted);
+            assert_eq!(report.adopted.len(), 1);
+            assert_eq!(report.adopted[0].from, report.reassigned[0].to);
+        }
+
+        #[test]
+        fn two_plaintext_copies_are_reassigned_and_adopted() {
+            let fixture = encrypted_vault();
+            let session = &fixture.session;
+            write_note(
+                session,
+                &format!("{ULID}-plan.md"),
+                "---\ntitle: Plan\n---\noriginal\n",
+            );
+            write_note(
+                session,
+                &format!("{ULID}-plan-b.md"),
+                "---\ntitle: Plan\n---\ncopy\n",
+            );
+
+            let report = reconcile(session).expect("reconcile");
+
+            let keeper = session.layout().all_notes().join(format!("{ULID}.age"));
+            assert_eq!(
+                session.cipher().read(&keeper).expect("read"),
+                "---\ntitle: Plan\n---\noriginal\n"
+            );
+            assert_eq!(
+                other_encrypted_notes(session),
+                ["---\ntitle: Plan\n---\ncopy\n"]
+            );
+            assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+            assert_eq!(report.reassigned.len(), 1);
+            assert_eq!(report.reassigned[0].keeper, keeper);
+            assert_eq!(report.adopted.len(), 2);
+        }
+
+        #[test]
+        fn two_plaintext_copies_are_reassigned_and_adopted_while_locked() {
+            // Reassigning needs only the names in the directory, and adopting
+            // only the public recipient.
+            let fixture = encrypted_vault();
+            write_note(
+                &fixture.session,
+                &format!("{ULID}-plan.md"),
+                "---\ntitle: Plan\n---\noriginal\n",
+            );
+            write_note(
+                &fixture.session,
+                &format!("{ULID}-plan-b.md"),
+                "---\ntitle: Plan\n---\ncopy\n",
+            );
+
+            reconcile(&fixture.locked()).expect("reconcile while locked");
+
+            assert_eq!(
+                other_encrypted_notes(&fixture.session),
+                ["---\ntitle: Plan\n---\ncopy\n"]
+            );
+            assert!(
+                note_files(&fixture.session)
+                    .iter()
+                    .all(|name| name.ends_with(".age")),
+                "{:?}",
+                note_files(&fixture.session)
+            );
         }
 
         #[test]

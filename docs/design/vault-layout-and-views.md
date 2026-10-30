@@ -53,7 +53,11 @@ Two files can carry one ULID when a note file is copied by hand. The scan keeps
 one of them, the one with the shorter file name, then the one first in byte
 order, and skips every other with a warning naming the one it kept (ADR 0067).
 Everything that works from the scan, links included, sees the kept file alone;
-a full ULID given as a selector still matches all of them.
+a full ULID given as a selector still matches all of them. `reconcile`, and the
+realignment after an edit or a `write`, give each skipped copy a ULID of its
+own: the same time part, so its creation date stays, and a remainder derived
+from the old ULID and the copy's file name, so every machine syncing the vault
+computes the same one.
 
 The one file an encrypted vault does not ignore is a plaintext `.md`: it warns,
 naming `reconcile`, which encrypts such a file in place. A stray `.age` file in

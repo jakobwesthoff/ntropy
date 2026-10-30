@@ -54,6 +54,14 @@ and this project adheres to
   keeps it; before, they went to whichever file was read first. A full ULID
   passed to `edit` or `delete` still matches both files, and `new`, `today`
   and `write` report the copy, which their view refresh leaves out.
+- `reconcile`, and the filename realignment after `edit`, `new`, `today` and
+  `write`, give such a copy a ULID of its own. The new ULID keeps the
+  original's time, so the note keeps its creation date, and every machine
+  syncing the vault computes the same one. Each change is reported as
+  `reassigned <old> -> <new>, its id stays with <keeper>`. In an encrypted
+  vault, `reconcile` does the same for a plaintext note whose ULID is already
+  taken, then encrypts it; before, such a note stayed unencrypted with a
+  warning.
 - `reconcile`, and the filename realignment after an edit or a `write`, no
   longer rename a note over an existing file. Two files sharing a ULID and a
   title, such as a note copied by hand, could be renamed to one name, and the

@@ -6,8 +6,10 @@ Date: 2026-10-30
 
 Accepted
 
-Amends [ADR 0019](0019-scan-robustness-and-resource-tolerance.md), which
-gains a reason to skip a file.
+Amends [ADR 0004](0004-note-identity-and-filename-strategy.md), under which
+a note's ULID never changed after creation, and
+[ADR 0019](0019-scan-robustness-and-resource-tolerance.md), which gains a
+reason to skip a file.
 
 ## Context
 
@@ -38,7 +40,35 @@ A full ULID used as a selector still matches the keeper and its copies, so
 `edit <ULID>` and `delete <ULID>` treat it as ambiguous instead of picking one.
 `new`, `today` and `write` report the copies their view refresh left out, as
 `edit` does through the search that picks the note; other scan warnings stay
-with the commands that list notes.
+with the commands that list notes. The warning tells to run `reconcile`.
+
+### Copies get their own ULID
+
+Only commands that already change the vault reassign: `reconcile`, and the
+filename realignment after `edit`, `new`, `today` and `write`. Commands that
+only read the vault warn. Each copy gets a new ULID that keeps the old one's
+48-bit time part, so the note keeps its creation date, and is renamed to the
+canonical name for it; its content does not change, as identity lives in the
+filename alone (ADR 0004). The realignment after an edit handles every file
+carrying the edited note's ULID, whether the edited note is the keeper or a
+copy. `reconcile` prints `reassigned <from> -> <to>, its id stays with
+<keeper>` on stdout and counts the copies in its summary; the realignment
+after an edit or a `write` prints the same line on stderr after `note: `, so
+`write`'s stdout stays the note's path.
+
+The remaining 80 bits are derived, not drawn at random: they are the low bits
+of a 128-bit FNV-1a hash of the old ULID, the copy's file name and a counter,
+which counts up while the result names a ULID a file already claims. Every
+machine that reassigns the same copy of a synced vault then computes the same
+ULID. With a random part, two machines reconciling the same copy before a
+sync tool such as Dropbox or Syncthing caught up would each rename it to a
+different ULID, and the sync would keep both files.
+
+In an encrypted vault, `reconcile` adopts a plaintext note dropped in by hand
+by encrypting it under its ULID. A plaintext note whose ULID an encrypted
+note already has, or that copies another plaintext note, first gets a ULID of
+its own; the encrypted file of the shared ULID keeps it. The ULIDs already
+taken are read from the file names, so this works on a locked vault.
 
 ### No rename replaces a file
 

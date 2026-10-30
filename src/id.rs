@@ -14,6 +14,7 @@
 //! the view layer needs (ADR 0023), rather than leaking `ulid::Ulid` across the
 //! crate.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::str::FromStr;
 
@@ -65,6 +66,49 @@ impl Id {
         let n = n.min(ULID_LEN);
         s[ULID_LEN - n..].to_string()
     }
+
+    /// A new identity for a copy of the note with this one (ADR 0067).
+    ///
+    /// The time part stays, so the copy keeps its creation date. The other
+    /// 80 bits are derived from this identity and the copy's file name rather
+    /// than drawn at random: every machine that reassigns the same copy of a
+    /// synced vault computes the same ULID, so the vault converges instead of
+    /// ending up with the note twice. A counter joins the hash input and
+    /// counts up while the result is `taken` or this identity itself.
+    pub fn reassigned(&self, copy_name: &str, taken: &HashSet<Id>) -> Id {
+        let ulid = self.to_string();
+        (0u64..)
+            .map(|counter| {
+                let hash = fnv1a_128(&[
+                    ulid.as_bytes(),
+                    copy_name.as_bytes(),
+                    &counter.to_be_bytes(),
+                ]);
+                Id(Ulid::from_parts(self.timestamp_ms(), hash & RANDOM_MASK))
+            })
+            .find(|candidate| candidate != self && !taken.contains(candidate))
+            .expect("the counter runs until an identity is free, and a vault holds finitely many")
+    }
+}
+
+/// The bits of a ULID below its 48-bit timestamp.
+const RANDOM_MASK: u128 = (1 << 80) - 1;
+
+/// The 128-bit FNV-1a hash of `parts`, concatenated.
+///
+/// Written out because the value must be the same on every machine and in
+/// every release; `std`'s hashers promise neither. The ULID text is fixed
+/// width and the counter is eight bytes, so concatenating `reassigned`'s
+/// parts cannot make two different inputs read the same.
+fn fnv1a_128(parts: &[&[u8]]) -> u128 {
+    const OFFSET_BASIS: u128 = 0x6c62272e07bb014262b821756295c58d;
+    const PRIME: u128 = 0x0000000001000000000000000000013b;
+    parts
+        .iter()
+        .flat_map(|part| part.iter())
+        .fold(OFFSET_BASIS, |hash, &byte| {
+            (hash ^ u128::from(byte)).wrapping_mul(PRIME)
+        })
 }
 
 impl fmt::Display for Id {
@@ -153,5 +197,63 @@ mod tests {
     fn tail_clamps_to_full_width() {
         let id = Id::generate();
         assert_eq!(id.tail(999), id.to_string());
+    }
+
+    const ULID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+
+    #[test]
+    fn fnv1a_128_matches_the_published_test_values() {
+        // The empty input yields the offset basis; "a" and "foobar" are the
+        // reference vectors of the FNV test suite.
+        assert_eq!(fnv1a_128(&[]), 0x6c62272e07bb014262b821756295c58d);
+        assert_eq!(fnv1a_128(&[b"a"]), 0xd228cb696f1a8caf78912b704e4a8964);
+        assert_eq!(
+            fnv1a_128(&[b"foo", b"bar"]),
+            0x343e1662793c64bf6f0d3597ba446f18
+        );
+    }
+
+    #[test]
+    fn reassigned_keeps_the_time_and_changes_the_rest() {
+        let id: Id = ULID.parse().expect("valid");
+        let new = id.reassigned("plan-b.md", &HashSet::new());
+        assert_ne!(new, id);
+        assert_eq!(new.timestamp_ms(), id.timestamp_ms());
+        assert_eq!(new.to_string()[..10], ULID[..10]);
+    }
+
+    #[test]
+    fn reassigned_is_the_same_for_the_same_copy() {
+        // Every machine that reassigns the same copy must arrive at the same
+        // ULID, so a synced vault converges.
+        let id: Id = ULID.parse().expect("valid");
+        let taken = HashSet::new();
+        assert_eq!(
+            id.reassigned("plan-b.md", &taken),
+            id.reassigned("plan-b.md", &taken)
+        );
+    }
+
+    #[test]
+    fn reassigned_differs_for_different_copy_names() {
+        let id: Id = ULID.parse().expect("valid");
+        let taken = HashSet::new();
+        assert_ne!(
+            id.reassigned("plan-b.md", &taken),
+            id.reassigned("plan copy.md", &taken)
+        );
+    }
+
+    #[test]
+    fn reassigned_avoids_a_taken_id() {
+        let id: Id = ULID.parse().expect("valid");
+        let first = id.reassigned("plan-b.md", &HashSet::new());
+        let taken = HashSet::from([first]);
+
+        let next = id.reassigned("plan-b.md", &taken);
+
+        assert_ne!(next, first);
+        assert_ne!(next, id);
+        assert_eq!(next.timestamp_ms(), id.timestamp_ms());
     }
 }

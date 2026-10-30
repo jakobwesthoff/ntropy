@@ -29,8 +29,9 @@ language for filtering, and materialized symlink views for filesystem browsing.
    `$(ntropy search …)` without `-n` hangs waiting for keys.
 2. **NEVER hand-create files in `all-notes/`.** You would have to invent a
    ULID: a wrong one corrupts note identity, and a file carrying another
-   note's ULID, such as a copy, is skipped by every command with a warning. ntropy allocates
-   the identity, the location and the filename; only the content is yours.
+   note's ULID, such as a copy, is skipped by every command with a warning
+   until `ntropy reconcile` gives it a ULID of its own. ntropy allocates the
+   identity, the location and the filename; only the content is yours.
 3. **Author a note with `new --empty` then `write`.** This is the path to
    prefer whenever you already know what the note should say. `ntropy new
    --empty -p <title>` prints the path of an empty file; `ntropy write <path>`
@@ -122,7 +123,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
 | `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`), `typst` for the emitted document, or `html` for a web page with a `<stem>_files/` directory beside it; the last two need no external tool. Resolves to exactly one note; `-p` prints the artifact path; an existing artifact is refused without `--force`. |
 | `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website: a page per note, a tag tree, a page per view and group, a front page, sidebar, search, works from disk. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `--theme` overrides the site theme. `site theme init <name>` copies the built-in theme into the vault. Warnings name missing files, dangling links, and unresolvable navigation; `--strict` fails on them. Details: [references/site.md](references/site.md). |
-| `ntropy reconcile` | Realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
+| `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
 | `ntropy tags -n` | Every tag with its note count — check this before inventing new tags. |
 | `ntropy info` | Active vault + how it resolved, global default, vault statistics. `-p`/`--print` prints the vault's absolute path alone, for scripts. |

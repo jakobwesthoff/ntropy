@@ -3255,6 +3255,64 @@ fn search_skips_a_copied_note_with_a_warning() {
     assert_eq!(strict.status.code(), Some(1), "{}", rendered(&strict));
 }
 
+/// The files in `all-notes/` whose ULID has `ULID_A`'s time part but is not
+/// `ULID_A`: the new identities of reassigned copies.
+fn reassigned_files(vault: &Path) -> Vec<String> {
+    fs::read_dir(vault.join("all-notes"))
+        .expect("read all-notes")
+        .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+        .filter(|name| name.starts_with(&ULID_A[..10]) && !name.starts_with(ULID_A))
+        .collect()
+}
+
+#[test]
+fn reconcile_reassigns_a_copied_note() {
+    let dir = setup_vault();
+    copied_note(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("reconcile");
+        assert_cmd_snapshot!(cmd);
+    });
+    let notes = dir.path().join("all-notes");
+    assert!(notes.join(format!("{ULID_A}-plan.md")).exists());
+    assert!(!notes.join(format!("{ULID_A}-plan-b.md")).exists());
+    let reassigned = reassigned_files(dir.path());
+    assert_eq!(reassigned.len(), 1, "{reassigned:?}");
+    assert!(reassigned[0].ends_with("-plan-b.md"), "{reassigned:?}");
+}
+
+#[test]
+fn write_into_a_copy_reports_its_new_ulid() {
+    // The copy is the note written, so the path printed is where it lives
+    // under its new ULID, and the reassignment is reported on stderr.
+    let dir = setup_vault();
+    copied_note(dir.path());
+    let copy = dir.path().join(format!("all-notes/{ULID_A}-plan-b.md"));
+    let content = "---\ntitle: Plan B\n---\nwritten\n";
+
+    let out = run_write(dir.path(), &[&copy.to_string_lossy()], content);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let reassigned = reassigned_files(dir.path());
+    assert_eq!(reassigned.len(), 1, "{reassigned:?}");
+    let moved = dir.path().join("all-notes").join(&reassigned[0]);
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim_end(),
+        moved.to_string_lossy()
+    );
+    assert_eq!(fs::read_to_string(&moved).expect("read"), content);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "note: reassigned {ULID_A}-plan-b.md -> {}, its id stays with {ULID_A}-plan.md",
+            reassigned[0]
+        )),
+        "{}",
+        rendered(&out)
+    );
+}
+
 #[test]
 fn delete_by_ulid_refuses_when_two_files_share_it() {
     // A ULID names both files, so it is as ambiguous as a query matching two

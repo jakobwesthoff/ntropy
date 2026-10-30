@@ -71,7 +71,10 @@ Copying a note file by hand copies its ULID, and two files then claim one
 identity. ntropy keeps the one with the shorter file name as the note and
 skips the other with a warning that names the note it kept, so searches,
 views and links see one note per ULID. Passing that ULID to `edit` or `delete`
-still matches both files.
+still matches both files. `ntropy reconcile`, or editing or writing either
+file through ntropy, gives the copy a ULID of its own with the same creation
+time and says so; links that used the shared ULID keep pointing at the note
+that kept it.
 
 ## Linking between notes
 

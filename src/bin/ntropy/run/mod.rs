@@ -564,7 +564,7 @@ fn cmd_write(global: &GlobalArgs, session: &VaultSession, target: &str) -> Resul
     // the caller changed cannot leave the filename and the views behind.
     let realignment =
         reconcile::realign(session, &note.path).context("while realigning the written note")?;
-    output::print_refused_renames(realignment.refused.as_slice());
+    output::print_realignment(&realignment);
     refresh_views(session, CopyWarnings::Print)?;
 
     // The content is written whether or not the rename was refused, so the
@@ -607,6 +607,9 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
     output::print_warnings(&report.warnings);
     output::print_refused_renames(&report.refused);
     print_skipped_views(&report.skipped_views);
+    for reassignment in &report.reassigned {
+        println!("{}", output::reassignment(reassignment));
+    }
     for rename in &report.renamed {
         println!(
             "renamed {} -> {}",
@@ -641,8 +644,9 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
     }
     // A summary always prints, so even a no-op run confirms what happened.
     println!(
-        "Scanned {}, renamed {}, relinked {}, synced {}, ignored {}, unignored {}, {}.",
+        "Scanned {}, reassigned {}, renamed {}, relinked {}, synced {}, ignored {}, unignored {}, {}.",
         plural(report.notes_scanned, "note", "notes"),
+        plural(report.reassigned.len(), "note", "notes"),
         plural(report.renamed.len(), "file", "files"),
         plural(report.links_rewritten.len(), "link", "links"),
         plural(report.views_synced, "view", "views"),
@@ -818,7 +822,7 @@ fn open_and_refresh_from(
     // written still gets its filename and views brought into step.
     let realignment =
         reconcile::realign(session, path).context("while realigning the edited note")?;
-    output::print_refused_renames(realignment.refused.as_slice());
+    output::print_realignment(&realignment);
     refresh_views(session, copy_warnings)?;
     outcome?;
     Ok(())

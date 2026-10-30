@@ -63,7 +63,9 @@ impl ScanWarning {
             .to_string_lossy();
         ScanWarning {
             path: duplicate.note.path.clone(),
-            message: format!("its id is also used by `{keeper}`"),
+            message: format!(
+                "its id is also used by `{keeper}`; run `ntropy reconcile` to give it a new id"
+            ),
         }
     }
 }

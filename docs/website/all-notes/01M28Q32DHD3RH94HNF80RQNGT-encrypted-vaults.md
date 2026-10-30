@@ -37,7 +37,7 @@ ntropy vault passphrase   # change the passphrase; notes are untouched
 
 The vault has one keypair, and only the public half is needed to encrypt. `ntropy new` therefore works on a locked vault: you can jot something down without unlocking anything. So does `ntropy write`, which is what makes an encrypted vault scriptable. Reading, searching and editing need the key, so `ntropy today` (which finds today's note by title) fails on a locked vault with a message naming `ntropy unlock`.
 
-A plaintext `.md` note dropped into an encrypted vault's `all-notes/` by hand is skipped with a warning; `ntropy reconcile` encrypts it in place, and that works on a locked vault too.
+A plaintext `.md` note dropped into an encrypted vault's `all-notes/` by hand is skipped with a warning; `ntropy reconcile` encrypts it in place, and that works on a locked vault too. If its ULID already belongs to an encrypted note, as with a copy of a note, it first gets a ULID of its own with the same creation time, so neither note is overwritten.
 
 ## Scripts and headless machines
 

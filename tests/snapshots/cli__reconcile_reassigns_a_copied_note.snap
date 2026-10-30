@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - reconcile
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+Reconciling vault at [VAULT]...
+reassigned [ULID....................]-plan-b.md -> [ULID....................]-plan-b.md, its id stays with [ULID....................]-plan.md
+ignored /by-tag/
+Scanned 2 notes, reassigned 1 note, renamed 0 files, relinked 0 links, synced 1 view, ignored 1 entry, unignored 0 entries, 0 warnings.
+
+----- stderr -----

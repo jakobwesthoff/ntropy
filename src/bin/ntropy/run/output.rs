@@ -21,7 +21,7 @@ use anyhow::{Context, Result};
 use ntropy::config::ViewConfig;
 use ntropy::note::Note;
 use ntropy::ops::{TagCount, VaultStats};
-use ntropy::reconcile::Rename;
+use ntropy::reconcile::{Realignment, Reassignment, Rename};
 use ntropy::scan::ScanWarning;
 use ntropy::vault::{ResolveSource, Vault};
 use unicode_width::UnicodeWidthStr;
@@ -198,6 +198,28 @@ pub fn print_refused_renames(refused: &[Rename]) {
             file_name(&rename.to)
         );
     }
+}
+
+/// One line telling that a copied note got a ULID of its own, and which file
+/// kept the one it shared (ADR 0067).
+pub fn reassignment(reassignment: &Reassignment) -> String {
+    format!(
+        "reassigned {} -> {}, its id stays with {}",
+        file_name(&reassignment.from),
+        file_name(&reassignment.to),
+        file_name(&reassignment.keeper)
+    )
+}
+
+/// Report on stderr what realigning an edited or written note did besides
+/// renaming it: copies given their own ULID, and a rename it could not make.
+///
+/// stderr, so `write`'s stdout stays the one path a script reads.
+pub fn print_realignment(realignment: &Realignment) {
+    for reassigned in &realignment.reassigned {
+        eprintln!("note: {}", reassignment(reassigned));
+    }
+    print_refused_renames(realignment.refused.as_slice());
 }
 
 /// The file-name component of a path as a lossy string, or the whole path

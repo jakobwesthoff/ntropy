@@ -45,7 +45,8 @@ it, since one stamps content and the other writes none.
 
 **FORBIDDEN: hand-creating files in `all-notes/`.** You would have to invent a
 ULID; a wrong one corrupts note identity, and a file carrying another note's
-ULID, such as a copy, is skipped by every command with a warning.
+ULID, such as a copy, is skipped by every command with a warning until
+`ntropy reconcile` gives it a ULID of its own.
 
 ### What `write` accepts
 

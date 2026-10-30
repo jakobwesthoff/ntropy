@@ -307,12 +307,17 @@ No picker and no prompt, terminal or not: stdin carries the payload, so the
 invocation is scripted by construction. Afterwards the note is realigned and
 views refreshed, exactly as on editor exit, and the resulting path is printed,
 which is how a caller learns the new name when a written title renamed the file.
-When a note file shares its ULID with another file, the views are refreshed
-without the copy, and `new`, `today`, `write` and the editor round trip print
-its scan warning; other scan warnings are left to the commands that list
-notes (ADR 0067). When a file already holds the name the title calls for, the
-note keeps its old name, which is the path printed, and a `warning: did not rename ...` line goes
-to stderr (ADR 0067). The content is written either way; the warning fails the
+
+When other files carry the note's ULID, the realignment first gives each copy
+among them, the note itself or another file, a ULID of its own with the same
+time part, and prints a `note: reassigned <from> -> <to>, its id stays with
+<keeper>` line per copy on stderr; when the written note was the copy, the
+path printed is its new one (ADR 0067). The views are refreshed without any
+copy left, and `new`, `today`, `write` and the editor round trip print that
+copy's scan warning; other scan warnings are left to the commands that list
+notes. When a file already holds the name the title calls for, the note keeps
+its old name, which is the path printed, and a `warning: did not rename ...`
+line goes to stderr. The content is written either way; the warning fails the
 command only under `--strict`.
 
     path=$(ntropy new --empty -p Quarterly review)
@@ -321,10 +326,18 @@ command only under `--strict`.
 
 ### `reconcile`
 
-Realign filenames whose slugs drifted from their titles after out-of-band
-edits, refresh inter-note link targets to the current filenames, sync the
-materialized view trees, and sync the root `.gitignore` to the configured
-views (ADR 0032).
+Give copied notes ULIDs of their own, realign filenames whose slugs drifted
+from their titles after out-of-band edits, refresh inter-note link targets to
+the current filenames, sync the materialized view trees, and sync the root
+`.gitignore` to the configured views (ADR 0032).
+
+A copy is a note file whose ULID another file keeps (ADR 0067). It gets a new
+ULID with the same time part, so its creation date stays, and is renamed to
+the canonical name for it; its content does not change. The remainder of the
+new ULID is derived from the old one and the copy's file name, so two
+machines that reconcile the same synced copy give it the same ULID. Links to
+the shared ULID resolve to the file that keeps it, and the link pass below
+points them at its name.
 
 After renaming, it rewrites stale link targets in note bodies so links keep
 resolving and stay clickable in plain Markdown viewers (ADR 0028); links inside
@@ -336,11 +349,13 @@ ntropy never deletes a directory, so a removed view's directory stays on disk;
 because its ignore entry is gone it becomes visible to git, which the run
 reports so the user can delete it.
 
-It prints a `Reconciling vault at <path>...` line, one `renamed <from> -> <to>`
+It prints a `Reconciling vault at <path>...` line, one `reassigned <from> ->
+<to>, its id stays with <keeper>` line per copy, one `renamed <from> -> <to>`
 line per realignment, one `relinked <from> -> <to> in <file>` line per refreshed
 link, one `ignored <entry>` line per added ignore and a `stopped ignoring ...`
-line per pruned one, and a closing summary of the notes scanned, files renamed,
-links relinked, views synced, ignore entries added and removed, and warnings.
+line per pruned one, and a closing summary of the notes scanned, notes
+reassigned, files renamed, links relinked, views synced, ignore entries added
+and removed, and warnings.
 The summary always prints, so a no-op run is no longer silent.
 
 No realignment replaces an existing file (ADR 0067). When a file already holds

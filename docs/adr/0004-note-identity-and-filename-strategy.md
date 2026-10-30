@@ -6,6 +6,8 @@ Date: 2026-06-24
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0067](0067-duplicate-note-ids.md).
+
 ## Context
 
 A note needs a stable identity that survives title edits so links do not

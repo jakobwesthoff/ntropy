@@ -85,10 +85,14 @@ the problem does not also fail on it.
 Adoption takes only files that already parse as notes — a `<ulid>-<slug>.md`
 name and frontmatter carrying a title. Anything else is left byte-for-byte
 alone and stays a warning, exactly as it would in a plaintext vault, which
-never renames or rewrites a file it cannot parse. A file whose identity is
-already taken by an existing note is refused rather than overwriting it.
-Because encrypting needs only the public recipient, adoption runs on a locked
-vault too, which is where a stray plaintext note is most likely to appear.
+never renames or rewrites a file it cannot parse. A plaintext note whose ULID
+an encrypted note already has, or that copies another plaintext note, first
+gets a ULID of its own, the original's time with a new remainder, and is then
+encrypted under it; the encrypted file of the shared ULID keeps it
+(ADR 0067). Nothing is overwritten. The ULIDs already taken come from the
+file names, and encrypting needs only the public recipient, so adoption runs
+on a locked vault too, which is where a stray plaintext note is most likely
+to appear.
 
 ## Locking model
 

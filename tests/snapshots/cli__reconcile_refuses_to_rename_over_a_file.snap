@@ -13,7 +13,7 @@ exit_code: 0
 ----- stdout -----
 Reconciling vault at [VAULT]...
 ignored /by-tag/
-Scanned 1 note, renamed 0 files, relinked 0 links, synced 1 view, ignored 1 entry, unignored 0 entries, 2 warnings.
+Scanned 1 note, reassigned 0 notes, renamed 0 files, relinked 0 links, synced 1 view, ignored 1 entry, unignored 0 entries, 2 warnings.
 
 ----- stderr -----
 warning: skipped `[ULID....................]-plan.md`: the note has no frontmatter block
