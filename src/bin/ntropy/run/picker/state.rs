@@ -197,8 +197,15 @@ impl<T> PickerState<T> {
 
     /// Set the viewport height (e.g. after a terminal resize), keeping the
     /// selection visible.
+    ///
+    /// A taller viewport could show matches above an offset chosen for the
+    /// old height while blank lines pad its top, so the offset comes down to
+    /// the last one that still fills the viewport.
     pub fn set_height(&mut self, height: usize) {
         self.height = height.max(1);
+        self.offset = self
+            .offset
+            .min(self.scored.len().saturating_sub(self.height));
         self.scroll_to_selection();
     }
 
@@ -514,6 +521,37 @@ mod tests {
         5/5
         >
         ");
+    }
+
+    /// Twenty rows named `r0` to `r19`, best first.
+    fn twenty(height: usize) -> PickerState<String> {
+        let names: Vec<String> = (0..20).map(|i| format!("r{i}")).collect();
+        let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+        state(&refs, height)
+    }
+
+    #[test]
+    fn growing_the_viewport_fills_it_with_matches() {
+        let mut s = twenty(5);
+        for _ in 0..19 {
+            s.select_worse();
+        }
+        assert_eq!((s.selected, s.offset), (19, 15));
+        s.set_height(10);
+        assert_eq!(s.offset, 10);
+        assert!(s.offset <= s.selected && s.selected < s.offset + 10);
+        assert!(s.list_lines().iter().all(Option::is_some));
+    }
+
+    #[test]
+    fn shrinking_the_viewport_keeps_the_selection_visible() {
+        let mut s = twenty(10);
+        for _ in 0..19 {
+            s.select_worse();
+        }
+        assert_eq!((s.selected, s.offset), (19, 10));
+        s.set_height(5);
+        assert_eq!(s.offset, 15);
     }
 
     #[test]

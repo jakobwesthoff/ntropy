@@ -92,6 +92,8 @@ and this project adheres to
 - A query wider than the terminal no longer breaks the picker's frame. The
   prompt shows the end of the query, where you type, and the cursor stays
   on the screen.
+- Growing the terminal while the picker shows the end of a long list no
+  longer leaves blank rows above the list. The list fills the new rows.
 
 ## v2.2.0 - 2026-10-10
 
