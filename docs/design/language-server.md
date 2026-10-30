@@ -73,7 +73,7 @@ it raw.
 
 ### Tags
 
-Completion offers the vault's existing normalized tag set (ADR 0023), fuzzy
+Completion offers the vault's existing normalized tag set (ADR 0023, ADR 0077), fuzzy
 filtered by the partial and slash-hierarchy aware (typing `programming/` narrows
 to children). The completion point is found without a YAML parser, by locating
 the cursor inside the frontmatter `tags` value in either authored form:

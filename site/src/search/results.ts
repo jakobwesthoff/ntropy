@@ -205,7 +205,7 @@ export function search(
   const pageHit = (page: SearchPage): Hit => ({
     kind: page.kind,
     href: `${prefix}${page.page}`,
-    title: mark(page.value, found),
+    title: mark(page.values.join(", "), found),
     section: page.section,
     count: page.count,
   });

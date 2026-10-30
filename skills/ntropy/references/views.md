@@ -35,8 +35,11 @@ value:
   holds; it appears in several leaves at once.
 - A `/` inside a value nests subdirectories: `tags: [programming/rust]` puts
   the note under `by-tag/programming/rust/`.
-- Grouping values are **normalized** (lowercased, slugified), so `In Progress`
-  and `in-progress` land in the same `in-progress/` directory.
+- Grouping values are **normalized** (lowercased; each part of a value becomes
+  letters, digits and dashes), so `In Progress` and `in-progress` land in the
+  same `in-progress/` directory and `milestone/0.13` lands in
+  `milestone/0-13/`. Values that differ only in punctuation (`node.js`,
+  `node-js`) share one directory. A value of only punctuation gets none.
 - A note with **no value** for the field is simply absent from that view.
 
 Each leaf is a relative symlink named `<date>-<slug>.md` (creation date derived

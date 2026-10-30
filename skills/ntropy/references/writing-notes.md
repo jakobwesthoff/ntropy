@@ -159,8 +159,9 @@ Body is ordinary Markdown.
   text, `1.50` as `1.5`; quote a tag whose spelling matters). A `/` inside a tag denotes
   hierarchy: `area/roadmap` is one tag with two levels, understood by both
   queries and views. Tags are lowercase-normalized, so `Rust` and `rust` are
-  the same tag. Never nest YAML structures inside `tags`: a list or mapping entry
-  makes the note malformed.
+  the same tag; punctuation stays (`milestone/0.13`, `c++`, `node.js`). Never
+  nest YAML structures inside `tags`: a list or mapping entry makes the note
+  malformed.
 - **Every other field is free** (`status`, `project`, `author`, anything) and
   becomes queryable and view-groupable just by existing. Unknown fields are
   preserved untouched when ntropy rewrites a note.

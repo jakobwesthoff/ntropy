@@ -510,4 +510,16 @@ mod tests {
             Err(FrontmatterError::Yaml(_))
         ));
     }
+
+    #[test]
+    fn parse_keeps_punctuation_in_tags() {
+        let fm = parse_block("title: T\ntags: [milestone/0.13, C++, Node.JS]\n").expect("parse");
+        assert_eq!(fm.tags, vec!["milestone/0.13", "c++", "node.js"]);
+    }
+
+    #[test]
+    fn parse_keeps_tags_that_differ_only_in_punctuation_apart() {
+        let fm = parse_block("title: T\ntags: [node.js, node-js]\n").expect("parse");
+        assert_eq!(fm.tags, vec!["node.js", "node-js"]);
+    }
 }

@@ -12,6 +12,7 @@
 
 use crate::render::html::writer::escape;
 use crate::render::markdown::Heading;
+use crate::text::tag;
 
 use super::model::{Entry, Group, Model, NavItem};
 
@@ -433,11 +434,18 @@ pub fn listing(model: &Model, notes: &[usize], prefix: &str) -> String {
         if !note.tags.is_empty() {
             out.push_str("<span class=\"note-row-tags\">");
             for tag in &note.tags {
-                out.push_str(&format!(
-                    "<a class=\"tag\" href=\"{}\">{TAG_ICON}{}</a>",
-                    escape(&format!("{prefix}tags/{tag}/index.html")),
-                    escape(tag)
-                ));
+                // A tag with no path form has no page to link to.
+                match tag::path(tag).as_str() {
+                    "" => out.push_str(&format!(
+                        "<span class=\"tag\">{TAG_ICON}{}</span>",
+                        escape(tag)
+                    )),
+                    path => out.push_str(&format!(
+                        "<a class=\"tag\" href=\"{}\">{TAG_ICON}{}</a>",
+                        escape(&format!("{prefix}tags/{path}/index.html")),
+                        escape(tag)
+                    )),
+                }
             }
             out.push_str("</span>");
         }
@@ -886,5 +894,31 @@ mod tests {
             "{out}"
         );
         assert!(!out.contains("Newest notes"), "{out}");
+    }
+
+    #[test]
+    fn a_tag_row_links_to_the_path_form_or_not_at_all() {
+        let notes = [note(A, "Odd", "tags: [node.js, \"...\"]\n")];
+        let model = Model::build(&notes, &[], &SiteOptions::default(), "V").expect("model");
+        let out = listing(&model, &[0], "../");
+        assert!(
+            out.contains("<a class=\"tag\" href=\"../tags/node-js/index.html\">"),
+            "{out}"
+        );
+        assert!(
+            out.contains(&format!("<span class=\"tag\">{TAG_ICON}...</span>")),
+            "{out}"
+        );
+    }
+
+    #[test]
+    fn a_merged_group_is_labelled_with_every_member_in_the_sidebar() {
+        let notes = [
+            note(A, "Sharp", "tags: [\"c#\"]\n"),
+            note(B, "Plus", "tags: [\"c++\"]\n"),
+        ];
+        let model = Model::build(&notes, &[], &SiteOptions::default(), "V").expect("model");
+        let out = sidebar(&model, "", "index.html");
+        assert!(out.contains(">c#, c++<"), "{out}");
     }
 }

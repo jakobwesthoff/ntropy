@@ -10,7 +10,7 @@
 //! tag). Matching a query tag against a note tag is a contiguous-segment-run
 //! search, which is the semantics the `tag:` query predicate evaluates.
 
-use super::slug::normalize_segment;
+use super::slug::{normalize_segment, normalize_tag_segment};
 
 /// Split a tag into its normalized, non-empty segments.
 ///
@@ -20,9 +20,30 @@ use super::slug::normalize_segment;
 /// built on.
 pub fn segments(tag: &str) -> Vec<String> {
     tag.split('/')
-        .map(normalize_segment)
+        .map(normalize_tag_segment)
         .filter(|seg| !seg.is_empty())
         .collect()
+}
+
+/// The tag's segments as they appear in a filesystem path or a URL.
+///
+/// Each tag segment goes through the slug normalizer, which replaces every
+/// character outside `[a-z0-9-]` with `-`, and segments that come out empty
+/// (`.`, `..`, `+`) are dropped. The result holds only `[a-z0-9-]`, so it
+/// never contains `.`, `..`, a leading dot or a character that is invalid on a
+/// filesystem or special in a URL. Tags that differ only in punctuation
+/// (`node.js`, `node-js`) share one path form (ADR 0077).
+pub fn path_segments(tag: &str) -> Vec<String> {
+    segments(tag)
+        .iter()
+        .map(|segment| normalize_segment(segment))
+        .filter(|segment| !segment.is_empty())
+        .collect()
+}
+
+/// [`path_segments`] joined with `/`; empty when no segment survives.
+pub fn path(tag: &str) -> String {
+    path_segments(tag).join("/")
 }
 
 /// Normalize a tag to its canonical `a/b/c` string form.
@@ -193,5 +214,103 @@ mod tests {
     fn empty_query_matches_nothing() {
         assert!(!matches("", "anything"));
         assert!(!matches("///", "anything"));
+    }
+
+    #[test]
+    fn a_dot_stays_in_a_segment() {
+        assert_eq!(segments("milestone/0.13"), vec!["milestone", "0.13"]);
+    }
+
+    #[test]
+    fn plus_signs_stay_in_a_segment() {
+        assert_eq!(normalize("C++"), "c++");
+    }
+
+    #[test]
+    fn a_hash_stays_in_a_segment() {
+        assert_eq!(normalize("C#"), "c#");
+    }
+
+    #[test]
+    fn a_dotted_name_is_lowercased_and_kept() {
+        assert_eq!(normalize("Node.JS"), "node.js");
+    }
+
+    #[test]
+    fn a_comma_stays_in_a_segment() {
+        assert_eq!(normalize("a,b"), "a,b");
+    }
+
+    #[test]
+    fn dot_segments_are_kept_as_tag_segments() {
+        assert_eq!(segments("../x"), vec!["..", "x"]);
+    }
+
+    #[test]
+    fn control_characters_are_dropped() {
+        assert_eq!(normalize("a\u{1b}b"), "ab");
+        assert_eq!(normalize("a\u{7f}b"), "ab");
+    }
+
+    #[test]
+    fn whitespace_in_a_tag_becomes_a_dash() {
+        assert_eq!(normalize("my tag.v2"), "my-tag.v2");
+    }
+
+    #[test]
+    fn a_dotted_query_does_not_match_the_undotted_tag() {
+        assert!(!matches("013", "milestone/0.13"));
+    }
+
+    #[test]
+    fn a_dotted_query_matches_the_dotted_tag() {
+        assert!(matches("0.13", "milestone/0.13"));
+    }
+
+    #[test]
+    fn suggest_completes_a_dotted_partial() {
+        let all = tags(&["milestone/0.13", "milestone/013"]);
+        assert_eq!(suggest("milestone/0.1", &all), tags(&["milestone/0.13"]));
+    }
+
+    #[test]
+    fn suggest_does_not_offer_a_dotted_child_for_a_top_level_partial() {
+        assert!(suggest("0.1", &tags(&["milestone/0.13"])).is_empty());
+    }
+
+    #[test]
+    fn path_slugs_each_segment() {
+        assert_eq!(path("milestone/0.13"), "milestone/0-13");
+    }
+
+    #[test]
+    fn path_replaces_punctuation_with_a_dash() {
+        assert_eq!(path("Node.JS"), "node-js");
+        assert_eq!(path("a%2Fb"), "a-2fb");
+    }
+
+    #[test]
+    fn path_collapses_tags_that_differ_only_in_punctuation() {
+        assert_eq!(path("c++"), "c");
+        assert_eq!(path("c#"), "c");
+        assert_eq!(path("0.13"), path("0-13"));
+    }
+
+    #[test]
+    fn path_never_holds_a_dot_segment() {
+        assert_eq!(path("../etc"), "etc");
+        assert_eq!(path("a/./b"), "a/b");
+        assert_eq!(path(".hidden"), "hidden");
+    }
+
+    #[test]
+    fn path_is_empty_for_a_tag_of_only_punctuation() {
+        assert_eq!(path("..."), "");
+        assert_eq!(path("+/#"), "");
+    }
+
+    #[test]
+    fn path_segments_split_the_path() {
+        assert_eq!(path_segments("a.b/c"), vec!["a-b", "c"]);
     }
 }

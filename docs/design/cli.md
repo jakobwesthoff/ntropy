@@ -29,7 +29,8 @@ and the query DSL in [query-and-search.md](query-and-search.md).
   invocation: the note table is `id date title tags path`,
   one note per line, led by an uppercase column header, columns padded to their
   widest cell in Unicode display width with the last column unpadded (tags
-  comma-joined; `tail -n +2` drops the header). All plain tables carry a header.
+  comma-joined, and a tag may itself hold a comma; `tail -n +2` drops the
+  header). All plain tables carry a header.
   The tab-separated `awk`/`cut` positional format is retired (ADR 0033);
   structured JSON output for machine consumers is planned. Where a note is named
   to a human (delete prompts/confirmations, ambiguous-match lists) it is shown
@@ -407,7 +408,7 @@ edit` in v1; editing a view is remove + add.
 - `view list` — list configured views as the aligned `NAME FIELD` table.
 - `view add <name> --field <field>` — define a new view and materialize it (the
   view's directory is its name; grouping values are always normalized, ADR
-  0009/0023, so there is no case flag). The name must be a valid view name
+  0009/0023/0077, so there is no case flag). The name must be a valid view name
   (ADR 0064, rules in [vault-layout-and-views.md](vault-layout-and-views.md))
   and not already in use; an invalid name is refused with the nearest valid
   one as a suggestion. Adding a view also records its directory in

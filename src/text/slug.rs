@@ -4,11 +4,11 @@
 
 //! Title-to-slug normalization (ADR 0023).
 //!
-//! The slug is the lossy, filename-safe form of a note's title. The same
-//! per-segment normalization is reused for tag segments and view grouping
-//! values (ADR 0009), so the core pipeline is factored out as
-//! [`normalize_segment`] and [`slugify`] only adds the `untitled` fallback for
-//! the filename case.
+//! The slug is the lossy, filename-safe form of a note's title. Tag segments
+//! and view grouping values (ADR 0009) run the same pipeline but keep
+//! punctuation (ADR 0077): [`normalize_segment`] is the slug form,
+//! [`normalize_tag_segment`] the tag form, and [`slugify`] adds the `untitled`
+//! fallback for the filename case.
 
 /// The slug length cap, applied at a `-` boundary (ADR 0023 step 6).
 pub(crate) const MAX_SLUG_LEN: usize = 72;
@@ -30,12 +30,35 @@ pub fn slugify(title: &str) -> String {
     }
 }
 
-/// Run the normalization pipeline, returning the possibly-empty result.
+/// Run the slug pipeline, returning the possibly-empty result.
 ///
-/// This is steps 1-6 of ADR 0023 without the `untitled` fallback, because tag
-/// segments and view grouping keys must be able to come back empty (an empty
-/// segment is dropped by the caller rather than turned into `untitled`).
+/// This is steps 1-6 of ADR 0023 without the `untitled` fallback, because view
+/// names and path segments must be able to come back empty (an empty segment
+/// is dropped by the caller rather than turned into `untitled`).
 pub fn normalize_segment(input: &str) -> String {
+    run_pipeline(input, Punctuation::Replace)
+}
+
+/// Run the pipeline for one segment of a tag, keeping its punctuation.
+///
+/// Identical to [`normalize_segment`] except that step 4 keeps every printable
+/// ASCII character (`0.13`, `c++` and `node.js` stay as written) and drops
+/// control characters. A `/` is dropped as well, because it separates the
+/// segments of a tag and never belongs inside one.
+pub fn normalize_tag_segment(input: &str) -> String {
+    run_pipeline(input, Punctuation::Keep)
+}
+
+/// What step 4 does with an ASCII character outside `[a-z0-9-]`.
+#[derive(Clone, Copy)]
+enum Punctuation {
+    /// Turn it into `-` (the slug form).
+    Replace,
+    /// Keep printable characters, drop the rest (the tag form).
+    Keep,
+}
+
+fn run_pipeline(input: &str, punctuation: Punctuation) -> String {
     // Step 1: German-aware (and best-effort Latin) ASCII transliteration.
     let transliterated: String = input.chars().map(transliterate).collect();
 
@@ -59,17 +82,21 @@ pub fn normalize_segment(input: &str) -> String {
         }
     }
 
-    // Step 4: replace every ASCII character outside `[a-z0-9-]` with `-`.
-    // Replacing instead of dropping keeps `node.js` apart from `nodejs` and
-    // stops `a&b` from fusing into `ab`; step 5 collapses the resulting runs.
-    // Non-ASCII characters never get here: step 1 already mapped or dropped them.
+    // Step 4: handle every ASCII character outside `[a-z0-9-]`. The slug form
+    // replaces it with `-`, which keeps `node.js` apart from `nodejs` and stops
+    // `a&b` from fusing into `ab`; step 5 collapses the resulting runs. The tag
+    // form keeps what the author typed. Non-ASCII characters never get here:
+    // step 1 already mapped or dropped them.
     let filtered: String = spaced
         .chars()
-        .map(|ch| {
+        .filter_map(|ch| {
             if ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' {
-                ch
-            } else {
-                '-'
+                return Some(ch);
+            }
+            match punctuation {
+                Punctuation::Replace => Some('-'),
+                Punctuation::Keep if ch.is_ascii_graphic() && ch != '/' => Some(ch),
+                Punctuation::Keep => None,
             }
         })
         .collect();
@@ -264,5 +291,21 @@ mod tests {
         // Unlike `slugify`, the segment form does not substitute `untitled`.
         assert_eq!(normalize_segment(""), "");
         assert_eq!(normalize_segment("///"), "");
+    }
+
+    #[test]
+    fn the_tag_form_keeps_punctuation_the_slug_form_replaces() {
+        assert_eq!(normalize_tag_segment("Node.js & C++"), "node.js-&-c++");
+        assert_eq!(normalize_segment("Node.js & C++"), "node-js-c");
+    }
+
+    #[test]
+    fn the_tag_form_drops_slashes_and_controls() {
+        assert_eq!(normalize_tag_segment("a/b\u{1b}c"), "abc");
+    }
+
+    #[test]
+    fn the_tag_form_still_transliterates_and_drops_unmapped_non_ascii() {
+        assert_eq!(normalize_tag_segment("Über 日本 v1.0"), "ueber-v1.0");
     }
 }

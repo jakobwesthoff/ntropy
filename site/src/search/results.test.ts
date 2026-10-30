@@ -41,6 +41,7 @@ const page = (
   section,
   field,
   value,
+  values: [value],
   label: value.split("/").pop() ?? value,
   page: `${section === "tags" ? "tags" : `views/${section}`}/${value}/index.html`,
   count,

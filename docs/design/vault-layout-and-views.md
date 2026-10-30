@@ -137,10 +137,16 @@ frontmatter field. The same mechanism serves every axis:
   note appears in several leaves.
 - A value containing `/` nests into subdirectories.
 - A note with no value for the field is skipped.
-- Grouping values are always lowercased and slugified (same normalization as
-  tags, ADR 0023), so a value maps to one canonical directory regardless of
+- Grouping values are always normalized like tags (ADR 0023, ADR 0077):
+  lowercased, transliterated, punctuation kept. A value's directory is the
+  slug of each of its `/` segments, so `milestone/0.13` is
+  `milestone/0-13` and a value maps to one canonical directory regardless of
   casing. Not configurable: case-insensitive filesystems (default APFS on
   macOS) cannot hold `Done/` and `done/` distinctly.
+- Values with the same directory (`node.js` and `node-js`) share it. It holds
+  the leaves of all their notes, and a note appears once. A value with no
+  segment left after the slug (`...`) has no directory, and its notes are
+  absent from the view.
 
 So `by-tag` is the mechanism applied to `tags`, `by-status` to `status`, and so
 on. Views are configuration entries pairing an output directory with a field,
@@ -198,7 +204,7 @@ Relative links keep the entire vault relocatable: moving or copying the vault
 does not break them. The `../` depth is computed per link from its position in
 the view tree. When two notes would collide on `<date>-<slug>` within one
 group, a short ULID-derived tail disambiguates them. The leaf names of one
-group directory are unique without regard to case: when a tailed name equals
+group directory, merged ones included, are unique without regard to case: when a tailed name equals
 another note's name, or differs from it only in case, which a
 case-insensitive filesystem such as default APFS stores as one entry, the
 tails of both grow, a plain name gaining one, until no two names match

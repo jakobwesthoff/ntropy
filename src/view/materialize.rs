@@ -2,14 +2,16 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Materializing one view as a symlink tree (ADRs 0008, 0009, 0023).
+//! Materializing one view as a symlink tree (ADRs 0008, 0009, 0023, 0077).
 //!
 //! A view groups notes by one frontmatter field. Each grouping value (always
-//! normalized) becomes a directory path under the view, a `/` in the value
-//! nests further, and a list-valued field places a note under each of its
-//! values. The leaf in each group is a relative symlink back into `all-notes/`,
-//! named `<date>-<slug>.md` with collisions disambiguated (see [`super::leaf`]).
-//! A note with no value for the field is skipped.
+//! normalized) becomes a directory path under the view: the slug of each of
+//! its `/`-separated segments, so `milestone/0.13` is `milestone/0-13`, and a
+//! list-valued field places a note under each of its values. Values whose
+//! paths are equal share one directory. The leaf in each group is a relative
+//! symlink back into `all-notes/`, named `<date>-<slug>.md` with collisions
+//! disambiguated (see [`super::leaf`]). A note with no value for the field, or
+//! only values that have no path segment, is skipped.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -94,19 +96,30 @@ fn desired_links(
     view: &ViewDef,
     notes: &[Note],
 ) -> Result<BTreeMap<PathBuf, PathBuf>> {
-    // Group notes by normalized field value. A `BTreeMap` keeps the projection
-    // deterministic, which matters for reproducible disambiguation and tests.
+    // Group notes by the directory their value maps to. Values that differ only
+    // in punctuation (`node.js`, `node-js`) share a directory and are merged
+    // into one group, and a value with no usable path segment (`...`) has no
+    // directory at all. A `BTreeMap` keeps the projection deterministic, which
+    // matters for reproducible disambiguation and tests.
     let mut groups: BTreeMap<String, Vec<&Note>> = BTreeMap::new();
     for note in notes {
         for value in group_values(note, &view.field) {
-            groups.entry(value).or_default().push(note);
+            let path = tag::path(&value);
+            if path.is_empty() {
+                continue;
+            }
+            let members = groups.entry(path).or_default();
+            // A note carrying two values on one path still gets a single leaf.
+            if !members.iter().any(|member| member.id == note.id) {
+                members.push(note);
+            }
         }
     }
 
     let mut desired = BTreeMap::new();
-    for (value, group_notes) in groups {
-        // A value's `/` segments nest into subdirectories.
-        let leaf_dir = view_dir.join(&value);
+    for (path, group_notes) in groups {
+        // The path's `/` segments nest into subdirectories.
+        let leaf_dir = view_dir.join(&path);
 
         let mut inputs = Vec::with_capacity(group_notes.len());
         for note in &group_notes {
@@ -253,9 +266,15 @@ mod tests {
     }
 
     #[test]
-    fn unnormalizable_value_is_dropped() {
-        let n = note("01ARZ3NDEKTSV4RRFFQ69G5FAV", "title: T\nstatus: \"!!!\"\n");
+    fn a_value_without_any_segment_is_dropped() {
+        let n = note("01ARZ3NDEKTSV4RRFFQ69G5FAV", "title: T\nstatus: \"///\"\n");
         assert!(group_values(&n, "status").is_empty());
+    }
+
+    #[test]
+    fn punctuation_in_a_field_value_is_kept() {
+        let n = note("01ARZ3NDEKTSV4RRFFQ69G5FAV", "title: T\nversion: \"1.5\"\n");
+        assert_eq!(group_values(&n, "version"), vec!["1.5"]);
     }
 }
 
@@ -680,5 +699,170 @@ mod sync_tests {
             3,
             "every note has a leaf"
         );
+    }
+
+    /// The directory names under the `by-tag` view, as paths relative to it.
+    fn group_dirs(session: &VaultSession) -> Vec<String> {
+        fn walk(dir: &Path, base: &Path, out: &mut Vec<String>) {
+            for entry in std::fs::read_dir(dir).expect("read dir") {
+                let path = entry.expect("entry").path();
+                if path.is_dir() {
+                    out.push(
+                        path.strip_prefix(base)
+                            .expect("below the view")
+                            .to_string_lossy()
+                            .into_owned(),
+                    );
+                    walk(&path, base, out);
+                }
+            }
+        }
+        let base = session.root().join("by-tag");
+        let mut out = Vec::new();
+        walk(&base, &base, &mut out);
+        out.sort();
+        out
+    }
+
+    #[test]
+    fn a_dotted_tag_gets_a_dashed_directory() {
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        write_note(
+            &session,
+            &format!("{ULID_A}-n.md"),
+            "---\ntitle: Note\ntags: [milestone/0.13]\n---\nx\n",
+        );
+
+        sync(&session);
+
+        assert_eq!(group_dirs(&session), ["milestone", "milestone/0-13"]);
+    }
+
+    #[test]
+    fn a_tag_cannot_climb_out_of_the_view() {
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        write_note(
+            &session,
+            &format!("{ULID_A}-n.md"),
+            "---\ntitle: Note\ntags: [\"../escape\"]\n---\nx\n",
+        );
+
+        sync(&session);
+
+        assert_eq!(group_dirs(&session), ["escape"]);
+        assert!(!session.root().join("escape").exists());
+    }
+
+    #[test]
+    fn a_tag_of_only_punctuation_gets_no_directory() {
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        write_note(
+            &session,
+            &format!("{ULID_A}-n.md"),
+            "---\ntitle: Note\ntags: [\"...\"]\n---\nx\n",
+        );
+
+        sync(&session);
+
+        assert!(group_dirs(&session).is_empty());
+    }
+
+    #[test]
+    fn tags_sharing_a_path_share_one_directory() {
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        write_note(
+            &session,
+            &format!("{ULID_A}-a.md"),
+            "---\ntitle: Alpha\ntags: [node.js]\n---\nx\n",
+        );
+        write_note(
+            &session,
+            &format!("{ULID_B}-b.md"),
+            "---\ntitle: Beta\ntags: [node-js]\n---\nx\n",
+        );
+
+        sync(&session);
+
+        assert_eq!(group_dirs(&session), ["node-js"]);
+        let group = group_dir(&session, "node-js");
+        leaf_containing(&group, "alpha");
+        leaf_containing(&group, "beta");
+    }
+
+    #[test]
+    fn a_note_with_two_tags_on_one_path_has_one_leaf() {
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        write_note(
+            &session,
+            &format!("{ULID_A}-a.md"),
+            "---\ntitle: Alpha\ntags: [node.js, node-js]\n---\nx\n",
+        );
+
+        sync(&session);
+
+        only_entry(&group_dir(&session, "node-js"));
+    }
+
+    #[test]
+    fn notes_with_equal_names_in_tags_sharing_a_path_get_ulid_tails() {
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        write_note(
+            &session,
+            &format!("{ULID_A}-a.md"),
+            "---\ntitle: Same\ntags: [node.js]\n---\nx\n",
+        );
+        write_note(
+            &session,
+            &format!("{ULID_B}-b.md"),
+            "---\ntitle: Same\ntags: [node-js]\n---\nx\n",
+        );
+
+        sync(&session);
+
+        let entries = std::fs::read_dir(group_dir(&session, "node-js"))
+            .expect("read dir")
+            .count();
+        assert_eq!(entries, 2, "both notes keep a leaf");
+    }
+
+    #[test]
+    fn the_directory_of_an_older_dropping_rule_is_replaced() {
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        write_note(
+            &session,
+            &format!("{ULID_A}-a.md"),
+            "---\ntitle: Alpha\ntags: [milestone/0.13]\n---\nx\n",
+        );
+        let stale = session.root().join("by-tag/milestone/013");
+        std::fs::create_dir_all(&stale).expect("stale group");
+        std::os::unix::fs::symlink(
+            format!("../../../all-notes/{ULID_A}-a.md"),
+            stale.join("2016-07-31-alpha.md"),
+        )
+        .expect("stale link");
+
+        sync(&session);
+
+        assert_eq!(group_dirs(&session), ["milestone", "milestone/0-13"]);
+    }
+
+    #[test]
+    fn a_field_value_with_a_dot_groups_under_a_dashed_directory() {
+        let (_g, session) = vault_with_views(&[("by-version", "version")]);
+        write_note(
+            &session,
+            &format!("{ULID_A}-a.md"),
+            "---\ntitle: Alpha\nversion: \"1.5\"\n---\nx\n",
+        );
+        let view = ViewDef::parse("by-version", "version").expect("valid view name");
+        let scan = scan::scan_notes_dir(
+            &session.layout().all_notes(),
+            &crate::cipher::PlaintextCipher,
+        )
+        .expect("scan");
+
+        sync_view(&session, &view, &scan.notes).expect("sync view");
+
+        assert!(session.root().join("by-version/1-5").is_dir());
     }
 }

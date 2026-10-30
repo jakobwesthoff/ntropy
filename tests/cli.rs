@@ -4479,6 +4479,65 @@ fn a_view_leaf_is_named_after_the_replaced_slug() {
     assert!(leaves[0].ends_with("-node-js.md"), "{leaves:?}");
 }
 
+/// A vault with one note tagged `[concurrency, milestone/0.13]`.
+fn vault_with_a_version_tag() -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "plan",
+        "---\ntitle: Plan\ntags: [concurrency, milestone/0.13]\n---\nbody\n",
+    );
+    dir
+}
+
+#[test]
+fn tags_lists_a_dotted_tag_as_written() {
+    let dir = vault_with_a_version_tag();
+    let listing = stdout_of(ntropy(dir.path()).args(["-n", "tags"]));
+    assert!(listing.contains("milestone/0.13"), "{listing}");
+    assert!(!listing.contains("milestone/013"), "{listing}");
+}
+
+#[test]
+fn a_dotted_tag_is_found_by_its_quoted_query() {
+    let dir = vault_with_a_version_tag();
+    let found =
+        stdout_of(ntropy(dir.path()).args(["-n", "search", "-p", "tag:\"milestone/0.13\""]));
+    assert!(found.contains("plan.md"), "{found}");
+}
+
+#[test]
+fn the_stripped_form_of_a_dotted_tag_finds_nothing() {
+    let dir = vault_with_a_version_tag();
+    let output = ntropy(dir.path())
+        .args(["-n", "search", "-p", "tag:milestone/013"])
+        .output()
+        .expect("run ntropy");
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("No notes matched"));
+}
+
+#[test]
+fn a_dotted_tag_gets_a_dashed_view_directory() {
+    let dir = vault_with_a_version_tag();
+    stdout_of(ntropy(dir.path()).args(["-n", "reconcile"]));
+    assert!(dir.path().join("by-tag/milestone/0-13").is_dir());
+    assert!(!dir.path().join("by-tag/milestone/0.13").exists());
+}
+
+#[test]
+fn a_site_export_writes_the_dashed_tag_page() {
+    let dir = vault_with_a_version_tag();
+    let output = site(dir.path(), &["-o", "out"]);
+    assert!(output.status.success());
+    assert!(
+        dir.path()
+            .join("out/tags/milestone/0-13/index.html")
+            .exists()
+    );
+}
+
 /// A note titled `Plan` under a drifted name, and a file without frontmatter
 /// holding the name `<ULID_A>-plan.md` the note would be renamed to. The scan
 /// skips that file, so nothing but the rename itself stands in the way.

@@ -177,13 +177,17 @@ There are no backlinks.
 
 **Tag pages.** `tags/index.html` is the tag tree. A tag's page lists the
 notes carrying the tag or any descendant tag, the sub-path rule of the
-`tag:` predicate, and lists its child tags.
+`tag:` predicate, and lists its child tags. The page path is the slug of
+each tag segment, so tags that differ only in punctuation (`c#`, `c++`) share
+one page, whose heading names them all (ADR 0077).
 
 **View pages.** For each configured view an index of its groups, and a
 page per group nested as the filesystem view nests its directories, with
 the same grouping rules: a list-valued field places a note under each
 value, `/` nests, values are normalized, notes without the field are
-absent. A group's page lists its child groups and, like a tag page, the
+absent. Page paths are the slug of each segment (`milestone/0.13` is
+`milestone/0-13`), and values that share a path share a page that names all of
+them (ADR 0077); a value without a path segment has no page. A group's page lists its child groups and, like a tag page, the
 notes of the group and of every group below it; a group with a landing
 note shows the note instead, and the listing after it only when the
 note asks. A view whose field is `tags` is no section and gets no

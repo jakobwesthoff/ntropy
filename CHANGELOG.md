@@ -36,6 +36,16 @@ change in any release
 
 ### Fixed
 
+- Tags keep dots and other punctuation: `milestone/0.13` is listed and matched
+  as written instead of becoming `milestone/013`, and `c++`, `c#` and
+  `node.js` no longer collapse into `c` and `nodejs`. View directories and
+  site pages use the slug of each tag segment (`by-tag/milestone/0-13/`,
+  `tags/milestone/0-13/`); tags that share one slug, such as `node.js` and
+  `node-js`, share a directory and a page. A `tag:` query, a site `root` or a
+  navigation `tag` written in the old stripped form (`milestone/013`) no
+  longer matches and has to name the tag as written. The language server
+  inserts a tag that YAML would misread as a quoted string
+  ([ADR 0077](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0077-punctuation-in-slugs-and-tags.md)).
 - `delete` refuses an empty selector instead of matching every note.
 - Links inside an inline code span that continues over a line break, and
   inside indented code blocks, are no longer treated as note links. `reconcile`

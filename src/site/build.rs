@@ -36,6 +36,7 @@ use crate::render::html::{self, Targets, frontmatter};
 use crate::render::markdown::resolve_root_relative;
 use crate::render::{LinkTarget, RenderError, ResolvedLink, join_within};
 use crate::site::scope::ExportScope;
+use crate::text::tag;
 use crate::view::ViewDef;
 
 use super::SiteOptions;
@@ -355,15 +356,16 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                 continue;
             }
             let extra = group_page(&model, section_index, &path);
+            let heading = group.values.join(", ");
             let body = format!(
                 "<h1>{}</h1>\n{}",
-                html::writer::escape(&group.value),
+                html::writer::escape(&heading),
                 extra.listing
             );
             let page = chrome(
                 &export,
                 &group.page,
-                &group.value,
+                &heading,
                 PageKind::Group,
                 body,
                 extra.crumbs,
@@ -677,7 +679,9 @@ fn render_note(
         .iter()
         .map(|tag| TagLink {
             label: tag.clone(),
-            href: Some(format!("{prefix}tags/{tag}/index.html")),
+            href: Some(tag::path(tag))
+                .filter(|path| !path.is_empty())
+                .map(|path| format!("{prefix}tags/{path}/index.html")),
         })
         .collect();
     let mut body = NoteFragment {
@@ -2645,6 +2649,56 @@ mod tests {
         assert_eq!(
             targets(&built),
             [format!("files/all-notes/{C}-folder.md/inside.png")]
+        );
+    }
+
+    #[test]
+    fn tag_pages_and_chips_use_the_path_form_of_punctuated_tags() {
+        let vault = vault();
+        let notes = vec![
+            note(
+                vault.path(),
+                A,
+                "Dotted",
+                "tags: [node.js, \"...\", \"../escape\"]\n",
+                "x\n",
+            ),
+            note(vault.path(), B, "Dashed", "tags: [node-js]\n", "x\n"),
+        ];
+        let vault_ids = ids(&notes);
+        let options = SiteOptions::default();
+        let built = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &options,
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault.path(),
+            theme: None,
+            output_dir: None,
+        })
+        .expect("the site builds");
+
+        let merged = text(&built, "tags/node-js/index.html");
+        assert!(merged.contains("<h1>node-js, node.js</h1>"), "{merged}");
+        assert!(
+            merged.contains("Dotted") && merged.contains("Dashed"),
+            "{merged}"
+        );
+        let dotted = text(&built, "notes/dotted.html");
+        assert!(
+            dotted.contains("<a class=\"tag\" href=\"../tags/node-js/index.html\">"),
+            "{dotted}"
+        );
+        assert!(
+            dotted.contains("<span class=\"tag\"><svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-tag\"/></svg>...</span>"),
+            "{dotted}"
+        );
+        assert!(built.file("tags/escape/index.html").is_some());
+        assert!(
+            built.files.iter().all(|f| !f.path.contains("..")),
+            "no page path climbs"
         );
     }
 }

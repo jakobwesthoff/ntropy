@@ -64,8 +64,10 @@ that quoted form is a plain regex and does not match across a line break.
   segments anywhere within a note tag's segments. So `tag:programming` matches
   `programming`, `programming/rust`, `area/programming` and
   `area/programming/cli`; `tag:programming/rust` matches any tag containing that
-  consecutive chain. Segments are normalized (ADR 0023), so the match is
-  case-insensitive (ADR 0006).
+  consecutive chain. Segments are normalized (ADR 0023, ADR 0077): lowercased,
+  transliterated, whitespace turned into `-`, punctuation kept. The match is
+  case-insensitive (ADR 0006), and `tag:milestone/0.13` matches
+  `milestone/0.13` but not `milestone/013`.
 - `field:value` matches when the frontmatter scalar equals `value`, or when a
   list-valued field contains it (exact, case-sensitive).
 - `text:` (and the bare-term shorthand) is a **regex** evaluated by the `regex`
@@ -97,5 +99,6 @@ mixing both (`tag:work and text:"deadline"`) costs a single scan.
 - Comparison operators and date-range queries (post-v1).
 
 Tag matching is case-insensitive (tags are lowercase-normalized,
-[ADR 0023](../adr/0023-slug-tag-and-disambiguator-normalization-rules.md));
+[ADR 0023](../adr/0023-slug-tag-and-disambiguator-normalization-rules.md)) and
+keeps punctuation ([ADR 0077](../adr/0077-punctuation-in-slugs-and-tags.md));
 arbitrary `field:value` predicates match the frontmatter value exactly.

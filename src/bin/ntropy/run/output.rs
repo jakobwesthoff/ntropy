@@ -59,8 +59,8 @@ pub fn print_notes(notes: &[Note]) -> Result<()> {
 /// [`Note`] and a picker candidate can format identically.
 ///
 /// The reference is escaped as a whole (ADR 0071). Only the title can carry
-/// a character that needs it: the id and date are ntropy's own, and tags are
-/// normalized slugs.
+/// a character that needs it: the id and date are ntropy's own, and tags
+/// carry no control characters (ADR 0077).
 pub fn reference(id: impl Display, date: &str, title: &str, tags: &[String]) -> String {
     let mut s = format!("{date}  {title}");
     if !tags.is_empty() {

@@ -74,7 +74,7 @@ A view's directory must also be a real directory. If it, or a directory above it
 - A list-valued field (like `tags`) fans a note out into every value it holds.
 - A `/` inside a value (`area/roadmap`) nests into subdirectories.
 - A note with no value for the field does not appear in the view.
-- Grouping values are normalized the same way tags are, lowercased and slugified, so `In Progress` and `in-progress` land in the same directory. This is not configurable: a case-insensitive filesystem (APFS on macOS by default) cannot hold `Done/` and `done/` side by side.
+- Grouping values are normalized the same way tags are, lowercased with punctuation kept, and each part of a value becomes a directory name made of letters, digits and dashes, so `In Progress` and `in-progress` land in the same directory and `milestone/0.13` lands in `milestone/0-13`. Values that differ only in punctuation, such as `node.js` and `node-js`, share a directory with the notes of both. A value with nothing but punctuation, such as `...`, gets no directory. This is not configurable: a case-insensitive filesystem (APFS on macOS by default) cannot hold `Done/` and `done/` side by side.
 
 ## Views or search
 

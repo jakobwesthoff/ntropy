@@ -3,7 +3,7 @@
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // Tag normalization and the sub-path match, mirroring `src/text/slug.rs` and
-// `src/text/tag.rs` (ADR 0023, ADR 0006). The shared conformance corpus pins
+// `src/text/tag.rs` (ADR 0023, ADR 0006, ADR 0077). The shared conformance corpus pins
 // the two implementations against each other (ADR 0052).
 
 const MAX_SEGMENT_LEN = 72;
@@ -89,11 +89,12 @@ function transliterate(ch: string): string {
 }
 
 /**
- * The slug normalization pipeline without the `untitled` fallback:
- * transliterate, lowercase, whitespace runs to `-`, keep `[a-z0-9-]`,
- * collapse and trim dashes, cap the length at a dash boundary.
+ * One segment of a tag, as `normalize_tag_segment` in `src/text/slug.rs`
+ * does it (ADR 0077): transliterate, lowercase, whitespace runs to `-`, keep
+ * every printable ASCII character except `/` and drop the rest, collapse and
+ * trim dashes, cap the length at a dash boundary.
  */
-export function normalizeSegment(input: string): string {
+export function normalizeTagSegment(input: string): string {
   const transliterated = Array.from(input).map(transliterate).join("");
   const lowered = transliterated.toLowerCase();
 
@@ -109,7 +110,7 @@ export function normalizeSegment(input: string): string {
     }
   }
 
-  const filtered = spaced.replace(/[^a-z0-9-]/g, "");
+  const filtered = spaced.replace(/[^\x21-\x7e]|\//g, "");
   const collapsed = filtered.replace(/-+/g, "-").replace(/^-|-$/g, "");
   return truncateAtBoundary(collapsed, MAX_SEGMENT_LEN);
 }
@@ -126,7 +127,7 @@ function truncateAtBoundary(input: string, max: number): string {
 export function segments(tag: string): string[] {
   return tag
     .split("/")
-    .map(normalizeSegment)
+    .map(normalizeTagSegment)
     .filter((segment) => segment.length > 0);
 }
 

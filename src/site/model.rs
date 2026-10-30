@@ -12,7 +12,7 @@
 //! the front page is. It is pure data over the note set, so the page paths
 //! and the navigation are testable without rendering a byte of HTML.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_yaml_ng::{Mapping, Value};
 
@@ -148,12 +148,18 @@ struct ReadingKey {
 /// the notes and child groups under it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Group {
-    /// The full value, `programming/rust`.
+    /// The smallest of the group's values, `programming/rust`.
     pub value: String,
+    /// The path form of the value, `programming/rust`: what the page path and
+    /// the lookups by tag or group use (ADR 0077).
+    pub key: String,
+    /// Every value that maps to the group, sorted: more than one when values
+    /// differ only in punctuation, as `c#` and `c++` do.
+    pub values: Vec<String>,
     /// What the sidebar shows: the landing note's label when it has one,
     /// else the value's last segment.
     pub label: String,
-    /// Page path: `<section root>/<value>/index.html`.
+    /// Page path: `<section root>/<key>/index.html`.
     pub page: String,
     /// The landing note (ADR 0056), whose title and body the group's page
     /// shows above the listing, as an index into the model's notes.
@@ -646,14 +652,21 @@ fn tag_paths(tags: &[String]) -> std::collections::BTreeSet<String> {
 /// Build a section's group tree from each note's grouping values. Every
 /// `/`-separated prefix of a value becomes a group, so `a/b/c` yields `a`,
 /// `a/b`, and `a/b/c` nested; a note is a member of exactly the group its
-/// value names. The first member marked `index` is the group's landing
-/// note and lends it its label and order; the entries of every group, and
-/// the top-level groups, are put into reading order.
+/// value names. Groups are keyed by the path form of their segments (ADR
+/// 0077): values that differ only in punctuation (`node.js`, `node-js`) are
+/// one group, which lists the notes of all of them and names every one of its
+/// values, and a segment without a path form (`+`) is left out. The first
+/// member marked `index` is the group's landing note and lends it its label
+/// and order; the entries of every group, and the top-level groups, are put
+/// into reading order.
 fn tree(root: &str, values_per_note: &[Vec<String>], notes: &[NoteEntry]) -> Vec<Group> {
     #[derive(Default)]
     struct Node {
         notes: Vec<usize>,
         children: BTreeMap<String, Node>,
+        /// Each value that passes through the node, cut off at the node: the
+        /// display form of the segments from the root to here.
+        values: BTreeSet<String>,
     }
 
     let mut top: BTreeMap<String, Node> = BTreeMap::new();
@@ -664,10 +677,22 @@ fn tree(root: &str, values_per_note: &[Vec<String>], notes: &[NoteEntry]) -> Vec
     }
 
     fn insert(top: &mut BTreeMap<String, Node>, value: &str, index: usize) {
-        let segments: Vec<&str> = value.split('/').filter(|s| !s.is_empty()).collect();
+        // Display segments pair with their path form; a segment whose path
+        // form is empty has no place in the tree.
+        let segments: Vec<(String, String)> = tag::segments(value)
+            .into_iter()
+            .map(|segment| (slug::normalize_segment(&segment), segment))
+            .filter(|(path, _)| !path.is_empty())
+            .collect();
         let mut level = top;
-        for (depth, segment) in segments.iter().enumerate() {
-            let node = level.entry((*segment).to_string()).or_default();
+        let mut shown = String::new();
+        for (depth, (path, segment)) in segments.iter().enumerate() {
+            if !shown.is_empty() {
+                shown.push('/');
+            }
+            shown.push_str(segment);
+            let node = level.entry(path.clone()).or_default();
+            node.values.insert(shown.clone());
             if depth + 1 == segments.len() {
                 if !node.notes.contains(&index) {
                     node.notes.push(index);
@@ -687,11 +712,12 @@ fn tree(root: &str, values_per_note: &[Vec<String>], notes: &[NoteEntry]) -> Vec
         let mut groups: Vec<Group> = nodes
             .into_iter()
             .map(|(segment, node)| {
-                let value = if prefix.is_empty() {
-                    segment.clone()
+                let key = if prefix.is_empty() {
+                    segment
                 } else {
                     format!("{prefix}/{segment}")
                 };
+                let values: Vec<String> = node.values.into_iter().collect();
                 let mut members = node.notes;
                 let landing = members
                     .iter()
@@ -700,20 +726,26 @@ fn tree(root: &str, values_per_note: &[Vec<String>], notes: &[NoteEntry]) -> Vec
                 members.retain(|&index| Some(index) != landing);
                 let (label, order) = match landing {
                     Some(index) => (
-                        notes[index].site.label.clone().unwrap_or(segment),
+                        notes[index]
+                            .site
+                            .label
+                            .clone()
+                            .unwrap_or_else(|| last_segments(&values)),
                         notes[index].site.order,
                     ),
-                    None => (segment, None),
+                    None => (last_segments(&values), None),
                 };
                 let mut group = Group {
-                    page: format!("{root}/{value}/index.html"),
-                    children: convert(root, &value, node.children, notes),
+                    page: format!("{root}/{key}/index.html"),
+                    children: convert(root, &key, node.children, notes),
                     notes: members,
                     entries: Vec::new(),
                     landing,
                     label,
                     order,
-                    value,
+                    value: values[0].clone(),
+                    values,
+                    key,
                 };
                 group.arrange(notes);
                 group
@@ -729,6 +761,16 @@ fn tree(root: &str, values_per_note: &[Vec<String>], notes: &[NoteEntry]) -> Vec
             ))
         });
         groups
+    }
+
+    /// The last segment of each value, once each, joined: `0.13` for a group
+    /// of `milestone/0.13`, `node-js, node.js` for a merged one.
+    fn last_segments(values: &[String]) -> String {
+        let lasts: BTreeSet<&str> = values
+            .iter()
+            .map(|value| value.rsplit('/').next().unwrap_or(value))
+            .collect();
+        lasts.into_iter().collect::<Vec<_>>().join(", ")
     }
 
     convert(root, "", top, notes)
@@ -750,7 +792,9 @@ fn sidebar(
         return curated_sidebar(&options.nav, notes, sections, warnings);
     }
     let root = options.root.clone().or_else(|| match query {
-        Some(Query::Tag(value)) => Some(format!("tags/{}", tag::normalize(value))),
+        Some(Query::Tag(value)) => Some(tag::path(value))
+            .filter(|path| !path.is_empty())
+            .map(|path| format!("tags/{path}")),
         _ => None,
     });
     if let Some(root) = root {
@@ -874,16 +918,16 @@ fn find_page(sections: &[Section], page: &str) -> Option<(usize, Vec<usize>)> {
     Some((section, path))
 }
 
-/// The path of child indices to the group with `value`, which lies at the
-/// depth of the value's segments.
-fn find_group(groups: &[Group], value: &str) -> Option<Vec<usize>> {
+/// The path of child indices to the group with the path form `key`, which
+/// lies at the depth of the key's segments.
+fn find_group(groups: &[Group], key: &str) -> Option<Vec<usize>> {
     for (position, group) in groups.iter().enumerate() {
-        if group.value == value {
+        if group.key == key {
             return Some(vec![position]);
         }
-        if value.starts_with(&format!("{}/", group.value)) {
+        if key.starts_with(&format!("{}/", group.key)) {
             let mut path = vec![position];
-            path.extend(find_group(&group.children, value)?);
+            path.extend(find_group(&group.children, key)?);
             return Some(path);
         }
     }
@@ -953,7 +997,7 @@ fn nav_items(
                 }
             }
             NavEntryKind::Tag(value) => {
-                match find_group(&sections[tags_section].groups, &tag::normalize(value)) {
+                match find_group(&sections[tags_section].groups, &tag::path(value)) {
                     Some(path) => NavItem::Group {
                         section: tags_section,
                         path,
@@ -977,21 +1021,19 @@ fn nav_items(
                     continue;
                 };
                 match group {
-                    Some(value) => {
-                        match find_group(&sections[section].groups, &tag::normalize(value)) {
-                            Some(path) => NavItem::Group {
-                                section,
-                                path,
-                                label,
-                            },
-                            None => {
-                                warnings.push(format!(
+                    Some(value) => match find_group(&sections[section].groups, &tag::path(value)) {
+                        Some(path) => NavItem::Group {
+                            section,
+                            path,
+                            label,
+                        },
+                        None => {
+                            warnings.push(format!(
                                     "[site.nav]: the view `{name}` has no group `{value}`; the item is left out"
                                 ));
-                                continue;
-                            }
+                            continue;
                         }
-                    }
+                    },
                     None => NavItem::Curated {
                         label: label.unwrap_or_else(|| name.to_string()),
                         items: group_items(&sections[section], section, &[]),
@@ -2027,5 +2069,101 @@ mod tests {
             Some("notes/home.html")
         );
         assert_eq!(model.page_of(B.parse().expect("ulid")), None);
+    }
+
+    #[test]
+    fn a_dotted_tag_has_a_dashed_page_and_keeps_its_label() {
+        let notes = [note(A, "Plan", "tags: [milestone/0.13]\n")];
+        let model = model(&notes, &[], SiteOptions::default());
+        let milestone = &model.sections[0].groups[0];
+        let version = &milestone.children[0];
+        assert_eq!(version.key, "milestone/0-13");
+        assert_eq!(version.value, "milestone/0.13");
+        assert_eq!(version.label, "0.13");
+        assert_eq!(version.page, "tags/milestone/0-13/index.html");
+    }
+
+    #[test]
+    fn tags_sharing_a_path_are_one_group_that_names_every_member() {
+        let notes = [
+            note(A, "Sharp", "tags: [\"c#\"]\n"),
+            note(B, "Plus", "tags: [\"c++\"]\n"),
+        ];
+        let model = model(&notes, &[], SiteOptions::default());
+        let groups = &model.sections[0].groups;
+        assert_eq!(groups.len(), 1);
+        let c = &groups[0];
+        assert_eq!(c.key, "c");
+        assert_eq!(c.page, "tags/c/index.html");
+        assert_eq!(c.values, ["c#", "c++"]);
+        assert_eq!(c.value, "c#");
+        assert_eq!(c.label, "c#, c++");
+        assert_eq!(titles(&model, &c.notes), ["Plus", "Sharp"]);
+    }
+
+    #[test]
+    fn merged_parents_keep_their_own_children() {
+        let notes = [
+            note(A, "Dotted", "tags: [node.js/x]\n"),
+            note(B, "Dashed", "tags: [node-js/y]\n"),
+        ];
+        let model = model(&notes, &[], SiteOptions::default());
+        let groups = &model.sections[0].groups;
+        assert_eq!(groups.len(), 1);
+        let node = &groups[0];
+        assert_eq!(node.key, "node-js");
+        assert_eq!(node.values, ["node-js", "node.js"]);
+        assert_eq!(node.label, "node-js, node.js");
+        let children: Vec<(&str, &str)> = node
+            .children
+            .iter()
+            .map(|child| (child.key.as_str(), child.value.as_str()))
+            .collect();
+        assert_eq!(
+            children,
+            [("node-js/x", "node.js/x"), ("node-js/y", "node-js/y")]
+        );
+    }
+
+    #[test]
+    fn a_segment_without_a_path_is_left_out_of_the_group() {
+        let notes = [note(A, "Odd", "tags: [\"a/+/b\"]\n")];
+        let model = model(&notes, &[], SiteOptions::default());
+        let a = &model.sections[0].groups[0];
+        let b = &a.children[0];
+        assert_eq!(b.key, "a/b");
+        assert_eq!(b.value, "a/b");
+    }
+
+    #[test]
+    fn a_tag_without_a_path_makes_no_group() {
+        let notes = [note(A, "Odd", "tags: [\"...\"]\n")];
+        let model = model(&notes, &[], SiteOptions::default());
+        assert!(model.sections[0].groups.is_empty());
+    }
+
+    #[test]
+    fn a_tag_cannot_put_a_page_outside_the_tags_directory() {
+        let notes = [note(A, "Odd", "tags: [\"../escape\"]\n")];
+        let model = model(&notes, &[], SiteOptions::default());
+        assert_eq!(model.sections[0].groups[0].page, "tags/escape/index.html");
+    }
+
+    #[test]
+    fn a_query_for_a_tag_without_a_path_roots_the_sidebar_nowhere_and_warns_nothing() {
+        let notes = [note(A, "Odd", "tags: [\"...\"]\n")];
+        let query = crate::query::parse("tag:\"...\"").expect("a query");
+        let model = Model::build_for(&notes, &[], &SiteOptions::default(), Some(&query), "V")
+            .expect("the model builds");
+        assert!(model.warnings.is_empty(), "{:?}", model.warnings);
+    }
+
+    #[test]
+    fn a_tag_query_roots_the_sidebar_at_the_path_form() {
+        let notes = [note(A, "Plan", "tags: [milestone/0.13]\n")];
+        let query = crate::query::parse("tag:\"milestone/0.13\"").expect("a query");
+        let model = Model::build_for(&notes, &[], &SiteOptions::default(), Some(&query), "V")
+            .expect("the model builds");
+        assert!(model.warnings.is_empty(), "{:?}", model.warnings);
     }
 }

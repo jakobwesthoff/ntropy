@@ -35,7 +35,7 @@ pub fn complete(
     let items = ntropy::text::tag::suggest(&context.query, tags)
         .into_iter()
         .enumerate()
-        .map(|(rank, tag)| item(tag, &context.query, range, rank))
+        .map(|(rank, tag)| item(tag, &context, range, rank))
         .collect();
     Some(CompletionList {
         is_incomplete: true,
@@ -50,6 +50,8 @@ struct Context {
     query: String,
     /// Byte offset where the replacement begins (the cursor is its end).
     replace_start: usize,
+    /// Whether the author already opened a double quote around the element.
+    quoted: bool,
 }
 
 /// Detect a frontmatter tag-completion context at `offset`, or `None`.
@@ -68,18 +70,10 @@ fn detect(text: &str, offset: usize) -> Option<Context> {
 
     // Flow form: `tags: [a, b|` on a single line.
     if let Some(after_key) = stripped.strip_prefix("tags:") {
-        if let Some(open) = after_key.find('[')
-            && !after_key[open + 1..].contains(']')
-        {
-            // The last `[` or `,` before the cursor opens the current element.
-            // A comma inside a value cannot mislead this: commas do not survive
-            // tag normalization, so no candidate is ever offered against one.
-            let separator = prefix
-                .rfind(['[', ','])
-                .expect("the flow array has an opening bracket");
-            return Some(token_after(prefix, line_start, separator));
-        }
-        return None;
+        let open = after_key
+            .find('[')
+            .map(|relative| prefix.len() - after_key.len() + relative);
+        return open.and_then(|open| flow_element(prefix, line_start, open));
     }
 
     // Block form: a `- item` line beneath a `tags:` key.
@@ -94,6 +88,46 @@ fn detect(text: &str, offset: usize) -> Option<Context> {
     None
 }
 
+/// The flow-list element the cursor is in, for the `[` at byte `open` of the
+/// line's `prefix` (the line up to the cursor), or `None` once the list is
+/// closed before the cursor.
+///
+/// The scan follows double quotes, because a tag may hold a `,` or a `]`: only
+/// a comma or bracket outside a quote separates or ends elements.
+fn flow_element(prefix: &str, line_start: usize, open: usize) -> Option<Context> {
+    let mut separator = open;
+    let mut quote_open = None;
+    let mut escaped = false;
+    for (index, ch) in prefix
+        .char_indices()
+        .skip_while(|(index, _)| *index <= open)
+    {
+        if quote_open.is_some() {
+            match ch {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                '"' => quote_open = None,
+                _ => {}
+            }
+            continue;
+        }
+        match ch {
+            '"' => quote_open = Some(index),
+            ',' => separator = index,
+            ']' => return None,
+            _ => {}
+        }
+    }
+    match quote_open {
+        Some(opened_at) => Some(Context {
+            query: prefix[opened_at + 1..].to_owned(),
+            replace_start: line_start + opened_at + 1,
+            quoted: true,
+        }),
+        None => Some(token_after(prefix, line_start, separator)),
+    }
+}
+
 /// The token between the separator and the cursor, skipping spaces and one
 /// opening quote, with its absolute start offset.
 fn token_after(prefix: &str, line_start: usize, separator: usize) -> Context {
@@ -102,12 +136,14 @@ fn token_after(prefix: &str, line_start: usize, separator: usize) -> Context {
     while start < prefix.len() && bytes[start] == b' ' {
         start += 1;
     }
-    if start < prefix.len() && bytes[start] == b'"' {
+    let quoted = start < prefix.len() && bytes[start] == b'"';
+    if quoted {
         start += 1;
     }
     Context {
         query: prefix[start..].trim_end_matches('"').to_owned(),
         replace_start: line_start + start,
+        quoted,
     }
 }
 
@@ -133,18 +169,42 @@ fn under_tags_key(text: &str, line_start: usize) -> bool {
     false
 }
 
+/// The text that puts `tag` into a YAML list so that it reads back as that
+/// very string.
+///
+/// A tag keeps its punctuation (ADR 0077), so some tags would change meaning
+/// when written bare: `0.13` is a number, `true` a boolean, `a,b` two
+/// elements. The tag is checked as the only element of a flow list, which is
+/// stricter than a block item, and written as a double-quoted string when it
+/// does not read back unchanged. Inside a quote the author already typed, only
+/// the escaping applies.
+fn yaml_text(tag: &str, already_quoted: bool) -> String {
+    let escaped = || tag.replace('\\', "\\\\").replace('"', "\\\"");
+    if already_quoted {
+        return escaped();
+    }
+    let reads_back_unchanged = matches!(
+        serde_yaml_ng::from_str::<serde_yaml_ng::Value>(&format!("[{tag}]")),
+        Ok(serde_yaml_ng::Value::Sequence(items))
+            if items.len() == 1 && items[0].as_str() == Some(tag)
+    );
+    if reads_back_unchanged {
+        tag.to_owned()
+    } else {
+        format!("\"{}\"", escaped())
+    }
+}
+
 /// Build the completion item inserting `tag` over the typed query.
-fn item(tag: String, query: &str, range: Range, rank: usize) -> CompletionItem {
+fn item(tag: String, context: &Context, range: Range, rank: usize) -> CompletionItem {
+    let new_text = yaml_text(&tag, context.quoted);
     CompletionItem {
-        label: tag.clone(),
+        label: tag,
         kind: Some(CompletionItemKind::ENUM_MEMBER),
-        filter_text: Some(query.to_owned()),
+        filter_text: Some(context.query.clone()),
         sort_text: Some(format!("{rank:06}")),
         insert_text_format: Some(InsertTextFormat::PLAIN_TEXT),
-        text_edit: Some(CompletionTextEdit::Edit(TextEdit {
-            range,
-            new_text: tag,
-        })),
+        text_edit: Some(CompletionTextEdit::Edit(TextEdit { range, new_text })),
         ..Default::default()
     }
 }
@@ -319,5 +379,99 @@ mod tests {
         assert_eq!(edit.range.start.line, 1);
         assert_eq!(edit.range.start.character, 7);
         assert_eq!(edit.range.end.character, 11);
+    }
+
+    /// The `(new_text, start column)` of every edit offered at the `|` marker
+    /// for the given tag set.
+    fn edits_at(text: &str, known: &[&str]) -> Vec<(String, u32)> {
+        let offset = text.find('|').expect("a cursor marker");
+        let text = text.replace('|', "");
+        let known: Vec<String> = known.iter().map(|t| (*t).to_owned()).collect();
+        let list = complete(&text, offset, Encoding::Utf8, &known).expect("context");
+        list.items
+            .into_iter()
+            .map(|item| {
+                let Some(CompletionTextEdit::Edit(edit)) = item.text_edit else {
+                    panic!("edit");
+                };
+                (edit.new_text, edit.range.start.character)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_tag_that_reads_back_as_a_number_is_inserted_quoted() {
+        let edits = edits_at("---\ntags: [|]\n---\n", &["0.13", "2026"]);
+        let texts: Vec<&str> = edits.iter().map(|(text, _)| text.as_str()).collect();
+        assert_eq!(texts, ["\"0.13\"", "\"2026\""]);
+    }
+
+    #[test]
+    fn a_tag_that_reads_back_as_a_keyword_is_inserted_quoted() {
+        let edits = edits_at("---\ntags: [|]\n---\n", &["true", "null"]);
+        let texts: Vec<&str> = edits.iter().map(|(text, _)| text.as_str()).collect();
+        assert_eq!(texts, ["\"true\"", "\"null\""]);
+    }
+
+    #[test]
+    fn a_tag_with_a_flow_separator_is_inserted_quoted() {
+        let edits = edits_at("---\ntags: [|]\n---\n", &["a,b", "c]d"]);
+        let texts: Vec<&str> = edits.iter().map(|(text, _)| text.as_str()).collect();
+        assert_eq!(texts, ["\"a,b\"", "\"c]d\""]);
+    }
+
+    #[test]
+    fn quotes_and_backslashes_in_a_tag_are_escaped() {
+        let edits = edits_at("---\ntags: [|]\n---\n", &["a,\"b", "c,\\d"]);
+        let texts: Vec<&str> = edits.iter().map(|(text, _)| text.as_str()).collect();
+        assert_eq!(texts, ["\"a,\\\"b\"", "\"c,\\\\d\""]);
+    }
+
+    #[test]
+    fn a_plain_tag_is_inserted_as_it_is() {
+        let edits = edits_at(
+            "---\ntags: [|]\n---\n",
+            &["programming/rust", "milestone/0.13", "c++"],
+        );
+        let texts: Vec<&str> = edits.iter().map(|(text, _)| text.as_str()).collect();
+        assert_eq!(texts, ["programming/rust", "milestone/0.13", "c++"]);
+    }
+
+    #[test]
+    fn a_tag_typed_inside_a_quote_is_inserted_without_new_quotes() {
+        let edits = edits_at("---\ntags: [\"a,b|\"]\n---\n", &["a,b"]);
+        // `tags: ["` is eight characters wide, so the element starts at 8.
+        assert_eq!(edits, [("a,b".to_owned(), 8)]);
+    }
+
+    #[test]
+    fn a_comma_inside_a_quote_does_not_start_a_new_element() {
+        let edits = edits_at("---\ntags: [x, \"a,b|\"]\n---\n", &["a,b"]);
+        assert_eq!(edits, [("a,b".to_owned(), 11)]);
+    }
+
+    #[test]
+    fn a_closing_bracket_inside_a_quote_does_not_end_the_list() {
+        let edits = edits_at("---\ntags: [x, \"a]b|\"]\n---\n", &["a]b"]);
+        assert_eq!(edits, [("a]b".to_owned(), 11)]);
+    }
+
+    #[test]
+    fn an_escaped_quote_does_not_close_the_quote_it_sits_in() {
+        let edits = edits_at("---\ntags: [\"x\\\" ,y|\n---\n", &["x\\\"-,y"]);
+        // The escaped quote and the comma after it stay inside the element,
+        // which starts right after the opening quote at column 8.
+        assert_eq!(edits, [("x\\\\\\\"-,y".to_owned(), 8)]);
+    }
+
+    #[test]
+    fn a_list_closed_before_the_cursor_declines() {
+        assert!(labels_at("---\ntags: [a], prog|\n---\n").is_none());
+    }
+
+    #[test]
+    fn a_quoted_block_item_is_inserted_without_new_quotes() {
+        let edits = edits_at("---\ntags:\n  - \"pro|\n---\n", &["programming/rust"]);
+        assert_eq!(edits, [("programming/rust".to_owned(), 5)]);
     }
 }

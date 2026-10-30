@@ -41,12 +41,14 @@ Two fields carry special meaning. The rest are yours.
   [queries](01M28Q32FC8RW01C5DSEEV77DW-query-language.md) and
   [views](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md) understand.
   ntropy normalizes each tag when it reads the note: segments are lowercased
-  and slugified the same way a title is, so `Rust` and `rust` are the same
-  tag, and exact duplicates collapse into one. A lone string instead of a
-  list is accepted as a single tag. Numbers and booleans are read as their
-  text like a title is (`tags: [2026, rust]` holds both) and quoting a tag
-  keeps its spelling. A list or a mapping inside `tags` makes the note
-  malformed, and the warning names the entry by its position.
+  and whitespace becomes a dash, so `Rust` and `rust` are the same tag, and
+  exact duplicates collapse into one. Punctuation stays as written, so
+  `milestone/0.13`, `c++` and `node.js` are listed and matched exactly like
+  that. A lone string instead of a list is accepted as a single tag. Numbers
+  and booleans are read as their text like a title is (`tags: [2026, rust]`
+  holds both) and quoting a tag keeps its spelling. A list or a mapping inside
+  `tags` makes the note malformed, and the warning names the entry by its
+  position.
 - Everything else (`status`, `due`, `author`, anything you like) is a free
   field. Filter on it, build a view from it, or just keep it for yourself.
 

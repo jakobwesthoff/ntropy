@@ -68,6 +68,7 @@ fn pages(model: &Model) -> Vec<serde_json::Value> {
             "section": section.title,
             "field": field,
             "value": section.title,
+            "values": [section.title],
             "label": section.title,
             "page": section.page,
             "count": total,
@@ -85,6 +86,7 @@ fn pages(model: &Model) -> Vec<serde_json::Value> {
                     "section": section,
                     "field": field,
                     "value": group.value,
+                    "values": group.values,
                     "label": group.label,
                     "page": group.page,
                     "count": group.descendants().len(),
@@ -260,5 +262,30 @@ mod tests {
         );
         assert_eq!(json["pages"][1]["field"], "status");
         assert_eq!(json["pages"][3]["field"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn a_merged_tag_page_lists_every_value_it_stands_for() {
+        let notes = vec![
+            note("01ARZ3NDEKTSV4RRFFQ69G5FAV", "One", "tags: [\"c#\"]\n", ""),
+            note("01BRZ3NDEKTSV4RRFFQ69G5FAV", "Two", "tags: [\"c++\"]\n", ""),
+        ];
+        let model = Model::build(&notes, &[], &SiteOptions::default(), "V").expect("model");
+        let refs: Vec<&Note> = notes.iter().collect();
+        let script = script(&model, &refs);
+        let json: serde_json::Value = serde_json::from_str(
+            script
+                .trim_start_matches("window.__ntropySearch=")
+                .trim_end_matches(";\n"),
+        )
+        .expect("the payload is JSON");
+        let tag_page = json["pages"]
+            .as_array()
+            .expect("pages")
+            .iter()
+            .find(|p| p["kind"] == "tag")
+            .expect("a tag page");
+        assert_eq!(tag_page["values"], serde_json::json!(["c#", "c++"]));
+        assert_eq!(tag_page["page"], "tags/c/index.html");
     }
 }

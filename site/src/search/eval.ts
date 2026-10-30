@@ -40,6 +40,11 @@ export interface SearchPage {
   field: string | null;
   /** The full grouping value, `programming/rust`; the title for a section. */
   value: string;
+  /**
+   * Every value the page stands for: more than one when tags that differ
+   * only in punctuation, such as `c#` and `c++`, share a page.
+   */
+  values: string[];
   /** The last segment, what the sidebar shows. */
   label: string;
   /** Site-relative page path. */
@@ -178,21 +183,25 @@ export function matchesPage(query: Compiled, page: SearchPage): boolean {
     case "tag":
       return (
         page.kind === "tag" &&
-        (tagMatches(query.value, page.value) ||
-          page.value.includes(normalizeTag(query.value)))
+        page.values.some(
+          (value) =>
+            tagMatches(query.value, value) ||
+            value.includes(normalizeTag(query.value)),
+        )
       );
     case "field":
       return (
         page.kind === "group" &&
         page.field !== null &&
         page.field.toLowerCase() === query.name.toLowerCase() &&
-        contains(page.value, query.value)
+        page.values.some((value) => contains(value, query.value))
       );
     case "text":
       return false;
     case "term":
       return (
-        contains(page.value, query.text) || contains(page.label, query.text)
+        page.values.some((value) => contains(value, query.text)) ||
+        contains(page.label, query.text)
       );
   }
 }

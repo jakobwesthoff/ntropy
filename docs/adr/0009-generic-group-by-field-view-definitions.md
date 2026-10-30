@@ -6,6 +6,8 @@ Date: 2026-06-24
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0077](0077-punctuation-in-slugs-and-tags.md).
+
 ## Context
 
 Materialized views (ADR 0008) need a definition model: bespoke per-axis code,

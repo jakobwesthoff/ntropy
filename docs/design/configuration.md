@@ -38,7 +38,7 @@ travel with the vault.
 ```toml
 # Each view is a top-level directory in the vault whose name is the table's
 # `name` and whose tree groups notes by `field`. Grouping values are always
-# normalized (ADR 0009 / ADR 0023).
+# normalized (ADR 0009 / ADR 0023 / ADR 0077).
 [[view]]
 name = "by-tag"
 field = "tags"
@@ -62,7 +62,7 @@ index = "01ARZ3NDEKTSV4RRFFQ69G5FAV" # the note that becomes the front page
 title = "Team Docs"                  # defaults to the vault directory name
 lang = "en"                          # the html lang attribute, default en
 related = false                      # no related notes under the pages
-root = "tags/docs"                   # the sidebar starts at this tag page
+root = "tags/docs"                   # the sidebar starts at this tag page (its path form)
 
 [[site.nav]]                         # a hand-assembled sidebar section
 label = "Getting Started"

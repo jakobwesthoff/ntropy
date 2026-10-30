@@ -5,41 +5,55 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  normalizeSegment,
   normalizeTag,
+  normalizeTagSegment,
   segments,
   tagMatches,
   tagsOf,
 } from "./tag";
 
-describe("normalizeSegment", () => {
-  it("lowercases, hyphenates, and drops punctuation", () => {
-    expect(normalizeSegment("My First Note")).toBe("my-first-note");
-    expect(normalizeSegment("C++ & Rust!")).toBe("c-rust");
-    expect(normalizeSegment("  spaced   out  ")).toBe("spaced-out");
+describe("normalizeTagSegment", () => {
+  it("lowercases and hyphenates whitespace", () => {
+    expect(normalizeTagSegment("My First Note")).toBe("my-first-note");
+    expect(normalizeTagSegment("  spaced   out  ")).toBe("spaced-out");
+  });
+
+  it("keeps punctuation as written", () => {
+    expect(normalizeTagSegment("0.13")).toBe("0.13");
+    expect(normalizeTagSegment("C++")).toBe("c++");
+    expect(normalizeTagSegment("C#")).toBe("c#");
+    expect(normalizeTagSegment("Node.JS")).toBe("node.js");
+    expect(normalizeTagSegment("a,b")).toBe("a,b");
+    expect(normalizeTagSegment("C++ & Rust!")).toBe("c++-&-rust!");
+  });
+
+  it("drops control characters and slashes", () => {
+    expect(normalizeTagSegment("a\u001bb")).toBe("ab");
+    expect(normalizeTagSegment("a\u007fb")).toBe("ab");
+    expect(normalizeTagSegment("a/b")).toBe("ab");
   });
 
   it("transliterates German and folds Latin accents", () => {
-    expect(normalizeSegment("Über Größe und Spaß")).toBe(
+    expect(normalizeTagSegment("Über Größe und Spaß")).toBe(
       "ueber-groesse-und-spass",
     );
-    expect(normalizeSegment("Café Ñandú")).toBe("cafe-nandu");
+    expect(normalizeTagSegment("Café Ñandú")).toBe("cafe-nandu");
   });
 
   it("drops other non-ASCII characters", () => {
-    expect(normalizeSegment("日本語 notes")).toBe("notes");
+    expect(normalizeTagSegment("日本語 notes")).toBe("notes");
   });
 
   it("caps the length at a dash boundary", () => {
     const long = Array.from({ length: 20 }, (_, i) => `word${i}`).join("-");
-    const out = normalizeSegment(long);
+    const out = normalizeTagSegment(long);
     expect(out.length).toBeLessThanOrEqual(72);
     expect(out.endsWith("-")).toBe(false);
     expect(long.startsWith(out)).toBe(true);
   });
 
   it("can come back empty", () => {
-    expect(normalizeSegment("!!!")).toBe("");
+    expect(normalizeTagSegment("\u001b")).toBe("");
   });
 });
 
@@ -49,9 +63,18 @@ describe("segments and normalizeTag", () => {
     expect(normalizeTag("Area / Work")).toBe("area/work");
     expect(normalizeTag("///")).toBe("");
   });
+
+  it("keeps a dotted segment whole", () => {
+    expect(segments("milestone/0.13")).toEqual(["milestone", "0.13"]);
+  });
 });
 
 describe("tagMatches", () => {
+  it("tells a dotted tag from the undotted one", () => {
+    expect(tagMatches("0.13", "milestone/0.13")).toBe(true);
+    expect(tagMatches("013", "milestone/0.13")).toBe(false);
+  });
+
   it("matches a contiguous run of whole segments", () => {
     expect(tagMatches("programming", "programming/rust")).toBe(true);
     expect(tagMatches("programming", "area/programming/cli")).toBe(true);
@@ -69,7 +92,7 @@ describe("tagMatches", () => {
 
 describe("tagsOf", () => {
   it("accepts a list or a scalar, normalizes, and deduplicates", () => {
-    expect(tagsOf(["Work", "work", "Programming/Rust", "", "!!!"])).toEqual([
+    expect(tagsOf(["Work", "work", "Programming/Rust", "", "///"])).toEqual([
       "work",
       "programming/rust",
     ]);

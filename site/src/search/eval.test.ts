@@ -154,6 +154,7 @@ describe("matchesPage", () => {
     section: "tags",
     field: null,
     value: "programming/rust",
+    values: ["programming/rust"],
     label: "rust",
     page: "tags/programming/rust/index.html",
     count: 3,
@@ -164,6 +165,7 @@ describe("matchesPage", () => {
     section: "by-status",
     field: "status",
     value: "open",
+    values: ["open"],
     label: "open",
     page: "views/by-status/open/index.html",
   };
@@ -182,6 +184,26 @@ describe("matchesPage", () => {
     expect(matchesPage(q("text:rust"), tag)).toBe(false);
     expect(matchesPage(q("rust and not tag:home"), tag)).toBe(true);
     expect(matchesPage(q("rust or open"), group)).toBe(true);
+  });
+});
+
+describe("matchesPage on a merged tag page", () => {
+  const merged: SearchPage = {
+    kind: "tag",
+    section: "tags",
+    field: null,
+    value: "c#",
+    values: ["c#", "c++"],
+    label: "c#, c++",
+    page: "tags/c/index.html",
+    count: 2,
+  };
+
+  it("answers a tag query for any value the page stands for", () => {
+    const q = (s: string) => compile(s, "reader");
+    expect(matchesPage(q('tag:"c#"'), merged)).toBe(true);
+    expect(matchesPage(q('tag:"c++"'), merged)).toBe(true);
+    expect(matchesPage(q('tag:"d"'), merged)).toBe(false);
   });
 });
 
