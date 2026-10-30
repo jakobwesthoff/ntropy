@@ -95,7 +95,7 @@ fn value_matches(field: &Value, value: &str) -> bool {
 /// Render a scalar YAML value to the string a `field:value` predicate compares
 /// against. Non-scalars (nested maps/sequences) have no scalar form and never
 /// match.
-fn scalar_to_string(value: &Value) -> Option<String> {
+pub(crate) fn scalar_to_string(value: &Value) -> Option<String> {
     match value {
         Value::String(s) => Some(s.clone()),
         Value::Bool(b) => Some(b.to_string()),

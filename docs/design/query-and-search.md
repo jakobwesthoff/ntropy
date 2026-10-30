@@ -7,7 +7,7 @@ How ntropy filters and searches notes. Consolidates
 [ADR 0030](../adr/0030-replace-ripgrep-stack-with-regex-crate-for-full-text-search.md),
 [ADR 0012](../adr/0012-query-dsl-with-hand-rolled-parser.md),
 [ADR 0076](../adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md), and
-[ADR 0078](../adr/0078-field-names-in-a-query-ignore-letter-case.md).
+[ADR 0078](../adr/0078-field-predicates-ignore-name-case-and-compare-numbers-by-their-spelling.md).
 
 ## One mechanism
 
@@ -75,11 +75,14 @@ that quoted form is a plain regex and does not match across a line break.
   `milestone/0.13` but not `milestone/013`.
 - `field:value` matches when the frontmatter scalar equals `value`, or when a
   list-valued field contains it (exact, case-sensitive). The field name ignores
-  letter case ([ADR 0078](../adr/0078-field-names-in-a-query-ignore-letter-case.md)):
+  letter case ([ADR 0078](../adr/0078-field-predicates-ignore-name-case-and-compare-numbers-by-their-spelling.md)):
   `Status:done` finds a `status` key and `status:done` finds a `Status` key,
   with the Unicode lowercase fold, so `größe:x` finds `Größe`. A note can hold
   keys that differ only in case. The predicate matches when any of them holds a
-  matching value, whatever the order of the keys. `tag` and `text` are
+  matching value, whatever the order of the keys. A number is compared as the
+  text the YAML parser displays it as: `x: 2.0` matches `x:2.0` and not
+  `x:2`, `1.50` reads as `1.5`, `0x1F` as `31`, and `.inf` keeps its
+  spelling. The site's search compares the same text. `tag` and `text` are
   reserved: in any letter case before the colon they are the keywords above, so
   a frontmatter field with such a name cannot be queried, and the grammar has
   no escape for it. Views group by the exact field name.

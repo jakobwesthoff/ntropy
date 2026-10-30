@@ -46,8 +46,10 @@ change in any release
   (`Status` and `status`) matches when any of them holds the value. Values
   stay case-sensitive in the CLI. `tag` and `text` are reserved names in any
   letter case, so a frontmatter field with such a name still cannot be
-  queried
-  ([ADR 0078](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0078-field-names-in-a-query-ignore-letter-case.md)).
+  queried. In the site's search a number is compared as the same text, so
+  `x:2.0` selects a note with `x: 2.0` and `x:2` no longer does, and
+  `.inf` and `.nan` can be matched
+  ([ADR 0078](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0078-field-predicates-ignore-name-case-and-compare-numbers-by-their-spelling.md)).
 
 ### Fixed
 

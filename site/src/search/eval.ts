@@ -27,7 +27,10 @@ export interface SearchNote {
   created: string;
   /** Normalized tags. */
   tags: string[];
-  /** Frontmatter as JSON; only string keys, tagged values as null. */
+  /**
+   * Frontmatter as JSON; only string keys, numbers as their text, tagged
+   * values as null.
+   */
   frontmatter: Record<string, unknown>;
   body: string;
 }
@@ -245,7 +248,6 @@ function fieldMatches(
 function scalarText(value: unknown): string | null {
   if (typeof value === "string") return value;
   if (typeof value === "boolean") return value ? "true" : "false";
-  if (typeof value === "number") return String(value);
   return null;
 }
 

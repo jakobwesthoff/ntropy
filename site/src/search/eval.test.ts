@@ -24,8 +24,8 @@ const note = noteFrom(
     title: "Rust Tips",
     tags: ["Programming/Rust"],
     status: "draft",
-    n: 2,
-    list: [1, "b"],
+    n: "2",
+    list: ["1", "b"],
   },
   "Body with Tokens.\nsecond line\n",
 );
@@ -267,9 +267,15 @@ describe("matchesPage on a merged tag page", () => {
 
 describe("scalarValues", () => {
   it("flattens scalars from lists and maps, skipping nulls", () => {
-    expect(scalarValues({ a: "x", b: [1, true, null], c: { d: "y" } })).toEqual(
-      ["x", "1", "true", "y"],
-    );
+    expect(
+      scalarValues({ a: "x", b: ["1", true, null], c: { d: "y" } }),
+    ).toEqual(["x", "1", "true", "y"]);
+  });
+});
+
+describe("scalarValues and numbers", () => {
+  it("does not format a number itself, as the search data carries numbers as text", () => {
+    expect(scalarValues({ a: 2 })).toEqual([]);
   });
 });
 

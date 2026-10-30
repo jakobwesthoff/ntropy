@@ -384,7 +384,9 @@ and note count, as `assets/search-data.js`, a classic script that
 assigns `window.__ntropySearch`. The notes come in the model's order, newest
 first, hidden notes among them, and a landing note's page is its
 group's; a group's label is the one the sidebar shows. Frontmatter travels as JSON with string keys only; a tagged YAML
-value becomes `null`. Every `</` inside the JSON is written as `<\/`, so
+value becomes `null`, and a number becomes the text a `field:` predicate
+compares against (`2.0`, `1e21`, `.inf`), since the browser would read a JSON
+number as a double. Every `</` inside the JSON is written as `<\/`, so
 a note whose body contains `</script>` cannot end the script that carries
 it. A published site therefore carries each note twice, as its page and
 inside the search data. The search itself is described in

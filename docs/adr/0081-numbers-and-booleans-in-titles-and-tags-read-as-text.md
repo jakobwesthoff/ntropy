@@ -11,6 +11,8 @@ which makes `title` required, and
 [ADR 0006](0006-hierarchical-tags-by-slash-convention.md), which defines
 `tags` as a list of strings.
 
+Amended 2026-10-30 by [ADR 0078](0078-field-predicates-ignore-name-case-and-compare-numbers-by-their-spelling.md).
+
 ## Context
 
 YAML reads an unquoted `2026` as a number and an unquoted `true` as a

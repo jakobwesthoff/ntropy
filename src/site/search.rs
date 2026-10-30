@@ -10,7 +10,10 @@
 //! The frontmatter travels as JSON the way the CLI's evaluator sees it:
 //! only string keys, since a `field:` predicate looks a field up by its
 //! string name and a non-string key can never match; tagged values as
-//! `null`, since they have no scalar form and never match either.
+//! `null`, since they have no scalar form and never match either. A number
+//! travels as the text the CLI compares a `field:` value against (`2.0`,
+//! `1e21`, `.inf`), because the browser reads a JSON number as a double and
+//! would spell `2.0` as `2` and round a large integer.
 //!
 //! Beside the notes, the data lists the site's own pages a search can land
 //! on: each section's index, every tag page, and every view group page,
@@ -21,6 +24,7 @@ use serde_yaml_ng::Value as Yaml;
 
 use super::model::{Group, Model, SectionKind};
 use crate::note::Note;
+use crate::query::scalar_to_string;
 
 /// The file name of the search data within the site's `assets/`.
 pub const SEARCH_DATA: &str = "search-data.js";
@@ -114,7 +118,9 @@ fn value_json(value: &Yaml) -> serde_json::Value {
     match value {
         Yaml::Null | Yaml::Tagged(_) => serde_json::Value::Null,
         Yaml::Bool(b) => serde_json::Value::Bool(*b),
-        Yaml::Number(n) => serde_json::to_value(n).unwrap_or(serde_json::Value::Null),
+        Yaml::Number(_) => {
+            serde_json::Value::String(scalar_to_string(value).expect("a number has a scalar form"))
+        }
         Yaml::String(s) => serde_json::Value::String(s.clone()),
         Yaml::Sequence(items) => serde_json::Value::Array(items.iter().map(value_json).collect()),
         Yaml::Mapping(map) => frontmatter_json(map),
@@ -152,15 +158,58 @@ mod tests {
             json,
             serde_json::json!({
                 "title": "T",
-                "n": 2,
-                "f": 1.5,
+                "n": "2",
+                "f": "1.5",
                 "b": true,
-                "list": ["a", 1],
+                "list": ["a", "1"],
                 "nested": {"k": "v"},
                 "angle": null,
                 "none": null,
             })
         );
+    }
+
+    /// The embedded form of the frontmatter field `x: <yaml>`.
+    fn embedded(yaml: &str) -> serde_json::Value {
+        let note = note(
+            "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+            "T",
+            &format!("x: {yaml}\n"),
+            "",
+        );
+        frontmatter_json(&note.frontmatter)["x"].clone()
+    }
+
+    #[test]
+    fn a_float_with_a_zero_fraction_keeps_its_spelling() {
+        assert_eq!(embedded("2.0"), serde_json::json!("2.0"));
+    }
+
+    #[test]
+    fn a_float_in_exponent_form_keeps_its_spelling() {
+        assert_eq!(embedded("1e21"), serde_json::json!("1e21"));
+    }
+
+    #[test]
+    fn a_non_finite_float_keeps_its_spelling() {
+        assert_eq!(embedded(".inf"), serde_json::json!(".inf"));
+    }
+
+    #[test]
+    fn a_large_integer_is_text() {
+        assert_eq!(
+            embedded("18446744073709551615"),
+            serde_json::json!("18446744073709551615")
+        );
+    }
+
+    #[test]
+    fn a_number_reaches_the_script_as_text() {
+        let notes = vec![note("01ARZ3NDEKTSV4RRFFQ69G5FAV", "T", "x: 2.0\n", "")];
+        let model = Model::build(&notes, &[], &SiteOptions::default(), "V").expect("model");
+        let refs: Vec<&Note> = notes.iter().collect();
+        let script = script(&model, &refs);
+        assert!(script.contains("\"x\":\"2.0\""), "{script}");
     }
 
     #[test]

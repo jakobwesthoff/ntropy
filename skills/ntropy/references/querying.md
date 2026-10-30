@@ -62,7 +62,8 @@ arguments are ignored.
 - **`field:value`** — frontmatter equality for scalars, membership for list
   fields. The value is exact and case-sensitive (`status:Done` does not match
   `status: done`); the field name ignores letter case (`Status:done` finds a
-  `status` key). A note with keys that differ only in case (`Status` and
+  `status` key). A number compares as ntropy reads it (`x: 2.0` is `x:2.0`,
+  `x: 1.50` is `x:1.5`). A note with keys that differ only in case (`Status` and
   `status`) matches when any of them does. `tag` and `text` are reserved in
   any letter case, so a frontmatter field with such a name cannot be queried.
   Quote multi-word values: `status:"in progress"`.

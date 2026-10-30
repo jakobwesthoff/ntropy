@@ -23,6 +23,7 @@ pub use arguments::from_arguments;
 pub use ast::Query;
 pub use error::QueryError;
 pub use eval::Prepared;
+pub(crate) use eval::scalar_to_string;
 
 /// Parse a query string into its AST without compiling regexes.
 pub fn parse(input: &str) -> Result<Query, QueryError> {

@@ -21,7 +21,12 @@ struct Corpus {
 #[derive(serde::Deserialize)]
 struct CorpusNote {
     id: String,
+    /// The frontmatter as the site's search data carries it: every number as
+    /// its text.
     frontmatter: serde_json::Value,
+    /// The frontmatter source, for a note whose numbers JSON cannot spell
+    /// (`2.0`); without it the JSON is serialized to YAML.
+    yaml: Option<String>,
     body: String,
 }
 
@@ -38,10 +43,13 @@ fn corpus() -> Corpus {
     serde_json::from_str(include_str!("fixtures/query-corpus.json")).expect("the corpus parses")
 }
 
-/// A note from the corpus: the JSON frontmatter serialized as YAML in front
-/// of the body, parsed the way a vault note is.
+/// A note from the corpus: its frontmatter source (or the JSON serialized as
+/// YAML) in front of the body, parsed the way a vault note is.
 fn note(entry: &CorpusNote) -> Note {
-    let yaml = serde_yaml_ng::to_string(&entry.frontmatter).expect("frontmatter serializes");
+    let yaml = match &entry.yaml {
+        Some(yaml) => yaml.clone(),
+        None => serde_yaml_ng::to_string(&entry.frontmatter).expect("frontmatter serializes"),
+    };
     let content = format!("---\n{yaml}---\n{}", entry.body);
     Note::parse(
         PathBuf::from(format!("/vault/all-notes/{}-note.md", entry.id)),
@@ -88,6 +96,14 @@ fn every_corpus_case_holds() {
         failures.len(),
         failures.join("\n")
     );
+}
+
+#[test]
+fn corpus_frontmatter_is_the_form_the_site_search_data_carries() {
+    for entry in &corpus().notes {
+        let embedded = ntropy::site::search::frontmatter_json(&note(entry).frontmatter);
+        assert_eq!(embedded, entry.frontmatter, "note {}", entry.id);
+    }
 }
 
 #[test]

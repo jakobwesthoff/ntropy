@@ -10,8 +10,8 @@
           "area/work"
         ],
         "status": "draft",
-        "priority": 2,
-        "ratio": 1.5,
+        "priority": "2",
+        "ratio": "1.5",
         "published": false,
         "reviewers": [
           "jakob",
@@ -22,6 +22,7 @@
         },
         "or": "keyword-field"
       },
+      "yaml": "title: Rust Tips\ntags: [Programming/Rust, area/work]\nstatus: draft\npriority: 2\nratio: 1.5\npublished: false\nreviewers: [jakob, mia]\nreview:\n  due: \"2026-08-01\"\nor: keyword-field\n",
       "body": "Borrowing rules.\nThe Borrow checker helps.\nfoo-bar and foo.bar\n"
     },
     {
@@ -33,9 +34,10 @@
           "Über/Größe"
         ],
         "status": "done",
-        "priority": 10,
+        "priority": "10",
         "published": true
       },
+      "yaml": "title: Grillen im Garten\ntags: [Freizeit/Grillen, Über/Größe]\nstatus: done\npriority: 10\npublished: true\n",
       "body": "Ein Abend mit Würstchen.\nSecond line mentions Rust the game.\n"
     },
     {
@@ -51,12 +53,13 @@
       "frontmatter": {
         "title": "Numeric tags",
         "tags": [
-          2026,
-          0.13,
+          "2026",
+          "0.13",
           true,
           "plain-text"
         ]
       },
+      "yaml": "title: Numeric tags\ntags: [2026, 0.13, true, plain-text]\n",
       "body": "Numbers as tags.\n"
     },
     {
@@ -107,6 +110,24 @@
         "text": "zzreservedtext"
       },
       "body": "Case fixture zzreservedtext.\n"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FF1",
+      "frontmatter": {
+        "title": "Floats",
+        "whole": "2.0",
+        "half": "1.5",
+        "huge": "1e21",
+        "small": "1e-7",
+        "zero": "-0.0",
+        "big": "18446744073709551615",
+        "hex": "31",
+        "inf": ".inf",
+        "ninf": "-.inf",
+        "nan": ".nan"
+      },
+      "yaml": "title: Floats\nwhole: 2.0\nhalf: 1.5\nhuge: 1e21\nsmall: 1e-7\nzero: -0.0\nbig: 18446744073709551615\nhex: 0x1F\ninf: .inf\nninf: -.inf\nnan: .nan\n",
+      "body": "Case fixture.\n"
     }
   ],
   "cases": [
@@ -332,7 +353,8 @@
         "01ARZ3NDEKTSV4RRFFQ69G5FD2",
         "01ARZ3NDEKTSV4RRFFQ69G5FE1",
         "01ARZ3NDEKTSV4RRFFQ69G5FE2",
-        "01ARZ3NDEKTSV4RRFFQ69G5FE3"
+        "01ARZ3NDEKTSV4RRFFQ69G5FE3",
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
       ]
     },
     {
@@ -666,6 +688,74 @@
       "query": "text:zzreservedtext",
       "expect": [
         "01ARZ3NDEKTSV4RRFFQ69G5FE3"
+      ]
+    },
+    {
+      "query": "whole:2.0",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
+      ]
+    },
+    {
+      "query": "whole:2",
+      "expect": []
+    },
+    {
+      "query": "half:1.5",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
+      ]
+    },
+    {
+      "query": "half:1.50",
+      "expect": []
+    },
+    {
+      "query": "huge:1e21",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
+      ]
+    },
+    {
+      "query": "small:1e-7",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
+      ]
+    },
+    {
+      "query": "zero:-0.0",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
+      ]
+    },
+    {
+      "query": "big:18446744073709551615",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
+      ]
+    },
+    {
+      "query": "hex:31",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
+      ]
+    },
+    {
+      "query": "inf:.inf",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
+      ]
+    },
+    {
+      "query": "ninf:-.inf",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
+      ]
+    },
+    {
+      "query": "nan:.nan",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FF1"
       ]
     }
   ]

@@ -10,7 +10,7 @@ Amended 2026-10-30 by [ADR 0076](0076-adjacent-terms-in-a-query-are-an-implicit-
 
 Amended 2026-10-30 by [ADR 0077](0077-punctuation-in-slugs-and-tags.md).
 
-Amended 2026-10-30 by [ADR 0078](0078-field-names-in-a-query-ignore-letter-case.md).
+Amended 2026-10-30 by [ADR 0078](0078-field-predicates-ignore-name-case-and-compare-numbers-by-their-spelling.md).
 
 ## Context
 

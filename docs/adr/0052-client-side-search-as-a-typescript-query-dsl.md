@@ -21,6 +21,8 @@ share.
 
 Amended 2026-10-30 by [ADR 0076](0076-adjacent-terms-in-a-query-are-an-implicit-and.md).
 
+Amended 2026-10-30 by [ADR 0078](0078-field-predicates-ignore-name-case-and-compare-numbers-by-their-spelling.md).
+
 Gives the site of
 [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md)
 the search of [ADR 0012](0012-query-dsl-with-hand-rolled-parser.md) and

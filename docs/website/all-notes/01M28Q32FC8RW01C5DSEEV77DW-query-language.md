@@ -52,9 +52,10 @@ precise matching, reach for a typed term:
   `value`. The value match is case-sensitive, the field name is not:
   `Status:done` finds a note with a `status` field, and a note with
   both `Status: open` and `status: done` matches `status:open` and
-  `status:done`. `tag` and `text` always mean the terms above, in any
-  letter case, so a frontmatter field named `tag` or `text` cannot be
-  queried.
+  `status:done`. A number is compared as ntropy reads it: `x: 2.0` is
+  found by `x:2.0` and not by `x:2`, and `x: 1.50` by `x:1.5`. `tag` and
+  `text` always mean the terms above, in any letter case, so a frontmatter
+  field named `tag` or `text` cannot be queried.
 - `text:pattern` is a regex matched against the note body, compiled with
   smart case: an all-lowercase pattern matches regardless of case, but a
   pattern containing an uppercase letter only matches that case exactly.
