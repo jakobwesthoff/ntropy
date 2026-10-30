@@ -8,8 +8,9 @@ views are derived from them. It consolidates the decisions in
 [ADR 0006](../adr/0006-hierarchical-tags-by-slash-convention.md),
 [ADR 0007](../adr/0007-vault-directory-layout.md),
 [ADR 0008](../adr/0008-materialized-symlink-views.md),
-[ADR 0009](../adr/0009-generic-group-by-field-view-definitions.md), and
-[ADR 0032](../adr/0032-auto-managed-gitignore-for-views.md).
+[ADR 0009](../adr/0009-generic-group-by-field-view-definitions.md),
+[ADR 0032](../adr/0032-auto-managed-gitignore-for-views.md), and
+[ADR 0064](../adr/0064-view-names-are-validated-slug-segments.md).
 
 ## On-disk structure
 
@@ -128,6 +129,36 @@ on. Views are configuration entries pairing an output directory with a field,
 not bespoke code. View definitions are managed through the `view`
 CLI commands (`list`/`add`/`remove`), not only by hand-editing config.
 
+### View names
+
+A view's name is its directory, relative to the vault root, and the sync
+removes everything in that directory that is not one of the view's links. A
+name is therefore one or more `/`-separated segments that each stay a
+directory of their own inside the vault:
+
+- not empty, and no control characters;
+- no empty segment: no leading or trailing `/`, no `//`;
+- the first segment is not a reserved name (`all-notes`, `.ntropy`,
+  `.gitignore`, `README.md`);
+- no segment starts with `.`;
+- every segment is already in slug form (ADR 0023): lowercase ASCII letters,
+  digits and single dashes, at most 72 characters.
+
+`by-tag` and `area/work` are valid; `../notes`, `/tmp/x`, `.git`,
+`all-notes/x`, `By_Tag`, `my.view` and `area work` are not. The rules hold for
+the name only; a view's grouping values are normalized separately (above).
+
+`view add` refuses an invalid name and suggests the nearest valid one
+(`By_Tag` becomes `bytag`). A configured view whose name is invalid is skipped
+with a warning by every command that syncs views or exports a site, and the
+other views carry on; `--strict` turns that warning into a failure of
+`reconcile` and `site`. `view list` and `view remove` work on any configured
+name, so a damaged configuration can be inspected and repaired.
+
+A valid name still names a directory ntropy owns (ADR 0007): if it is also the
+name of an existing directory of the vault, or lies inside another view's
+directory, it is synced like any other view.
+
 ### Leaf links
 
 Each leaf is a relative symlink named `<date>-<slug>.md`, where `<date>` is the
@@ -176,7 +207,9 @@ managed entries mirror exactly the configured views. Every view-affecting
 operation syncs it — adding a view's entry, pruning the entry of a view that has
 left the configuration — while never touching a line the user wrote. Ownership
 is tracked by a marker comment placed above each managed entry, so only ntropy's
-own entries are ever pruned.
+own entries are ever pruned. A view skipped for an invalid name keeps the entry
+it already has, and none is added for it, so its old directory stays ignored
+and the invalid name is never written into the file.
 
 ntropy never deletes a directory. Removing a view (whether by `view remove` or by
 editing config and reconciling) prunes the ignore entry but leaves the view's

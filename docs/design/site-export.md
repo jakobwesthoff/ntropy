@@ -106,7 +106,10 @@ One directory per node:
                                  reference
 
 The `views/` and `tags/` prefixes keep a view named `notes` or `tags`
-from colliding with the note pages. Every link in a page is relative to
+from colliding with the note pages. A view's `<name>` is a valid view
+name ([vault-layout-and-views.md](vault-layout-and-views.md), ADR 0064),
+so its pages stay below `views/`; a configured view with an invalid name
+gets no pages and a warning. Every link in a page is relative to
 that page, climbing to the site root with `../` per directory level, so
 the site works from `file://` and from any path on a host.
 

@@ -69,8 +69,17 @@ look wrong, reconcile before investigating anything else.
 - **ntropy never deletes a directory.** After `view remove` the stale tree
   stays on disk (and, no longer ignored, shows up in `git status`); the command
   reports it so you can `rm -r` it yourself.
-- View names must not collide with the reserved names (`all-notes`, `.ntropy`,
-  `.gitignore`) or an existing view.
+- A view name is lowercase letters, digits and single dashes, optionally
+  nested with `/` (`by-status`, `area/work`), each part at most 72
+  characters. It must not start with a reserved name (`all-notes`, `.ntropy`,
+  `.gitignore`, `README.md`), no part may start with `.`, and it must not
+  repeat an existing view. `view add` refuses anything else and suggests a
+  valid name; use the suggestion.
+- A configured view with an invalid name is skipped: commands that sync views
+  print `warning: skipped view ...` on stderr, and `--strict` makes
+  `reconcile` and `site` fail. Fix it with `ntropy view remove <name>`, then
+  `view add` under a valid name; the old directory is left for you to delete.
+  `vault encrypt` refuses to start until such a view is removed.
 
 ## View or query?
 

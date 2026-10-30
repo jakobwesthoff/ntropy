@@ -869,7 +869,7 @@ mod tests {
     fn build_site(vault: &Path, options: &SiteOptions) -> Built {
         let notes = notes(vault);
         let vault_ids = ids(&notes);
-        let views = [ViewDef::new("by-status", "status")];
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
         build(&Input {
             notes: &notes,
             vault_ids: &vault_ids,
@@ -1312,7 +1312,7 @@ mod tests {
         let built = build(&Input {
             notes: &notes,
             vault_ids: &vault_ids,
-            views: &[ViewDef::new("by-status", "status")],
+            views: &[ViewDef::parse("by-status", "status").expect("valid view name")],
             options: &options,
             query: None,
             fallback_title: "Vault",

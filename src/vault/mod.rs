@@ -16,11 +16,13 @@
 pub mod layout;
 pub mod resolve;
 pub mod seed;
+pub mod view_name;
 
 use std::path::{Path, PathBuf};
 
 pub use layout::Layout;
 pub use resolve::{ResolveError, ResolveOptions, ResolveSource};
+pub use view_name::{InvalidViewName, ViewName};
 
 /// A resolved vault.
 #[derive(Debug, Clone, PartialEq, Eq)]

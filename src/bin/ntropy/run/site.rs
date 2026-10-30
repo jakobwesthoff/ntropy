@@ -18,7 +18,6 @@ use anyhow::{Context, Result, bail};
 use ntropy::ops;
 use ntropy::session::VaultSession;
 use ntropy::site;
-use ntropy::view::ViewDef;
 
 use super::render::{absolutize, lands_inside_vault};
 use super::{exit_for_warnings, output, plural};
@@ -81,11 +80,10 @@ pub fn cmd_site(
         None => matches.notes,
     };
 
-    let views: Vec<ViewDef> = config
-        .views
-        .iter()
-        .map(|view| ViewDef::new(&view.name, &view.field))
-        .collect();
+    // A view with an invalid name gets no pages: its name would become page
+    // paths under the output directory (ADR 0064).
+    let (views, skipped_views) = ntropy::reconcile::configured_views(&config);
+    super::print_skipped_views(&skipped_views);
     let fallback_title = session
         .root()
         .file_name()
@@ -120,14 +118,18 @@ pub fn cmd_site(
             plural(built.page_count(), "page", "pages"),
             output_dir.display(),
             plural(notes.len(), "note", "notes"),
-            plural(built.warnings.len(), "warning", "warnings")
+            plural(
+                built.warnings.len() + skipped_views.len(),
+                "warning",
+                "warnings"
+            )
         );
     }
 
     Ok(exit_for_warnings(
         global.strict,
         &matches.warnings,
-        built.warnings.len(),
+        built.warnings.len() + skipped_views.len(),
     ))
 }
 

@@ -1,0 +1,19 @@
+---
+source: tests/view_names.rs
+info:
+  program: ntropy
+  args:
+    - "--vault"
+    - "."
+    - reconcile
+  env:
+    EDITOR: "true"
+---
+success: true
+exit_code: 0
+----- stdout -----
+Reconciling vault at [BASE]/vault...
+Scanned 0 notes, renamed 0 files, relinked 0 links, synced 0 views, ignored 0 entries, unignored 0 entries, 1 warning.
+
+----- stderr -----
+warning: skipped view `../decoy`: the segment `..` starts with a dot (try `decoy`)

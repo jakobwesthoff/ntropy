@@ -11,7 +11,7 @@
 //! the filename case.
 
 /// The slug length cap, applied at a `-` boundary (ADR 0023 step 6).
-const MAX_SLUG_LEN: usize = 72;
+pub(crate) const MAX_SLUG_LEN: usize = 72;
 
 /// The fallback slug for a title that normalizes to nothing (ADR 0023 step 7).
 pub const UNTITLED: &str = "untitled";

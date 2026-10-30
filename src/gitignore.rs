@@ -20,12 +20,14 @@
 //!
 //! The module is decoupled from the config layer: callers pass the configured
 //! view names, exactly as the `view` layer takes `ViewDef`s. The on-disk entry
-//! is derived from [`Layout::view_dir`] so this module owns only git syntax,
-//! never *where* a view lives.
+//! is derived from [`Layout::view_relative_dir`] so this module owns only git
+//! syntax, never *where* a view lives.
+//!
+//! [`Layout::view_relative_dir`]: crate::vault::layout::Layout::view_relative_dir
 
 use crate::error::Result;
 use crate::fsutil;
-use crate::vault::Vault;
+use crate::vault::{Vault, ViewName};
 
 /// The comment written directly above every ntropy-managed entry.
 ///
@@ -53,8 +55,14 @@ pub struct SyncOutcome {
 /// comment with it. The add pass appends a `marker + entry` block for every
 /// configured entry not already present in some form. User-authored lines are
 /// never removed or reordered.
-pub fn sync_entries(existing: &str, configured: &[&str]) -> SyncOutcome {
+///
+/// `retained` names views that are still configured but skipped because their
+/// name is invalid (ADR 0064). Their managed entries are neither pruned nor
+/// added: the view's old directory stays ignored until the view is removed,
+/// and an invalid name is never written into the file.
+pub fn sync_entries(existing: &str, configured: &[&str], retained: &[&str]) -> SyncOutcome {
     let configured_norm: Vec<String> = configured.iter().map(|e| normalize(e)).collect();
+    let retained_norm: Vec<String> = retained.iter().map(|e| normalize(e)).collect();
     let logical = logical_lines(existing);
 
     // Prune pass: drop managed entries whose view has gone, and the marker
@@ -65,7 +73,7 @@ pub fn sync_entries(existing: &str, configured: &[&str]) -> SyncOutcome {
         let owned = idx > 0 && logical[idx - 1].trim() == MARKER && is_entry(line);
         if owned {
             let name = normalize(line);
-            if !configured_norm.contains(&name) {
+            if !configured_norm.contains(&name) && !retained_norm.contains(&name) {
                 // The previous line was this entry's marker; it was kept on the
                 // prior step, so removing it here drops the whole block.
                 kept.pop();
@@ -134,29 +142,27 @@ pub struct SyncReport {
 /// Reconcile `<vault>/.gitignore` so its managed entries match the configured
 /// views, writing the file only when something changed.
 ///
-/// Each view's ignore entry is derived from [`Layout::view_dir`] relative to the
-/// vault root, then wrapped in anchored git syntax (`/<rel>/`). A missing file
-/// is treated as empty; the write goes through [`fsutil::atomic_write`].
+/// Each view's ignore entry is [`Layout::view_relative_dir`] wrapped in
+/// anchored git syntax (`/<rel>/`). `retained` passes through to
+/// [`sync_entries`]. A missing file is treated as empty; the write goes
+/// through [`fsutil::atomic_write`].
 ///
-/// [`Layout::view_dir`]: crate::vault::layout::Layout::view_dir
-pub fn sync(vault: &Vault, configured_view_names: &[&str]) -> Result<SyncReport> {
+/// [`Layout::view_relative_dir`]: crate::vault::layout::Layout::view_relative_dir
+pub fn sync(
+    vault: &Vault,
+    configured_view_names: &[&ViewName],
+    retained: &[&str],
+) -> Result<SyncReport> {
     let layout = vault.layout();
-    let root = layout.root();
     let entries: Vec<String> = configured_view_names
         .iter()
-        .map(|name| {
-            let dir = layout.view_dir(name);
-            let rel = dir
-                .strip_prefix(root)
-                .expect("view dir is built by joining the name onto the root");
-            format!("/{}/", rel.display())
-        })
+        .map(|name| format!("/{}/", layout.view_relative_dir(name).display()))
         .collect();
     let entry_refs: Vec<&str> = entries.iter().map(String::as_str).collect();
 
     let path = layout.gitignore_file();
     let existing = fsutil::read_to_string_if_exists(&path)?.unwrap_or_default();
-    let outcome = sync_entries(&existing, &entry_refs);
+    let outcome = sync_entries(&existing, &entry_refs, retained);
     if let Some(content) = outcome.content {
         fsutil::atomic_write(&path, content.as_bytes())?;
     }
@@ -204,7 +210,7 @@ mod tests {
 
     #[test]
     fn adds_entry_to_empty_file() {
-        let out = sync_entries("", &["/by-tag/"]);
+        let out = sync_entries("", &["/by-tag/"], &[]);
         assert_eq!(out.added, ["/by-tag/"]);
         assert!(out.removed.is_empty());
         insta::assert_snapshot!(out.content.unwrap(), @r"
@@ -216,7 +222,7 @@ mod tests {
     #[test]
     fn appends_after_user_content_without_trailing_newline() {
         // No trailing newline on the user's line: the block still lands cleanly.
-        let out = sync_entries("*.tmp", &["/by-tag/"]);
+        let out = sync_entries("*.tmp", &["/by-tag/"], &[]);
         assert_eq!(out.added, ["/by-tag/"]);
         insta::assert_snapshot!(out.content.unwrap(), @r"
         *.tmp
@@ -228,7 +234,7 @@ mod tests {
     #[test]
     fn idempotent_when_block_already_present() {
         let existing = "# ntropy: derived view directory, safe to ignore\n/by-tag/\n";
-        let out = sync_entries(existing, &["/by-tag/"]);
+        let out = sync_entries(existing, &["/by-tag/"], &[]);
         assert_eq!(out.content, None);
         assert!(out.added.is_empty());
         assert!(out.removed.is_empty());
@@ -237,7 +243,7 @@ mod tests {
     #[test]
     fn does_not_duplicate_a_user_authored_entry() {
         // The user added the ignore themselves, in bare form and without a marker.
-        let out = sync_entries("by-tag\n", &["/by-tag/"]);
+        let out = sync_entries("by-tag\n", &["/by-tag/"], &[]);
         assert_eq!(out.content, None);
         assert!(out.added.is_empty());
     }
@@ -245,7 +251,7 @@ mod tests {
     #[test]
     fn membership_tolerates_slash_variants() {
         for form in ["by-tag", "by-tag/", "/by-tag", "/by-tag/", "  /by-tag/  "] {
-            let out = sync_entries(&format!("{form}\n"), &["/by-tag/"]);
+            let out = sync_entries(&format!("{form}\n"), &["/by-tag/"], &[]);
             assert_eq!(out.content, None, "form `{form}` should count as present");
         }
     }
@@ -257,7 +263,7 @@ mod tests {
 # ntropy: derived view directory, safe to ignore
 /old/
 ";
-        let out = sync_entries(existing, &[]);
+        let out = sync_entries(existing, &[], &[]);
         assert_eq!(out.removed, ["/old/"]);
         assert!(out.added.is_empty());
         insta::assert_snapshot!(out.content.unwrap(), @"*.tmp");
@@ -266,7 +272,7 @@ mod tests {
     #[test]
     fn keeps_user_lookalike_without_marker() {
         // Same directory, but no marker above it: it is the user's, so we leave it.
-        let out = sync_entries("/old/\n", &[]);
+        let out = sync_entries("/old/\n", &[], &[]);
         assert_eq!(out.content, None);
         assert!(out.removed.is_empty());
     }
@@ -274,7 +280,7 @@ mod tests {
     #[test]
     fn adds_and_prunes_in_one_call() {
         let existing = "# ntropy: derived view directory, safe to ignore\n/old/\n";
-        let out = sync_entries(existing, &["/by-tag/"]);
+        let out = sync_entries(existing, &["/by-tag/"], &[]);
         assert_eq!(out.added, ["/by-tag/"]);
         assert_eq!(out.removed, ["/old/"]);
         insta::assert_snapshot!(out.content.unwrap(), @r"
@@ -294,7 +300,7 @@ build/
 /old/
 secrets/
 ";
-        let out = sync_entries(existing, &["/by-tag/"]);
+        let out = sync_entries(existing, &["/by-tag/"], &[]);
         assert_eq!(out.added, ["/by-tag/"]);
         assert_eq!(out.removed, ["/old/"]);
         insta::assert_snapshot!(out.content.unwrap(), @r"
@@ -311,7 +317,7 @@ secrets/
     #[test]
     fn adds_only_the_missing_view_in_partial_overlap() {
         let existing = "# ntropy: derived view directory, safe to ignore\n/by-tag/\n";
-        let out = sync_entries(existing, &["/by-tag/", "/by-status/"]);
+        let out = sync_entries(existing, &["/by-tag/", "/by-status/"], &[]);
         assert_eq!(out.added, ["/by-status/"]);
         assert!(out.removed.is_empty());
         insta::assert_snapshot!(out.content.unwrap(), @r"
@@ -330,29 +336,61 @@ secrets/
 # ntropy: derived view directory, safe to ignore
 /by-status/
 ";
-        let out = sync_entries(existing, &[]);
+        let out = sync_entries(existing, &[], &[]);
         assert_eq!(out.removed, ["/by-tag/", "/by-status/"]);
         assert_eq!(out.content.as_deref(), Some(""));
     }
 
     #[test]
     fn handles_multi_segment_view_names() {
-        let added = sync_entries("", &["/area/work/"]);
+        let added = sync_entries("", &["/area/work/"], &[]);
         assert_eq!(added.added, ["/area/work/"]);
 
         let existing = "# ntropy: derived view directory, safe to ignore\n/area/work/\n";
-        let pruned = sync_entries(existing, &[]);
+        let pruned = sync_entries(existing, &[], &[]);
         assert_eq!(pruned.removed, ["/area/work/"]);
         assert_eq!(pruned.content.as_deref(), Some(""));
     }
 
+    #[test]
+    fn a_retained_entry_is_neither_pruned_nor_added() {
+        // `By_Tag` is still configured but no longer a valid name, so its
+        // view is skipped; its old directory must stay ignored.
+        let existing = "# ntropy: derived view directory, safe to ignore\n/By_Tag/\n";
+        let kept = sync_entries(existing, &[], &["By_Tag"]);
+        assert_eq!(kept.content, None);
+        assert!(kept.removed.is_empty());
+
+        let not_added = sync_entries("", &[], &["By_Tag"]);
+        assert_eq!(not_added.content, None);
+        assert!(not_added.added.is_empty());
+    }
+
     // -- IO shell ------------------------------------------------------------
+
+    fn name(raw: &str) -> ViewName {
+        ViewName::parse(raw).expect("valid view name")
+    }
+
+    #[test]
+    fn sync_keeps_a_retained_entry_on_disk() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let v = Vault::new(dir.path());
+        let existing = "# ntropy: derived view directory, safe to ignore\n/By_Tag/\n";
+        std::fs::write(v.layout().gitignore_file(), existing).expect("write");
+
+        let report = sync(&v, &[&name("by-tag")], &["By_Tag"]).expect("sync");
+        assert_eq!(report.added, ["/by-tag/"]);
+        assert!(report.removed.is_empty());
+        let content = std::fs::read_to_string(v.layout().gitignore_file()).expect("read");
+        assert!(content.contains("/By_Tag/"), "content: {content}");
+    }
 
     #[test]
     fn sync_creates_file_with_anchored_entry() {
         let dir = tempfile::tempdir().expect("temp dir");
         let v = Vault::new(dir.path());
-        let report = sync(&v, &["by-tag"]).expect("sync");
+        let report = sync(&v, &[&name("by-tag")], &[]).expect("sync");
         assert_eq!(report.added, ["/by-tag/"]);
         let content = std::fs::read_to_string(v.layout().gitignore_file()).expect("read");
         assert!(content.contains("/by-tag/"), "content: {content}");
@@ -363,9 +401,9 @@ secrets/
     fn sync_is_idempotent_on_disk() {
         let dir = tempfile::tempdir().expect("temp dir");
         let v = Vault::new(dir.path());
-        sync(&v, &["by-tag"]).expect("first");
+        sync(&v, &[&name("by-tag")], &[]).expect("first");
         let before = std::fs::read_to_string(v.layout().gitignore_file()).expect("read");
-        let report = sync(&v, &["by-tag"]).expect("second");
+        let report = sync(&v, &[&name("by-tag")], &[]).expect("second");
         assert!(report.added.is_empty() && report.removed.is_empty());
         let after = std::fs::read_to_string(v.layout().gitignore_file()).expect("read");
         assert_eq!(before, after);
@@ -375,13 +413,13 @@ secrets/
     fn sync_prunes_orphan_entry_but_leaves_directory() {
         let dir = tempfile::tempdir().expect("temp dir");
         let v = Vault::new(dir.path());
-        sync(&v, &["by-tag"]).expect("add");
-        std::fs::create_dir_all(v.layout().view_dir("by-tag")).expect("view dir");
+        sync(&v, &[&name("by-tag")], &[]).expect("add");
+        std::fs::create_dir_all(v.layout().view_dir(&name("by-tag"))).expect("view dir");
 
-        let report = sync(&v, &[]).expect("prune");
+        let report = sync(&v, &[], &[]).expect("prune");
         assert_eq!(report.removed, ["/by-tag/"]);
         assert!(
-            v.layout().view_dir("by-tag").exists(),
+            v.layout().view_dir(&name("by-tag")).exists(),
             "the directory must be left in place"
         );
     }
@@ -390,7 +428,7 @@ secrets/
     fn sync_derives_multi_segment_entry() {
         let dir = tempfile::tempdir().expect("temp dir");
         let v = Vault::new(dir.path());
-        let report = sync(&v, &["area/work"]).expect("sync");
+        let report = sync(&v, &[&name("area/work")], &[]).expect("sync");
         assert_eq!(report.added, ["/area/work/"]);
     }
 }

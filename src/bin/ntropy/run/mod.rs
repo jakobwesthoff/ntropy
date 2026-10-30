@@ -37,7 +37,8 @@ use ntropy::ops;
 use ntropy::reconcile;
 use ntropy::scan::ScanWarning;
 use ntropy::session::VaultSession;
-use ntropy::vault::{ResolveOptions, Vault, layout, resolve};
+use ntropy::vault::{ResolveOptions, Vault, ViewName, layout, resolve};
+use ntropy::view::SkippedView;
 
 use crate::cli::{Cli, Command, GlobalArgs, SiteCommand, VaultCommand, ViewCommand, join};
 
@@ -269,6 +270,7 @@ fn cmd_init(
         println!("Initialized vault at {}", report.root.display());
     }
     report_gitignore_changes(&report.gitignore_added, &report.gitignore_removed);
+    print_skipped_views(&report.skipped_views);
     if let Some(recipient) = &report.recipient {
         println!("Encryption:    on");
         println!("Recipient:     {recipient}");
@@ -540,7 +542,7 @@ fn cmd_new(
     if !print && interactive {
         open_and_refresh_from(session, &path, Some(&initial))?;
     } else {
-        reconcile::refresh_views(session).context("while refreshing views")?;
+        refresh_views(session)?;
         println!("{}", path.display());
     }
     Ok(ExitCode::SUCCESS)
@@ -566,7 +568,7 @@ fn cmd_write(session: &VaultSession, target: &str) -> Result<ExitCode> {
         Some(rename) => rename.to,
         None => note.path,
     };
-    reconcile::refresh_views(session).context("while refreshing views")?;
+    refresh_views(session)?;
 
     println!("{}", path.display());
     Ok(ExitCode::SUCCESS)
@@ -585,7 +587,7 @@ fn cmd_today(session: &VaultSession, print: bool, interactive: bool) -> Result<E
             .then(|| format!("{}{}", outcome.note.raw_header, outcome.note.body));
         open_and_refresh_from(session, &outcome.note.path, initial.as_deref())?;
     } else {
-        reconcile::refresh_views(session).context("while refreshing views")?;
+        refresh_views(session)?;
         println!("{}", outcome.note.path.display());
     }
     Ok(ExitCode::SUCCESS)
@@ -595,6 +597,7 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
     println!("Reconciling vault at {}...", session.root().display());
     let report = reconcile::reconcile(session).context("while reconciling")?;
     output::print_warnings(&report.warnings);
+    print_skipped_views(&report.skipped_views);
     for rename in &report.renamed {
         println!(
             "renamed {} -> {}",
@@ -636,9 +639,17 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
         plural(report.views_synced, "view", "views"),
         plural(report.gitignore_added.len(), "entry", "entries"),
         plural(report.gitignore_removed.len(), "entry", "entries"),
-        plural(report.warnings.len(), "warning", "warnings"),
+        plural(
+            report.warnings.len() + report.skipped_views.len(),
+            "warning",
+            "warnings"
+        ),
     );
-    Ok(exit_for_warnings(global.strict, &report.warnings, 0))
+    Ok(exit_for_warnings(
+        global.strict,
+        &report.warnings,
+        report.skipped_views.len(),
+    ))
 }
 
 fn cmd_delete(
@@ -693,9 +704,11 @@ fn cmd_delete(
     }
 
     // The resolution scan above already surfaced any warnings; the view sync
-    // scans the same vault, so its warnings are discarded to avoid printing
-    // each one twice.
-    ops::delete_note(session, &path).context("while deleting the note")?;
+    // scans the same vault, so its scan warnings are discarded to avoid
+    // printing each one twice. Skipped views come from the config, which
+    // nothing above reported on.
+    let refresh = ops::delete_note(session, &path).context("while deleting the note")?;
+    print_skipped_views(&refresh.skipped_views);
     println!("Deleted {reference}");
     Ok(ExitCode::SUCCESS)
 }
@@ -707,15 +720,21 @@ fn cmd_view(session: &VaultSession, sub: ViewCommand) -> Result<ExitCode> {
             output::print_views(&views)?;
         }
         ViewCommand::Add { name, field } => {
-            ops::add_view(session, &name, &field).context("while adding the view")?;
+            let sync = ops::add_view(session, &name, &field).context("while adding the view")?;
+            print_skipped_views(&sync.skipped_views);
             println!("Added view `{name}` (field `{field}`).");
         }
         ViewCommand::Remove { name } => {
-            ops::remove_view(session, &name).context("while removing the view")?;
+            let sync = ops::remove_view(session, &name).context("while removing the view")?;
             println!("Removed view `{name}`.");
+            print_skipped_views(&sync.skipped_views);
             // ntropy never deletes the directory; tell the user it remains so
             // they can clean up the now-stale (and no longer ignored) tree.
-            if session.layout().view_dir(&name).exists() {
+            // An invalid name never becomes a path, so its directory is not
+            // looked up (ADR 0064).
+            let left_in_place = ViewName::parse(&name)
+                .is_ok_and(|view_name| session.layout().view_dir(&view_name).exists());
+            if left_in_place {
                 println!(
                     "left directory `{name}/` in place, delete it manually if you no longer need it"
                 );
@@ -782,9 +801,26 @@ fn open_and_refresh_from(session: &VaultSession, path: &Path, initial: Option<&s
     // Realign and refresh regardless of how the edit ended, so a note that was
     // written still gets its filename and views brought into step.
     reconcile::realign(session, path).context("while realigning the edited note")?;
-    reconcile::refresh_views(session).context("while refreshing views")?;
+    refresh_views(session)?;
     outcome?;
     Ok(())
+}
+
+/// Sync the views after a change, reporting any view that was skipped.
+///
+/// Only skipped views are reported here; scan warnings are left to the
+/// commands that resolve and list notes.
+fn refresh_views(session: &VaultSession) -> Result<()> {
+    let refresh = reconcile::refresh_views(session).context("while refreshing views")?;
+    print_skipped_views(&refresh.skipped_views);
+    Ok(())
+}
+
+/// Print each skipped view as a warning on stderr.
+pub(super) fn print_skipped_views(skipped: &[SkippedView]) {
+    for view in skipped {
+        eprintln!("warning: {view}");
+    }
 }
 
 /// Write the default-vault entry to the global config.

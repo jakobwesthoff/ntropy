@@ -13,14 +13,13 @@ use std::path::Path;
 use crate::error::Result;
 use crate::fsutil;
 use crate::reconcile;
-use crate::scan::ScanWarning;
 use crate::session::VaultSession;
 
 /// Delete the note file at `path` and sync the views.
 ///
-/// Returns the scan warnings produced while syncing (so a caller can honor
-/// `--strict`).
-pub fn delete_note(session: &VaultSession, path: &Path) -> Result<Vec<ScanWarning>> {
+/// Returns what the view refresh left to report: the scan warnings (so a
+/// caller can honor `--strict`) and any views it skipped.
+pub fn delete_note(session: &VaultSession, path: &Path) -> Result<reconcile::ViewRefresh> {
     fsutil::remove_file(path)?;
     reconcile::refresh_views(session)
 }

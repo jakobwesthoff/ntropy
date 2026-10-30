@@ -276,7 +276,7 @@ mod sync_tests {
 
     /// Scan the vault and sync the single `by-tag` view (grouping by `tags`).
     fn sync(session: &VaultSession) {
-        let view = ViewDef::new("by-tag", "tags");
+        let view = ViewDef::parse("by-tag", "tags").expect("valid view name");
         let scan = scan::scan_notes_dir(
             &session.layout().all_notes(),
             &crate::cipher::PlaintextCipher,

@@ -443,7 +443,7 @@ impl Model {
                 kind: SectionKind::View {
                     field: view.field.clone(),
                 },
-                title: view.name.clone(),
+                title: view.name.to_string(),
                 page: format!("{root}/index.html"),
                 groups: tree(&root, &values, &entries),
                 root,
@@ -1219,7 +1219,7 @@ mod tests {
             note(B, "Done", "status: Done\n"),
             note(C, "None", ""),
         ];
-        let views = [ViewDef::new("by-status", "status")];
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
         let model = model(&notes, &views, SiteOptions::default());
         assert_eq!(model.sections.len(), 2);
         let status = &model.sections[0];
@@ -1242,8 +1242,8 @@ mod tests {
     fn a_view_over_the_tags_field_is_no_section() {
         let notes = [note(A, "Tagged", "tags: [x]\nstatus: open\n")];
         let views = [
-            ViewDef::new("by-tag", "tags"),
-            ViewDef::new("by-status", "status"),
+            ViewDef::parse("by-tag", "tags").expect("valid view name"),
+            ViewDef::parse("by-status", "status").expect("valid view name"),
         ];
         let model = model(&notes, &views, SiteOptions::default());
         let titles: Vec<&str> = model.sections.iter().map(|s| s.title.as_str()).collect();
@@ -1291,7 +1291,7 @@ mod tests {
             note(B, "Two", "status: open\n"),
             note(C, "Three", "status: open\n"),
         ];
-        let views = [ViewDef::new("by-status", "status")];
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
         let model = model(&notes, &views, SiteOptions::default());
         // Newest first: Three, Two, One.
         let three = model.placements[0].as_ref().expect("placed");
@@ -1618,7 +1618,7 @@ mod tests {
             ),
             note(C, "Other", "tags: [t]\n"),
         ];
-        let views = [ViewDef::new("by-status", "status")];
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
         let model = model(&notes, &views, SiteOptions::default());
         let hidden = model
             .notes
@@ -1750,7 +1750,7 @@ mod tests {
     #[test]
     fn the_default_sidebar_is_one_section_per_section() {
         let notes = docs_notes();
-        let views = [ViewDef::new("by-status", "status")];
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
         let model = model(&notes, &views, SiteOptions::default());
         assert_eq!(
             sidebar_labels(&model),
@@ -1781,7 +1781,7 @@ mod tests {
     #[test]
     fn a_configured_root_shows_that_groups_entries_and_starts_the_breadcrumb_there() {
         let notes = docs_notes();
-        let views = [ViewDef::new("by-status", "status")];
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
         let options = SiteOptions {
             root: Some("tags/docs".to_string()),
             ..SiteOptions::default()
@@ -1833,7 +1833,7 @@ mod tests {
     #[test]
     fn a_view_group_can_be_the_root() {
         let notes = docs_notes();
-        let views = [ViewDef::new("by-status", "status")];
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
         let options = SiteOptions {
             root: Some("views/by-status/open".to_string()),
             ..SiteOptions::default()
@@ -1879,7 +1879,11 @@ mod tests {
                 root: Some(root.to_string()),
                 ..SiteOptions::default()
             };
-            let model = model(&notes, &[ViewDef::new("by-status", "status")], options);
+            let model = model(
+                &notes,
+                &[ViewDef::parse("by-status", "status").expect("valid view name")],
+                options,
+            );
             assert_eq!(sidebar_labels(&model)[0], "# by-status", "{root}");
             assert_eq!(model.warnings.len(), 1, "{root}: {:?}", model.warnings);
             assert!(model.warnings[0].contains(root), "{}", model.warnings[0]);
@@ -1893,7 +1897,7 @@ mod tests {
     #[test]
     fn the_nav_table_is_the_whole_sidebar() {
         let notes = docs_notes();
-        let views = [ViewDef::new("by-status", "status")];
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
         let options = nav(&format!(
             "[[nav]]\nlabel = \"Guide\"\nitems = [\n  {{ note = \"{A}\" }},\n  {{ note = \"{B}\", label = \"Setting up\" }},\n  {{ label = \"Reference\", tag = \"docs/dev\" }},\n  {{ label = \"More\", items = [{{ view = \"by-status\", group = \"open\" }}, {{ tags = true }}] }},\n]\n[[nav]]\nlabel = \"Everything\"\nitems = [{{ view = \"by-status\" }}]\n"
         ));
@@ -1957,7 +1961,7 @@ mod tests {
     #[test]
     fn nav_items_that_name_nothing_the_site_has_warn_and_are_left_out() {
         let notes = docs_notes();
-        let views = [ViewDef::new("by-status", "status")];
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
         const E: &str = "01ERZ3NDEKTSV4RRFFQ69G5FAV";
         const Z: &str = "01ZRZ3NDEKTSV4RRFFQ69G5FAV";
         let options = nav(&format!(

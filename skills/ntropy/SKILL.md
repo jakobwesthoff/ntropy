@@ -130,7 +130,8 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy lsp` | Language server for editors (link/tag completion, go-to-definition); not used from scripts. Editor setup lives in the ntropy README. |
 
 Global flags on every command: `--vault <path>`, `-n`/`--non-interactive`,
-`--strict` (malformed notes become errors instead of skip-warnings),
+`--strict` (malformed notes and skipped views become errors instead of
+skip-warnings),
 `-i`/`--identity <path>` and `--passphrase-file <path>` for encrypted vaults.
 
 ## Encrypted vaults

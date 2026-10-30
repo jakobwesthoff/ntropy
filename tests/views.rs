@@ -168,3 +168,143 @@ fn rebuild_catches_up_after_out_of_band_edit() {
     let tree = list_tree(&vault.root().join("by-tag"));
     assert_tree_snapshot!(tree);
 }
+
+// =============================================================================
+// Hostile view names
+// =============================================================================
+//
+// A view's directory is emptied of everything that is not one of its links,
+// so a name that points anywhere else turns a sync into a recursive delete.
+// Every test here keeps its victim tree inside its own temporary directory:
+// the vault sits one level below `base`, and the decoy beside it, so even a
+// regression can only delete files the test created.
+
+/// A vault at `<base>/vault` with the given views configured, plus the
+/// `base` directory that holds it.
+fn nested_vault(views: &[(&str, &str)]) -> (tempfile::TempDir, PathBuf, VaultSession) {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let base = dir.path().to_path_buf();
+    let root = base.join("vault");
+    std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
+    std::fs::create_dir_all(root.join(".ntropy")).expect(".ntropy");
+
+    let mut config = PerVaultConfig::default();
+    for (name, field) in views {
+        config.add(ViewConfig {
+            name: (*name).into(),
+            field: (*field).into(),
+        });
+    }
+    std::fs::write(
+        root.join(".ntropy").join("config.toml"),
+        config.to_toml().expect("toml"),
+    )
+    .expect("write config");
+
+    (dir, base, VaultSession::plaintext(Vault::new(root)))
+}
+
+/// Plant files a sync must never touch under `dir`, returning their paths.
+fn plant_victims(dir: &Path) -> Vec<PathBuf> {
+    let files = [
+        dir.join("important.txt"),
+        dir.join("sub").join("nested.txt"),
+    ];
+    for file in &files {
+        std::fs::create_dir_all(file.parent().expect("a planted file has a parent"))
+            .expect("victim dir");
+        std::fs::write(file, "keep me").expect("victim file");
+    }
+    files.to_vec()
+}
+
+fn assert_all_exist(guard: &tempfile::TempDir, files: &[PathBuf]) {
+    for file in files {
+        assert!(
+            file.starts_with(guard.path()),
+            "the victim `{}` must live in the test's own temp dir",
+            file.display()
+        );
+        assert!(file.exists(), "`{}` was deleted", file.display());
+    }
+}
+
+#[test]
+fn a_traversing_view_name_cannot_delete_outside_the_vault() {
+    let (guard, base, vault) = nested_vault(&[("../decoy", "tags")]);
+    let victims = plant_victims(&base.join("decoy"));
+
+    let report = reconcile::reconcile(&vault).expect("reconcile");
+
+    assert_all_exist(&guard, &victims);
+    let skipped: Vec<&str> = report
+        .skipped_views
+        .iter()
+        .map(|v| v.name.as_str())
+        .collect();
+    assert_eq!(skipped, ["../decoy"]);
+}
+
+#[test]
+fn a_traversing_view_name_cannot_delete_outside_the_vault_on_refresh() {
+    // `refresh_views` is what `new`, `today`, `write`, `delete` and the
+    // editor flow run after every change.
+    let (guard, base, vault) = nested_vault(&[("../decoy", "tags")]);
+    let victims = plant_victims(&base.join("decoy"));
+
+    reconcile::refresh_views(&vault).expect("refresh");
+
+    assert_all_exist(&guard, &victims);
+}
+
+#[test]
+fn an_absolute_view_name_cannot_delete_outside_the_vault() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let decoy = dir.path().join("decoy");
+    let name = decoy.to_str().expect("temp paths are UTF-8").to_string();
+    let (guard, _base, vault) = nested_vault(&[(&name, "tags")]);
+    let victims = plant_victims(&decoy);
+
+    reconcile::reconcile(&vault).expect("reconcile");
+
+    // The victims live in a second temp dir, so check that one.
+    assert_all_exist(&dir, &victims);
+    drop(guard);
+}
+
+#[test]
+fn a_dot_git_view_name_cannot_empty_the_repository() {
+    let (guard, _base, vault) = nested_vault(&[(".git", "tags")]);
+    let git = vault.root().join(".git");
+    let victims = [
+        git.join("HEAD"),
+        git.join("refs").join("heads").join("main"),
+    ];
+    for file in &victims {
+        std::fs::create_dir_all(file.parent().expect("a git file has a parent")).expect("git dir");
+        std::fs::write(file, "ref: refs/heads/main\n").expect("git file");
+    }
+
+    reconcile::reconcile(&vault).expect("reconcile");
+
+    assert_all_exist(&guard, &victims);
+}
+
+#[test]
+fn a_reserved_prefix_view_name_cannot_touch_the_notes() {
+    let (guard, _base, vault) = nested_vault(&[("all-notes/x", "status")]);
+    write_note(
+        &vault,
+        ULID_A,
+        "keep",
+        "---\ntitle: Keep\nstatus: open\n---\nbody\n",
+    );
+    let resource = vault.layout().all_notes().join("x").join("keep.txt");
+    std::fs::create_dir_all(resource.parent().expect("a resource has a parent"))
+        .expect("resource dir");
+    std::fs::write(&resource, "an attachment").expect("resource");
+
+    reconcile::reconcile(&vault).expect("reconcile");
+
+    assert_all_exist(&guard, &[resource]);
+}

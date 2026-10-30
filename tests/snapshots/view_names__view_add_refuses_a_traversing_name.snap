@@ -1,0 +1,21 @@
+---
+source: tests/view_names.rs
+info:
+  program: ntropy
+  args:
+    - "--vault"
+    - "."
+    - view
+    - add
+    - "../escape"
+    - "--field"
+    - tags
+  env:
+    EDITOR: "true"
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while adding the view: `../escape` is not a valid view name: the segment `..` starts with a dot (try `escape`)

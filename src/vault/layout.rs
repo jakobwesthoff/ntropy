@@ -10,6 +10,8 @@
 
 use std::path::{Path, PathBuf};
 
+use super::ViewName;
+
 /// The canonical notes directory, the lossless source of truth.
 pub const ALL_NOTES_DIR: &str = "all-notes";
 /// The reserved per-vault configuration/templates directory.
@@ -145,8 +147,16 @@ impl Layout {
     }
 
     /// The output directory of a named view: `<root>/<name>`.
-    pub fn view_dir(&self, name: &str) -> PathBuf {
-        self.root.join(name)
+    ///
+    /// Takes a [`ViewName`] rather than a string: the validated name is what
+    /// keeps this join inside the vault (ADR 0064).
+    pub fn view_dir(&self, name: &ViewName) -> PathBuf {
+        self.root.join(self.view_relative_dir(name))
+    }
+
+    /// A view's directory relative to the vault root: `<name>`.
+    pub fn view_relative_dir(&self, name: &ViewName) -> PathBuf {
+        PathBuf::from(name.as_str())
     }
 
     /// `<root>/.gitignore`, the auto-managed ignore file for view directories.
@@ -215,9 +225,21 @@ mod tests {
             layout.default_template(),
             PathBuf::from("/vault/.ntropy/templates/default.md")
         );
-        assert_eq!(layout.view_dir("by-tag"), PathBuf::from("/vault/by-tag"));
+        let by_tag = ViewName::parse("by-tag").expect("valid view name");
+        assert_eq!(layout.view_dir(&by_tag), PathBuf::from("/vault/by-tag"));
         assert_eq!(layout.gitignore_file(), PathBuf::from("/vault/.gitignore"));
         assert_eq!(layout.readme_file(), PathBuf::from("/vault/README.md"));
+    }
+
+    #[test]
+    fn computes_view_paths_for_nested_names() {
+        let layout = Layout::new("/vault");
+        let nested = ViewName::parse("area/work").expect("valid view name");
+        assert_eq!(layout.view_dir(&nested), PathBuf::from("/vault/area/work"));
+        assert_eq!(
+            layout.view_relative_dir(&nested),
+            PathBuf::from("area/work")
+        );
     }
 
     #[test]

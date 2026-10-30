@@ -6,6 +6,8 @@ Date: 2026-06-24
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0064](0064-view-names-are-validated-slug-segments.md).
+
 ## Context
 
 The vault holds canonical notes and materialized view trees (ADR 0008). The

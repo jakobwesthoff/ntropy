@@ -27,6 +27,16 @@ and this project adheres to
   `EDITOR="'/Applications/My Editor.app/Contents/MacOS/edit' -w"`. When the
   program cannot be found, the shell says so on the terminal, and ntropy
   reports that the editor exited with a non-zero status.
+- View names are limited to lowercase letters, digits and single dashes,
+  nested with `/` (`by-status`, `area/work`), with no part starting with a dot
+  and no reserved name as the first part. `view add` refuses other names, such
+  as `By_Tag`, `my.view` or `area work`, and suggests a valid one. A view
+  already configured under such a name is skipped with a warning wherever
+  views are synced, its old directory stays on disk and stays ignored by git,
+  and `--strict` makes `reconcile` and `site` fail on it. Rename it with
+  `ntropy view remove <name>` and `ntropy view add <new-name> --field <field>`,
+  then delete the old directory. `vault encrypt` refuses to start until it is
+  removed.
 
 ### Fixed
 
@@ -56,6 +66,18 @@ and this project adheres to
   A `Meeting.MD` was listed as `Meeting`, which `new --template Meeting`
   could not find on a case-sensitive filesystem, and a directory named like
   a template was listed although it cannot be loaded.
+
+### Security
+
+- A view name in `.ntropy/config.toml` could point outside its directory,
+  and the next view sync deleted every file in the directory it named, down
+  through its subdirectories, that was not one of the view's links. A name
+  such as `../Documents` or an absolute path reached outside the vault, and
+  `.git` or `all-notes/x` reached into it. Every command that syncs views ran
+  it, including `reconcile`, `new` and `today`, and `vault encrypt` deleted
+  the named directory outright. A name with two `..` parts made `site` write
+  pages outside its output directory, and a name with a line break added lines
+  to `.gitignore`. View names are now validated before they become paths.
 
 ## v2.2.0 - 2026-10-10
 

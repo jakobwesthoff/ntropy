@@ -6,6 +6,8 @@ Date: 2026-06-24
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0064](0064-view-names-are-validated-slug-segments.md).
+
 ## Context
 
 Scanning `all-notes/` can meet files that are not well-formed notes: malformed

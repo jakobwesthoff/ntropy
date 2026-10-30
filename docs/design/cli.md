@@ -268,7 +268,8 @@ and previous/next links. The site works when opened straight from disk.
   `Exported 9 pages to out (2 notes, 0 warnings)`.
 - Scan warnings and export warnings (a referenced file missing or outside
   the vault, a link to a note left out, a configured index note not
-  exported) print to stderr and fail the command under `--strict`; the site
+  exported, a configured view skipped for an invalid name, which gets no
+  pages) print to stderr and fail the command under `--strict`; the site
   is written either way.
 - In an encrypted vault an output directory inside the vault draws a
   warning, as `render` warns for an artifact.
@@ -333,6 +334,10 @@ line per pruned one, and a closing summary of the notes scanned, files renamed,
 links relinked, views synced, ignore entries added and removed, and warnings.
 The summary always prints, so a no-op run is no longer silent.
 
+A configured view with an invalid name (ADR 0064) is not synced; it prints a
+`warning: skipped view ...` line on stderr, counts among the summary's
+warnings, and fails the run under `--strict`.
+
 ### `view list|add|remove`
 
 Manage per-vault materialized view definitions (each pairs an output directory
@@ -343,12 +348,19 @@ edit` in v1; editing a view is remove + add.
 - `view list` — list configured views as the aligned `NAME FIELD` table.
 - `view add <name> --field <field>` — define a new view and materialize it (the
   view's directory is its name; grouping values are always normalized, ADR
-  0009/0023, so there is no case flag). The name must not be reserved
-  (`all-notes`, `.ntropy`, `.gitignore`) or already in use. Adding a view also
-  records its directory in `.gitignore` (ADR 0032).
+  0009/0023, so there is no case flag). The name must be a valid view name
+  (ADR 0064, rules in [vault-layout-and-views.md](vault-layout-and-views.md))
+  and not already in use; an invalid name is refused with the nearest valid
+  one as a suggestion. Adding a view also records its directory in
+  `.gitignore` (ADR 0032).
 - `view remove <name>` — delete a view definition and prune its `.gitignore`
-  entry. The view's directory is left on disk (ntropy never deletes a
-  directory) and reported so you can remove it yourself.
+  entry. It takes any configured name, valid or not. The view's directory is
+  left on disk (ntropy never deletes a directory) and, for a valid name,
+  reported so you can remove it yourself.
+
+`view add` and `view remove` warn about every other configured view they skip
+for an invalid name, as `init`, `new`, `today`, `write`, `delete` and the
+editor flow do whenever they sync the views.
 
 ### `tags`
 

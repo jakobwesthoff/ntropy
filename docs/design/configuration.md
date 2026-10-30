@@ -97,7 +97,11 @@ broken pointer is a hard error.
 
 ## Reserved names
 
-Within a vault, `all-notes`, `.ntropy`, and any configured view `name` are
-reserved (ADR 0007). A view `name` must not collide with `all-notes` or another
-view. `.ntropy-vault` is reserved as the pointer-file name during walk-up
+Within a vault, `all-notes`, `.ntropy`, `.gitignore`, `README.md`, and the
+directory of every configured view are reserved (ADR 0007). A view `name` must
+not repeat another view's, and its first segment must not be one of the
+reserved names; the full rules for view names, and what happens to a
+configured view whose name breaks them, are in
+[vault-layout-and-views.md](vault-layout-and-views.md) (ADR 0064).
+`.ntropy-vault` is reserved as the pointer-file name during walk-up
 (ADR 0026).

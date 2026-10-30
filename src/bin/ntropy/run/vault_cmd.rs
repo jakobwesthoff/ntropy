@@ -19,6 +19,7 @@ use ntropy::keys;
 use ntropy::migrate::{self, Marker, Migration, NoHooks, Operation};
 use ntropy::session::VaultSession;
 use ntropy::vault::{Vault, layout};
+use ntropy::view::{SkipReason, SkippedView};
 
 use crate::cli::{GlobalArgs, VaultCommand};
 
@@ -67,6 +68,17 @@ fn encrypt(
 ) -> Result<()> {
     if layout::is_encrypted(vault.root()) && !resume {
         bail!("this vault is already encrypted");
+    }
+    // Before the prompt and the keypair: a view tree the conversion cannot
+    // remove would stay in the vault, its link names spelling out note
+    // titles in plaintext, and the keypair alone already marks the vault as
+    // encrypted. A resumed run is past that point and skips such views.
+    if !resume {
+        let blocking =
+            migrate::views_blocking_encrypt(&vault).context("while checking the views")?;
+        if !blocking.is_empty() {
+            bail!("{}", blocking_views_message(&blocking));
+        }
     }
     ask(yes, interactive, "Encrypt every note in this vault?")?;
 
@@ -117,8 +129,34 @@ fn encrypt(
     for dir in &report.views_removed {
         println!("removed view directory {}", dir.display());
     }
+    for view in &report.views_skipped {
+        eprintln!("warning: {view}; its directory was left in place");
+    }
     history_notice();
     Ok(())
+}
+
+/// Why `vault encrypt` refuses to start: one line per view in the way, each
+/// with what to do about it.
+fn blocking_views_message(blocking: &[SkippedView]) -> String {
+    let mut message =
+        String::from("these views cannot be removed safely, so the vault was not encrypted:");
+    for view in blocking {
+        let name = view.name.escape_debug();
+        match &view.reason {
+            SkipReason::InvalidName(reason) => message.push_str(&format!(
+                "\n  view `{name}`: {reason}; remove it with `ntropy view remove {}`, \
+                 delete its directory, then encrypt again",
+                shell_quote(&view.name)
+            )),
+        }
+    }
+    message
+}
+
+/// `text` as one single-quoted shell word.
+fn shell_quote(text: &str) -> String {
+    format!("'{}'", text.replace('\'', r"'\''"))
 }
 
 /// Convert an encrypted vault back to plaintext storage.

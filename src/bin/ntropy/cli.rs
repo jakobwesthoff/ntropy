@@ -41,7 +41,7 @@ pub struct GlobalArgs {
     #[arg(short = 'n', long = "non-interactive", global = true)]
     pub non_interactive: bool,
 
-    /// Treat malformed/badly-named notes as errors instead of warnings.
+    /// Treat malformed/badly-named notes and skipped views as errors instead of warnings.
     #[arg(long, global = true)]
     pub strict: bool,
 

@@ -33,8 +33,11 @@ pub use plan::Conversion;
 
 use crate::cipher::{CipherError, NoteCipher};
 use crate::fsutil::{self, FsError};
+use crate::reconcile;
 use crate::scan::{self, ScanError};
 use crate::session::VaultSession;
+use crate::vault::Vault;
+use crate::view::SkippedView;
 
 /// Why a conversion could not run or complete.
 #[derive(Debug, thiserror::Error)]
@@ -131,7 +134,7 @@ pub struct NoHooks;
 impl MigrationHooks for NoHooks {}
 
 /// What a conversion did.
-#[derive(Debug, Default, PartialEq, Eq)]
+#[derive(Debug, Default)]
 pub struct MigrationReport {
     /// Notes written in their new form.
     pub produced: usize,
@@ -143,6 +146,9 @@ pub struct MigrationReport {
     pub deleted: usize,
     /// View directories removed, for a conversion to encrypted storage.
     pub views_removed: Vec<PathBuf>,
+    /// Configured views whose directories were left in place, because they
+    /// could not be removed safely.
+    pub views_skipped: Vec<SkippedView>,
     /// Whether this run continued an interrupted conversion.
     pub resumed: bool,
 }
@@ -272,7 +278,7 @@ pub fn run(
     }
 
     if migration.operation == Operation::Encrypt {
-        report.views_removed = remove_view_trees(session)?;
+        (report.views_removed, report.views_skipped) = remove_view_trees(session)?;
     }
 
     marker::remove_at(&marker_path)?;
@@ -291,12 +297,17 @@ fn reads_back_as(cipher: &dyn NoteCipher, path: &Path, expected: &str) -> bool {
 /// Remove the materialized view trees, which an encrypted vault cannot have.
 ///
 /// Done at commit rather than up front so an interrupted conversion leaves the
-/// vault's views intact and usable.
-fn remove_view_trees(session: &VaultSession) -> Result<Vec<PathBuf>, MigrateError> {
+/// vault's views intact and usable. A view whose tree cannot be removed safely
+/// is skipped and reported, never an error: this runs after the sources are
+/// gone, and failing here would leave the conversion marker behind.
+fn remove_view_trees(
+    session: &VaultSession,
+) -> Result<(Vec<PathBuf>, Vec<SkippedView>), MigrateError> {
     let config = crate::config::PerVaultConfig::load(&session.layout().config_file())?;
+    let (views, skipped) = reconcile::configured_views(&config);
 
     let mut removed = Vec::new();
-    for view in &config.views {
+    for view in &views {
         let dir = session.layout().view_dir(&view.name);
         if dir.is_dir() {
             fsutil::remove_dir_all(&dir)?;
@@ -304,7 +315,18 @@ fn remove_view_trees(session: &VaultSession) -> Result<Vec<PathBuf>, MigrateErro
         }
     }
     removed.sort();
-    Ok(removed)
+    Ok((removed, skipped))
+}
+
+/// The configured views whose trees `vault encrypt` could not remove safely.
+///
+/// A conversion leaves such a tree in the vault, where its link names spell
+/// out note titles in plaintext, so `vault encrypt` asks for this before it
+/// writes anything and refuses while the list is not empty.
+pub fn views_blocking_encrypt(vault: &Vault) -> Result<Vec<SkippedView>, MigrateError> {
+    let config = crate::config::PerVaultConfig::load(&vault.layout().config_file())?;
+    let (_, skipped) = reconcile::configured_views(&config);
+    Ok(skipped)
 }
 
 #[cfg(test)]
@@ -340,7 +362,20 @@ mod tests {
     /// A plaintext vault holding two notes, ready to be encrypted.
     fn plaintext_vault() -> (tempfile::TempDir, VaultSession) {
         let dir = tempfile::tempdir().expect("temp dir");
-        let root = dir.path();
+        let session = plaintext_vault_at(dir.path());
+        (dir, session)
+    }
+
+    /// The same vault at `<base>/vault`, so a view name that climbs out of
+    /// the vault still lands inside the test's own temp dir.
+    fn nested_plaintext_vault() -> (tempfile::TempDir, PathBuf, VaultSession) {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let base = dir.path().to_path_buf();
+        let session = plaintext_vault_at(&base.join("vault"));
+        (dir, base, session)
+    }
+
+    fn plaintext_vault_at(root: &Path) -> VaultSession {
         std::fs::create_dir_all(root.join("all-notes")).expect("all-notes");
         std::fs::create_dir_all(root.join(".ntropy")).expect(".ntropy");
         std::fs::write(
@@ -353,8 +388,39 @@ mod tests {
             "---\ntitle: Beta\n---\nsecond body\n",
         )
         .expect("write note");
-        let session = VaultSession::plaintext(Vault::new(root));
-        (dir, session)
+        VaultSession::plaintext(Vault::new(root))
+    }
+
+    /// Write a config holding the given `(name, field)` views verbatim.
+    fn configure_views(session: &VaultSession, views: &[(&str, &str)]) {
+        let mut config = crate::config::PerVaultConfig::default();
+        for (name, field) in views {
+            config.add(crate::config::ViewConfig {
+                name: (*name).into(),
+                field: (*field).into(),
+            });
+        }
+        std::fs::write(
+            session.layout().config_file(),
+            config.to_toml().expect("toml"),
+        )
+        .expect("write config");
+    }
+
+    fn encrypt(session: &VaultSession) -> MigrationReport {
+        let (recipient, target) = fresh_target();
+        run(
+            session,
+            &Migration {
+                operation: Operation::Encrypt,
+                source: &PlaintextCipher,
+                target: &target,
+                resume: false,
+                marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
+                hooks: &NoHooks,
+            },
+        )
+        .expect("encrypt")
     }
 
     /// A keypair plus a cipher that can both write and read it back.
@@ -548,8 +614,7 @@ mod tests {
             config.to_toml().expect("toml"),
         )
         .expect("write config");
-        std::fs::create_dir_all(session.layout().view_dir("by-tag").join("work"))
-            .expect("view tree");
+        std::fs::create_dir_all(session.root().join("by-tag").join("work")).expect("view tree");
 
         let (recipient, target) = fresh_target();
         let report = run(
@@ -565,8 +630,47 @@ mod tests {
         )
         .expect("encrypt");
 
-        assert_eq!(report.views_removed, [session.layout().view_dir("by-tag")]);
-        assert!(!session.layout().view_dir("by-tag").exists());
+        assert_eq!(report.views_removed, [session.root().join("by-tag")]);
+        assert!(!session.root().join("by-tag").exists());
+        assert!(report.views_skipped.is_empty());
+    }
+
+    #[test]
+    fn encrypt_never_removes_a_tree_outside_the_vault() {
+        let (guard, base, session) = nested_plaintext_vault();
+        let victim = base.join("decoy").join("sub").join("keep.txt");
+        std::fs::create_dir_all(victim.parent().expect("a victim has a parent")).expect("decoy");
+        std::fs::write(&victim, "keep me").expect("victim");
+        configure_views(&session, &[("../decoy", "tags")]);
+
+        let report = encrypt(&session);
+
+        assert!(victim.starts_with(guard.path()));
+        assert!(victim.exists(), "the decoy tree was removed");
+        assert!(report.views_removed.is_empty());
+        let skipped: Vec<&str> = report
+            .views_skipped
+            .iter()
+            .map(|s| s.name.as_str())
+            .collect();
+        assert_eq!(skipped, ["../decoy"]);
+        assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn views_with_invalid_names_block_encrypt() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("by-tag", "tags"), ("By_Tag", "tags")]);
+        let blocking = views_blocking_encrypt(&session).expect("check");
+        let names: Vec<&str> = blocking.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, ["By_Tag"]);
+    }
+
+    #[test]
+    fn valid_views_do_not_block_encrypt() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("by-tag", "tags")]);
+        assert!(views_blocking_encrypt(&session).expect("check").is_empty());
     }
 
     // -------------------------------------------------------------------------

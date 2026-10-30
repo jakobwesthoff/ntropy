@@ -554,7 +554,7 @@ mod tests {
         ];
         Model::build(
             &notes,
-            &[ViewDef::new("by-status", "status")],
+            &[ViewDef::parse("by-status", "status").expect("valid view name")],
             &SiteOptions::default(),
             "Vault & Co",
         )
@@ -680,7 +680,7 @@ mod tests {
         ];
         let model = Model::build(
             &notes,
-            &[ViewDef::new("by-area", "area")],
+            &[ViewDef::parse("by-area", "area").expect("valid view name")],
             &SiteOptions::default(),
             "V",
         )
@@ -718,7 +718,7 @@ mod tests {
         ];
         Model::build(
             &notes,
-            &[ViewDef::new("by-status", "status")],
+            &[ViewDef::parse("by-status", "status").expect("valid view name")],
             &options,
             "V",
         )

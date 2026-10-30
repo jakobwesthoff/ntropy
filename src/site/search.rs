@@ -205,7 +205,7 @@ mod tests {
             ),
             note("01BRZ3NDEKTSV4RRFFQ69G5FAV", "Two", "tags: [work]\n", ""),
         ];
-        let views = [crate::view::ViewDef::new("by-status", "status")];
+        let views = [crate::view::ViewDef::parse("by-status", "status").expect("valid view name")];
         let model = Model::build(&notes, &views, &SiteOptions::default(), "V").expect("model");
         let refs: Vec<&Note> = notes.iter().collect();
         let script = script(&model, &refs);

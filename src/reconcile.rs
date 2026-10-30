@@ -22,8 +22,8 @@ use crate::link;
 use crate::note::Note;
 use crate::scan::{self, ScanWarning};
 use crate::session::VaultSession;
-use crate::vault::Vault;
-use crate::view::{self, ViewDef};
+use crate::vault::{Vault, ViewName};
+use crate::view::{self, SkippedView, ViewDef};
 
 /// A single filename realignment.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,24 +62,39 @@ pub struct ReconcileReport {
     pub gitignore_removed: Vec<String>,
     /// Warnings from scanning `all-notes/` (malformed/badly-named files).
     pub warnings: Vec<ScanWarning>,
+    /// Configured views that were not synced (ADR 0064).
+    pub skipped_views: Vec<SkippedView>,
+}
+
+/// What a view refresh left for the caller to report.
+#[derive(Debug, Default)]
+pub struct ViewRefresh {
+    /// Warnings from scanning `all-notes/`.
+    pub warnings: Vec<ScanWarning>,
+    /// Configured views that were not synced.
+    pub skipped_views: Vec<SkippedView>,
 }
 
 /// Sync all configured views to the current note set (no realignment).
 ///
-/// Returns the scan warnings so a caller can honor `--strict`.
+/// Returns the scan warnings so a caller can honor `--strict`, and the views
+/// it skipped so a caller can report them.
 ///
 /// An encrypted vault has no views to sync, and returning before the scan is
 /// what makes that fact load-bearing rather than cosmetic: `new` calls this
 /// after creating a note, so a scan here would need the identity and creation
 /// would stop working on a locked vault (ADR 0041).
-pub fn refresh_views(session: &VaultSession) -> Result<Vec<ScanWarning>> {
+pub fn refresh_views(session: &VaultSession) -> Result<ViewRefresh> {
     if session.is_encrypted() {
-        return Ok(Vec::new());
+        return Ok(ViewRefresh::default());
     }
     let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
-    let views = load_views(session)?;
-    sync_views_and_gitignore(session, &views, &scan.notes)?;
-    Ok(scan.warnings)
+    let (views, skipped_views) = load_views(session)?;
+    sync_views_and_gitignore(session, &views, &skipped_views, &scan.notes)?;
+    Ok(ViewRefresh {
+        warnings: scan.warnings,
+        skipped_views,
+    })
 }
 
 /// Sync every view and bring `.gitignore` in step with them.
@@ -91,11 +106,26 @@ pub fn refresh_views(session: &VaultSession) -> Result<Vec<ScanWarning>> {
 fn sync_views_and_gitignore(
     vault: &Vault,
     views: &[ViewDef],
+    skipped: &[SkippedView],
     notes: &[Note],
 ) -> Result<gitignore::SyncReport> {
     view::sync_all(vault, views, notes)?;
-    let names: Vec<&str> = views.iter().map(|v| v.name.as_str()).collect();
-    gitignore::sync(vault, &names)
+    sync_gitignore(vault, views, skipped)
+}
+
+/// Bring `.gitignore` in step with the configured views.
+///
+/// The skipped views keep whatever entry they already have, so a view that
+/// stopped syncing because of its name does not have its old directory
+/// surface in `git status`.
+pub fn sync_gitignore(
+    vault: &Vault,
+    views: &[ViewDef],
+    skipped: &[SkippedView],
+) -> Result<gitignore::SyncReport> {
+    let names: Vec<&ViewName> = views.iter().map(|v| &v.name).collect();
+    let retained: Vec<&str> = skipped.iter().map(|v| v.name.as_str()).collect();
+    gitignore::sync(vault, &names, &retained)
 }
 
 /// Realign drifted filenames, adopt stray plaintext notes, then sync views.
@@ -157,16 +187,18 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
         warnings.retain(|warning| !fixed.contains(&warning.path.as_path()));
     }
 
-    let views = load_views(session)?;
-    let (views_synced, gitignore) = if session.is_encrypted() {
+    let (views, skipped_views) = load_views(session)?;
+    let (views_synced, gitignore, skipped_views) = if session.is_encrypted() {
         // Views are disabled here, and `.gitignore` is left alone: pruning its
         // managed entries would report "stopped ignoring /by-tag/" about a
-        // directory that does not exist.
-        (0, gitignore::SyncReport::default())
+        // directory that does not exist. Nothing is synced, so nothing is
+        // reported as skipped either.
+        (0, gitignore::SyncReport::default(), Vec::new())
     } else {
         (
             views.len(),
-            sync_views_and_gitignore(session, &views, &notes)?,
+            sync_views_and_gitignore(session, &views, &skipped_views, &notes)?,
+            skipped_views,
         )
     };
 
@@ -179,6 +211,7 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
         gitignore_added: gitignore.added,
         gitignore_removed: gitignore.removed,
         warnings,
+        skipped_views,
     })
 }
 
@@ -294,20 +327,27 @@ fn canonical_sibling(path: &Path, filename: &str) -> PathBuf {
         .join(filename)
 }
 
-/// Read the per-vault view definitions as [`ViewDef`]s.
-fn load_views(vault: &Vault) -> Result<Vec<ViewDef>> {
+/// Read the per-vault view definitions: the valid ones as [`ViewDef`]s, the
+/// ones with an invalid name as [`SkippedView`]s (ADR 0064).
+fn load_views(vault: &Vault) -> Result<(Vec<ViewDef>, Vec<SkippedView>)> {
     let config = PerVaultConfig::load(&vault.layout().config_file())?;
-    Ok(config
-        .views
-        .iter()
-        .map(|v| ViewDef::new(&v.name, &v.field))
-        .collect())
+    Ok(configured_views(&config))
+}
+
+/// Split a config's view entries into valid definitions and skipped views.
+pub fn configured_views(config: &PerVaultConfig) -> (Vec<ViewDef>, Vec<SkippedView>) {
+    view::parse_defs(
+        config
+            .views
+            .iter()
+            .map(|v| (v.name.as_str(), v.field.as_str())),
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::{vault_with_view, write_note};
+    use crate::test_support::{vault_with_view, vault_with_views, write_note};
 
     const ULID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
 
@@ -320,7 +360,7 @@ mod tests {
             "---\ntitle: Note\ntags: [area/work]\n---\nbody\n",
         );
 
-        let warnings = refresh_views(&session).expect("refresh");
+        let warnings = refresh_views(&session).expect("refresh").warnings;
         assert!(warnings.is_empty());
 
         // The link exists and resolves back to the canonical file.
@@ -389,6 +429,55 @@ mod tests {
         assert_eq!(report.views_synced, 1);
         assert_eq!(report.warnings.len(), 1);
         assert!(report.renamed.is_empty());
+    }
+
+    // The invalid names below stay inside the temporary vault even when
+    // joined onto its root, so these tests are safe against unfixed code.
+
+    #[test]
+    fn reconcile_skips_and_reports_a_view_with_an_invalid_name() {
+        let (_guard, session) = vault_with_views(&[("by-tag", "tags"), ("By_Tag", "tags")]);
+        let report = reconcile(&session).expect("reconcile");
+        assert_eq!(report.views_synced, 1);
+        let skipped: Vec<&str> = report
+            .skipped_views
+            .iter()
+            .map(|v| v.name.as_str())
+            .collect();
+        assert_eq!(skipped, ["By_Tag"]);
+        assert!(!session.root().join("By_Tag").exists());
+    }
+
+    #[test]
+    fn refresh_reports_a_view_with_an_invalid_name() {
+        let (_guard, session) = vault_with_views(&[("By_Tag", "tags")]);
+        let refresh = refresh_views(&session).expect("refresh");
+        let skipped: Vec<&str> = refresh
+            .skipped_views
+            .iter()
+            .map(|v| v.name.as_str())
+            .collect();
+        assert_eq!(skipped, ["By_Tag"]);
+        assert!(!session.root().join("By_Tag").exists());
+    }
+
+    #[test]
+    fn a_skipped_view_keeps_its_ignore_entry() {
+        // A view created under the old name rules: its tree and its managed
+        // entry exist, and after the upgrade the view is skipped.
+        let (_guard, session) = vault_with_views(&[("By_Tag", "tags")]);
+        let gitignore = session.layout().gitignore_file();
+        std::fs::write(
+            &gitignore,
+            format!("{}\n/By_Tag/\n", crate::gitignore::MARKER),
+        )
+        .expect("write");
+
+        let report = reconcile(&session).expect("reconcile");
+        assert!(report.gitignore_removed.is_empty());
+        refresh_views(&session).expect("refresh");
+        let after = std::fs::read_to_string(&gitignore).expect("read");
+        assert!(after.contains("/By_Tag/"), "entry pruned: {after}");
     }
 
     #[test]
@@ -591,12 +680,20 @@ mod tests {
         let mut content = std::fs::read_to_string(&gitignore).expect("read");
         content.push_str(&format!("{}\n/old/\n", crate::gitignore::MARKER));
         std::fs::write(&gitignore, content).expect("write");
-        std::fs::create_dir_all(session.layout().view_dir("old")).expect("orphan dir");
+        std::fs::create_dir_all(
+            session
+                .layout()
+                .view_dir(&ViewName::parse("old").expect("valid view name")),
+        )
+        .expect("orphan dir");
 
         let report = reconcile(&session).expect("second reconcile");
         assert_eq!(report.gitignore_removed, ["/old/"]);
         assert!(
-            session.layout().view_dir("old").exists(),
+            session
+                .layout()
+                .view_dir(&ViewName::parse("old").expect("valid view name"))
+                .exists(),
             "the directory must be left in place"
         );
         let after = std::fs::read_to_string(&gitignore).expect("read");
@@ -805,7 +902,9 @@ mod tests {
             // What makes `ntropy new` work on a locked vault: this must return
             // before it would otherwise scan.
             let fixture = encrypted_vault();
-            let warnings = refresh_views(&fixture.locked()).expect("refresh while locked");
+            let warnings = refresh_views(&fixture.locked())
+                .expect("refresh while locked")
+                .warnings;
             assert!(warnings.is_empty());
         }
 

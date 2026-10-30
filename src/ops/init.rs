@@ -20,11 +20,18 @@ use crate::fsutil;
 use crate::gitignore;
 #[cfg(feature = "encryption")]
 use crate::keys;
-use crate::vault::{Layout, Vault, layout, seed};
+use crate::reconcile;
+use crate::vault::{Layout, Vault, ViewName, layout, seed};
+use crate::view::SkippedView;
 
 /// The view seeded into a fresh vault.
 const SEED_VIEW_NAME: &str = "by-tag";
 const SEED_VIEW_FIELD: &str = "tags";
+
+/// [`SEED_VIEW_NAME`] as the validated name its directory is built from.
+fn seed_view_name() -> ViewName {
+    ViewName::parse(SEED_VIEW_NAME).expect("the seed view name is a valid view name")
+}
 
 /// Resolves a seeded file's destination against a vault's layout.
 type SeedPath = fn(&Layout) -> PathBuf;
@@ -65,6 +72,9 @@ pub struct InitReport {
     pub gitignore_removed: Vec<String>,
     /// The vault's recipient, when it is encrypted.
     pub recipient: Option<String>,
+    /// Configured views skipped because of their name, when completing an
+    /// existing vault.
+    pub skipped_views: Vec<SkippedView>,
 }
 
 /// Initialize (or complete) a plaintext vault rooted at `path`.
@@ -114,7 +124,7 @@ pub fn init_vault_with(path: &Path, options: &InitOptions) -> Result<InitReport>
         created.push(config_path);
         if !encrypted {
             // The seeded view's directory, empty until notes carry tags.
-            ensure_dir(&layout.view_dir(SEED_VIEW_NAME), &mut created)?;
+            ensure_dir(&layout.view_dir(&seed_view_name()), &mut created)?;
         }
     }
 
@@ -122,12 +132,15 @@ pub fn init_vault_with(path: &Path, options: &InitOptions) -> Result<InitReport>
     // view directories stay out of version control (ADR 0032). Loading from
     // disk covers both a fresh init and completing an existing vault. An
     // encrypted vault has no views, so it gets no ignore file at all.
-    let sync = if encrypted {
-        gitignore::SyncReport::default()
+    let (sync, skipped_views) = if encrypted {
+        (gitignore::SyncReport::default(), Vec::new())
     } else {
         let config = PerVaultConfig::load(&layout.config_file())?;
-        let names: Vec<&str> = config.views.iter().map(|v| v.name.as_str()).collect();
-        gitignore::sync(&vault, &names)?
+        let (views, skipped_views) = reconcile::configured_views(&config);
+        (
+            reconcile::sync_gitignore(&vault, &views, &skipped_views)?,
+            skipped_views,
+        )
     };
 
     Ok(InitReport {
@@ -136,6 +149,7 @@ pub fn init_vault_with(path: &Path, options: &InitOptions) -> Result<InitReport>
         gitignore_added: sync.added,
         gitignore_removed: sync.removed,
         recipient,
+        skipped_views,
     })
 }
 
@@ -222,7 +236,7 @@ mod tests {
         assert!(vault.layout().default_template().is_file());
         assert!(vault.layout().today_template().is_file());
         assert!(vault.layout().config_file().is_file());
-        assert!(vault.layout().view_dir("by-tag").is_dir());
+        assert!(vault.layout().view_dir(&seed_view_name()).is_dir());
         assert!(vault.layout().readme_file().is_file());
         assert!(!report.created.is_empty());
     }
@@ -471,7 +485,7 @@ mod tests {
 
             let config = PerVaultConfig::load(&layout.config_file()).expect("load");
             assert!(config.views.is_empty());
-            assert!(!layout.view_dir(SEED_VIEW_NAME).exists());
+            assert!(!layout.view_dir(&seed_view_name()).exists());
         }
 
         #[test]
@@ -539,7 +553,7 @@ mod tests {
             assert!(!layout.identity_pub().exists());
             let config = PerVaultConfig::load(&layout.config_file()).expect("load");
             assert_eq!(config.views.len(), 1);
-            assert!(layout.view_dir(SEED_VIEW_NAME).is_dir());
+            assert!(layout.view_dir(&seed_view_name()).is_dir());
             assert!(layout.gitignore_file().is_file());
         }
     }

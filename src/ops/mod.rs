@@ -23,5 +23,5 @@ pub use info::{VaultStats, vault_stats};
 pub use init::{InitOptions, InitReport, init_vault, init_vault_with};
 pub use select::{Candidate, Matches, resolve_selection, search, to_candidates};
 pub use tags::{TagCount, list_tags};
-pub use view_admin::{ViewAdminError, add_view, list_views, remove_view};
+pub use view_admin::{ViewAdminError, ViewConfigSync, add_view, list_views, remove_view};
 pub use write::{WriteError, locate, write_note};

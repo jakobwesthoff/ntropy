@@ -43,7 +43,7 @@ Options:
           Write the artifact here instead of `./<slug>.<ext>`
 
       --strict
-          Treat malformed/badly-named notes as errors instead of warnings
+          Treat malformed/badly-named notes and skipped views as errors instead of warnings
 
   -i, --identity <PATH>
           Use this age identity file instead of the OS credential store.

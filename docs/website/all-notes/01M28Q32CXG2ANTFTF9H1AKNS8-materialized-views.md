@@ -37,9 +37,35 @@ ntropy view list                            # show configured views
 ntropy view remove by-status                # drop the definition
 ```
 
-`init` seeds a `by-tag` view on the `tags` field. Add one for whatever frontmatter field you navigate by: `status`, `project`, `author`, `area`, anything you put in your [notes](01M28Q32ACTNYR0FBYG9CAZMKG-note-format.md). A view's name must not be `all-notes`, `.ntropy`, or the name of another view.
+`init` seeds a `by-tag` view on the `tags` field. Add one for whatever frontmatter field you navigate by: `status`, `project`, `author`, `area`, anything you put in your [notes](01M28Q32ACTNYR0FBYG9CAZMKG-note-format.md).
 
 `view remove` drops the definition and its `.gitignore` entry, but ntropy never deletes a directory. The now-stale view tree stays on disk and the command tells you so, so you can delete it yourself. Since its ignore entry is gone, git now sees that directory.
+
+## View names
+
+A view's name is its directory, and ntropy removes anything in that directory that is not one of the view's links. So a name has to stay a directory of its own inside the vault:
+
+- It is made of lowercase letters, digits and single dashes, like `by-status`. A `/` nests it, as in `area/work`, and each part follows the same rule, at most 72 characters.
+- It is not `all-notes`, `.ntropy`, `.gitignore` or `README.md`, and does not start with one of them followed by `/`.
+- No part starts with a dot, so `.git` and `..` are out.
+- It is not the name of another view.
+
+`view add` refuses any other name and suggests the nearest valid one:
+
+```bash
+$ ntropy view add By_Tag --field tags
+error: while adding the view: `By_Tag` is not a valid view name: the segment `By_Tag` may only hold lowercase letters, digits and single dashes, at most 72 characters (try `bytag`)
+```
+
+If `config.toml` holds a view whose name breaks these rules, for example one added with an older ntropy that accepted `By_Tag` or `my.view`, ntropy leaves that view alone. Every command that syncs views prints a warning for it, the other views carry on, and `--strict` makes `reconcile` and `site` fail on it. Its old directory stays on disk and stays ignored by git. To fix it, remove it and add it again under a valid name, then delete the old directory:
+
+```bash
+ntropy view remove By_Tag
+ntropy view add bytag --field tags
+rm -r By_Tag
+```
+
+`vault encrypt` refuses to start while such a view is configured, because the old directory's link names would keep your note titles readable inside the encrypted vault.
 
 ## How notes are grouped
 

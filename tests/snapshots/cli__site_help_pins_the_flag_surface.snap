@@ -40,7 +40,7 @@ Options:
           The output directory. A non-empty directory is refused unless `--force` empties it first
 
       --strict
-          Treat malformed/badly-named notes as errors instead of warnings
+          Treat malformed/badly-named notes and skipped views as errors instead of warnings
 
       --theme <NAME>
           Export with this site theme instead of the vault's configured one.

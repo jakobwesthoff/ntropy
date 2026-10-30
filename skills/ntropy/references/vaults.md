@@ -150,7 +150,8 @@ Templates are plain files under `<vault>/.ntropy/templates/`, not config. See
 ## Reserved names
 
 Inside a vault, `all-notes`, `.ntropy`, `.gitignore`, and `README.md` are
-reserved, as is every configured view name. `.ntropy-vault` is reserved as the pointer-file
+reserved, as is the directory of every configured view; no view name may
+start with a reserved name. `.ntropy-vault` is reserved as the pointer-file
 name. MUST NOT create your own files or directories under these names.
 
 ## Vaults under git
@@ -165,7 +166,8 @@ directories and DO NOT remove the managed ignore entries.
 
 Malformed notes (no `title`, bad filename) are skipped with a stderr warning by
 default. Pass `--strict` to turn those warnings into hard errors — useful as a
-vault health check:
+vault health check. `reconcile --strict` also fails on a configured view
+skipped for an invalid name ([views.md](views.md)):
 
 ```bash
 ntropy search -n --strict > /dev/null   # exits non-zero if any note is malformed
