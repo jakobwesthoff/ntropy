@@ -351,11 +351,15 @@ default engine for the formats `typst` (the emitted document as the
 artifact) and `pdf` (that identical document compiled).
 
 The pdf format's invocation feeds the document on stdin (see Asset
-paths) and runs typst in the note's directory. `Invocation` carries a
-stdin payload and a working-directory field, and the fake context's
-recorded transcript includes both, keeping the exact invocation
-snapshot-testable without the tools installed. This follows ADR 0038's
-rule that the context contract grows only when a real engine needs it.
+paths), and typst runs in ntropy's own working directory. Nothing typst
+reads for the document depends on that directory: the document arrives
+on stdin, its paths resolve against `--root`, and the output path is
+absolute. A relative path in typst's own environment variables, such as
+`TYPST_PACKAGE_PATH`, resolves against it (ADR 0074). `Invocation`
+carries the stdin payload, and the fake context's recorded transcript
+includes it, keeping the exact invocation snapshot-testable without the
+tools installed. This follows ADR 0038's rule that the context contract
+grows only when a real engine needs it.
 
 ## Writer and context model
 

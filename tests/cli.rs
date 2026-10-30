@@ -1055,17 +1055,16 @@ const STUB_BIN: &str = "stub-bin";
 /// `stub-bin` lives in the vault root, which the scanner never walks, so it is
 /// invisible to selection.
 fn write_stub_typst(vault: &Path) {
-    use std::os::unix::fs::PermissionsExt;
+    write_typst_script(&vault.join(STUB_BIN), STUB_TYPST_SCRIPT, 0o755);
+}
 
-    let bin = vault.join(STUB_BIN);
-    fs::create_dir_all(&bin).expect("stub-bin dir");
-    // Draining stdin mirrors the real compiler consuming the document; the last
-    // argument of `typst compile - <path>` is the output path the marker lands
-    // at, proving ntropy handed the tool an absolute, working-directory-proof
-    // location. `cat` is named by absolute path: the tests run the stub with
-    // `PATH` reduced to the relative `stub-bin` entry, which resolves against
-    // the child's working directory (the note's), where no `cat` exists.
-    let script = r#"#!/bin/sh
+/// The fake compiler [`write_stub_typst`] installs.
+///
+/// Draining stdin mirrors the real compiler consuming the document; the marker
+/// lands at the last argument of `typst compile - <path>`, the output path.
+/// `cat` is named by absolute path: the tests reduce `PATH` to the relative
+/// `stub-bin` entry, under which no `cat` exists.
+const STUB_TYPST_SCRIPT: &str = r#"#!/bin/sh
 /bin/cat > /dev/null
 out=""
 for arg in "$@"; do
@@ -1076,19 +1075,21 @@ if [ -n "$out" ]; then
 fi
 exit 0
 "#;
-    let path = bin.join("typst");
-    fs::write(&path, script).expect("write stub typst");
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub typst");
+
+/// Write `script` as `<dir>/typst` with permission bits `mode`, creating `dir`.
+fn write_typst_script(dir: &Path, script: &str, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::create_dir_all(dir).expect("typst script dir");
+    let path = dir.join("typst");
+    fs::write(&path, script).expect("write typst script");
+    fs::set_permissions(&path, fs::Permissions::from_mode(mode)).expect("chmod typst script");
 }
 
 /// Write a fake `typst` that records its own argument vector instead of a
 /// fixed marker, so a test can assert on how ntropy invoked the compiler.
 /// One argument per line, into the last argument (the output path).
 fn write_arg_recording_typst(vault: &Path) {
-    use std::os::unix::fs::PermissionsExt;
-
-    let bin = vault.join(STUB_BIN);
-    fs::create_dir_all(&bin).expect("stub-bin dir");
     let script = r#"#!/bin/sh
 /bin/cat > /dev/null
 out=""
@@ -1104,9 +1105,7 @@ if [ -n "$out" ]; then
 fi
 exit 0
 "#;
-    let path = bin.join("typst");
-    fs::write(&path, script).expect("write stub typst");
-    fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).expect("chmod stub typst");
+    write_typst_script(&vault.join(STUB_BIN), script, 0o755);
 }
 
 #[test]
@@ -1245,6 +1244,174 @@ fn render_missing_typst_reports_unavailable() {
     });
 }
 
+// ---------------------------------------------------------------------------
+// Where typst runs and how it is found (ADR 0074)
+// ---------------------------------------------------------------------------
+
+/// The error `render` reports for a `typst` it cannot run.
+const TYPST_UNAVAILABLE: &str =
+    "required tool `typst` is not available: install typst; it must be on PATH";
+
+/// A vault holding the single note `wanted`.
+fn wanted_vault() -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    dir
+}
+
+/// A fake compiler that writes its own physical working directory into its
+/// output argument, the last one.
+const PWD_TYPST_SCRIPT: &str = r#"#!/bin/sh
+/bin/cat > /dev/null
+out=""
+for arg in "$@"; do
+  out="$arg"
+done
+pwd -P > "$out"
+exit 0
+"#;
+
+#[test]
+fn render_runs_typst_in_the_directory_ntropy_runs_in() {
+    // ntropy runs outside the vault, so its directory, the vault root and the
+    // note's directory are three different places, and the stub reports which
+    // one typst ran in.
+    let dir = wanted_vault();
+    let bin = dir.path().join(STUB_BIN);
+    write_typst_script(&bin, PWD_TYPST_SCRIPT, 0o755);
+    let invocation_dir = tempfile::tempdir().expect("invocation dir");
+
+    let mut cmd = ntropy_bin(invocation_dir.path());
+    cmd.arg("--vault").arg(dir.path());
+    cmd.args(["render", ULID_A, "-n", "-o", "pwd.pdf"]);
+    cmd.env("PATH", &bin);
+    assert!(cmd.status().expect("run render").success());
+
+    let recorded = fs::read_to_string(invocation_dir.path().join("pwd.pdf"))
+        .expect("the stub recorded its working directory");
+    let expected = invocation_dir
+        .path()
+        .canonicalize()
+        .expect("canonical invocation dir");
+    assert_eq!(recorded.trim_end(), expected.to_string_lossy());
+}
+
+#[test]
+fn render_finds_typst_after_a_path_entry_without_it() {
+    let dir = wanted_vault();
+    write_stub_typst(dir.path());
+    fs::create_dir_all(dir.path().join("empty-bin")).expect("empty-bin dir");
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-n"]);
+    cmd.env("PATH", format!("empty-bin:{STUB_BIN}"));
+    assert!(cmd.status().expect("run render").success());
+    assert_eq!(
+        fs::read_to_string(dir.path().join("wanted.pdf")).expect("read artifact"),
+        "stub pdf via typst\n"
+    );
+}
+
+#[test]
+fn render_finds_typst_through_an_empty_path_entry() {
+    // An empty `PATH` entry names the working directory (ADR 0070), here the
+    // vault root, which holds the fake compiler itself.
+    let dir = wanted_vault();
+    write_typst_script(dir.path(), STUB_TYPST_SCRIPT, 0o755);
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-n"]);
+    cmd.env("PATH", ":no-such-bin");
+    assert!(cmd.status().expect("run render").success());
+    assert_eq!(
+        fs::read_to_string(dir.path().join("wanted.pdf")).expect("read artifact"),
+        "stub pdf via typst\n"
+    );
+}
+
+/// Render `wanted` with `output_args` through the argument-recording stub and
+/// return the output argument typst received, after checking that the
+/// artifact landed at `artifact` inside the vault.
+fn typst_output_argument(dir: &Path, output_args: &[&str], artifact: &str) -> String {
+    write_arg_recording_typst(dir);
+    let mut cmd = ntropy(dir);
+    cmd.args(["render", ULID_A, "-n"]);
+    cmd.args(output_args);
+    cmd.env("PATH", STUB_BIN);
+    assert!(cmd.status().expect("run render").success());
+
+    let args = fs::read_to_string(dir.join(artifact)).expect("recorded args");
+    args.lines()
+        .last()
+        .expect("the stub recorded its arguments")
+        .to_string()
+}
+
+#[test]
+fn render_hands_typst_a_dash_leading_output_as_an_absolute_path() {
+    // typst would read a relative `-dash.pdf` as an option. `--output=` is the
+    // spelling clap takes a value starting with `-` in.
+    let dir = wanted_vault();
+    let received = typst_output_argument(dir.path(), &["--output=-dash.pdf"], "-dash.pdf");
+    assert!(Path::new(&received).is_absolute(), "{received}");
+    assert_eq!(
+        PathBuf::from(received),
+        dir.path()
+            .canonicalize()
+            .expect("canonical vault path")
+            .join("-dash.pdf")
+    );
+}
+
+#[test]
+fn render_hands_typst_a_lone_dash_output_as_a_file() {
+    // typst would read a lone `-` as standard output.
+    let dir = wanted_vault();
+    let received = typst_output_argument(dir.path(), &["-o", "-"], "-");
+    assert!(Path::new(&received).is_absolute(), "{received}");
+    assert_eq!(
+        PathBuf::from(received),
+        dir.path()
+            .canonicalize()
+            .expect("canonical vault path")
+            .join("-")
+    );
+}
+
+/// Render `wanted` with `PATH` set to `path_var` and check that it fails with
+/// the missing-tool error, writing no artifact.
+fn assert_typst_unavailable(dir: &Path, path_var: &str) {
+    let mut cmd = ntropy(dir);
+    cmd.args(["render", ULID_A, "-n"]);
+    cmd.env("PATH", path_var);
+    let output = cmd.output().expect("run render");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(1), "{stderr}");
+    assert!(stderr.contains(TYPST_UNAVAILABLE), "{stderr}");
+    assert!(!dir.join("wanted.pdf").exists());
+}
+
+#[test]
+fn render_reports_a_non_executable_typst_as_unavailable() {
+    let dir = wanted_vault();
+    write_typst_script(&dir.path().join(STUB_BIN), STUB_TYPST_SCRIPT, 0o644);
+    assert_typst_unavailable(dir.path(), STUB_BIN);
+}
+
+#[test]
+fn render_reports_unavailable_when_the_last_path_entry_is_a_file() {
+    // A regular file as the last `PATH` entry ends the search with "not a
+    // directory" on Linux rather than "not found".
+    let dir = wanted_vault();
+    fs::write(dir.path().join("stub-file"), "").expect("write stub-file");
+    assert_typst_unavailable(dir.path(), "no-such-bin:stub-file");
+}
+
 #[test]
 fn render_scan_warnings_print_and_strict_fails() {
     // A malformed sibling note warns on stderr while the good note still
@@ -1378,39 +1545,26 @@ fn render_keeps_an_existing_artifact_unless_forced() {
 }
 
 #[test]
-fn render_relative_output_is_absolutized_against_the_invocation_cwd() {
-    // The default typst engine compiles in the note's own directory (all-notes),
-    // so a relative `-o` path must be absolutized against the invocation's cwd
-    // (the vault root) rather than resolving inside all-notes. The artifact lands
-    // at the vault-root-relative location, and all-notes stays free of strays.
-    let dir = setup_vault();
-    write_note(
-        dir.path(),
-        ULID_A,
-        "wanted",
-        "---\ntitle: Wanted\n---\nbody\n",
-    );
+fn render_relative_output_lands_relative_to_the_invocation_directory() {
+    // ntropy runs in a subdirectory of the vault, so the directory it runs
+    // in differs from the vault root it finds by walking up. The tests that
+    // record typst's arguments pin that the path typst receives is absolute.
+    let dir = wanted_vault();
     write_stub_typst(dir.path());
-    // The stub writes but does not create parent directories, so the target
-    // subdirectory (under the vault root, where absolutization lands it) exists.
-    fs::create_dir_all(dir.path().join("out")).expect("output subdir");
+    let invocation_dir = dir.path().join("sub");
+    // The stub writes but does not create parent directories.
+    fs::create_dir_all(invocation_dir.join("out")).expect("output subdir");
 
-    let mut cmd = ntropy(dir.path());
+    let mut cmd = ntropy(&invocation_dir);
     cmd.args(["render", ULID_A, "-o", "out/report.pdf", "-n"]);
-    cmd.env("PATH", STUB_BIN);
+    cmd.env("PATH", dir.path().join(STUB_BIN));
     let status = cmd.status().expect("run render");
     assert!(status.success());
 
-    // Absolutized against the vault root (the cwd), not the note's directory.
     assert_eq!(
-        fs::read_to_string(dir.path().join("out/report.pdf"))
-            .expect("artifact at the cwd-relative path"),
+        fs::read_to_string(invocation_dir.join("out/report.pdf"))
+            .expect("artifact relative to the invocation directory"),
         "stub pdf via typst\n"
-    );
-    // An unabsolutized path would have landed inside the note's directory.
-    assert!(
-        !dir.path().join("all-notes/out/report.pdf").exists(),
-        "no artifact leaked into the note's directory"
     );
 }
 

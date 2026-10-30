@@ -98,3 +98,4 @@ made.
 - [0070. Trust model for discovered vaults](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0070-trust-model-for-discovered-vaults.md)
 - [0071. Escaping untrusted text for the terminal](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0071-escaping-untrusted-text-for-the-terminal.md)
 - [0072. Export paths stay inside the vault and the output](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)
+- [0074. typst runs in ntropy's working directory](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0074-typst-runs-in-ntropys-working-directory.md)

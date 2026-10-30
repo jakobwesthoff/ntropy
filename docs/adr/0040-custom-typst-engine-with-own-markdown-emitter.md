@@ -18,6 +18,9 @@ compile root is the vault, and the emitter, not the working directory,
 anchors a note's relative asset paths to its own directory, so a note
 reaches assets above it as long as they stay inside the vault.
 
+Amended 2026-10-30 by
+[ADR 0074](0074-typst-runs-in-ntropys-working-directory.md).
+
 ## Context
 
 The pandoc engine of ADR 0038 was a stopgap. Of the two tools it

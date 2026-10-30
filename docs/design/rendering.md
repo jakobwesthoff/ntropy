@@ -3,8 +3,9 @@
 The `render` command and its engines: how a note becomes an output artifact
 such as a PDF. Decisions are recorded in
 [ADR 0037](../adr/0037-render-command-surface.md),
-[ADR 0038](../adr/0038-pluggable-rendering-engine-with-pandoc-and-typst.md), and
-[ADR 0040](../adr/0040-custom-typst-engine-with-own-markdown-emitter.md);
+[ADR 0038](../adr/0038-pluggable-rendering-engine-with-pandoc-and-typst.md),
+[ADR 0040](../adr/0040-custom-typst-engine-with-own-markdown-emitter.md), and
+[ADR 0074](../adr/0074-typst-runs-in-ntropys-working-directory.md);
 selector semantics in [query-and-search.md](query-and-search.md), the overall
 command surface in [cli.md](cli.md).
 
@@ -155,9 +156,9 @@ pub trait Renderer {
 ```
 
 An `Invocation` carries the program and its argument vector, plus an optional
-stdin payload and working directory, so an engine can feed a tool its work on
-standard input and choose the directory it runs in (the typst `pdf` pipeline
-uses both).
+stdin payload, so an engine can feed a tool its work on standard input (the
+typst `pdf` pipeline does). The tool runs in ntropy's own working directory
+(ADR 0074).
 
 An engine's chain is ordinary sequential Rust inside `render`: stage files,
 run tools, derive later steps from earlier output. Multi-step chains,
@@ -169,21 +170,16 @@ backed by a temporary directory that is removed when the render ends, `run`
 backed by `std::process::Command`, `write_output` backed by a filesystem
 write to the artifact path, and `warn` printing to stderr. That one
 implementation serves every engine, so adding an engine never touches the
-binary. Probing for an engine's external tools is likewise the binary's job,
-next to the spawn; the library defines the error the probe reports through.
+binary. The spawn looks a bare program name up on `PATH`. A program it reports
+as not found, not permitted, or behind a `PATH` entry that is not a directory
+is the missing-tool error naming what to install, which the library defines.
 
-Two placement details live with the production context because a tool may run
-in a directory other than where the user stood:
-
-- **Output-path absolutization.** The binary joins a relative `-o` path onto
-  the process working directory before building the context, so a tool run in
-  the note's own directory cannot land the artifact next to the note. The
-  user-facing prints keep the path as the user gave it.
-- **Program resolution in the parent's context.** The binary resolves a bare
-  program name against `PATH` relative to the parent process cwd before
-  spawning, because a spawn that first changed directory would otherwise
-  resolve a relative `PATH` entry against the child's directory. A resolution
-  failure is the missing-tool error naming what to install.
+The binary joins a relative `-o` path onto the process working directory
+before building the context. The vault-containment warning (see Encrypted
+vaults) compares that absolute path with the vault root, and `typst` receives
+it as a plain file path: it would read a relative name starting with `-` as an
+option and a lone `-` as standard output. The user-facing prints keep the path
+as the user gave it.
 
 This is a capability reading of ADR 0013's headless rule: the library still
 contains no spawn call and no ambient effect; it requests effects through a

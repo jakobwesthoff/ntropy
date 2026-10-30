@@ -80,7 +80,9 @@ pub trait RenderContext {
     /// `--strict`, counts it toward a failing exit like a scan warning.
     fn warn(&mut self, message: &str);
 
-    /// The path the final artifact must land at.
+    /// The path the final artifact must land at. Absolute: an engine hands it
+    /// to its tool verbatim, where a relative name starting with `-` could
+    /// read as an option and a lone `-` as standard output.
     fn output_path(&self) -> &Path;
 }
 
@@ -137,9 +139,6 @@ pub struct Invocation {
     /// Bytes piped to the child's standard input. `None` leaves the child with
     /// no input to read, for a tool that takes its work through arguments alone.
     pub stdin: Option<Vec<u8>>,
-    /// The child's working directory. `None` runs it in the host's current
-    /// directory, matching an unconfigured spawn.
-    pub cwd: Option<PathBuf>,
 }
 
 /// The captured result of an external-tool call.

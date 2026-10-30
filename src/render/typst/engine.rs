@@ -103,12 +103,9 @@ impl Renderer for Typst {
             // the emitter writes local image paths root-absolute, leaving only a
             // path that climbs out of the vault as written (the "Asset paths"
             // contract of `docs/design/typst-engine.md`). The output path
-            // reaches typst as an argument verbatim; it must already be
-            // absolute, since a relative path would resolve inside the note's
-            // directory, the tool's working directory, landing the artifact
-            // next to the note. Absolutizing is the host's job, keeping the
-            // engine headless: it touches neither the filesystem nor the
-            // working directory itself.
+            // reaches typst as an argument verbatim; it is absolute (see
+            // `RenderContext::output_path`). The engine itself touches neither
+            // the filesystem nor the working directory.
             Format::Pdf => {
                 // `--root` grants the compiler the whole vault, so a theme can
                 // reach assets outside `all-notes/` by a vault-absolute path
@@ -125,7 +122,6 @@ impl Renderer for Typst {
                     program: "typst".to_string(),
                     args,
                     stdin: Some(document.into_bytes()),
-                    cwd: doc.path.parent().map(|parent| parent.to_path_buf()),
                 };
 
                 let out = ctx.run(&invocation)?;
@@ -414,7 +410,7 @@ mod tests {
         // The pdf arm compiles the identical document the typst format writes.
         // Render the same note through both formats and prove the pdf arm feeds
         // the typst-format bytes on stdin, compiles them with `typst compile -`,
-        // targets the (absolute) output path, and runs in the note's directory.
+        // and targets the (absolute) output path.
         let document = doc(
             "My Note",
             "tags:\n  - area/work\n",
@@ -457,11 +453,6 @@ mod tests {
             invocation.stdin.as_deref(),
             Some(expected_document.as_slice()),
             "stdin carries the exact bytes the typst format writes"
-        );
-        assert_eq!(
-            invocation.cwd.as_deref(),
-            Some(Path::new("/vault/all-notes")),
-            "the note's parent directory is the working directory"
         );
     }
 

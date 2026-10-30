@@ -51,6 +51,13 @@ and this project adheres to
   file whose name holds such a character or whose slug starts with `-`, and
   writes nothing. Run `ntropy reconcile` to give such a note its canonical
   name, or pass `-o` to name the artifact.
+- `render --to pdf` runs `typst` in the directory ntropy runs in instead of
+  the note's directory. A relative path in typst's own environment variables
+  `TYPST_FONT_PATHS`, `TYPST_PACKAGE_PATH`, `TYPST_PACKAGE_CACHE_PATH` and
+  `TYPST_CERT` now resolves against that directory. With `$PATH` unset,
+  ntropy looks for `typst` in the C library's default path, not in the
+  working directory.
+- The library's `render::Invocation` has no `cwd` field.
 
 ### Fixed
 

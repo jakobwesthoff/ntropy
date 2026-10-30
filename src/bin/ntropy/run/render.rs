@@ -203,12 +203,11 @@ pub fn cmd_render(
     let index = link::index(&indexed.notes);
     let doc = prepare(&note, &index, session.root()).context("while preparing the document")?;
 
-    // The engine may run its tool in the note's own directory (the typst pdf
-    // pipeline does, so relative assets resolve against the note). A relative
-    // output path would then resolve inside that directory rather than where the
-    // user invoked the command, so it is absolutized against the process's
-    // working directory before the engine ever sees it. The user-facing prints
-    // below keep the original, as-given form.
+    // A relative output path is joined onto the process's working directory
+    // before the engine sees it. The vault-containment check below compares it
+    // with the vault root, and `typst` would read a relative name starting with
+    // `-` as an option and a lone `-` as standard output. The user-facing prints
+    // below keep the as-given form.
     let cwd = std::env::current_dir().context("while resolving the current directory")?;
     let absolute_output = absolutize(&output_path, &cwd);
 
@@ -347,11 +346,6 @@ impl Drop for SigpipeIgnoredScope {
     }
 }
 
-/// Resolve `path` to an absolute location, joining a relative path onto `cwd`
-/// and leaving an already-absolute path untouched.
-///
-/// The engine receives the absolute form so its tool's working directory cannot
-/// change where the artifact lands; the user still sees the path as given.
 /// Whether `output` would be written inside `vault_root`.
 ///
 /// Component-wise, which `Path::starts_with` already is: a sibling directory
@@ -361,6 +355,12 @@ pub(super) fn lands_inside_vault(vault_root: &Path, output: &Path) -> bool {
     output.starts_with(vault_root)
 }
 
+/// Resolve `path` to an absolute location, joining a relative path onto `cwd`
+/// and leaving an already-absolute path untouched.
+///
+/// `render` and `site` compare the result with the vault root, and `render`
+/// hands it to the engine's tool, where an absolute path cannot be read as an
+/// option or as `-` for standard output. The user still sees the path as given.
 pub(super) fn absolutize(path: &Path, cwd: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -369,49 +369,28 @@ pub(super) fn absolutize(path: &Path, cwd: &Path) -> PathBuf {
     }
 }
 
-/// Resolve `program` to a concrete, executable path in the caller's context.
+/// The error for a tool `program` that failed to start with `source`.
 ///
-/// A bare program name is searched along `path_var` in order; each relative
-/// `PATH` entry is joined against `parent_cwd` rather than left for the OS to
-/// resolve. This matters because a child spawned with its own working directory
-/// resolves relative `PATH` entries against *that* directory under Unix
-/// `execvp`, not against the caller's — so a relative `PATH` entry would mean
-/// two different things depending on where the child runs. Resolving here, in
-/// the caller's directory, pins the entry to the location the caller intends.
-/// A program that already contains a path separator is taken as a path and
-/// absolutized against `parent_cwd`.
-///
-/// Returns the first candidate that exists and is executable, or `None` when no
-/// such file is found (the tool is absent).
-fn resolve_program(program: &str, path_var: &str, parent_cwd: &Path) -> Option<PathBuf> {
-    // A path-bearing name is a location, not a `PATH` lookup. Absolutizing it
-    // against the caller's directory makes it independent of the child's cwd.
-    if program.contains(std::path::MAIN_SEPARATOR) {
-        let candidate = parent_cwd.join(program);
-        return is_executable_file(&candidate).then_some(candidate);
-    }
+/// An absent or unusable tool is reported as unavailable, naming what to
+/// install. A `NotFound` spawn means the program, or the interpreter a script
+/// names, is missing. A `PATH` search that met only an unsearchable directory,
+/// a non-executable file or a directory of that name ends in
+/// `PermissionDenied`, and on Linux one whose last entry is a file ends in
+/// `NotADirectory`. Any other spawn failure keeps its own cause.
+fn spawn_failure(program: &str, source: std::io::Error) -> RenderError {
+    use std::io::ErrorKind;
 
-    path_var.split(':').find_map(|entry| {
-        // An empty entry (a leading, trailing, or doubled `:`) conventionally
-        // means the current directory; every other relative entry anchors to
-        // the caller's cwd, absolute entries stand on their own.
-        let dir = if entry.is_empty() {
-            parent_cwd.to_path_buf()
-        } else {
-            parent_cwd.join(entry)
-        };
-        let candidate = dir.join(program);
-        is_executable_file(&candidate).then_some(candidate)
-    })
-}
-
-/// Whether `path` is a regular file with at least one execute bit set.
-fn is_executable_file(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-
-    match std::fs::metadata(path) {
-        Ok(meta) => meta.is_file() && meta.permissions().mode() & 0o111 != 0,
-        Err(_) => false,
+    match source.kind() {
+        ErrorKind::NotFound | ErrorKind::PermissionDenied | ErrorKind::NotADirectory => {
+            RenderError::RendererUnavailable {
+                tool: program.to_string(),
+                hint: format!("install {program}; it must be on PATH"),
+            }
+        }
+        _ => RenderError::Spawn {
+            program: program.to_string(),
+            source,
+        },
     }
 }
 
@@ -481,48 +460,11 @@ impl RenderContext for ProcessContext {
     }
 
     fn run(&mut self, invocation: &Invocation) -> Result<ToolOutput, RenderError> {
-        // Resolve the program to a concrete path here, in the parent's context,
-        // rather than letting the spawn resolve a bare name against `PATH`. The
-        // child may run in a different working directory (see `cwd` below), and
-        // Unix `execvp` would resolve relative `PATH` entries against *that*
-        // directory; resolving up front keeps a relative `PATH` entry meaning
-        // what the invoking process intends. A resolution miss is the tool being
-        // absent, so it surfaces as unavailable, naming what to install.
-        let path_var = std::env::var("PATH").unwrap_or_default();
-        let parent_cwd = std::env::current_dir().map_err(|source| RenderError::Spawn {
-            program: invocation.program.clone(),
-            source,
-        })?;
-        let program =
-            resolve_program(&invocation.program, &path_var, &parent_cwd).ok_or_else(|| {
-                RenderError::RendererUnavailable {
-                    tool: invocation.program.clone(),
-                    hint: format!("install {}; it must be on PATH", invocation.program),
-                }
-            })?;
-
-        let mut command = Command::new(&program);
+        // The tool runs in ntropy's own working directory, and the spawn looks a
+        // bare program name up on `PATH` from there.
+        let mut command = Command::new(&invocation.program);
         command.args(&invocation.args);
-        if let Some(cwd) = &invocation.cwd {
-            command.current_dir(cwd);
-        }
-
-        // Map a spawn failure the same way regardless of which path builds the
-        // command: a `NotFound` can still occur if the resolved file is deleted
-        // between resolution and spawn, so it remains an unavailability report.
-        let spawn_error = |source: std::io::Error| -> RenderError {
-            if source.kind() == std::io::ErrorKind::NotFound {
-                RenderError::RendererUnavailable {
-                    tool: invocation.program.clone(),
-                    hint: format!("install {}; it must be on PATH", invocation.program),
-                }
-            } else {
-                RenderError::Spawn {
-                    program: invocation.program.clone(),
-                    source,
-                }
-            }
-        };
+        let spawn_error = |source| spawn_failure(&invocation.program, source);
 
         let output = match &invocation.stdin {
             // With a payload the child reads from a pipe. The write happens on a
@@ -707,7 +649,6 @@ mod tests {
             program: "ntropy-test-definitely-missing-tool".to_string(),
             args: vec![],
             stdin: None,
-            cwd: None,
         };
         let err = ctx.run(&invocation).expect_err("a missing tool errors");
         match err {
@@ -731,7 +672,6 @@ mod tests {
             program: "/no/such/dir/ntropy-missing".to_string(),
             args: vec![],
             stdin: None,
-            cwd: None,
         };
         let err = ctx
             .run(&invocation)
@@ -746,7 +686,6 @@ mod tests {
             program: "sh".to_string(),
             args: vec!["-c".into(), "echo out; echo err >&2; exit 3".into()],
             stdin: None,
-            cwd: None,
         };
         let out = ctx.run(&invocation).expect("sh runs");
         assert!(!out.success);
@@ -837,33 +776,9 @@ mod tests {
             program: "sh".to_string(),
             args: vec!["-c".into(), "exit 0".into()],
             stdin: None,
-            cwd: None,
         };
         let out = ctx.run(&invocation).expect("sh runs");
         assert!(out.success);
-    }
-
-    #[test]
-    fn run_honors_the_invocation_cwd() {
-        // `pwd` prints the child's working directory; setting `cwd` must move it
-        // there rather than leaving it in the host's current directory.
-        let dir = tempfile::TempDir::new().expect("temp dir");
-        // Canonicalize so the assertion is immune to symlinked temp roots (macOS
-        // `/tmp` → `/private/tmp`), which `pwd -P` also resolves.
-        let canonical = std::fs::canonicalize(dir.path()).expect("canonicalize");
-        let mut ctx = ProcessContext::new(PathBuf::from("out.pdf")).expect("context");
-        let invocation = Invocation {
-            program: "sh".to_string(),
-            args: vec!["-c".into(), "pwd -P".into()],
-            stdin: None,
-            cwd: Some(canonical.clone()),
-        };
-        let out = ctx.run(&invocation).expect("sh runs");
-        assert!(out.success);
-        assert_eq!(
-            String::from_utf8_lossy(&out.stdout).trim_end(),
-            canonical.to_string_lossy()
-        );
     }
 
     #[test]
@@ -876,7 +791,6 @@ mod tests {
             program: "sh".to_string(),
             args: vec!["-c".into(), "cat".into()],
             stdin: Some(payload.clone()),
-            cwd: None,
         };
         let out = ctx.run(&invocation).expect("sh runs");
         assert!(out.success);
@@ -893,7 +807,6 @@ mod tests {
             program: "sh".to_string(),
             args: vec!["-c".into(), "cat".into()],
             stdin: Some(payload.clone()),
-            cwd: None,
         };
         let out = ctx.run(&invocation).expect("sh runs");
         assert!(out.success);
@@ -913,7 +826,6 @@ mod tests {
             program: "sh".to_string(),
             args: vec!["-c".into(), "cat; yes ntropy | head -c 3000000".into()],
             stdin: Some(payload.clone()),
-            cwd: None,
         };
         let out = ctx.run(&invocation).expect("sh runs");
         assert!(out.success);
@@ -930,7 +842,6 @@ mod tests {
             program: "sh".to_string(),
             args: vec!["-c".into(), "echo produced".into()],
             stdin: None,
-            cwd: None,
         };
         let out = ctx.run(&invocation).expect("sh runs");
         assert!(out.success);
@@ -938,115 +849,48 @@ mod tests {
     }
 
     // =========================================================
-    // Parent-context program resolution
+    // Spawn failure mapping
     // =========================================================
 
-    /// A `mode 0o755` file at `path`, so resolution finds an executable
-    /// candidate without invoking it.
-    fn write_executable(path: &Path) {
-        use std::os::unix::fs::PermissionsExt;
-
-        std::fs::write(path, "#!/bin/sh\nexit 0\n").expect("write fake executable");
-        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
-            .expect("chmod fake executable");
+    /// Assert that a spawn failing with `kind` reports `typst` as unavailable,
+    /// with the install hint.
+    fn assert_unavailable_for(kind: std::io::ErrorKind) {
+        match spawn_failure("typst", std::io::Error::from(kind)) {
+            RenderError::RendererUnavailable { tool, hint } => {
+                assert_eq!(tool, "typst");
+                assert_eq!(hint, "install typst; it must be on PATH");
+            }
+            other => panic!("expected RendererUnavailable for {kind:?}, got {other:?}"),
+        }
     }
 
     #[test]
-    fn resolve_program_finds_a_bare_name_on_an_absolute_path_entry() {
-        let dir = tempfile::TempDir::new().expect("temp dir");
-        let bin = dir.path().join("mytool");
-        write_executable(&bin);
-        let resolved = resolve_program(
-            "mytool",
-            &dir.path().to_string_lossy(),
-            Path::new("/unused/parent"),
-        )
-        .expect("the tool resolves");
-        assert_eq!(resolved, bin);
+    fn spawn_failure_reports_not_found_as_unavailable() {
+        assert_unavailable_for(std::io::ErrorKind::NotFound);
     }
 
     #[test]
-    fn resolve_program_joins_a_relative_path_entry_against_the_parent_cwd() {
-        // The load-bearing case: a relative `PATH` entry resolves against the
-        // caller's cwd, so a child running elsewhere still finds the tool where
-        // the caller placed it. The invocation's own `cwd` is deliberately
-        // different to prove resolution ignores it.
-        let parent = tempfile::TempDir::new().expect("parent dir");
-        let bin_dir = parent.path().join("stub-bin");
-        std::fs::create_dir_all(&bin_dir).expect("stub-bin dir");
-        write_executable(&bin_dir.join("mytool"));
-
-        let resolved = resolve_program("mytool", "stub-bin", parent.path())
-            .expect("the relative entry resolves against the parent cwd");
-        assert_eq!(resolved, bin_dir.join("mytool"));
+    fn spawn_failure_reports_permission_denied_as_unavailable() {
+        // A `PATH` search that met only an unsearchable directory, or a file
+        // or directory of that name it cannot execute.
+        assert_unavailable_for(std::io::ErrorKind::PermissionDenied);
     }
 
     #[test]
-    fn resolve_program_searches_entries_in_order() {
-        // Two entries both hold the tool; the first on `PATH` wins.
-        let first = tempfile::TempDir::new().expect("first dir");
-        let second = tempfile::TempDir::new().expect("second dir");
-        write_executable(&first.path().join("mytool"));
-        write_executable(&second.path().join("mytool"));
-        let path_var = format!(
-            "{}:{}",
-            first.path().to_string_lossy(),
-            second.path().to_string_lossy()
-        );
-        let resolved =
-            resolve_program("mytool", &path_var, Path::new("/unused")).expect("the tool resolves");
-        assert_eq!(resolved, first.path().join("mytool"));
+    fn spawn_failure_reports_not_a_directory_as_unavailable() {
+        // Linux ends a `PATH` search whose last entry is a file this way.
+        assert_unavailable_for(std::io::ErrorKind::NotADirectory);
     }
 
     #[test]
-    fn resolve_program_skips_a_non_executable_candidate() {
-        // A same-named but non-executable file in an earlier entry is skipped in
-        // favor of the executable one later on `PATH`.
-        let first = tempfile::TempDir::new().expect("first dir");
-        let second = tempfile::TempDir::new().expect("second dir");
-        std::fs::write(first.path().join("mytool"), "not executable").expect("write plain file");
-        write_executable(&second.path().join("mytool"));
-        let path_var = format!(
-            "{}:{}",
-            first.path().to_string_lossy(),
-            second.path().to_string_lossy()
-        );
-        let resolved = resolve_program("mytool", &path_var, Path::new("/unused"))
-            .expect("the executable candidate resolves");
-        assert_eq!(resolved, second.path().join("mytool"));
-    }
-
-    #[test]
-    fn resolve_program_returns_none_for_an_absent_bare_name() {
-        let dir = tempfile::TempDir::new().expect("temp dir");
-        assert!(
-            resolve_program(
-                "mytool",
-                &dir.path().to_string_lossy(),
-                Path::new("/unused")
-            )
-            .is_none()
-        );
-    }
-
-    #[test]
-    fn resolve_program_takes_a_path_bearing_name_as_a_location() {
-        // A name containing a separator is a path, absolutized against the parent
-        // cwd, not a `PATH` lookup.
-        let parent = tempfile::TempDir::new().expect("parent dir");
-        let sub = parent.path().join("sub");
-        std::fs::create_dir_all(&sub).expect("sub dir");
-        write_executable(&sub.join("mytool"));
-
-        let resolved = resolve_program("sub/mytool", "/ignored", parent.path())
-            .expect("the path-bearing name resolves against the parent cwd");
-        assert_eq!(resolved, parent.path().join("sub/mytool"));
-    }
-
-    #[test]
-    fn resolve_program_rejects_a_path_bearing_name_that_is_not_executable() {
-        let parent = tempfile::TempDir::new().expect("parent dir");
-        std::fs::write(parent.path().join("plain"), "not executable").expect("write plain file");
-        assert!(resolve_program("./plain", "/ignored", parent.path()).is_none());
+    fn spawn_failure_keeps_any_other_cause() {
+        let err = spawn_failure("typst", std::io::Error::other("no-such-failure"));
+        match err {
+            RenderError::Spawn { program, source } => {
+                assert_eq!(program, "typst");
+                assert_eq!(source.to_string(), "no-such-failure");
+            }
+            other => panic!("expected Spawn, got {other:?}"),
+        }
     }
 }
