@@ -29,4 +29,7 @@ alone never raises the major version.
 ## Consequences
 
 The library's API can change in any release, a patch release included.
-Code that uses the crate as a library has to pin an exact version.
+Code that uses the crate as a library has to pin an exact version. The
+crate documentation asks anyone who needs stable library versions to get in
+touch; a stable library API is likely at some point, and such a request
+brings it forward.

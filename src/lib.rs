@@ -9,6 +9,11 @@
 //! and semantic versioning cover the CLI only, and the API here can change
 //! in any release (ADR 0075). Pin an exact version to build on it.
 //!
+//! If you build on the library and need versions you can rely on, open an
+//! issue at <https://github.com/jakobwesthoff/ntropy/issues> and we will
+//! work out how to provide them. A stable library API is likely at some
+//! point anyway, and such a request brings it forward.
+//!
 //! The crate is organized into layers, lowest (pure, no I/O) to highest
 //! (orchestration), so dependencies only ever point downward:
 //!
