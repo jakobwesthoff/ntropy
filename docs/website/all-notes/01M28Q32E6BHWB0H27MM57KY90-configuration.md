@@ -10,6 +10,8 @@ There is not much to configure, on purpose. This page lists what there is: the e
 
 ntropy opens notes in `$VISUAL`, then `$EDITOR`. It won't guess a default: if neither is set, opening a note fails with a message saying so. Set one of them in your shell and ntropy uses it for `new`, `today`, and opening notes from the picker.
 
+The value can carry arguments, the way git reads it: ntropy hands it to `/bin/sh` and adds the note's path as the last argument. `EDITOR="code -w"` and `EDITOR="emacsclient -t"` work, and so do `~` and `$VARIABLES` in the value. Quote a program path that contains spaces or other characters special to the shell: `EDITOR="'/Applications/My Editor.app/Contents/MacOS/edit' -w"`.
+
 ## Your default vault
 
 `ntropy init --set-default` records a vault as the global fallback, used when nothing nearer resolves (see [Finding the vault](01M28Q32CAAZA2PWAP4RR44GMA-finding-the-vault.md)). It lives in a small TOML file in your OS config directory, `~/.config/ntropy/config.toml` on Linux and `~/Library/Application Support/ntropy/config.toml` on macOS, holding a single line:

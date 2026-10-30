@@ -21,9 +21,18 @@ and this project adheres to
 - The crate declares its minimum Rust version, 1.92, which Cargo checks
   before it builds. Its crates.io entry links the project page and lists
   keywords and categories.
+- ntropy runs `$VISUAL` and `$EDITOR` through `/bin/sh`, so their value is
+  shell code. A program path that contains spaces or other characters special
+  to the shell needs quotes, such as
+  `EDITOR="'/Applications/My Editor.app/Contents/MacOS/edit' -w"`. When the
+  program cannot be found, the shell says so on the terminal, and ntropy
+  reports that the editor exited with a non-zero status.
 
 ### Fixed
 
+- `$VISUAL` and `$EDITOR` can carry arguments, such as `EDITOR="code -w"` or
+  `EDITOR="emacsclient -t"`. Before, ntropy took the whole value as the
+  editor's program name and could not start it.
 - A file in `all-notes/` whose name has a multibyte character across its
   26th byte, such as `aaaaaaaaaaaaaaaaaaaaaaaaaé-xx.md`, no longer makes
   every command that scans the vault crash. It is skipped with a warning,

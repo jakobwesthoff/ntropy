@@ -35,7 +35,11 @@ and the query DSL in [query-and-search.md](query-and-search.md).
   to a human (delete prompts/confirmations, ambiguous-match lists) it is shown
   as the reference `date  title  [tags]  (id)`.
 - **Ordering:** results are newest first (creation time descending) by default.
-- **Editor:** `$VISUAL` then `$EDITOR`; error if neither is set.
+- **Editor:** `$VISUAL` then `$EDITOR`; a value that is empty or only
+  whitespace counts as unset, and an error if neither is set. The value runs
+  through `/bin/sh` as `sh -c '<value> "$@"'` with the note path as the
+  positional argument, so it may carry arguments and shell quoting
+  (ADR 0066).
 - **Bare `ntropy`:** with no subcommand, prints help.
 - **Free-text args:** `search` and `new` join their trailing arguments into one
   string (the query / the title).

@@ -11,6 +11,10 @@ Supersedes the stdout-based interactivity detection and auto output mode of
 non-interactive `--print` behavior of
 [ADR 0035](0035-generic-print-flag-replaces-no-edit.md).
 
+Amended by [ADR 0066](0066-editor-value-run-through-the-shell.md), which makes
+a CLI test that runs the binary on its own pseudo-terminal the second way to
+keep both environments on the same branch.
+
 ## Context
 
 ADR 0014 keyed interactivity off stdout being a terminal, using one signal

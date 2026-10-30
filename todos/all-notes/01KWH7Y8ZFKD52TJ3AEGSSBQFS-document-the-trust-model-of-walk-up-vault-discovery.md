@@ -67,7 +67,7 @@ The ADR is titled "Trust model for discovered vaults":
 3. The binding invariant: no configuration value, per-vault or global, may name an executable, a shell command, a hook, a pager, or an argument passed to a spawned process. The only subprocess ntropy launches is the editor, resolved only from `$VISUAL` and `$EDITOR`. Any feature that breaks this invariant must supersede the ADR and first introduce a trust boundary (a uid check or a trust store).
 4. Accepted residuals, named: committed `.ntropy-vault` misdirection (operations use the target vault's own config, and `delete` stays behind a selector and confirmation); a planted vault in a world-writable ancestor can be adopted, since walk-up runs to `/`; auto-opened content may be attacker-authored, and editor-side execution is out of scope.
 5. Non-goals: no trust store, no ownership check and no opt-in walk-up in v1.
-6. Revisit triggers: config gains any execution-adjacent field. The most likely accidental path is "fixing" the `$EDITOR`-with-arguments limitation by adding an `editor` config key, which would invalidate this decision (see the editor todo in Relations). Vault content gains an interpreted role. Windows support arrives (ADR 0020 is Unix-only).
+6. Revisit triggers: config gains any execution-adjacent field, such as an `editor` config key. ADR 0066 lets `$VISUAL` and `$EDITOR` carry arguments and still reads the editor only from them. Vault content gains an interpreted role. Windows support arrives (ADR 0020 is Unix-only).
 
 ## Other verified points
 
@@ -81,7 +81,6 @@ The ADR is titled "Trust model for discovered vaults":
 
 - The ADR is written per the sketch, with the no-execution-in-config invariant as its centerpiece and the uid ownership check named as the pre-decided escalation. It cross-references the view-name, terminal-escape and frontmatter-parser todos.
 - The design doc describes the trust model of vault discovery.
-- The `$EDITOR`-with-arguments todo is updated to point at this decision, so a future editor fix cannot silently break the invariant.
 
 ## Decisions
 
@@ -91,4 +90,3 @@ The ADR is titled "Trust model for discovered vaults":
 
 - Relates to: [Unbounded frontmatter size lets one note slow every scan](01KWH7Y8ZFKD52TJ3AEGSSBQFQ-unbounded-frontmatter-size-lets-one-note-slow-every-scan.md), a primitive fix this recommendation relies on
 - Relates to: [View names are used as unvalidated paths, so a config can delete files outside the vault](01KWH7Y8ZFKD52TJ3AEGSSBQFR-view-names-are-used-as-unvalidated-paths-so-a-config-can-delete-files.md), the view-name fix that removes the destructive residual
-- Relates to: [EDITOR values with arguments fail to launch](01KWH6MQT7T5CJE5J1PQYSVDQA-editor-values-with-arguments-fail-to-launch.md), the likeliest route to breaking the no-execution invariant

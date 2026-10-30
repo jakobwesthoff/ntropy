@@ -3427,9 +3427,17 @@ mod editor_launch {
     use std::path::PathBuf;
     use std::process::{Output, Stdio};
 
+    /// What a run on a pseudo-terminal produced.
+    struct TerminalRun {
+        /// Exit status, stdout and stderr, which stay pipes.
+        output: Output,
+        /// Everything written to the terminal.
+        terminal: String,
+    }
+
     /// Run `cmd` to completion with a fresh pseudo-terminal as its controlling
-    /// terminal. stdout and stderr stay pipes and are returned.
-    fn output_on_own_terminal(cmd: &mut Command) -> Output {
+    /// terminal.
+    fn run_on_own_terminal(cmd: &mut Command) -> TerminalRun {
         let mut master = -1;
         let mut slave = -1;
         // SAFETY: `master` and `slave` are valid pointers to `c_int`s, and the
@@ -3451,8 +3459,9 @@ mod editor_launch {
             unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) };
 
         // `openpty` has no close-on-exec variant, so a child that another test
-        // thread forks in between can inherit both ends. That is harmless:
-        // nothing here waits for end-of-file or hangup on the terminal.
+        // thread forks in between can inherit both ends. That child is another
+        // short ntropy run; until it exits, the terminal reader below waits a
+        // little longer for the end of the terminal's output.
         for fd in [&master, &slave] {
             // SAFETY: `fd` is an open descriptor owned by this function.
             let rc = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) };
@@ -3482,11 +3491,30 @@ mod editor_launch {
                 Ok(())
             });
         }
-        let output = cmd.output().expect("run ntropy on its own terminal");
-        // The master end stays open until the child is gone; closing it early
-        // would hang up the terminal under the running editor.
-        drop(master);
-        output
+        let child = cmd.spawn().expect("run ntropy on its own terminal");
+        // `cmd` holds this process's copy of the slave until its stdin is
+        // replaced. Closing it leaves the child and what it starts as the only
+        // holders, so the terminal's output ends when they are gone.
+        cmd.stdin(Stdio::null());
+
+        // Terminal output nobody reads blocks the child: a session leader's
+        // exit waits for its terminal's output to drain. The shell writes its
+        // own error messages there, so the terminal is read for as long as it
+        // is open. Once the last slave descriptor closes the read ends, with
+        // end-of-file or an error depending on the platform, and what was read
+        // so far stays in `seen`.
+        let reader = std::thread::spawn(move || {
+            let mut terminal = fs::File::from(master);
+            let mut seen = Vec::new();
+            let _ = io::Read::read_to_end(&mut terminal, &mut seen);
+            seen
+        });
+        let output = child.wait_with_output().expect("wait for ntropy");
+        let seen = reader.join().expect("the terminal reader does not panic");
+        TerminalRun {
+            output,
+            terminal: String::from_utf8_lossy(&seen).into_owned(),
+        }
     }
 
     /// Write a stub editor to `<vault>/stub-bin/editor` and return its path.
@@ -3557,7 +3585,7 @@ done
 
         let mut cmd = ntropy(vault);
         cmd.env("EDITOR", &stub).args(["new", "Editor Test"]);
-        let output = output_on_own_terminal(&mut cmd);
+        let output = run_on_own_terminal(&mut cmd).output;
 
         assert!(
             output.status.success(),
@@ -3568,6 +3596,57 @@ done
         assert_eq!(terminal, "tty");
         assert_eq!(args.len(), 1, "got {args:?}");
         assert_is_note(vault, &args[0], "-editor-test.md");
+    }
+
+    #[test]
+    fn an_editor_value_with_arguments_receives_the_note_path() {
+        // A quoted program path plus an argument, the shape of
+        // `EDITOR="code -w"` with a path that needs quoting (ADR 0066).
+        let dir = setup_vault();
+        let vault = dir.path();
+        let stub = write_stub_editor(vault);
+
+        let mut cmd = ntropy(vault);
+        cmd.env("EDITOR", format!("'{}' --wait", stub.display()))
+            .args(["new", "Editor Test"]);
+        let output = run_on_own_terminal(&mut cmd).output;
+
+        assert!(
+            output.status.success(),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let (terminal, args) = recorded_launch(vault);
+        assert_eq!(terminal, "tty");
+        assert_eq!(args.len(), 2, "got {args:?}");
+        assert_eq!(args[0], "--wait");
+        assert_is_note(vault, &args[1], "-editor-test.md");
+    }
+
+    #[test]
+    fn a_missing_editor_program_is_reported_with_the_value_as_written() {
+        // The shell reports the missing program on the terminal, naming the
+        // setting through `$0`; ntropy's own error names it the way the person
+        // wrote it.
+        let dir = setup_vault();
+        let vault = dir.path();
+
+        let mut cmd = ntropy(vault);
+        cmd.env("EDITOR", "no-such-editor --wait")
+            .args(["new", "Editor Test"]);
+        let run = run_on_own_terminal(&mut cmd);
+
+        assert_eq!(run.output.status.code(), Some(1));
+        let stderr = String::from_utf8_lossy(&run.output.stderr);
+        assert!(
+            stderr.contains("editor `no-such-editor --wait` exited with a non-zero status"),
+            "got: {stderr}"
+        );
+        assert!(
+            run.terminal.contains("no-such-editor --wait:"),
+            "got: {}",
+            run.terminal
+        );
     }
 }
 

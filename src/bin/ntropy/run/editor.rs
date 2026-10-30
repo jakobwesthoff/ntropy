@@ -2,12 +2,13 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Launching the user's editor (ADR 0015, ADR 0036).
+//! Launching the user's editor (ADR 0015, ADR 0036, ADR 0066).
 //!
 //! The editor is `$VISUAL`, then `$EDITOR`; if neither is set, that is an
-//! explicit error rather than a built-in fallback. The child talks to the
-//! controlling terminal so a full-screen editor works even when ntropy's own
-//! stdout or stdin is redirected, and ntropy waits for it to exit.
+//! explicit error rather than a built-in fallback. The value is shell code, run
+//! through `/bin/sh`, so it may carry arguments such as `code -w`. The child
+//! talks to the controlling terminal so a full-screen editor works even when
+//! ntropy's own stdout or stdin is redirected, and ntropy waits for it to exit.
 
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
@@ -15,13 +16,22 @@ use std::process::{Command, Stdio};
 
 use anyhow::{Context, Result, anyhow, bail};
 
+/// The shell every editor value runs through.
+const SHELL: &str = "/bin/sh";
+
 /// Build the command that opens `path`, without spawning anything.
 ///
 /// Separated from the spawn so the argument list and the environment the child
 /// inherits can be asserted without a terminal (ADR 0021).
 pub fn build_command(editor: &OsStr, path: &Path, vault_hint: Option<&Path>) -> Command {
-    let mut command = Command::new(editor);
-    command.arg(path);
+    // `sh -c '<value> "$@"' '<value>' <path>`: the value is used verbatim, so
+    // quoting, `~` and `$VARIABLES` in it work as in the shell, while the path
+    // arrives as a positional parameter and is never part of the shell string.
+    // The value doubles as `$0`, which the shell names in its own errors.
+    let mut script = editor.to_os_string();
+    script.push(" \"$@\"");
+    let mut command = Command::new(SHELL);
+    command.arg("-c").arg(script).arg(editor).arg(path);
     if let Some(root) = vault_hint {
         // An encrypted vault's note is edited through a file outside the
         // vault, which resolves to no vault at all. The language server the
@@ -73,6 +83,9 @@ fn resolve_editor() -> Result<OsString> {
 
 /// Pick the editor from the values of `$VISUAL` and `$EDITOR`.
 ///
+/// A value that is empty or only whitespace counts as unset: run through the
+/// shell, it would hand the note path to the shell as the command.
+///
 /// Takes the values rather than reading the environment, so the choice is
 /// testable without mutating the process environment that parallel tests
 /// share.
@@ -80,7 +93,7 @@ fn choose_editor(visual: Option<OsString>, editor: Option<OsString>) -> Result<O
     [visual, editor]
         .into_iter()
         .flatten()
-        .find(|value| !value.is_empty())
+        .find(|value| !value.as_encoded_bytes().iter().all(u8::is_ascii_whitespace))
         .ok_or_else(|| anyhow!("no editor configured: set $VISUAL or $EDITOR to open notes"))
 }
 
@@ -101,15 +114,75 @@ mod tests {
             .collect()
     }
 
+    /// Run `command` and return what it wrote to stdout.
+    ///
+    /// These tests run real commands through `/bin/sh` without a terminal: the
+    /// terminal binding happens in [`open`], not in [`build_command`].
+    fn stdout_of(mut command: Command) -> Vec<u8> {
+        let output = command.output().expect("the command starts");
+        assert!(output.status.success(), "status: {}", output.status);
+        output.stdout
+    }
+
     #[test]
-    fn the_note_path_is_the_only_argument() {
+    fn the_value_runs_through_the_shell_with_the_path_as_a_positional_argument() {
+        // `$0` is the value itself, so the shell names the setting in its own
+        // error messages, such as `code -w: 1: code: not found`.
+        let command = build_command(OsStr::new("code -w"), Path::new("/v/note.md"), None);
+        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
+        assert_eq!(command.get_program(), OsStr::new("/bin/sh"));
+        assert_eq!(args, ["-c", "code -w \"$@\"", "code -w", "/v/note.md"]);
+    }
+
+    #[test]
+    fn a_value_with_arguments_passes_them_before_the_path() {
+        // `printf '%s\0'` prints each argument it receives, NUL-terminated, so
+        // stdout is the editor's argument list byte for byte.
         let command = build_command(
-            OsStr::new("vim"),
-            Path::new("/v/all-notes/01ARZ-a.md"),
+            OsStr::new(r"printf '%s\0' --wait"),
+            Path::new("/v/note.md"),
             None,
         );
-        let args: Vec<_> = command.get_args().map(|a| a.to_string_lossy()).collect();
-        assert_eq!(args, ["/v/all-notes/01ARZ-a.md"]);
+        assert_eq!(stdout_of(command), b"--wait\0/v/note.md\0");
+    }
+
+    #[test]
+    fn the_note_path_reaches_the_editor_byte_for_byte() {
+        // The path is a positional parameter, never part of the shell string,
+        // so nothing in it is expanded, split or run.
+        let path = r#"/v/it's a "note" $HOME `echo hi` ; | \ *.md"#;
+        let command = build_command(OsStr::new(r"printf '%s\0'"), Path::new(path), None);
+        assert_eq!(stdout_of(command), format!("{path}\0").as_bytes());
+    }
+
+    #[test]
+    fn a_quoted_program_path_is_unquoted_by_the_shell() {
+        let command = build_command(OsStr::new("'/bin/echo'"), Path::new("/v/note.md"), None);
+        assert_eq!(stdout_of(command), b"/v/note.md\n");
+    }
+
+    #[test]
+    fn a_variable_in_the_value_expands() {
+        let mut command = build_command(
+            OsStr::new("$NTROPY_TEST_EDITOR"),
+            Path::new("/v/note.md"),
+            None,
+        );
+        command.env("NTROPY_TEST_EDITOR", "/bin/echo");
+        assert_eq!(stdout_of(command), b"/v/note.md\n");
+    }
+
+    #[test]
+    fn a_tilde_in_the_value_expands() {
+        let mut command = build_command(OsStr::new("~/echo"), Path::new("/v/note.md"), None);
+        command.env("HOME", "/bin");
+        assert_eq!(stdout_of(command), b"/v/note.md\n");
+    }
+
+    #[test]
+    fn a_single_word_value_still_receives_the_path() {
+        let command = build_command(OsStr::new("echo"), Path::new("/v/note.md"), None);
+        assert_eq!(stdout_of(command), b"/v/note.md\n");
     }
 
     #[test]
@@ -168,8 +241,13 @@ mod tests {
     }
 
     #[test]
-    fn the_editor_is_the_program() {
-        let command = build_command(OsStr::new("hx"), Path::new("/v/note.md"), None);
-        assert_eq!(command.get_program(), OsStr::new("hx"));
+    fn a_blank_value_counts_as_unset() {
+        // Run through the shell, a blank value would hand the note path to the
+        // shell as the command.
+        assert_eq!(
+            choose_editor(os(" \t"), os("vim")).expect("EDITOR is set"),
+            "vim"
+        );
+        assert!(choose_editor(os(" "), os("\n")).is_err());
     }
 }

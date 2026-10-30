@@ -13,6 +13,9 @@ The `--no-edit`/`--print` flag naming is superseded by
 [ADR 0042](0042-empty-note-creation-for-machine-authors.md) adds `--empty`, a
 second creation mode that stamps no template.
 
+Amended by [ADR 0066](0066-editor-value-run-through-the-shell.md), which runs
+the editor value through the shell, so it may carry arguments.
+
 ## Context
 
 ntropy opens notes in the user's editor and creates new notes. It needs an
