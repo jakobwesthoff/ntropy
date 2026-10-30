@@ -99,9 +99,15 @@ pub fn tokenize(input: &str) -> Result<Vec<Token>, QueryError> {
                 });
             }
             other => {
+                // Quoting gets the character past the tokenizer, but a quoted
+                // full-text term is a regex, so a metacharacter such as `+`
+                // still needs its own escape to match literally.
                 return Err(QueryError::parse(
                     i,
-                    format!("unexpected character `{other}` (quote it to search literally)"),
+                    format!(
+                        "unexpected character `{other}` (quote the term; a quoted full-text \
+                         term is a regex, so escape regex metacharacters with `\\`)"
+                    ),
                 ));
             }
         }
@@ -253,6 +259,15 @@ mod tests {
     fn unexpected_char_is_positioned_error() {
         let err = tokenize("a + b").expect_err("should fail");
         assert_eq!(err.position(), Some(2));
+    }
+
+    #[test]
+    fn unexpected_char_advises_escaping_for_a_regex() {
+        // A quoted full-text term reaches the regex engine unescaped, so
+        // quoting alone never makes `a + b` match literally.
+        let message = tokenize("a + b").expect_err("should fail").to_string();
+        assert!(!message.contains("literally"), "{message}");
+        assert!(message.contains("escape regex metacharacters"), "{message}");
     }
 
     #[test]

@@ -36,7 +36,22 @@ describe("tokenize", () => {
       tokenize("a!b");
     } catch (error) {
       expect((error as QueryError).position).toBe(1);
-      expect((error as QueryError).message).toContain("quote it");
+    }
+  });
+
+  it("advises quoting for a term and escaping only in a text: pattern", () => {
+    // The reader matches a quoted term as written, where a backslash would be
+    // searched for, but a `text:` pattern is a regex in both semantics.
+    expect(() => tokenize("a + b")).toThrow(QueryError);
+    try {
+      tokenize("a + b");
+    } catch (error) {
+      const message = (error as QueryError).message;
+      expect(message).not.toContain("literally");
+      expect(message).toContain("quote the term to search it as written");
+      expect(message).toContain(
+        "in a `text:` pattern, escape regex metacharacters",
+      );
     }
   });
 

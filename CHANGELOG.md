@@ -29,6 +29,12 @@ and this project adheres to
   ntropy process, such as the language server refreshing on save, adds a
   note to a view directory while the refresh removes that directory as
   empty.
+- The query error for an unexpected character such as `+` no longer says
+  that quoting the term searches it literally. In the CLI a quoted full-text
+  term is a regular expression, and the message now says to escape its
+  metacharacters with `\`. The exported site's search matches a quoted term
+  as written, and its message says to escape metacharacters in a `text:`
+  pattern.
 
 ## v2.2.0 - 2026-10-10
 

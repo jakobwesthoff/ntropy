@@ -88,9 +88,12 @@ export function tokenize(input: string): Token[] {
       }
       tokens.push({ kind: "word", value: word, pos: start });
     } else {
+      // The site's search uses the reader semantics, which match a quoted
+      // term as written, backslashes included; only a `text:` pattern is a
+      // regex there and needs metacharacters escaped.
       throw QueryError.parse(
         i,
-        `unexpected character \`${ch}\` (quote it to search literally)`,
+        `unexpected character \`${ch}\` (quote the term to search it as written; in a \`text:\` pattern, escape regex metacharacters with \`\\\`)`,
       );
     }
   }
