@@ -37,10 +37,13 @@ use ntropy::ops;
 use ntropy::reconcile;
 use ntropy::scan::ScanWarning;
 use ntropy::session::VaultSession;
+use ntropy::text::escape_controls;
 use ntropy::vault::{ResolveOptions, Vault, ViewName, layout, resolve};
 use ntropy::view::SkippedView;
 
 use crate::cli::{Cli, Command, GlobalArgs, SiteCommand, VaultCommand, ViewCommand, join};
+
+pub(crate) use output::error_message;
 
 /// Run the parsed CLI to completion, returning the process exit code.
 pub fn run(cli: Cli) -> Result<ExitCode> {
@@ -265,9 +268,12 @@ fn cmd_init(
     let touched_gitignore =
         !report.gitignore_added.is_empty() || !report.gitignore_removed.is_empty();
     if report.created.is_empty() && !touched_gitignore {
-        println!("Vault already initialized at {}", report.root.display());
+        println!(
+            "Vault already initialized at {}",
+            output::shown_path(&report.root)
+        );
     } else {
-        println!("Initialized vault at {}", report.root.display());
+        println!("Initialized vault at {}", output::shown_path(&report.root));
     }
     report_gitignore_changes(&report.gitignore_added, &report.gitignore_removed);
     print_skipped_views(&report.skipped_views);
@@ -321,7 +327,10 @@ fn init_options(_global: &GlobalArgs, encrypted: bool, _target: &Path) -> Result
 fn cmd_unlock(global: &GlobalArgs) -> Result<ExitCode> {
     let vault = resolve_vault(global)?;
     let recipient = keys::KeyContext::from_args(global).unlock(&vault)?;
-    println!("Unlocked {} ({recipient}).", vault.root().display());
+    println!(
+        "Unlocked {} ({recipient}).",
+        output::shown_path(vault.root())
+    );
     Ok(ExitCode::SUCCESS)
 }
 
@@ -330,9 +339,9 @@ fn cmd_lock(global: &GlobalArgs) -> Result<ExitCode> {
     let vault = resolve_vault(global)?;
     let (recipient, removed) = keys::KeyContext::from_args(global).lock(&vault)?;
     if removed {
-        println!("Locked {} ({recipient}).", vault.root().display());
+        println!("Locked {} ({recipient}).", output::shown_path(vault.root()));
     } else {
-        println!("{} was already locked.", vault.root().display());
+        println!("{} was already locked.", output::shown_path(vault.root()));
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -486,7 +495,9 @@ fn cmd_search(
                             // instead of opening the editor (ADR 0035).
                             // Nothing was edited, so no realign or view
                             // refresh is needed.
-                            SelectionAction::PrintPath => println!("{}", path.display()),
+                            SelectionAction::PrintPath => {
+                                println!("{}", output::checked_path(&path, true)?.display())
+                            }
                             SelectionAction::Open => open_and_refresh(session, &path)?,
                         }
                     }
@@ -500,9 +511,21 @@ fn cmd_search(
             } else if print {
                 // With no picker to choose one note, `--print` covers every
                 // match: one path per line, in the table's newest-first order,
-                // ready for `xargs` and friends.
+                // ready for `xargs` and friends. A path that cannot be printed
+                // as it is is left out with a warning (ADR 0071), and the run
+                // fails so a script does not take the list for complete.
+                let mut withheld = false;
                 for note in notes {
-                    println!("{}", note.path.display());
+                    match output::checked_path(&note.path, true) {
+                        Ok(path) => println!("{}", path.display()),
+                        Err(error) => {
+                            output::warn(&error.to_string());
+                            withheld = true;
+                        }
+                    }
+                }
+                if withheld {
+                    return Ok(ExitCode::FAILURE);
                 }
             } else {
                 // Without a TTY the editor never opens, mirroring `new`/`today`
@@ -543,7 +566,7 @@ fn cmd_new(
         open_and_refresh_from(session, &path, Some(&initial), CopyWarnings::Print)?;
     } else {
         refresh_views(session, CopyWarnings::Print)?;
-        println!("{}", path.display());
+        println!("{}", output::checked_path(&path, false)?.display());
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -569,7 +592,10 @@ fn cmd_write(global: &GlobalArgs, session: &VaultSession, target: &str) -> Resul
 
     // The content is written whether or not the rename was refused, so the
     // path printed is where it lives now and a refusal only fails `--strict`.
-    println!("{}", realignment.path.display());
+    println!(
+        "{}",
+        output::checked_path(&realignment.path, true)?.display()
+    );
     Ok(exit_for_warnings(
         global.strict,
         &[],
@@ -596,13 +622,19 @@ fn cmd_today(session: &VaultSession, print: bool, interactive: bool) -> Result<E
         )?;
     } else {
         refresh_views(session, CopyWarnings::Print)?;
-        println!("{}", outcome.note.path.display());
+        println!(
+            "{}",
+            output::checked_path(&outcome.note.path, false)?.display()
+        );
     }
     Ok(ExitCode::SUCCESS)
 }
 
 fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode> {
-    println!("Reconciling vault at {}...", session.root().display());
+    println!(
+        "Reconciling vault at {}...",
+        output::shown_path(session.root())
+    );
     let report = reconcile::reconcile(session).context("while reconciling")?;
     output::print_warnings(&report.warnings);
     output::print_refused_renames(&report.refused);
@@ -618,10 +650,11 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
         );
     }
     for rewrite in &report.links_rewritten {
+        // `from` is the link target as the note's body spelled it.
         println!(
             "relinked {} -> {} in {}",
-            rewrite.from,
-            rewrite.to,
+            escape_controls(&rewrite.from),
+            escape_controls(&rewrite.to),
             output::file_name(&rewrite.note)
         );
     }
@@ -766,7 +799,7 @@ fn cmd_info(global: &GlobalArgs, print: bool) -> Result<ExitCode> {
     // skips the vault scan the report would otherwise run. Resolution
     // canonicalizes the root, so the path is absolute whichever rule matched.
     if print {
-        println!("{}", root.display());
+        println!("{}", output::checked_path(&root, false)?.display());
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -861,7 +894,7 @@ fn refresh_views(session: &VaultSession, copy_warnings: CopyWarnings) -> Result<
 /// Print each skipped view as a warning on stderr.
 pub(super) fn print_skipped_views(skipped: &[SkippedView]) {
     for view in skipped {
-        eprintln!("warning: {view}");
+        output::warn(&view.to_string());
     }
 }
 
@@ -945,16 +978,35 @@ fn report_gitignore_changes(added: &[String], removed: &[String]) {
         println!("ignored {entry}");
     }
     for entry in removed {
-        let dir = entry.trim_matches('/');
-        println!(
-            "stopped ignoring {entry}; left directory `{dir}/` in place, delete it manually if you no longer need it"
-        );
+        println!("{}", unignored_line(entry));
     }
+}
+
+/// The line reporting a pruned `.gitignore` entry.
+///
+/// A pruned entry is whatever line sat below ntropy's marker in the vault's
+/// own `.gitignore`, so it is escaped (ADR 0071). An added entry is a
+/// validated view name and is printed as it is.
+fn unignored_line(entry: &str) -> String {
+    let entry = escape_controls(entry);
+    let dir = entry.trim_matches('/');
+    format!(
+        "stopped ignoring {entry}; left directory `{dir}/` in place, delete it manually if you no longer need it"
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_pruned_gitignore_entry_is_escaped() {
+        assert_eq!(
+            unignored_line("/a\u{1b}b/"),
+            "stopped ignoring /a\\u{1b}b/; left directory `a\\u{1b}b/` in place, delete it \
+             manually if you no longer need it"
+        );
+    }
 
     #[test]
     fn enter_opens_the_note_without_a_print_flag() {

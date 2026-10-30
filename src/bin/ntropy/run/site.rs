@@ -104,14 +104,15 @@ pub fn cmd_site(
     site::write(&built, &absolute_output).context("while writing the site")?;
 
     for warning in &built.warnings {
-        eprintln!("warning: {warning}");
+        output::warn(warning);
     }
 
     // `--print` writes exactly the entry page's path to stdout for command
     // substitution (ADR 0036); otherwise a completion report names the
     // directory, the page count, and the warnings.
     if print {
-        println!("{}", output_dir.join(site::build::INDEX_PAGE).display());
+        let index = output_dir.join(site::build::INDEX_PAGE);
+        println!("{}", output::checked_path(&index, false)?.display());
     } else {
         println!(
             "Exported {} to {} ({}, {})",

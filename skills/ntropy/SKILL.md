@@ -90,6 +90,12 @@ language for filtering, and materialized symlink views for filesystem browsing.
    `{ note = … }` item of a `[[site.nav]]` table take the full 26-character
    ULID, never a title, slug, or path. Look it up with `ntropy search -n`
    first.
+15. **Table cells and messages are display text.** Control characters and
+   bidi overrides in titles, names and paths are shown escaped (`\n`,
+   `\u{1b}`), so a title in the table can differ from the one in the file.
+   For a note's exact text use `-P`. A `-p` path is exact; a note whose file
+   name would need escaping has none, and `-p` fails or leaves it out with
+   a warning until `ntropy reconcile` renames it.
 
 ## Do / don't
 

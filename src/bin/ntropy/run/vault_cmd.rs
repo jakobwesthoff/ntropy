@@ -9,6 +9,7 @@
 //! itself lives in `ntropy::migrate`; this layer supplies the keys, the
 //! confirmation, and the report.
 
+use std::borrow::Cow;
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};
@@ -25,7 +26,7 @@ use ntropy::view::{SkipReason, SkippedView};
 use crate::cli::{GlobalArgs, VaultCommand};
 
 use super::keys::KeyContext;
-use super::{confirm, plural};
+use super::{confirm, output, plural};
 
 /// Dispatch a `vault` subcommand.
 pub fn run(global: &GlobalArgs, command: VaultCommand, interactive: bool) -> Result<()> {
@@ -136,10 +137,10 @@ fn encrypt(
         report.already_done
     );
     for dir in &report.views_removed {
-        println!("removed view directory {}", dir.display());
+        println!("removed view directory {}", output::shown_path(dir));
     }
     for view in &report.views_skipped {
-        eprintln!("warning: {view}; its directory was left in place");
+        output::warn(&format!("{view}; its directory was left in place"));
     }
     history_notice();
     Ok(())
@@ -153,6 +154,15 @@ fn blocking_views_message(blocking: &[SkippedView]) -> String {
     for view in blocking {
         let name = escape_controls(&view.name);
         match &view.reason {
+            // A command to paste needs the name as it is, which would carry
+            // its escaped characters to the terminal, and the escaped form
+            // names no view. Such a name is removed from the config by hand.
+            SkipReason::InvalidName(reason) if matches!(name, Cow::Owned(_)) => {
+                message.push_str(&format!(
+                    "\n  view `{name}`: {reason}; remove it from `.ntropy/config.toml`, \
+                     delete its directory, then encrypt again"
+                ))
+            }
             SkipReason::InvalidName(reason) => message.push_str(&format!(
                 "\n  view `{name}`: {reason}; remove it with `ntropy view remove {}`, \
                  delete its directory, then encrypt again",
@@ -421,6 +431,18 @@ mod tests {
              view `by-tag`: `/v/by-tag` is a symlink; remove the symlink itself (not what it \
              points to), then encrypt again\n  \
              view `by-tag`: `/v/by-tag` could not be inspected: name too long"
+        );
+    }
+
+    #[test]
+    fn a_name_that_needs_escaping_gets_no_command_to_paste() {
+        let (_, blocking) = ntropy::view::parse_defs([("a\u{1b}b", "tags")]);
+
+        assert_eq!(
+            blocking_views_message(&blocking),
+            "these views cannot be removed safely, so the vault was not encrypted:\n  \
+             view `a\\u{1b}b`: the name contains a control character; remove it from \
+             `.ntropy/config.toml`, delete its directory, then encrypt again"
         );
     }
 }

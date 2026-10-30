@@ -38,8 +38,8 @@ fn main() -> ExitCode {
     match run::run(cli) {
         Ok(code) => code,
         Err(error) => {
-            // `{:#}` renders the full anyhow context chain on one line.
-            eprintln!("error: {error:#}");
+            // The whole context chain, with text from the vault escaped.
+            eprintln!("error: {}", run::error_message(&error));
             ExitCode::FAILURE
         }
     }

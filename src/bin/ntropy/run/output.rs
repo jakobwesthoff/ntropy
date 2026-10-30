@@ -13,16 +13,18 @@
 //! `view list` prints `NAME FIELD` through the same renderer. The same note
 //! fields render as a human reference via [`note_reference`].
 
+use std::borrow::Cow;
 use std::fmt::Display;
 use std::io::{self, Write};
 use std::path::Path;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use ntropy::config::ViewConfig;
 use ntropy::note::Note;
 use ntropy::ops::{TagCount, VaultStats};
 use ntropy::reconcile::{Realignment, Reassignment, Rename};
 use ntropy::scan::ScanWarning;
+use ntropy::text::escape_controls;
 use ntropy::vault::{ResolveSource, Vault};
 use unicode_width::UnicodeWidthStr;
 
@@ -55,13 +57,17 @@ pub fn print_notes(notes: &[Note]) -> Result<()> {
 /// prompts and confirmations, the ambiguous-match list). Tags are dropped when
 /// empty. The `id`/`date`/`title`/`tags` are taken as primitives so both a
 /// [`Note`] and a picker candidate can format identically.
+///
+/// The reference is escaped as a whole (ADR 0071). Only the title can carry
+/// a character that needs it: the id and date are ntropy's own, and tags are
+/// normalized slugs.
 pub fn reference(id: impl Display, date: &str, title: &str, tags: &[String]) -> String {
     let mut s = format!("{date}  {title}");
     if !tags.is_empty() {
         s.push_str(&format!("  [{}]", tags.join(", ")));
     }
     s.push_str(&format!("  ({id})"));
-    s
+    escape_controls(&s).into_owned()
 }
 
 /// The [`reference`] for a parsed [`Note`], computing its local creation date.
@@ -110,11 +116,11 @@ pub fn print_info(
 ) {
     println!(
         "Active vault:  {} (via {})",
-        vault.root().display(),
+        shown_path(vault.root()),
         describe_source(source)
     );
     match default_vault {
-        Some(path) => println!("Default vault: {}", path.display()),
+        Some(path) => println!("Default vault: {}", shown_path(path)),
         None => println!("Default vault: (not set)"),
     }
 
@@ -161,7 +167,7 @@ pub fn print_info(
         println!();
         println!("Templates:");
         for name in &stats.templates {
-            println!("  {name}");
+            println!("  {}", escape_controls(name));
         }
     }
 }
@@ -171,7 +177,7 @@ fn describe_source(source: &ResolveSource) -> String {
     match source {
         ResolveSource::Explicit => "--vault flag".to_string(),
         ResolveSource::Env => "$NTROPY_VAULT".to_string(),
-        ResolveSource::Pointer(path) => format!("pointer file {}", path.display()),
+        ResolveSource::Pointer(path) => format!("pointer file {}", shown_path(path)),
         ResolveSource::WalkUp => "current directory".to_string(),
         ResolveSource::GlobalDefault => "global default".to_string(),
     }
@@ -183,9 +189,64 @@ fn describe_source(source: &ResolveSource) -> String {
 /// and readable; the file is always a top-level entry in `all-notes/`.
 pub fn print_warnings(warnings: &[ScanWarning]) {
     for warning in warnings {
-        let name = file_name(&warning.path);
-        eprintln!("warning: skipped `{name}`: {}", warning.message);
+        warn(&format_warning(warning));
     }
+}
+
+/// The text of one scan warning, without the `warning: ` prefix, escaped
+/// (ADR 0071): the message can quote file names too, such as the note that
+/// keeps a copy's ULID.
+fn format_warning(warning: &ScanWarning) -> String {
+    let message = format!(
+        "skipped `{}`: {}",
+        file_name(&warning.path),
+        warning.message
+    );
+    escape_controls(&message).into_owned()
+}
+
+/// Print `message` as a warning on stderr, escaped (ADR 0071), since warnings
+/// quote file names, link targets and other text from the vault.
+pub fn warn(message: &str) {
+    eprintln!("warning: {}", escape_controls(message));
+}
+
+/// The text `main` prints after `error: ` for an error that ends the command:
+/// the whole context chain on one line, escaped (ADR 0071).
+///
+/// Each line is escaped on its own and the line breaks are kept, so a
+/// message that spans lines, such as an external tool's diagnostics, keeps
+/// them.
+pub fn error_message(error: &anyhow::Error) -> String {
+    format!("{error:#}")
+        .split('\n')
+        .map(escape_controls)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// `path`, when it can be printed for a script exactly as it is (ADR 0071).
+///
+/// A path that holds a character [`escape_controls`] would escape is refused
+/// rather than printed: escaped, it would name a file that does not exist,
+/// and raw, it would reach the terminal. `note` says that the path is a
+/// note's, whose file name `ntropy reconcile` can replace with its canonical
+/// one, so the error says to run it.
+pub fn checked_path(path: &Path, note: bool) -> Result<&Path> {
+    if let Cow::Owned(escaped) = escape_controls(&path.to_string_lossy()) {
+        let hint = if note {
+            "; run `ntropy reconcile` to rename the note"
+        } else {
+            ""
+        };
+        bail!("`{escaped}` holds control or bidi characters, so it is not printed{hint}");
+    }
+    Ok(path)
+}
+
+/// A path for a line meant for a human, escaped (ADR 0071).
+pub fn shown_path(path: &Path) -> String {
+    escape_controls(&path.display().to_string()).into_owned()
 }
 
 /// Print each realignment that a file already holding the new name prevented,
@@ -223,11 +284,13 @@ pub fn print_realignment(realignment: &Realignment) {
 }
 
 /// The file-name component of a path as a lossy string, or the whole path
-/// when it has none.
+/// when it has none, escaped for a message (ADR 0071).
 pub fn file_name(path: &Path) -> String {
-    path.file_name()
+    let name = path
+        .file_name()
         .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string())
+        .unwrap_or_else(|| path.display().to_string());
+    escape_controls(&name).into_owned()
 }
 
 /// A byte count as a short human-readable figure: whole bytes below a KiB,
@@ -258,18 +321,25 @@ pub fn human_size(bytes: u64) -> String {
 /// columns are separated by two spaces. The final column is emitted unpadded, so
 /// no line carries trailing whitespace and the `tail -n +2` header strip stays
 /// valid. Each row is expected to carry exactly as many cells as the header.
+///
+/// Cells hold text from the vault and are escaped once, up front (ADR 0071),
+/// so the widths are measured on the same strings that are written.
 fn write_table(out: &mut impl Write, header: &[&str], rows: &[Vec<String>]) -> io::Result<()> {
-    let widths = column_widths(header, rows);
+    let rows: Vec<Vec<Cow<'_, str>>> = rows
+        .iter()
+        .map(|row| row.iter().map(|cell| escape_controls(cell)).collect())
+        .collect();
+    let widths = column_widths(header, &rows);
     write_row(out, header.iter().copied(), &widths)?;
-    for row in rows {
-        write_row(out, row.iter().map(String::as_str), &widths)?;
+    for row in &rows {
+        write_row(out, row.iter().map(|cell| cell.as_ref()), &widths)?;
     }
     Ok(())
 }
 
 /// The display-column width of each column: the widest of the header cell and
 /// every row's cell in that position.
-fn column_widths(header: &[&str], rows: &[Vec<String>]) -> Vec<usize> {
+fn column_widths(header: &[&str], rows: &[Vec<Cow<'_, str>>]) -> Vec<usize> {
     let mut widths: Vec<usize> = header.iter().map(|cell| cell.width()).collect();
     for row in rows {
         for (i, cell) in row.iter().enumerate() {
@@ -531,5 +601,162 @@ mod tests {
             "narrow.md",
         );
         assert_eq!(render(&header, &rows), expected);
+    }
+
+    // -------------------------------------------------------------------------
+    // Text from the vault is escaped before it is shown (ADR 0071)
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn a_line_break_in_a_cell_keeps_the_row_on_one_line() {
+        let out = render(&["TITLE", "PATH"], &[row(&["a\nb", "a.md"])]);
+        assert_eq!(out.lines().count(), 2, "{out}");
+    }
+
+    #[test]
+    fn a_tab_in_a_cell_is_escaped() {
+        let out = render(&["TITLE", "PATH"], &[row(&["a\tb", "a.md"])]);
+        assert!(!out.contains('\t'), "{out:?}");
+        assert!(out.contains("a\\tb"), "{out:?}");
+    }
+
+    #[test]
+    fn a_control_character_cannot_reach_the_table() {
+        let out = render(
+            &["TITLE", "PATH"],
+            &[row(&["Evil\u{1b}]52;c;ZXZpbAo=\u{7}", "a.md"])],
+        );
+        assert!(!out.contains('\u{1b}'), "{out:?}");
+        assert!(!out.contains('\u{7}'), "{out:?}");
+    }
+
+    #[test]
+    fn a_path_cell_is_escaped() {
+        let out = render(
+            &["TITLE", "PATH"],
+            &[row(&["t", "/v/all-notes/x\u{1b}y.md"])],
+        );
+        assert!(out.contains("/v/all-notes/x\\u{1b}y.md"), "{out:?}");
+    }
+
+    #[test]
+    fn cells_are_measured_after_escaping() {
+        // `a\u{1b}` is seven columns once escaped, the widest cell, so the
+        // other rows pad to it.
+        let out = render(
+            &["T", "P"],
+            &[row(&["a\u{1b}", "z"]), row(&["bbbbbbb", "z"])],
+        );
+        assert_eq!(out, "T        P\na\\u{1b}  z\nbbbbbbb  z\n");
+    }
+
+    #[test]
+    fn reference_escapes_the_title() {
+        let r = reference(ULID, "2026-06-25", "a\u{1b}[2Jb", &[]);
+        assert_eq!(r, "2026-06-25  a\\u{1b}[2Jb  (01ARZ3NDEKTSV4RRFFQ69G5FAV)");
+    }
+
+    #[test]
+    fn a_warning_escapes_the_file_name() {
+        let warning = ScanWarning {
+            path: std::path::PathBuf::from(format!("/v/all-notes/{ULID}-\u{1b}x.md")),
+            message: "the frontmatter is not valid YAML".to_string(),
+        };
+        assert_eq!(
+            format_warning(&warning),
+            format!("skipped `{ULID}-\\u{{1b}}x.md`: the frontmatter is not valid YAML")
+        );
+    }
+
+    #[test]
+    fn a_warning_escapes_the_message() {
+        let warning = ScanWarning {
+            path: std::path::PathBuf::from("/v/all-notes/x.md"),
+            message: "`\u{1b}x.md` does not start with a valid ULID".to_string(),
+        };
+        assert_eq!(
+            format_warning(&warning),
+            "skipped `x.md`: `\\u{1b}x.md` does not start with a valid ULID"
+        );
+    }
+
+    #[test]
+    fn a_reassignment_line_escapes_every_name() {
+        let line = reassignment(&Reassignment {
+            from: format!("/v/all-notes/{ULID}-\u{1b}copy.md").into(),
+            to: "/v/all-notes/01BRZ3NDEKTSV4RRFFQ69G5FAV-copy.md".into(),
+            keeper: format!("/v/all-notes/{ULID}-\u{202e}plan.md").into(),
+        });
+        assert_eq!(
+            line,
+            format!(
+                "reassigned {ULID}-\\u{{1b}}copy.md -> 01BRZ3NDEKTSV4RRFFQ69G5FAV-copy.md, \
+                 its id stays with {ULID}-\\u{{202e}}plan.md"
+            )
+        );
+    }
+
+    #[test]
+    fn an_error_message_is_escaped() {
+        let error = anyhow::anyhow!("`x\u{1b}y.md` is not a note").context("while writing");
+        assert_eq!(
+            error_message(&error),
+            "while writing: `x\\u{1b}y.md` is not a note"
+        );
+    }
+
+    #[test]
+    fn an_error_message_keeps_its_line_breaks() {
+        let error =
+            anyhow::anyhow!("these views cannot be removed safely:\n  view `a\u{1b}b`: invalid");
+        let message = error_message(&error);
+        assert_eq!(message.lines().count(), 2, "{message}");
+        assert!(!message.contains('\u{1b}'), "{message:?}");
+    }
+
+    #[test]
+    fn a_tab_in_a_tools_output_is_escaped() {
+        let error = anyhow::anyhow!("`typst` failed:\nerror: unknown\n\tat line 1");
+        assert_eq!(
+            error_message(&error),
+            "`typst` failed:\nerror: unknown\n\\tat line 1"
+        );
+    }
+
+    #[test]
+    fn a_colour_sequence_in_a_tools_output_is_escaped() {
+        let error = anyhow::anyhow!("`typst` failed:\n\u{1b}[31merror\u{1b}[0m: unknown");
+        assert_eq!(
+            error_message(&error),
+            "`typst` failed:\n\\u{1b}[31merror\\u{1b}[0m: unknown"
+        );
+    }
+
+    #[test]
+    fn a_clean_path_is_printed_as_it_is() {
+        let path = Path::new("/v/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-plan.md");
+        assert_eq!(checked_path(path, true).expect("a clean path prints"), path);
+    }
+
+    #[test]
+    fn a_note_path_that_needs_escaping_is_refused() {
+        let path = Path::new("/v/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-\u{1b}x.md");
+        let error = checked_path(path, true).expect_err("an escaped path is not printed");
+        assert_eq!(
+            error.to_string(),
+            "`/v/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-\\u{1b}x.md` holds control or bidi \
+             characters, so it is not printed; run `ntropy reconcile` to rename the note"
+        );
+    }
+
+    #[test]
+    fn another_path_that_needs_escaping_is_refused_without_the_reconcile_hint() {
+        let path = Path::new("/v\u{1b}/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-plan.md");
+        let error = checked_path(path, false).expect_err("an escaped path is not printed");
+        assert_eq!(
+            error.to_string(),
+            "`/v\\u{1b}/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-plan.md` holds control or bidi \
+             characters, so it is not printed"
+        );
     }
 }

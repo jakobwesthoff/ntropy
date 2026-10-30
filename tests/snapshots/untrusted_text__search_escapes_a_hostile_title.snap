@@ -1,0 +1,21 @@
+---
+source: tests/untrusted_text.rs
+info:
+  program: ntropy
+  args:
+    - "--vault"
+    - "."
+    - "-n"
+    - search
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+ID                          DATE        TITLE                    TAGS  PATH
+01BRZ3NDEKTSV4RRFFQ69G5FAV  [DATE....]  Two\nLines\tTabbed             [BASE]/vault/all-notes/01BRZ3NDEKTSV4RRFFQ69G5FAV-two-lines.md
+01ARZ3NDEKTSV4RRFFQ69G5FAV  [DATE....]  Evil\u{1b}]0;pwned\u{7}  work  [BASE]/vault/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-evil.md
+
+----- stderr -----

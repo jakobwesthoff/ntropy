@@ -96,4 +96,5 @@ made.
 - [0068. Unique view leaf names per directory, ignoring case](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0068-unique-view-leaf-names-per-directory-ignoring-case.md)
 - [0069. Picker paging keys and a hand-drawn renderer](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0069-picker-paging-keys-and-a-hand-drawn-renderer.md)
 - [0070. Trust model for discovered vaults](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0070-trust-model-for-discovered-vaults.md)
+- [0071. Escaping untrusted text for the terminal](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0071-escaping-untrusted-text-for-the-terminal.md)
 - [0072. Export paths stay inside the vault and the output](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)

@@ -34,6 +34,15 @@ and the query DSL in [query-and-search.md](query-and-search.md).
   structured JSON output for machine consumers is planned. Where a note is named
   to a human (delete prompts/confirmations, ambiguous-match lists) it is shown
   as the reference `date  title  [tags]  (id)`.
+- **Untrusted text:** text from the vault (titles, file and directory names,
+  link targets, template and view names, `.gitignore` entries, the vault's
+  path) is shown with control characters and bidi overrides and isolates
+  escaped as `\n`, `\t` or `\u{1b}`, in every mode and whether or not stdout
+  is a terminal (ADR 0071). Line breaks in an error message are kept. A path
+  printed for a script (`-p`, `write`) is exact, and one that would need
+  escaping is not printed: a single one is an error, and `search -n -p`
+  leaves it out with a warning and exits non-zero. `--print-content` prints
+  the note unchanged.
 - **Ordering:** results are newest first (creation time descending) by default.
 - **Editor:** `$VISUAL` then `$EDITOR`; a value that is empty or only
   whitespace counts as unset, and an error if neither is set. The value runs

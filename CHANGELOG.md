@@ -141,6 +141,18 @@ and this project adheres to
   as outside the vault, like a relative one: the export warns and copies
   nothing. Both commands also refuse to write any file outside their
   output.
+- Note titles, file names, link targets in note bodies, template names,
+  view names, `.gitignore` entries and the vault's path reached the terminal
+  unchanged. A vault you did not write could use them to send escape
+  sequences that retitle the window, clear the screen or, on some
+  terminals, write the clipboard, and a line break or tab in a title broke
+  a table row. ntropy now shows control characters, and the bidirectional
+  override and isolate characters that can reorder how a title reads,
+  escaped as `\n`, `\t` or `\u{1b}` in tables, prompts, warnings, error
+  messages and reports. A path that would need escaping is no longer
+  printed by `-p`: the command fails, or `search -n -p` leaves it out with
+  a warning, prints the rest and exits non-zero. `ntropy reconcile` renames
+  such a note.
 
 ## v2.2.0 - 2026-10-10
 

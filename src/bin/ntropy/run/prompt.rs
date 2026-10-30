@@ -13,6 +13,7 @@ use std::io::{BufRead, BufReader, Write};
 
 use ntropy::cipher::Passphrase;
 use ntropy::keys::{KeyError, PassphrasePrompt};
+use ntropy::text::escape_controls;
 
 use super::interact;
 
@@ -27,7 +28,7 @@ pub struct TtyPassphrasePrompt;
 
 impl PassphrasePrompt for TtyPassphrasePrompt {
     fn existing(&self, label: &str) -> Result<Passphrase, KeyError> {
-        ask(&format!("Passphrase for {label}: "))
+        ask(&labelled("Passphrase for", label))
     }
 
     fn new_passphrase(&self, label: &str) -> Result<Passphrase, KeyError> {
@@ -35,7 +36,7 @@ impl PassphrasePrompt for TtyPassphrasePrompt {
         // makes every note in it unreadable, and nothing downstream can tell
         // that happened.
         for _ in 0..CONFIRM_ATTEMPTS {
-            let first = ask(&format!("New passphrase for {label}: "))?;
+            let first = ask(&labelled("New passphrase for", label))?;
             let second = ask("Repeat passphrase: ")?;
             if first == second {
                 return Ok(first);
@@ -44,6 +45,12 @@ impl PassphrasePrompt for TtyPassphrasePrompt {
         }
         Err(KeyError::Locked)
     }
+}
+
+/// A prompt naming what the passphrase is for, usually the vault's path,
+/// escaped (ADR 0071).
+fn labelled(prompt: &str, label: &str) -> String {
+    format!("{prompt} {}: ", escape_controls(label))
 }
 
 /// Prompt on the terminal with echo off and read one line.
@@ -124,5 +131,18 @@ impl Drop for EchoOffScope {
         unsafe {
             libc::tcsetattr(self.fd, libc::TCSAFLUSH, &self.previous);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_prompt_escapes_the_vault_path() {
+        assert_eq!(
+            labelled("Passphrase for", "/home/a\u{1b}]0;x\u{7}/vault"),
+            "Passphrase for /home/a\\u{1b}]0;x\\u{7}/vault: "
+        );
     }
 }

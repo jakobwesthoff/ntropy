@@ -168,7 +168,15 @@ pub fn cmd_render(
 
     // The default artifact name is the note's slug plus the format's extension,
     // in the current directory; `-o` overrides it.
+    let named_after_note = output.is_none();
     let output_path = output.unwrap_or_else(|| default_output_path(&note.slug, &extension));
+
+    // A path `--print` could not print as it is fails before the engine
+    // writes anything there (ADR 0071). The slug is the rest of the note's
+    // file name, which `ntropy reconcile` realigns.
+    if print {
+        output::checked_path(&output_path, named_after_note)?;
+    }
 
     // Announce the work before the engine runs: external typesetting can take
     // a few seconds, and under `--print` stdout stays reserved for the path
@@ -250,7 +258,7 @@ pub fn cmd_render(
             .len();
         println!(
             "Rendered {} ({to} via {engine_name}, {})",
-            output_path.display(),
+            output::shown_path(&output_path),
             output::human_size(size)
         );
     }
@@ -566,7 +574,7 @@ impl RenderContext for ProcessContext {
     fn warn(&mut self, message: &str) {
         // Engine warnings go to stderr, keeping the `-p` stdout contract clean
         // (ADR 0036), in the same visual style as scan warnings.
-        eprintln!("warning: {message}");
+        output::warn(message);
         self.warnings += 1;
     }
 

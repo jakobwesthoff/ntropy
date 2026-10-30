@@ -254,7 +254,9 @@ with them note titles, in plaintext inside the vault, so a fresh `vault
 encrypt` refuses to start, before it writes the keypair, while a configured
 view has an invalid name, a symlink on the path to its directory, or a path
 that cannot be inspected (ADR 0064). For an invalid name the message names
-`ntropy view remove` and leaves the old directory to the user; for a symlink
+`ntropy view remove`, or `.ntropy/config.toml` when the name holds a
+character that is shown escaped (ADR 0071), and leaves the old directory to
+the user; for a symlink
 it says to remove the symlink itself. A resumed conversion is past that check
 and skips such a view, reporting that its directory was left in place. `ntropy view add` is refused rather than accepted-and-inert: a
 command that reports success and produces no directory is worse for a user's

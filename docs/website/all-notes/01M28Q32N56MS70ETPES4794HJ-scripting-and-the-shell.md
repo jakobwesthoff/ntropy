@@ -16,9 +16,13 @@ Pass `-n` (`--non-interactive`) and ntropy drops the interactive parts: no picke
 
 Split it with `awk -F'  +'` (the field separator is a run of two or more spaces), for example `awk -F'  +' '{print $1}'` for the ID column; `tail -n +2` drops the header. One caveat: a cell can itself contain a two-space run, since a title with doubled spaces is printed verbatim, and that shifts the fields after it. Treat TITLE and the columns after it as best-effort rather than a positional contract. ID and DATE never contain spaces and are always safe.
 
+A control character in a cell, such as a line break or an escape character in a title or file name, is shown escaped as `\n` or `\u{1b}`, and so are the bidirectional override and isolate characters. A row stays one line, and a cell cannot send commands to your terminal, also when the vault came from someone else.
+
 ## Paths and content
 
 File paths need no parsing at all. `search -n -p` prints every match as one path per line (`ntropy search -n -p tag:work | xargs grep -l deadline`), and `new -p` and `today -p` print the created note's path.
+
+A path is printed exactly as it is on disk. One that holds a control or bidi character is not printed at all, since it would act on your terminal: the command fails, or `search -n -p` leaves it out with a warning, prints the rest and exits non-zero. `ntropy reconcile` renames such a note to its canonical name.
 
 To read a note rather than locate it, `search -P` (`--print-content`) writes its text to stdout. It must resolve to exactly one note. Unlike `-p` it works the same in an [encrypted vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md): the path there names a ciphertext file, the content does not.
 

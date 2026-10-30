@@ -28,9 +28,14 @@ pub fn escape_controls(raw: &str) -> Cow<'_, str> {
     Cow::Owned(escaped)
 }
 
-/// Whether `ch` is shown escaped.
+/// Whether `ch` is shown escaped: a control character (C0, DEL, C1), or a
+/// bidi override, embedding or isolate, which can reorder the text around it
+/// so that it reads as something else (ADR 0071).
+///
+/// The directional marks U+200E, U+200F and U+061C stay, as mixed-script
+/// titles need them.
 fn needs_escape(ch: char) -> bool {
-    ch.is_control()
+    ch.is_control() || matches!(ch, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
 }
 
 #[cfg(test)]
@@ -79,6 +84,23 @@ mod tests {
         assert_eq!(escape_controls("\u{7f}"), "\\u{7f}");
         assert_eq!(escape_controls("\u{85}"), "\\u{85}");
         assert_eq!(escape_controls("\u{9b}"), "\\u{9b}");
+    }
+
+    #[test]
+    fn bidi_overrides_and_embeddings_are_escaped() {
+        assert_eq!(escape_controls("\u{202a}"), "\\u{202a}");
+        assert_eq!(escape_controls("\u{202b}"), "\\u{202b}");
+        assert_eq!(escape_controls("\u{202c}"), "\\u{202c}");
+        assert_eq!(escape_controls("\u{202d}"), "\\u{202d}");
+        assert_eq!(escape_controls("evil\u{202e}txt.md"), "evil\\u{202e}txt.md");
+    }
+
+    #[test]
+    fn bidi_isolates_are_escaped() {
+        assert_eq!(escape_controls("\u{2066}"), "\\u{2066}");
+        assert_eq!(escape_controls("\u{2067}"), "\\u{2067}");
+        assert_eq!(escape_controls("\u{2068}"), "\\u{2068}");
+        assert_eq!(escape_controls("\u{2069}"), "\\u{2069}");
     }
 
     #[test]
