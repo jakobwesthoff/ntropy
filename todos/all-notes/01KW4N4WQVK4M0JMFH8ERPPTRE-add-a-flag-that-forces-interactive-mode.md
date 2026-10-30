@@ -9,15 +9,17 @@ origin: implementation
 ntropy picks interactive or plain mode from the TTY and the
 `-n`/`--non-interactive` flag (`interact::is_interactive`, dispatched in
 `src/bin/ntropy/run/mod.rs`). There is a way to force plain mode but none to
-force interactive mode. When stdout is not a TTY, the interactive paths are
-unreachable, even with `$EDITOR` set.
+force interactive mode. The gate is `!non_interactive && open_tty().is_ok()`
+(`src/bin/ntropy/run/interact.rs`): a redirected stdout does not demote to
+plain mode (ADR 0036). Only the absence of a controlling terminal does, as
+under cron or in CI (checked in the code, 2026-10-30).
 
 ## Context
 
 The editor-open-and-refresh path in `cmd_search` (the `edit` alias, ADR 0031)
-runs only under the interactive gate, around line 170 of
-`src/bin/ntropy/run/mod.rs`. The benchmark harness (`scripts/benchmark.sh`)
-pipes stdout, so it cannot exercise that path. Its `edit-open` row measured
+runs only under the interactive gate in `src/bin/ntropy/run/mod.rs`. The
+benchmark harness (`scripts/benchmark.sh`) runs every command with `-n`, so it
+cannot exercise that path. Its `edit-open` row measured
 only a resolve-and-print, and it was removed for being misleading. A
 force-interactive flag would let the harness, and scripted or CI flows, drive
 the real cycle: resolve, open `$EDITOR` (stubbed), realign, and view sync.
@@ -38,7 +40,12 @@ counterpart to `-n`/`--non-interactive`.
 - How do editor-spawning paths behave when forced interactive without a real
   TTY? They rely on `$EDITOR`, and the picker may misbehave without a terminal.
   Should the flag imply that a single match opens and multiple matches error, or
-  something similar?
+  something similar? `editor::open` binds the editor's stdin, stdout and stderr
+  to the controlling terminal and fails without one, so forced interactive mode
+  without a terminal needs a separate rule for the editor too.
+- Does the benchmark need the flag at all? Run from a terminal, a benchmark
+  row without `-n` already passes the gate; whether hyperfine's children keep
+  the controlling terminal was not checked.
 
 ## Follow-up
 

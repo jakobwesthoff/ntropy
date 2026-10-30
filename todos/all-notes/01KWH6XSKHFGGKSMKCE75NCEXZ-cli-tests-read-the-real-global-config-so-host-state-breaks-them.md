@@ -17,17 +17,17 @@ Read in the code during the review. `global::load()` is called during vault reso
 2. Host-dependent output. `info` prints the host's default vault. The test hides this with a redaction filter on the whole line (`tests/cli.rs`, around line 426), so the "no default set" and "default set" variants are never pinned.
 3. `init --set-default` cannot be tested. It writes to the real global config (`set_global_default`, `src/bin/ntropy/run/mod.rs`, around lines 373 to 380), so no test exercises it.
 
-`config_path()` consults only `ProjectDirs`. On Linux, `XDG_CONFIG_HOME` would work, but macOS `ProjectDirs` ignores environment variables, so the tests cannot be made hermetic from outside on macOS, the main development platform.
+`config_path()` consults only `ProjectDirs`. That still leaves a way in from outside on every platform: `directories` 6.0 derives the macOS config directory from `$HOME` (`home_dir().join("Library/Application Support")`, with `dirs-sys` reading `HOME` first), and Linux honours `XDG_CONFIG_HOME`. The test `info_print_fails_without_a_vault` in `tests/cli.rs` already isolates itself this way by setting `HOME` and `XDG_CONFIG_HOME` to a temporary directory (checked in the `directories` 6.0.0 source, 2026-10-30).
 
 ## Suggested fix
 
-Add an ntropy-level override that `global::config_path()` consults before `ProjectDirs`, for example `NTROPY_CONFIG_DIR` (a directory) or `NTROPY_GLOBAL_CONFIG` (a file path). Then:
+Either point `HOME` and `XDG_CONFIG_HOME` at a per-test temporary directory in the `ntropy()` helper, which needs no code change but affects anything else in the binary that reads `HOME`, or add an ntropy-level override that `global::config_path()` consults before `ProjectDirs`, for example `NTROPY_CONFIG_DIR` (a directory) or `NTROPY_GLOBAL_CONFIG` (a file path), which adds a public environment variable. Then:
 
-- set it to a per-test temporary directory in the `ntropy()` helper in `tests/cli.rs`,
+- isolate the config in the `ntropy()` helper in `tests/cli.rs`,
 - pin both `Default vault: (not set)` and a set default in `info` snapshots, dropping the blanket redaction,
 - add a contract test for `init --set-default` that checks the config is written at the overridden location.
 
-Document the variable next to `NTROPY_VAULT` (ADR 0016).
+If the override is chosen, document the variable next to `NTROPY_VAULT` (ADR 0016).
 
 ## Done when
 

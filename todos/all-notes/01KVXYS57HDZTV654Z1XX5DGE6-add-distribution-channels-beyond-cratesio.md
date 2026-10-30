@@ -8,12 +8,13 @@ origin: discussion
 # Add distribution channels beyond crates.io
 
 Deferred during the v1 design (ADR 0022). Distribution is `cargo install` from
-crates.io, plus prebuilt macOS and Linux binaries attached to tagged GitHub
-releases by `.github/workflows/release.yml`.
+crates.io, prebuilt macOS and Linux binaries attached to tagged GitHub
+releases by `.github/workflows/release.yml`, and a Homebrew formula in the
+`jakobwesthoff/homebrew-tap` tap (`brew install jakobwesthoff/tap/ntropy`,
+documented in the README).
 
 ## Open questions
 
 - Should a shell or one-line installer script fetch the prebuilt release
   binaries?
-- Should a Homebrew tap be added?
 - Should a Nix flake be added?

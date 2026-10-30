@@ -18,10 +18,9 @@ areas below are independent of each other.
 
 The redesigned default theme is implemented (prelude defining `note`,
 `callout`, `notelink`, `task`; a4, chips, per-kind callout colors, code
-chips and panels, drawn checkboxes, colored links). Remaining theming work:
+chips and panels, drawn checkboxes, colored links), and so are vault render
+themes (ADR 0045). Remaining theming work:
 
-- User-provided themes: the mechanism for a vault to replace the embedded
-  prelude with its own. Not yet designed.
 - Smart quotes. The emitter escapes `'` and `"` unconditionally, so they
   render as straight quotes in the PDF and a theme cannot re-smarten them.
   Typographic quotes need a narrow emitter change: stop escaping quotes.
@@ -31,16 +30,19 @@ chips and panels, drawn checkboxes, colored links). Remaining theming work:
 
 - 2026-07-10, user: smart quotes are deferred again during basic theming.
 
-## Assets above the note's directory
+## Asset paths in the design doc
 
-The pdf pipeline feeds the document on stdin with the note's directory as the
-working directory, which is also typst's file-access sandbox. Assets
-referenced with `../` above the note's directory therefore fail the compile
-with typst's explicit "would escape the project root" error (design doc,
-"Asset paths"). A contained extension is an opt-in variant that passes a
-`--root` and rewrites paths, widening the sandbox while keeping the
-note-relative resolution that the `typst` format's identical-bytes contract
-depends on.
+Assets above the note's directory work since ADR 0045: the pdf pipeline
+passes `--root <vault>` on every render (`src/render/typst/engine.rs`), and
+the emitter rewrites local image paths to root-absolute ones under the
+note's directory, so `../assets/logo.svg` reaches a shared vault asset. Only
+a path that climbs out of the vault fails (checked in the code, 2026-10-30;
+not run against typst). Two texts still describe the older behaviour and
+contradict that: the closing paragraph of "Asset paths" in
+`docs/design/typst-engine.md` ("assets referenced with `../` above the
+note's directory are unsupported") and the comment above the `Format::Pdf`
+arm in `engine.rs` ("relative asset paths in the document resolve against
+the note"). Correct both, after confirming the behaviour with a render.
 
 ## Math
 
