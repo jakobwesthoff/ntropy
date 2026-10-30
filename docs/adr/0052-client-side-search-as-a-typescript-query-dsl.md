@@ -19,6 +19,8 @@ translation are shared with the CLI-faithful evaluator the conformance
 corpus keeps exercising, so the two readings cannot drift on what they
 share.
 
+Amended 2026-10-30 by [ADR 0076](0076-adjacent-terms-in-a-query-are-an-implicit-and.md).
+
 Gives the site of
 [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md)
 the search of [ADR 0012](0012-query-dsl-with-hand-rolled-parser.md) and

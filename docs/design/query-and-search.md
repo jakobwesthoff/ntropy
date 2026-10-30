@@ -4,8 +4,9 @@ How ntropy filters and searches notes. Consolidates
 [ADR 0002](../adr/0002-stateless-filesystem-scanning-over-a-derived-index.md),
 [ADR 0005](../adr/0005-permissive-frontmatter-schema-with-recognized-fields.md),
 [ADR 0006](../adr/0006-hierarchical-tags-by-slash-convention.md),
-[ADR 0030](../adr/0030-replace-ripgrep-stack-with-regex-crate-for-full-text-search.md), and
-[ADR 0012](../adr/0012-query-dsl-with-hand-rolled-parser.md).
+[ADR 0030](../adr/0030-replace-ripgrep-stack-with-regex-crate-for-full-text-search.md),
+[ADR 0012](../adr/0012-query-dsl-with-hand-rolled-parser.md), and
+[ADR 0076](../adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md).
 
 ## One mechanism
 
@@ -19,7 +20,7 @@ Precedence: `not` > `and` > `or`. Parentheses override.
 
     query   := or
     or      := and ("or" and)*
-    and     := unary ("and" unary)*
+    and     := unary (["and"] unary)*
     unary   := "not" unary | primary
     primary := "(" or ")" | predicate
     predicate :=
@@ -37,6 +38,14 @@ as ordinary words and disambiguated by position, so `field:or` is a valid
 predicate. A bare word or quoted string that is not followed by `:` is
 shorthand for a `text:` predicate, so `ntropy search foobar` searches bodies and
 `foobar and tag:work` combines with operators.
+
+Two operands side by side are an `and` that binds like the written one (ADR
+0076): `borrow checker` is `borrow and checker`, `a b or c` is
+`(a and b) or c`, `(a) b` is `(a) and b`, and `not a b` is `(not a) and b`. A
+keyword where an operand is expected is a search word, so `and b` and
+`a and and b` search bodies for `and`. A phrase is a quoted string inside the
+query: on the command line `ntropy search '"borrow checker"'`, since the shell
+removes plain double quotes.
 
 ### Predicate semantics
 

@@ -104,14 +104,13 @@ describe("parse", () => {
     });
   });
 
-  it("joins adjacent predicates with and only when asked", () => {
-    expect(() => parse("a b")).toThrow(QueryError);
-    expect(parse("a b", { implicitAnd: true })).toEqual({
+  it("joins adjacent predicates with and", () => {
+    expect(parse("a b")).toEqual({
       kind: "and",
       left: { kind: "term", text: "a" },
       right: { kind: "term", text: "b" },
     });
-    expect(parse("a b or c d", { implicitAnd: true })).toEqual({
+    expect(parse("a b or c d")).toEqual({
       kind: "or",
       left: {
         kind: "and",
@@ -124,11 +123,28 @@ describe("parse", () => {
         right: { kind: "term", text: "d" },
       },
     });
-    expect(parse('tag:x "a b" (c)', { implicitAnd: true }).kind).toBe("and");
-    expect(parse("a not b", { implicitAnd: true })).toEqual({
+    expect(parse('tag:x "a b" (c)').kind).toBe("and");
+    expect(parse("a not b")).toEqual({
       kind: "and",
       left: { kind: "term", text: "a" },
       right: { kind: "not", operand: { kind: "term", text: "b" } },
+    });
+  });
+
+  it("reads a leading or doubled keyword as a bare term", () => {
+    expect(parse("and a")).toEqual({
+      kind: "and",
+      left: { kind: "term", text: "and" },
+      right: { kind: "term", text: "a" },
+    });
+    expect(parse("a and and b")).toEqual({
+      kind: "and",
+      left: {
+        kind: "and",
+        left: { kind: "term", text: "a" },
+        right: { kind: "term", text: "and" },
+      },
+      right: { kind: "term", text: "b" },
     });
   });
 
@@ -151,10 +167,9 @@ describe("parse", () => {
     expect(position("a)")).toBe(1);
     expect(position("tag:")).toBe(4);
     expect(position("a and")).toBe(5);
-    // `and` in predicate position is a bare term; the error is the trailing `a`.
-    expect(position("and a")).toBe(4);
     expect(position(":x")).toBe(0);
-    expect(position("(a b")).toBe(3);
+    // The group's contents join, so the error is the missing `)` at the end.
+    expect(position("(a b")).toBe(4);
     expect(position("(a :")).toBe(4);
     expect(position("tag:(x)")).toBe(4);
     expect(position("tag")).toBe(null);

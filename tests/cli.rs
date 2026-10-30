@@ -921,6 +921,64 @@ fn search_full_text() {
 }
 
 #[test]
+fn search_with_two_bare_words_needs_both() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "both",
+        "---\ntitle: Both\n---\nthe borrow checker complains\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "one",
+        "---\ntitle: One\n---\nborrow only\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "borrow", "checker", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn search_splits_a_spaced_argument_into_words_and_keeps_a_quoted_phrase() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "phrase",
+        "---\ntitle: Phrase\n---\nthe borrow checker complains\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "reversed",
+        "---\ntitle: Reversed\n---\nchecker and borrow apart\n",
+    );
+
+    // The shell strips plain double quotes, so ntropy receives the single
+    // argument `borrow checker`: two words, in any order.
+    let words = ntropy(dir.path())
+        .args(["search", "borrow checker", "-n"])
+        .output()
+        .expect("run ntropy");
+    let words_out = String::from_utf8_lossy(&words.stdout);
+    assert!(words_out.contains(ULID_A), "{}", rendered(&words));
+    assert!(words_out.contains(ULID_B), "{}", rendered(&words));
+
+    // The quotes that make a phrase must reach ntropy itself.
+    let phrase = ntropy(dir.path())
+        .args(["search", "\"borrow checker\"", "-n"])
+        .output()
+        .expect("run ntropy");
+    let phrase_out = String::from_utf8_lossy(&phrase.stdout);
+    assert!(phrase_out.contains(ULID_A), "{}", rendered(&phrase));
+    assert!(!phrase_out.contains(ULID_B), "{}", rendered(&phrase));
+}
+
+#[test]
 fn search_by_ulid_resolves_single_note() {
     // A full ULID selector resolves to exactly that note; non-interactively the
     // lone match prints as a one-row table (ADR 0031).
@@ -3869,6 +3927,42 @@ fn delete_by_ulid_refuses_when_two_files_share_it() {
     let notes = dir.path().join("all-notes");
     assert!(notes.join(format!("{ULID_A}-plan.md")).exists());
     assert!(notes.join(format!("{ULID_A}-plan-b.md")).exists());
+}
+
+#[test]
+fn delete_with_two_bare_words_still_needs_exactly_one_match() {
+    let dir = setup_vault();
+    let vault = dir.path();
+    write_note(vault, ULID_A, "a", "---\ntitle: A\n---\nborrow checker\n");
+    write_note(vault, ULID_B, "b", "---\ntitle: B\n---\nchecker, borrow\n");
+
+    let out = ntropy(vault)
+        .args(["delete", "borrow", "checker", "-f", "-n"])
+        .output()
+        .expect("run ntropy");
+
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("is ambiguous (2 matches)"));
+    assert!(vault.join(format!("all-notes/{ULID_A}-a.md")).exists());
+    assert!(vault.join(format!("all-notes/{ULID_B}-b.md")).exists());
+}
+
+#[test]
+fn delete_with_two_pasted_ulids_deletes_nothing() {
+    // Two ULIDs side by side are a text query, not a selector for either note.
+    let dir = setup_vault();
+    let vault = dir.path();
+    write_note(vault, ULID_A, "a", "---\ntitle: A\n---\nbody\n");
+    write_note(vault, ULID_B, "b", "---\ntitle: B\n---\nbody\n");
+
+    let out = ntropy(vault)
+        .args(["delete", ULID_A, ULID_B, "-f", "-n"])
+        .output()
+        .expect("run ntropy");
+
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(vault.join(format!("all-notes/{ULID_A}-a.md")).exists());
+    assert!(vault.join(format!("all-notes/{ULID_B}-b.md")).exists());
 }
 
 #[test]

@@ -94,7 +94,9 @@ amended):
   are the CLI's.
 
 The parser is shared with a CLI-faithful evaluator, in which a bare term
-is a smart-case body regex and `tag:` and `field:` are exact; the
+is a smart-case body regex and `tag:` and `field:` are exact. Both
+evaluators read two predicates side by side as `and`, as the CLI does
+([ADR 0076](../adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md)). The
 conformance corpus under `tests/fixtures/` runs against that evaluator
 in Rust and in Vitest, so the two readings cannot drift on the parser,
 the operators, or the `text:` translation. Where both engines accept a

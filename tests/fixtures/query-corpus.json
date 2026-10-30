@@ -305,6 +305,57 @@
       ]
     },
     {
+      "query": "borrow checker",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "checker borrow",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "rust tag:freizeit",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "rust tag:programming",
+      "expect": []
+    },
+    {
+      "query": "rust tag:freizeit or tag:programming",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "(tag:freizeit) rust",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "(tag:programming) rust",
+      "expect": []
+    },
+    {
+      "query": "not rust borrow",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "tag:programming \"borrow checker\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
       "query": "",
       "error": true
     },
@@ -330,7 +381,9 @@
     },
     {
       "query": "and tag:rust",
-      "error": true
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
     },
     {
       "query": "\"unterminated",
@@ -354,6 +407,14 @@
     },
     {
       "query": "ratio:1.5",
+      "error": true
+    },
+    {
+      "query": "borrow checker and",
+      "error": true
+    },
+    {
+      "query": ") tag:rust",
       "error": true
     }
   ]

@@ -101,3 +101,4 @@ made.
 - [0073. What html and site exports copy from the vault](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0073-what-html-and-site-exports-copy-from-the-vault.md)
 - [0074. typst runs in ntropy's working directory](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0074-typst-runs-in-ntropys-working-directory.md)
 - [0075. Version numbers cover the CLI, not the library](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)
+- [0076. Adjacent terms in a query are an implicit and](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md)

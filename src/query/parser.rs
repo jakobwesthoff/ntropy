@@ -4,7 +4,8 @@
 
 //! Recursive-descent parser for the query grammar (ADR 0012).
 //!
-//! Precedence is `not > and > or`, with parentheses overriding. Keywords are
+//! Precedence is `not > and > or`, with parentheses overriding. Two operands
+//! side by side are an `and` (ADR 0076). Keywords are
 //! disambiguated by position: a `Word` only acts as an operator when it sits in
 //! operator position *and* is not immediately followed by a `:` (so `field:or`
 //! parses as a predicate). The v1 predicate grammar is:
@@ -96,15 +97,38 @@ impl Parser {
         Ok(left)
     }
 
-    // and := unary ("and" unary)*
+    // and := unary (["and"] unary)*
+    //
+    // Two operands side by side are an `and` as well, so `search borrow checker`
+    // (the shell hands over its words joined by spaces) finds notes holding
+    // both words. Because the loop lives here, below `or`, the implicit `and`
+    // binds exactly like the written one.
     fn parse_and(&mut self) -> Result<Query, QueryError> {
         let mut left = self.parse_unary()?;
-        while self.at_operator("and") {
-            self.advance();
+        loop {
+            if self.at_operator("and") {
+                self.advance();
+            } else if !self.starts_operand() {
+                break;
+            }
             let right = self.parse_unary()?;
             left = Query::And(Box::new(left), Box::new(right));
         }
         Ok(left)
+    }
+
+    /// Whether the next token begins another operand of an `and` chain.
+    ///
+    /// The operator `or`, a `)`, a stray `:` and the end of input end the
+    /// chain; the caller reports the last two as "unexpected trailing input".
+    /// Every other word starts an operand, including `not` and an `or` that a
+    /// `:` follows (the field `or`).
+    fn starts_operand(&self) -> bool {
+        match self.peek_kind_at(0) {
+            Some(TokenKind::LParen | TokenKind::Str(_)) => true,
+            Some(TokenKind::Word(_)) => !self.at_operator("or"),
+            Some(TokenKind::RParen | TokenKind::Colon) | None => false,
+        }
     }
 
     // unary := "not" unary | primary
@@ -343,11 +367,141 @@ mod tests {
         assert_eq!(err.position(), Some(4));
     }
 
+    fn text(word: &str) -> Query {
+        Query::Text(word.into())
+    }
+
+    fn and(left: Query, right: Query) -> Query {
+        Query::And(Box::new(left), Box::new(right))
+    }
+
     #[test]
-    fn juxtaposed_terms_without_operator_is_error() {
-        let err = parse("(a) b").expect_err("trailing");
-        // Juxtaposition is not implicit-and; the bare `b` at position 4 is
-        // unexpected trailing input.
+    fn adjacent_bare_words_are_an_implicit_and() {
+        assert_eq!(
+            parse_ok("borrow checker"),
+            and(text("borrow"), text("checker"))
+        );
+    }
+
+    #[test]
+    fn adjacent_text_and_tag_are_an_implicit_and() {
+        assert_eq!(
+            parse_ok("watcher tag:settings"),
+            and(text("watcher"), Query::Tag("settings".into()))
+        );
+    }
+
+    #[test]
+    fn implicit_and_chains_left_to_right() {
+        assert_eq!(parse_ok("a b c"), and(and(text("a"), text("b")), text("c")));
+    }
+
+    #[test]
+    fn implicit_and_binds_tighter_than_or() {
+        // a b or c  ==  (a and b) or c
+        assert_eq!(
+            parse_ok("a b or c"),
+            Query::Or(Box::new(and(text("a"), text("b"))), Box::new(text("c")))
+        );
+    }
+
+    #[test]
+    fn implicit_and_follows_a_group() {
+        assert_eq!(parse_ok("(a) b"), and(text("a"), text("b")));
+    }
+
+    #[test]
+    fn implicit_and_joins_a_quoted_phrase() {
+        assert_eq!(
+            parse_ok(r#"tag:programming "borrow checker""#),
+            and(Query::Tag("programming".into()), text("borrow checker"))
+        );
+    }
+
+    #[test]
+    fn not_applies_to_the_next_term_only() {
+        // not a b  ==  (not a) and b
+        assert_eq!(
+            parse_ok("not a b"),
+            and(Query::Not(Box::new(text("a"))), text("b"))
+        );
+    }
+
+    #[test]
+    fn not_after_a_term_starts_a_negated_operand() {
+        assert_eq!(
+            parse_ok("a not b"),
+            and(text("a"), Query::Not(Box::new(text("b"))))
+        );
+    }
+
+    #[test]
+    fn keyword_field_predicate_joins_as_a_term() {
+        // `or:x` is a field predicate, so it must not end the `and` chain.
+        assert_eq!(
+            parse_ok("a or:x"),
+            and(
+                text("a"),
+                Query::Field {
+                    name: "or".into(),
+                    value: "x".into()
+                }
+            )
+        );
+    }
+
+    #[test]
+    fn leading_keyword_is_a_search_word() {
+        assert_eq!(
+            parse_ok("and tag:x"),
+            and(text("and"), Query::Tag("x".into()))
+        );
+    }
+
+    #[test]
+    fn doubled_keyword_searches_for_the_keyword() {
+        assert_eq!(
+            parse_ok("a and and b"),
+            and(and(text("a"), text("and")), text("b"))
+        );
+    }
+
+    #[test]
+    fn closing_paren_after_a_chain_is_trailing_input() {
+        let err = parse("a b )").expect_err("trailing");
+        assert_eq!(
+            err.to_string(),
+            "query syntax error at position 4: unexpected trailing input"
+        );
+    }
+
+    #[test]
+    fn colon_after_a_group_is_trailing_input() {
+        let err = parse("(a) :").expect_err("trailing");
+        assert_eq!(
+            err.to_string(),
+            "query syntax error at position 4: unexpected trailing input"
+        );
+    }
+
+    #[test]
+    fn colon_after_a_predicate_is_trailing_input() {
+        let err = parse("tag:x :").expect_err("trailing");
+        assert_eq!(
+            err.to_string(),
+            "query syntax error at position 6: unexpected trailing input"
+        );
+    }
+
+    #[test]
+    fn dangling_operator_after_an_implicit_and_is_an_error() {
+        let err = parse("a b and").expect_err("dangling");
+        assert_eq!(err.position(), Some("a b and".chars().count()));
+    }
+
+    #[test]
+    fn unclosed_group_around_adjacent_terms_reports_the_end() {
+        let err = parse("(a b").expect_err("unbalanced");
         assert_eq!(err.position(), Some(4));
     }
 }

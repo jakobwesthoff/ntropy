@@ -23,18 +23,25 @@ The selector is optional and joined from all trailing arguments:
 ## The query language
 
 Combine predicates with `and`, `or`, `not`; precedence is `not` > `and` > `or`;
-parentheses override. Values are bare words (Unicode letters, digits, `/`, `_`,
+parentheses override. Two predicates side by side are an `and` that binds like
+the written one (`a b or c` is `(a and b) or c`). A word that is not an
+operator is a search word, so a mistyped operator (`tag:work nd status:done`)
+or a doubled one (`a and and b`) searches bodies for that word instead of
+failing. Values are bare words (Unicode letters, digits, `/`, `_`,
 `-`) or double-quoted strings for anything with spaces or regex metacharacters.
 
 ```bash
 ntropy search -n tag:work and not status:done
 ntropy search -n 'status:"in progress" or tag:urgent'
 ntropy search -n '(tag:work or tag:side-project) and not status:done'
-ntropy search -n borrow checker            # bare words = full-text over the body
+ntropy search -n borrow checker            # both words in the body, any order
+ntropy search -n '"borrow checker"'        # the exact phrase
 ```
 
 Quote the whole query for the shell whenever it contains `(`, `)`, or double
-quotes.
+quotes. A phrase needs its double quotes inside the query, so wrap them in
+single quotes: `'"borrow checker"'`. Plain `"borrow checker"` reaches ntropy
+as the two words `borrow checker`.
 
 ### Predicate semantics
 

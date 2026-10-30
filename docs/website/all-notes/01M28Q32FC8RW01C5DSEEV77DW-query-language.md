@@ -17,8 +17,11 @@ ntropy search text:deadline and tag:meeting
 # Everything still in progress, or anything that's on fire.
 ntropy search 'status:"in progress" or tag:urgent'
 
-# I know I wrote "borrow checker" somewhere in here.
+# A note that mentions both "borrow" and "checker".
 ntropy search borrow checker
+
+# I know I wrote the exact phrase "borrow checker" somewhere in here.
+ntropy search '"borrow checker"'
 
 # Just show me the whole pile.
 ntropy search
@@ -27,8 +30,11 @@ ntropy search
 ## Terms
 
 A bare word or quoted phrase that is not followed by `:` searches the
-note body, so `ntropy search borrow checker` looks for that text
-directly. For more precise matching, reach for a typed term:
+note body, so `ntropy search borrow checker` finds notes that contain
+both words, anywhere in the body and in any order. A phrase needs double
+quotes inside the query. The shell removes plain double quotes, so wrap
+them in single quotes: `ntropy search '"borrow checker"'`. For more
+precise matching, reach for a typed term:
 
 - `tag:x` matches hierarchically. `x` and each note tag are split on
   `/`, and the term matches when `x`'s segments appear as a contiguous
@@ -50,8 +56,15 @@ or backslash inside one can be written as `\"` or `\\`.
 
 Combine terms with `and`, `or`, and `not`. `not` binds tighter than
 `and`, which binds tighter than `or`, so add parentheses when that
-default order isn't what you mean:
+default order isn't what you mean. Two terms side by side are an `and`:
+`tag:work status:open` is `tag:work and status:open`, and
+`a b or c` is `(a and b) or c`.
 
 ```bash
 ntropy search '(tag:work or tag:side-project) and not status:done'
 ```
+
+A word that is not an operator is always a search word. A mistyped
+operator, as in `tag:work nd status:done`, is therefore not an error but
+a search for `nd`, and a doubled operator as in `a and and b` searches
+for the word `and`.

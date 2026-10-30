@@ -8,9 +8,9 @@
 // only in operator position and when no `:` follows it, so `or:x` is the
 // field predicate `or`. A bare word or quoted phrase is a `term`, kept apart
 // from `text:` because the two evaluators read it differently: the CLI as
-// a body regex, the site as a match against everything. The CLI's grammar
-// refuses two predicates side by side; the reader's search reads them as
-// `and`, so typing two words finds what holds both.
+// a body regex, the site as a match against everything. Two predicates side
+// by side are an `and` in both, as in the CLI's grammar (ADR 0076), so typing
+// two words finds what holds both.
 
 export type Query =
   | { kind: "and"; left: Query; right: Query }
@@ -122,16 +122,11 @@ function lexString(chars: string[], open: number): [string, number] {
   throw QueryError.parse(open, "unterminated quoted string");
 }
 
-/** Parse options; `implicitAnd` joins adjacent predicates with `and`. */
-export interface ParseOptions {
-  implicitAnd?: boolean;
-}
-
-export function parse(input: string, options: ParseOptions = {}): Query {
+export function parse(input: string): Query {
   const tokens = tokenize(input);
   const eof = Array.from(input).length;
   if (tokens.length === 0) throw QueryError.parse(0, "expected a query");
-  const parser = new Parser(tokens, eof, options.implicitAnd ?? false);
+  const parser = new Parser(tokens, eof);
   const query = parser.parseOr();
   const trailing = parser.peek();
   if (trailing !== undefined) {
@@ -146,7 +141,6 @@ class Parser {
   constructor(
     private readonly tokens: Token[],
     private readonly eof: number,
-    private readonly implicitAnd: boolean,
   ) {}
 
   peek(offset = 0): Token | undefined {
@@ -181,7 +175,7 @@ class Parser {
     for (;;) {
       if (this.atOperator("and")) {
         this.advance();
-      } else if (!(this.implicitAnd && this.startsPredicate())) {
+      } else if (!this.startsPredicate()) {
         break;
       }
       const right = this.parseUnary();

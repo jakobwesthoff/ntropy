@@ -6,6 +6,8 @@ Date: 2026-06-24
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0076](0076-adjacent-terms-in-a-query-are-an-implicit-and.md).
+
 ## Context
 
 Filtering needs boolean expressions (`tag:foo and not tag:bar`) from the start,

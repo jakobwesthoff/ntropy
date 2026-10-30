@@ -86,10 +86,7 @@ export type Compiled =
  * the CLI; under the reader's it is plain text and never fails.
  */
 export function compile(input: string, semantics: Semantics = "cli"): Compiled {
-  return lower(
-    parse(input, { implicitAnd: semantics === "reader" }),
-    semantics,
-  );
+  return lower(parse(input), semantics);
 }
 
 function lower(query: Query, semantics: Semantics): Compiled {

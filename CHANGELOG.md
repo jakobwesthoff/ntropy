@@ -9,6 +9,18 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Changed
+
+- Two terms side by side in a query are an `and` that binds like the written
+  one, so `ntropy search borrow checker` finds notes holding both words
+  instead of failing with a syntax error, and `a b or c` is `(a and b) or c`.
+  A mistyped operator, as in `tag:work nd status:done`, is no longer an
+  error: `nd` is searched as a word. A phrase on the command line is written
+  `ntropy search '"borrow checker"'`
+  ([ADR 0076](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md)).
+
 ## v2.3.0 - 2026-10-30
 
 ### Added
