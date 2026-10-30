@@ -95,6 +95,32 @@ broken pointer is a hard error.
 ./notes
 ```
 
+## Trust in a discovered vault
+
+The walk-up and the pointer adopt a vault without asking, so a command run
+inside a cloned repository, a synced folder or an extracted archive uses that
+tree's vault: its configuration, templates, themes and notes. ntropy treats
+all of it as data
+([ADR 0070](../adr/0070-trust-model-for-discovered-vaults.md)):
+
+- No configuration value, per-vault or global, selects an executable, a
+  shell command, a hook, a pager or an argument of a process ntropy starts.
+  Where the vault is and which note is worked on still shape the paths
+  ntropy passes. The editor comes from `$VISUAL` and `$EDITOR` only
+  (ADR 0066), and the `pdf` format runs `typst`, a name fixed in the engine
+  and found on `$PATH` (ADR 0040).
+- Vault content that is code runs only inside an interpreter that cannot
+  start a process: a Typst theme inside the `typst` compiler, whose `--root`
+  keeps the paths a document names inside the vault but which follows a
+  symlink inside it, and a site theme's templates inside the embedded
+  minijinja engine.
+- View names are validated before they become paths, and a view directory
+  behind a symlink is skipped (ADR 0064).
+
+`ntropy info` names the rule that resolved the vault, and the pointer file
+when one was followed. What stays accepted, such as a committed pointer that
+sends ntropy to another existing vault, is listed in ADR 0070.
+
 ## Reserved names
 
 Within a vault, `all-notes`, `.ntropy`, `.gitignore`, `README.md`, and the

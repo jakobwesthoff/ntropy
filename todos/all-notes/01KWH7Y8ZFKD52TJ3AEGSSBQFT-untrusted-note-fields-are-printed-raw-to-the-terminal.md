@@ -16,7 +16,9 @@ double-quoted YAML string, can emit terminal control sequences: title bar
 rewrites, screen clears, cursor moves and, on permissive emulators, OSC 52
 clipboard writes. Embedded `\n` and `\t` also break the table layout and the
 picker layout on every output. `ls`, `git` and ripgrep all sanitize or quote
-control bytes in untrusted names, and ntropy should do the same.
+control bytes in untrusted names, and ntropy should do the same. Walk-up
+discovery makes a hostile vault reachable without a deliberate open
+(ADR 0070).
 
 ## Problem
 
@@ -326,7 +328,3 @@ stay unchanged. Only the new tests exercise the escape path.
   snapshot tests stay green.
 - Tags are confirmed to be control free by normalization. Tag sanitization is
   not needed, though it would be harmless.
-
-## Relations
-
-- Relates to: [Document the trust model of walk-up vault discovery](01KWH7Y8ZFKD52TJ3AEGSSBQFS-document-the-trust-model-of-walk-up-vault-discovery.md), walk-up discovery is what makes a hostile vault reachable without a deliberate open.
