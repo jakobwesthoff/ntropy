@@ -42,8 +42,8 @@ views can lag, and only until they are rebuilt.
 
 Only top-level files carrying the vault's note extension are notes: `*.md` in a
 plaintext vault, `*.age` in an encrypted one. The extension is compared
-exactly, so a `.MD` file is a resource like any other. `all-notes/` may also hold
-resources (images, attachments) as other files or inside subdirectories; ntropy
+exactly, so a `.MD` file is a resource like any other. `all-notes/` may also
+hold resources (images, attachments) as other files or inside subdirectories; ntropy
 ignores all of these silently and never traverses subdirectories for notes.
 Malformed or badly named top-level note files are skipped with a stderr warning
 (`--strict` makes that fatal); see
