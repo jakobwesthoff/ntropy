@@ -19,6 +19,7 @@ use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
 use super::ConfigError;
+use crate::fsutil;
 
 /// The config file name within the application config directory.
 const CONFIG_FILE: &str = "config.toml";
@@ -52,18 +53,55 @@ pub fn load_at(path: &Path) -> Result<GlobalConfig, ConfigError> {
 }
 
 /// Write the global config to `path`, creating parent directories as needed.
+///
+/// The file is replaced atomically, so a crash mid-write leaves the old config
+/// whole rather than a truncated one that fails to parse on every later run.
+/// The replacement is a new file: it gets the default permissions of one, not
+/// those of the file it replaces.
+///
+/// A `path` that is a symlink, as when the config lives in a dotfiles
+/// repository, stays one: the write lands in the file the link points at,
+/// which is created if the link dangles.
 pub fn write_at(path: &Path, config: &GlobalConfig) -> Result<(), ConfigError> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|source| ConfigError::Write {
-            path: path.to_path_buf(),
-            source,
-        })?;
-    }
-    let text = toml::to_string_pretty(config)?;
-    std::fs::write(path, text).map_err(|source| ConfigError::Write {
+    let write_error = |source| ConfigError::Write {
         path: path.to_path_buf(),
         source,
-    })
+    };
+    let target = follow_symlinks(path).map_err(write_error)?;
+    // Only `/` or an empty path lacks a parent, and neither can hold the
+    // file; the write below reports that.
+    let parent = target.parent().unwrap_or(Path::new(""));
+    fsutil::create_dir_all(parent).map_err(|e| write_error(e.into_io()))?;
+    let text = toml::to_string_pretty(config)?;
+    fsutil::atomic_write(&target, text.as_bytes()).map_err(|e| write_error(e.into_io()))
+}
+
+/// The most symlinks [`follow_symlinks`] follows before giving up, the same
+/// bound Linux puts on path resolution.
+const MAX_SYMLINK_HOPS: usize = 40;
+
+/// The path a write to `path` should replace: `path` itself, or the end of
+/// the chain of symlinks starting there, whether or not that end exists.
+///
+/// Anything that is not a symlink, including a path that cannot be looked at,
+/// ends the chain; writing there then reports the real problem.
+fn follow_symlinks(path: &Path) -> std::io::Result<PathBuf> {
+    let mut current = path.to_path_buf();
+    for _ in 0..MAX_SYMLINK_HOPS {
+        let is_symlink = std::fs::symlink_metadata(&current)
+            .is_ok_and(|metadata| metadata.file_type().is_symlink());
+        if !is_symlink {
+            return Ok(current);
+        }
+        // A relative target is relative to the link's own directory; joining
+        // an absolute one replaces the base entirely. A symlink always has a
+        // name, so it always has a parent, if only the empty one.
+        let target = std::fs::read_link(&current)?;
+        current = current.parent().unwrap_or(Path::new("")).join(target);
+    }
+    Err(std::io::Error::other(format!(
+        "more than {MAX_SYMLINK_HOPS} symbolic links to follow"
+    )))
 }
 
 /// Load the global config from its OS-native location.
@@ -99,6 +137,110 @@ mod tests {
         };
         write_at(&path, &cfg).expect("write");
         assert_eq!(load_at(&path).expect("load"), cfg);
+    }
+
+    fn sample() -> GlobalConfig {
+        GlobalConfig {
+            default_vault: Some(PathBuf::from("/Users/jakob/notes")),
+        }
+    }
+
+    #[test]
+    fn write_at_replaces_the_file_rather_than_rewriting_it() {
+        // A new inode is the visible trace of writing a temporary file and
+        // renaming it over the old one: a crash mid-write leaves the old file
+        // whole instead of a truncated one that fails to parse.
+        use std::os::unix::fs::MetadataExt;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        write_at(&path, &GlobalConfig::default()).expect("first write");
+        let before = std::fs::metadata(&path).expect("stat").ino();
+
+        write_at(&path, &sample()).expect("second write");
+        let after = std::fs::metadata(&path).expect("stat").ino();
+
+        assert_ne!(before, after, "the file was rewritten in place");
+        assert_eq!(load_at(&path).expect("load"), sample());
+    }
+
+    #[test]
+    fn write_at_leaves_no_temp_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        write_at(&dir.path().join("config.toml"), &sample()).expect("write");
+        let names: Vec<_> = std::fs::read_dir(dir.path())
+            .expect("read dir")
+            .map(|e| e.expect("entry").file_name())
+            .collect();
+        assert_eq!(names, vec![std::ffi::OsString::from("config.toml")]);
+    }
+
+    #[test]
+    fn write_at_keeps_a_symlinked_config_a_symlink() {
+        // A config kept in a dotfiles repository and linked into place must
+        // stay linked; the write lands in the file the link points at.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let dotfiles = dir.path().join("dotfiles");
+        std::fs::create_dir(&dotfiles).expect("mkdir");
+        let target = dotfiles.join("ntropy.toml");
+        std::fs::write(&target, "").expect("seed target");
+        let link = dir.path().join("config.toml");
+        std::os::unix::fs::symlink("dotfiles/ntropy.toml", &link).expect("symlink");
+
+        write_at(&link, &sample()).expect("write");
+
+        assert!(link.symlink_metadata().expect("lstat").is_symlink());
+        assert_eq!(load_at(&target).expect("load target"), sample());
+    }
+
+    #[test]
+    fn write_at_writes_through_a_dangling_symlink() {
+        // A link set up before its target exists, into a directory that does
+        // not exist yet either.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("dotfiles").join("ntropy.toml");
+        let link = dir.path().join("config.toml");
+        std::os::unix::fs::symlink(&target, &link).expect("symlink");
+
+        write_at(&link, &sample()).expect("write");
+
+        assert!(link.symlink_metadata().expect("lstat").is_symlink());
+        assert_eq!(load_at(&target).expect("load target"), sample());
+    }
+
+    #[test]
+    fn write_at_rejects_a_symlink_cycle() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let first = dir.path().join("config.toml");
+        let second = dir.path().join("other.toml");
+        std::os::unix::fs::symlink(&second, &first).expect("symlink");
+        std::os::unix::fs::symlink(&first, &second).expect("symlink");
+
+        let err = write_at(&first, &sample()).expect_err("a cycle has no target");
+        assert!(matches!(err, ConfigError::Write { ref path, .. } if *path == first));
+    }
+
+    #[test]
+    fn write_at_reports_a_failed_directory_creation_as_a_config_write() {
+        // The parent is a regular file, so no directory can be made there.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let blocker = dir.path().join("ntropy");
+        std::fs::write(&blocker, "").expect("seed file");
+        let path = blocker.join("config.toml");
+
+        let err = write_at(&path, &sample()).expect_err("parent is a file");
+        assert!(matches!(err, ConfigError::Write { path: ref reported, .. } if *reported == path));
+    }
+
+    #[test]
+    fn write_at_reports_a_failed_replacement_as_a_config_write() {
+        // A directory where the file belongs cannot be renamed over.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::create_dir(&path).expect("mkdir");
+
+        let err = write_at(&path, &sample()).expect_err("path is a directory");
+        assert!(matches!(err, ConfigError::Write { path: ref reported, .. } if *reported == path));
     }
 
     #[test]

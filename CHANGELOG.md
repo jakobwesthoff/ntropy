@@ -35,6 +35,10 @@ and this project adheres to
   metacharacters with `\`. The exported site's search matches a quoted term
   as written, and its message says to escape metacharacters in a `text:`
   pattern.
+- `ntropy init --set-default` writes the global config to a temporary file
+  and renames it into place. If ntropy is killed or crashes during the
+  write, the old `config.toml` stays intact instead of being left truncated.
+  The rewritten file gets the default permissions of a new file.
 
 ## v2.2.0 - 2026-10-10
 

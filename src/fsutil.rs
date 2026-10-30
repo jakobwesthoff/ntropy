@@ -2,14 +2,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at https://mozilla.org/MPL/2.0/.
 
-//! Filesystem primitives: the single place in the crate that touches the
-//! filesystem.
+//! Filesystem primitives: reads, atomic writes, renames, removals, symlinks,
+//! and directory creation, listing and pruning.
 //!
-//! Every write, symlink, rename, and directory read or removal goes through
-//! here, which localizes error handling and, crucially, the Unix-only symlink
-//! assumption (ADR 0020). No higher layer calls `std::fs` or
-//! `std::os::unix::fs::symlink` directly; they call these helpers instead
-//! (ADRs 0008, 0020).
+//! Every write ntropy makes inside a vault, and to the global config, goes
+//! through here, except the built-in site theme that `site theme init` copies
+//! into `.ntropy/themes/site/`. Every symlink is made here, so the Unix-only
+//! symlink assumption lives in one place (ADRs 0008, 0020). Plain reads and
+//! metadata lookups, private temporary files, and the files `render` and
+//! `site` export to a destination the user names call `std::fs` directly.
 
 use std::path::{Component, Path, PathBuf};
 
@@ -36,6 +37,12 @@ impl FsError {
             path: path.into(),
             source,
         }
+    }
+
+    /// The underlying I/O error, for an error type that carries the path and
+    /// the failed step in its own terms.
+    pub(crate) fn into_io(self) -> std::io::Error {
+        self.source
     }
 }
 
