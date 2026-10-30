@@ -206,6 +206,10 @@ disturbed.
 titles after out-of-band edits. When ntropy itself launches the editor, it
 performs that realignment immediately on editor exit.
 
+A realignment never replaces an existing file. If a file already holds the
+name a note's title calls for, the note keeps its old name and the command
+warns about the rename it did not make (ADR 0067).
+
 ## Version control
 
 A vault is plain files, so committing it to git is a first-class use case. The

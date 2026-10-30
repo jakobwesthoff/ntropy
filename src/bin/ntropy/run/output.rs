@@ -21,6 +21,7 @@ use anyhow::{Context, Result};
 use ntropy::config::ViewConfig;
 use ntropy::note::Note;
 use ntropy::ops::{TagCount, VaultStats};
+use ntropy::reconcile::Rename;
 use ntropy::scan::ScanWarning;
 use ntropy::vault::{ResolveSource, Vault};
 use unicode_width::UnicodeWidthStr;
@@ -182,13 +183,29 @@ fn describe_source(source: &ResolveSource) -> String {
 /// and readable; the file is always a top-level entry in `all-notes/`.
 pub fn print_warnings(warnings: &[ScanWarning]) {
     for warning in warnings {
-        let name = warning
-            .path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| warning.path.display().to_string());
+        let name = file_name(&warning.path);
         eprintln!("warning: skipped `{name}`: {}", warning.message);
     }
+}
+
+/// Print each realignment that a file already holding the new name prevented,
+/// as a warning on stderr. The note itself is fine and keeps its old name.
+pub fn print_refused_renames(refused: &[Rename]) {
+    for rename in refused {
+        eprintln!(
+            "warning: did not rename `{}` to `{}`: a file of that name already exists",
+            file_name(&rename.from),
+            file_name(&rename.to)
+        );
+    }
+}
+
+/// The file-name component of a path as a lossy string, or the whole path
+/// when it has none.
+pub fn file_name(path: &Path) -> String {
+    path.file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.display().to_string())
 }
 
 /// A byte count as a short human-readable figure: whole bytes below a KiB,

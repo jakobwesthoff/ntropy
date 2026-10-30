@@ -52,6 +52,9 @@ pub struct ReconcileReport {
     pub views_synced: usize,
     /// Files renamed because their slug had drifted.
     pub renamed: Vec<Rename>,
+    /// Realignments not made because a file already holds the new name; each
+    /// note kept its old name. Counted as warnings (ADR 0067).
+    pub refused: Vec<Rename>,
     /// Link targets refreshed to point at their notes' current filenames.
     pub links_rewritten: Vec<LinkRewrite>,
     /// Plaintext notes encrypted in place in an encrypted vault.
@@ -151,19 +154,14 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
     let scan = scan::scan_notes_dir(&session.layout().all_notes(), session.cipher())?;
     let mut notes = scan.notes;
     let mut renamed = Vec::new();
+    let mut refused = Vec::new();
 
     for note in &mut notes {
-        if note.slug_is_aligned() {
-            continue;
+        match realign_note(note)? {
+            None => {}
+            Some(RenameOutcome::Renamed(change)) => renamed.push(change),
+            Some(RenameOutcome::Refused(change)) => refused.push(change),
         }
-        let new_path = canonical_sibling(&note.path, &note.canonical_filename());
-        fsutil::rename(&note.path, &new_path)?;
-        renamed.push(Rename {
-            from: note.path.clone(),
-            to: new_path.clone(),
-        });
-        // Subsequent view links must target the new filename.
-        note.path = new_path;
     }
 
     // With every filename settled, refresh stale link targets so links keep
@@ -211,6 +209,7 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
         notes_scanned: notes.len(),
         views_synced,
         renamed,
+        refused,
         links_rewritten,
         adopted,
         gitignore_added: gitignore.added,
@@ -295,34 +294,78 @@ fn rewrite_links(notes: &[Note]) -> Result<Vec<LinkRewrite>> {
     Ok(rewritten)
 }
 
-/// Realign one note's filename if its slug has drifted from its title.
-///
-/// Best-effort and forgiving: a file that no longer parses is left untouched
-/// (there is no title to realign to). Used by the editor flow on exit.
-///
-/// Inert in an encrypted vault, where a filename is derived from the identity
-/// alone and has nothing that can drift.
-pub fn realign(session: &VaultSession, path: &Path) -> Result<Option<Rename>> {
-    if session.is_encrypted() {
-        return Ok(None);
-    }
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return Ok(None);
-    };
-    let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok();
-    let Ok(note) = Note::parse(path.to_path_buf(), &content, modified) else {
-        return Ok(None);
-    };
+/// What realigning one note's filename came to.
+enum RenameOutcome {
+    Renamed(Rename),
+    /// A file already holds the new name, so the note kept its old one.
+    Refused(Rename),
+}
+
+/// Rename `note` to its canonical filename if its slug has drifted, and point
+/// `note.path` at wherever it now lives.
+fn realign_note(note: &mut Note) -> Result<Option<RenameOutcome>> {
     if note.slug_is_aligned() {
         return Ok(None);
     }
+    let change = Rename {
+        from: note.path.clone(),
+        to: canonical_sibling(&note.path, &note.canonical_filename()),
+    };
+    match fsutil::rename(&change.from, &change.to) {
+        Ok(()) => {
+            note.path = change.to.clone();
+            Ok(Some(RenameOutcome::Renamed(change)))
+        }
+        Err(e) if e.is_destination_taken() => Ok(Some(RenameOutcome::Refused(change))),
+        Err(e) => Err(e.into()),
+    }
+}
 
-    let new_path = canonical_sibling(path, &note.canonical_filename());
-    fsutil::rename(path, &new_path)?;
-    Ok(Some(Rename {
-        from: path.to_path_buf(),
-        to: new_path,
-    }))
+/// What [`realign`] did to the note it was given.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Realignment {
+    /// Where the note is now.
+    pub path: PathBuf,
+    /// The rename that brought its filename in line with its title.
+    pub renamed: Option<Rename>,
+    /// The rename that was due but not made, because a file already holds
+    /// the new name. The note kept its old name; the caller warns about it.
+    pub refused: Option<Rename>,
+}
+
+/// Realign one note's filename if its slug has drifted from its title.
+///
+/// Best-effort and forgiving: a file that no longer parses is left untouched
+/// (there is no title to realign to). Used by the editor flow on exit and by
+/// `write`, both of which have already saved the note, so a rename that is
+/// refused is reported rather than failing them.
+///
+/// Inert in an encrypted vault, where a filename is derived from the identity
+/// alone and has nothing that can drift.
+pub fn realign(session: &VaultSession, path: &Path) -> Result<Realignment> {
+    let mut realignment = Realignment {
+        path: path.to_path_buf(),
+        renamed: None,
+        refused: None,
+    };
+    if session.is_encrypted() {
+        return Ok(realignment);
+    }
+    let Ok(content) = std::fs::read_to_string(path) else {
+        return Ok(realignment);
+    };
+    let modified = std::fs::metadata(path).and_then(|m| m.modified()).ok();
+    let Ok(mut note) = Note::parse(path.to_path_buf(), &content, modified) else {
+        return Ok(realignment);
+    };
+
+    match realign_note(&mut note)? {
+        None => {}
+        Some(RenameOutcome::Renamed(change)) => realignment.renamed = Some(change),
+        Some(RenameOutcome::Refused(change)) => realignment.refused = Some(change),
+    }
+    realignment.path = note.path;
+    Ok(realignment)
 }
 
 /// The path of `filename` in the same directory as `path`.
@@ -493,18 +536,165 @@ mod tests {
             &format!("{ULID}-aligned.md"),
             "---\ntitle: Aligned\n---\nbody\n",
         );
-        assert!(realign(&session, &aligned).expect("realign").is_none());
+        let untouched = realign(&session, &aligned).expect("realign");
+        assert!(untouched.renamed.is_none());
+        assert_eq!(untouched.path, aligned);
 
         let drifted = write_note(
             &session,
             &format!("{ULID}-stale.md"),
             "---\ntitle: Fresh Title\n---\nbody\n",
         );
-        let rename = realign(&session, &drifted)
-            .expect("realign")
-            .expect("renamed");
+        let realignment = realign(&session, &drifted).expect("realign");
+        let rename = realignment.renamed.expect("renamed");
         assert!(rename.to.ends_with(format!("{ULID}-fresh-title.md")));
+        assert_eq!(realignment.path, rename.to);
         assert!(!drifted.exists());
+    }
+
+    /// A file holding the name `Plan` realigns to, which the scan skips
+    /// because it has no frontmatter, and a note titled `Plan` under a
+    /// drifted name. The returned paths are (unparseable, drifted).
+    fn canonical_name_taken_by_an_unparseable_file(session: &VaultSession) -> (PathBuf, PathBuf) {
+        let unparseable = write_note(session, &format!("{ULID}-plan.md"), "no frontmatter\n");
+        let drifted = write_note(
+            session,
+            &format!("{ULID}-old.md"),
+            "---\ntitle: Plan\n---\nbody\n",
+        );
+        (unparseable, drifted)
+    }
+
+    #[test]
+    fn reconcile_does_not_rename_over_an_unparseable_file() {
+        let (_guard, session) = vault_with_view();
+        let (unparseable, drifted) = canonical_name_taken_by_an_unparseable_file(&session);
+
+        let report = reconcile(&session).expect("reconcile");
+
+        assert_eq!(
+            std::fs::read_to_string(&unparseable).expect("read unparseable"),
+            "no frontmatter\n",
+            "the file holding the name must keep its content"
+        );
+        assert!(drifted.exists(), "the drifted note keeps its name");
+        assert!(report.renamed.is_empty());
+        assert_eq!(
+            report.refused,
+            [Rename {
+                from: drifted,
+                to: unparseable,
+            }]
+        );
+    }
+
+    #[test]
+    fn reconcile_keeps_both_files_that_share_a_ulid_and_a_title() {
+        // A note copied by hand: both files parse, the copy's name has
+        // drifted from the shared title, and its canonical name is the
+        // original's.
+        let (_guard, session) = vault_with_view();
+        let original = write_note(
+            &session,
+            &format!("{ULID}-plan.md"),
+            "---\ntitle: Plan\n---\noriginal\n",
+        );
+        let copy = write_note(
+            &session,
+            &format!("{ULID}-plan-b.md"),
+            "---\ntitle: Plan\n---\ncopy\n",
+        );
+
+        reconcile(&session).expect("reconcile");
+
+        assert_eq!(
+            std::fs::read_to_string(&original).expect("read original"),
+            "---\ntitle: Plan\n---\noriginal\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(&copy).expect("read copy"),
+            "---\ntitle: Plan\n---\ncopy\n"
+        );
+    }
+
+    #[test]
+    fn realign_keeps_the_name_when_the_canonical_one_is_taken() {
+        let (_guard, session) = vault_with_view();
+        let (unparseable, drifted) = canonical_name_taken_by_an_unparseable_file(&session);
+
+        let realignment = realign(&session, &drifted).expect("realign");
+
+        assert_eq!(realignment.path, drifted);
+        assert!(realignment.renamed.is_none());
+        let refused = realignment.refused.expect("the rename was due");
+        assert!(refused.to.ends_with(format!("{ULID}-plan.md")));
+        assert_eq!(
+            std::fs::read_to_string(&unparseable).expect("read unparseable"),
+            "no frontmatter\n",
+            "the file holding the name must keep its content"
+        );
+        assert!(drifted.exists(), "the drifted note keeps its name");
+    }
+
+    #[test]
+    fn realign_leaves_a_missing_or_unparseable_file_alone() {
+        let (_guard, session) = vault_with_view();
+        let missing = session.layout().all_notes().join(format!("{ULID}-gone.md"));
+        let untouched = realign(&session, &missing).expect("realign");
+        assert_eq!(untouched.path, missing);
+        assert!(untouched.renamed.is_none() && untouched.refused.is_none());
+
+        let unparseable = write_note(&session, &format!("{ULID}-old.md"), "no frontmatter\n");
+        let untouched = realign(&session, &unparseable).expect("realign");
+        assert_eq!(untouched.path, unparseable);
+        assert!(untouched.renamed.is_none() && untouched.refused.is_none());
+    }
+
+    #[test]
+    fn realign_reports_a_rename_that_fails_for_another_reason() {
+        // Only a taken name is a warning; a directory that cannot be written
+        // is an error like any other.
+        use std::os::unix::fs::PermissionsExt;
+
+        let (_guard, session) = vault_with_view();
+        let drifted = write_note(
+            &session,
+            &format!("{ULID}-old.md"),
+            "---\ntitle: Plan\n---\nbody\n",
+        );
+        let all_notes = session.layout().all_notes();
+        std::fs::set_permissions(&all_notes, std::fs::Permissions::from_mode(0o555))
+            .expect("make all-notes read-only");
+
+        let result = realign(&session, &drifted);
+
+        std::fs::set_permissions(&all_notes, std::fs::Permissions::from_mode(0o755))
+            .expect("restore permissions for cleanup");
+        let err = result.expect_err("the rename cannot be made");
+        assert!(err.to_string().contains("renaming"), "{err}");
+        assert!(drifted.exists());
+    }
+
+    #[test]
+    fn reconcile_renames_a_lowercase_ulid_file_to_uppercase() {
+        // On a case-insensitive filesystem the uppercase name already
+        // resolves to this very file, which the no-replace rule admits.
+        let (_guard, session) = vault_with_view();
+        let lowercase = write_note(
+            &session,
+            &format!("{}-note.md", ULID.to_lowercase()),
+            "---\ntitle: Note\n---\nbody\n",
+        );
+
+        let report = reconcile(&session).expect("reconcile");
+
+        assert_eq!(report.renamed.len(), 1);
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        let names: Vec<String> = std::fs::read_dir(lowercase.parent().expect("all-notes"))
+            .expect("read all-notes")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, [format!("{ULID}-note.md")]);
     }
 
     const ULID_B: &str = "01BX5ZZKBKACTAV9WEVGEMMVRZ";
@@ -918,7 +1108,8 @@ mod tests {
             let fixture = encrypted_vault();
             let session = &fixture.session;
             let path = write_encrypted_note(session, ULID, "---\ntitle: Whatever\n---\nbody\n");
-            assert!(realign(session, &path).expect("realign").is_none());
+            let realignment = realign(session, &path).expect("realign");
+            assert!(realignment.renamed.is_none() && realignment.refused.is_none());
             assert!(path.exists());
         }
 

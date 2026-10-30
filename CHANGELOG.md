@@ -47,6 +47,11 @@ and this project adheres to
 
 ### Fixed
 
+- `reconcile`, and the filename realignment after an edit or a `write`, no
+  longer rename a note over an existing file. Two files sharing a ULID and a
+  title, such as a note copied by hand, could be renamed to one name, and the
+  file that held it lost its content. Such a rename is now skipped with a
+  warning, which `--strict` makes fail, and both files keep their content.
 - `$VISUAL` and `$EDITOR` can carry arguments, such as `EDITOR="code -w"` or
   `EDITOR="emacsclient -t"`. Before, ntropy took the whole value as the
   editor's program name and could not start it.

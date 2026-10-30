@@ -3294,6 +3294,70 @@ fn reconcile_renames_and_reports() {
     );
 }
 
+/// A note titled `Plan` under a drifted name, and a file without frontmatter
+/// holding the name `<ULID_A>-plan.md` the note would be renamed to. The scan
+/// skips that file, so nothing but the rename itself stands in the way.
+fn canonical_name_taken_by_an_unparseable_file(vault: &Path) {
+    write_note(vault, ULID_A, "plan", "no frontmatter\n");
+    write_note(vault, ULID_A, "old", "---\ntitle: Plan\n---\nbody\n");
+}
+
+#[test]
+fn reconcile_refuses_to_rename_over_a_file() {
+    let dir = setup_vault();
+    canonical_name_taken_by_an_unparseable_file(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("reconcile");
+        assert_cmd_snapshot!(cmd);
+    });
+    assert_eq!(
+        fs::read_to_string(dir.path().join(format!("all-notes/{ULID_A}-plan.md")))
+            .expect("read the file holding the name"),
+        "no frontmatter\n"
+    );
+
+    let strict = ntropy(dir.path())
+        .args(["reconcile", "--strict"])
+        .output()
+        .expect("run ntropy");
+    assert_eq!(strict.status.code(), Some(1), "{}", rendered(&strict));
+}
+
+#[test]
+fn write_keeps_its_name_when_the_canonical_one_is_taken() {
+    // The content is written either way, so the path printed is where it now
+    // lives and the refused rename is only a warning.
+    let dir = setup_vault();
+    canonical_name_taken_by_an_unparseable_file(dir.path());
+    let drifted = dir.path().join(format!("all-notes/{ULID_A}-old.md"));
+    let content = "---\ntitle: Plan\n---\nwritten\n";
+
+    let out = run_write(dir.path(), &[&drifted.to_string_lossy()], content);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout).trim_end(),
+        drifted.to_string_lossy()
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!("{ULID_A}-plan.md")),
+        "stderr: {stderr}"
+    );
+    assert_eq!(fs::read_to_string(&drifted).expect("read note"), content);
+    assert_eq!(
+        fs::read_to_string(dir.path().join(format!("all-notes/{ULID_A}-plan.md")))
+            .expect("read the file holding the name"),
+        "no frontmatter\n"
+    );
+
+    let mut strict = ntropy(dir.path());
+    strict.args(["write", "--strict"]).arg(&drifted);
+    let strict = feed(&mut strict, content);
+    assert_eq!(strict.status.code(), Some(1), "{}", rendered(&strict));
+}
+
 #[test]
 fn reconcile_rewrites_stale_link_targets() {
     let dir = setup_vault();

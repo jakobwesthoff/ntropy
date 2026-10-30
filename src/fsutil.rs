@@ -44,7 +44,18 @@ impl FsError {
     pub(crate) fn into_io(self) -> std::io::Error {
         self.source
     }
+
+    /// Whether this is [`rename`] refusing a destination that already exists.
+    ///
+    /// The callers that rename notes turn exactly this case into a warning
+    /// and carry on; every other failure stays an error.
+    pub fn is_destination_taken(&self) -> bool {
+        self.action == REFUSING_TO_REPLACE
+    }
 }
+
+/// The action [`rename`] reports when the destination is taken.
+const REFUSING_TO_REPLACE: &str = "refusing to replace";
 
 type Result<T> = std::result::Result<T, FsError>;
 
@@ -199,9 +210,50 @@ pub fn remove_dir_all(dir: &Path) -> Result<()> {
     std::fs::remove_dir_all(dir).map_err(|e| FsError::new("removing directory tree", dir, e))
 }
 
-/// Rename `from` to `to`.
+/// Rename `from` to `to`, refusing to replace anything already at `to`.
+///
+/// `rename(2)` silently replaces an existing destination, which for a note
+/// file deletes another note's content (ADR 0067). The one existing
+/// destination admitted is `from` itself under another spelling: on a
+/// case-insensitive filesystem such as default APFS, `X-note.md` and
+/// `x-note.md` name the same entry, and renaming between them only changes
+/// how the name is written. That case is recognized by identity, the same
+/// device and inode with a single link, rather than by comparing names, so
+/// it covers whatever the filesystem folds (case, Unicode normalization)
+/// and still refuses two hard links of one file, between which `rename(2)`
+/// would succeed without doing anything. A file that also has a hard link
+/// elsewhere has two links, so even its case-only rename is refused.
+///
+/// The check and the rename are two calls. A second process creating that
+/// exact name in between is not guarded against. An atomic no-replace rename
+/// exists only per platform (`renamex_np`, `renameat2`), with fallbacks for
+/// filesystems that do not support it. Linking and then unlinking needs
+/// filesystems with hard links, which exFAT and some network mounts lack.
+/// Both would still need the same-entry exception above.
 pub fn rename(from: &Path, to: &Path) -> Result<()> {
+    match std::fs::symlink_metadata(to) {
+        Ok(existing) if !is_same_entry(from, &existing) => {
+            return Err(FsError::new(
+                REFUSING_TO_REPLACE,
+                to,
+                std::io::Error::from(std::io::ErrorKind::AlreadyExists),
+            ));
+        }
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(FsError::new("checking", to, e)),
+    }
     std::fs::rename(from, to).map_err(|e| FsError::new("renaming", from, e))
+}
+
+/// Whether `existing`, the metadata found at a rename's destination, is the
+/// entry `from` names.
+fn is_same_entry(from: &Path, existing: &std::fs::Metadata) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    std::fs::symlink_metadata(from).is_ok_and(|source| {
+        source.dev() == existing.dev() && source.ino() == existing.ino() && existing.nlink() == 1
+    })
 }
 
 /// Remove `path` if it is a regular file or symlink.
@@ -567,5 +619,87 @@ mod tests {
         let msg = err.to_string();
         assert!(msg.contains("renaming"), "message was: {msg}");
         assert!(msg.contains("deep.md"), "message was: {msg}");
+    }
+
+    #[test]
+    fn rename_refuses_an_existing_destination() {
+        // Replacing the destination would delete whatever it held, which for
+        // a note is its content.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let from = dir.path().join("old.md");
+        let to = dir.path().join("taken.md");
+        std::fs::write(&from, b"moving").expect("seed from");
+        std::fs::write(&to, b"already here").expect("seed to");
+
+        let err = rename(&from, &to).expect_err("the destination is taken");
+
+        assert!(
+            err.to_string().contains("refusing to replace"),
+            "message was: {err}"
+        );
+        assert!(err.is_destination_taken());
+        assert_eq!(std::fs::read(&from).expect("read from"), b"moving");
+        assert_eq!(std::fs::read(&to).expect("read to"), b"already here");
+    }
+
+    #[test]
+    fn rename_refuses_a_hard_link_under_another_name() {
+        // `rename(2)` between two links of one file succeeds without doing
+        // anything, so both names would stay while the caller believed the
+        // old one gone.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let from = dir.path().join("a.md");
+        let to = dir.path().join("b.md");
+        std::fs::write(&from, b"x").expect("seed");
+        std::fs::hard_link(&from, &to).expect("hard link");
+
+        let err = rename(&from, &to).expect_err("the destination is another link");
+
+        assert!(
+            err.to_string().contains("refusing to replace"),
+            "message was: {err}"
+        );
+        assert!(from.exists() && to.exists());
+    }
+
+    #[test]
+    fn rename_changes_only_the_case_of_a_name() {
+        // On a case-insensitive filesystem the new spelling already "exists":
+        // it is the file being renamed. Elsewhere it is an ordinary rename.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let from = dir.path().join("note.md");
+        let to = dir.path().join("NOTE.md");
+        std::fs::write(&from, b"x").expect("seed");
+
+        rename(&from, &to).expect("a case-only rename");
+
+        let names: Vec<String> = std::fs::read_dir(dir.path())
+            .expect("read dir")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["NOTE.md"]);
+    }
+
+    #[test]
+    fn rename_reports_a_destination_it_cannot_inspect() {
+        // A parent without search permission hides whether the destination
+        // exists; that is an error, not a free name.
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = tempfile::tempdir().expect("temp dir");
+        let from = dir.path().join("note.md");
+        std::fs::write(&from, b"x").expect("seed");
+        let sealed = dir.path().join("sealed");
+        std::fs::create_dir(&sealed).expect("mkdir");
+        std::fs::set_permissions(&sealed, std::fs::Permissions::from_mode(0o000)).expect("chmod");
+
+        let result = rename(&from, &sealed.join("note.md"));
+
+        std::fs::set_permissions(&sealed, std::fs::Permissions::from_mode(0o755))
+            .expect("restore permissions for cleanup");
+        let err = result.expect_err("the destination cannot be inspected");
+        assert!(err.to_string().contains("checking"), "message was: {err}");
+        assert!(!err.is_destination_taken());
+        assert!(from.exists());
     }
 }

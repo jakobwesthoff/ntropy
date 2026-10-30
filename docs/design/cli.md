@@ -307,6 +307,10 @@ No picker and no prompt, terminal or not: stdin carries the payload, so the
 invocation is scripted by construction. Afterwards the note is realigned and
 views refreshed, exactly as on editor exit, and the resulting path is printed,
 which is how a caller learns the new name when a written title renamed the file.
+When a file already holds the name the title calls for, the note keeps its old
+name, which is the path printed, and a `warning: did not rename ...` line goes
+to stderr (ADR 0067). The content is written either way; the warning fails the
+command only under `--strict`.
 
     path=$(ntropy new --empty -p Quarterly review)
     ntropy write "$path" < note.md
@@ -335,6 +339,12 @@ link, one `ignored <entry>` line per added ignore and a `stopped ignoring ...`
 line per pruned one, and a closing summary of the notes scanned, files renamed,
 links relinked, views synced, ignore entries added and removed, and warnings.
 The summary always prints, so a no-op run is no longer silent.
+
+No realignment replaces an existing file (ADR 0067). When a file already holds
+the name a note's title calls for, the note keeps its old name and the run
+prints a `warning: did not rename <from> to <to>: a file of that name already
+exists` line on stderr, which counts among the summary's warnings and fails
+the run under `--strict`.
 
 A configured view with an invalid name (ADR 0064) is not synced; it prints a
 `warning: skipped view ...` line on stderr, counts among the summary's

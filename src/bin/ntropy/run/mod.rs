@@ -110,7 +110,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             print,
         } => cmd_new(&session, join(&title), template, empty, print, interactive),
         Command::Today { print } => cmd_today(&session, print, interactive),
-        Command::Write { target } => cmd_write(&session, &target),
+        Command::Write { target } => cmd_write(&cli.global, &session, &target),
         Command::Reconcile => cmd_reconcile(&cli.global, &session),
         Command::Delete { selector, force } => {
             cmd_delete(&session, join(&selector), force, interactive)
@@ -548,7 +548,7 @@ fn cmd_new(
     Ok(ExitCode::SUCCESS)
 }
 
-fn cmd_write(session: &VaultSession, target: &str) -> Result<ExitCode> {
+fn cmd_write(global: &GlobalArgs, session: &VaultSession, target: &str) -> Result<ExitCode> {
     // stdin is the payload, which is why this command has no picker and no
     // prompt: an invocation that carries a note on stdin is a scripted one, and
     // dropping a fullscreen picker into the middle of a pipeline would be worse
@@ -562,16 +562,19 @@ fn cmd_write(session: &VaultSession, target: &str) -> Result<ExitCode> {
 
     // The same post-processing the editor round trip does on exit, so a title
     // the caller changed cannot leave the filename and the views behind.
-    let path = match reconcile::realign(session, &note.path)
-        .context("while realigning the written note")?
-    {
-        Some(rename) => rename.to,
-        None => note.path,
-    };
+    let realignment =
+        reconcile::realign(session, &note.path).context("while realigning the written note")?;
+    output::print_refused_renames(realignment.refused.as_slice());
     refresh_views(session)?;
 
-    println!("{}", path.display());
-    Ok(ExitCode::SUCCESS)
+    // The content is written whether or not the rename was refused, so the
+    // path printed is where it lives now and a refusal only fails `--strict`.
+    println!("{}", realignment.path.display());
+    Ok(exit_for_warnings(
+        global.strict,
+        &[],
+        realignment.refused.iter().count(),
+    ))
 }
 
 fn cmd_today(session: &VaultSession, print: bool, interactive: bool) -> Result<ExitCode> {
@@ -597,12 +600,13 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
     println!("Reconciling vault at {}...", session.root().display());
     let report = reconcile::reconcile(session).context("while reconciling")?;
     output::print_warnings(&report.warnings);
+    output::print_refused_renames(&report.refused);
     print_skipped_views(&report.skipped_views);
     for rename in &report.renamed {
         println!(
             "renamed {} -> {}",
-            file_name(&rename.from),
-            file_name(&rename.to)
+            output::file_name(&rename.from),
+            output::file_name(&rename.to)
         );
     }
     for rewrite in &report.links_rewritten {
@@ -610,14 +614,14 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
             "relinked {} -> {} in {}",
             rewrite.from,
             rewrite.to,
-            file_name(&rewrite.note)
+            output::file_name(&rewrite.note)
         );
     }
     for adopted in &report.adopted {
         println!(
             "encrypted {} -> {}",
-            file_name(&adopted.from),
-            file_name(&adopted.to)
+            output::file_name(&adopted.from),
+            output::file_name(&adopted.to)
         );
     }
     report_gitignore_changes(&report.gitignore_added, &report.gitignore_removed);
@@ -640,7 +644,7 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
         plural(report.gitignore_added.len(), "entry", "entries"),
         plural(report.gitignore_removed.len(), "entry", "entries"),
         plural(
-            report.warnings.len() + report.skipped_views.len(),
+            report.warnings.len() + report.refused.len() + report.skipped_views.len(),
             "warning",
             "warnings"
         ),
@@ -648,7 +652,7 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
     Ok(exit_for_warnings(
         global.strict,
         &report.warnings,
-        report.skipped_views.len(),
+        report.refused.len() + report.skipped_views.len(),
     ))
 }
 
@@ -800,7 +804,9 @@ fn open_and_refresh_from(session: &VaultSession, path: &Path, initial: Option<&s
     let outcome = edit::edit_note(session, path, initial, &launcher);
     // Realign and refresh regardless of how the edit ended, so a note that was
     // written still gets its filename and views brought into step.
-    reconcile::realign(session, path).context("while realigning the edited note")?;
+    let realignment =
+        reconcile::realign(session, path).context("while realigning the edited note")?;
+    output::print_refused_renames(realignment.refused.as_slice());
     refresh_views(session)?;
     outcome?;
     Ok(())
@@ -908,13 +914,6 @@ fn report_gitignore_changes(added: &[String], removed: &[String]) {
             "stopped ignoring {entry}; left directory `{dir}/` in place, delete it manually if you no longer need it"
         );
     }
-}
-
-/// The file-name component of a path as a lossy string.
-fn file_name(path: &Path) -> String {
-    path.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| path.display().to_string())
 }
 
 #[cfg(test)]
