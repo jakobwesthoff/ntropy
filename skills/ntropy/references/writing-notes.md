@@ -186,8 +186,9 @@ See [the Q3 plan](01j8za2abcdefghjkmnpqrstvw-q3-planning.md) for the numbers.
 Get the filename from a search (`ntropy search -n tag:planning`, PATH column)
 and use its basename. A link is recognized by its leading 26-character ULID, so
 it survives retitles: `ntropy reconcile` rewrites the slug portion of stale
-link targets after a rename (links inside code, whether inline, fenced
-or indented, are left alone). DO NOT link by title or by relative folder paths into views.
+link targets after a rename (links inside code, whether inline, fenced or
+indented, are left alone). DO NOT link by title or by relative folder paths
+into views.
 
 ## Templates
 
