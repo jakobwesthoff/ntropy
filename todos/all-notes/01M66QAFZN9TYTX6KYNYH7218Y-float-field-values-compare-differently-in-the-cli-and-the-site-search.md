@@ -18,4 +18,4 @@ Values like `1.5` agree. Very large or very small floats may differ too (`String
 
 ## Suggested fix
 
-Use one spelling on both sides. The coercion of scalar titles and tags settles on the number's display with a trailing `.0` stripped, matching the site's `String(n)`; the CLI's `scalar_to_string` should reuse that same function, so `x:2` matches `x: 2.0` everywhere. Add the cases to `tests/fixtures/query-corpus.json` so both evaluators are pinned. Changing the CLI side changes which notes `x:2.0` selects, so name it in the changelog.
+Use one spelling on both sides. The Rust side spells a YAML number with its `Display` (`2.0`, `1.5`), both in `scalar_to_string` and in the coercion of scalar titles and tags, so the site has to follow: embed each scalar's Rust spelling in the search data (or the frontmatter as strings) instead of JSON numbers, so `scalarText` never formats a number itself. Add the cases to `tests/fixtures/query-corpus.json` so both evaluators are pinned. Changing the site side changes which notes `x:2.0` and `x:2` select in the site search, so name it in the changelog.
