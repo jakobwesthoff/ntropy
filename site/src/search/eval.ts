@@ -119,7 +119,13 @@ function lower(query: Query, semantics: Semantics): Compiled {
       return {
         kind: "term",
         text: query.text,
-        regex: semantics === "cli" ? textRegex(query.text) : null,
+        // A bare word matches its dot literally; a quoted string is a pattern.
+        regex:
+          semantics === "cli"
+            ? textRegex(
+                query.bare ? query.text.replaceAll(".", "\\.") : query.text,
+              )
+            : null,
       };
   }
 }

@@ -177,9 +177,11 @@ impl Parser {
         };
 
         // A `:` makes this a keyed predicate; otherwise the bare word is
-        // full-text shorthand.
+        // full-text shorthand. A bare word holds no regex metacharacter other
+        // than the dot, which it matches literally: a quoted string is the
+        // form that is a pattern.
         if !matches!(self.peek_kind_at(0), Some(TokenKind::Colon)) {
-            return Ok(Query::Text(word));
+            return Ok(Query::Text(word.replace('.', r"\.")));
         }
         self.advance(); // consume the colon
 
@@ -522,5 +524,20 @@ mod tests {
                 value: "1.5".into()
             }
         );
+    }
+
+    #[test]
+    fn a_dot_in_a_bare_word_matches_a_literal_dot() {
+        assert_eq!(parse_ok("node.js"), Query::Text(r"node\.js".into()));
+    }
+
+    #[test]
+    fn a_dot_in_a_quoted_string_stays_a_pattern() {
+        assert_eq!(parse_ok(r#""node.js""#), Query::Text("node.js".into()));
+    }
+
+    #[test]
+    fn a_dot_in_a_text_value_is_not_escaped() {
+        assert_eq!(parse_ok("text:node.js"), Query::Text("node.js".into()));
     }
 }

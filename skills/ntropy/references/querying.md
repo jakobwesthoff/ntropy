@@ -31,7 +31,8 @@ or a doubled one (`a and and b`) searches bodies for that word instead of
 failing. Values are bare words (Unicode letters, digits, `/`, `_`,
 `-`, `.`) or double-quoted strings for anything with spaces, other punctuation
 (`tag:"c++"`) or regex metacharacters. `tag:milestone/0.13` needs no quotes.
-A bare search word with a dot is a regex, so `foo.bar` matches `fooXbar` too.
+A bare search word matches literally, its dot included (`node.js` does not
+match `nodexjs`); a quoted string is a regex (`"node.js"` does).
 
 ```bash
 ntropy search -n tag:work and not status:done

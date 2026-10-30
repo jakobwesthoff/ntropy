@@ -68,8 +68,10 @@ entry lists them all.
 ### Queries
 
 A bare query value may contain a dot, so `tag:milestone/0.13` needs no quotes.
-Other punctuation, such as `+` and `#`, stays quoted: `tag:"c++"`. The site's
-search lexes bare values the same way, and the shared query corpus pins both
+Other punctuation, such as `+` and `#`, stays quoted: `tag:"c++"`. A bare
+search word matches its dot literally, so `node.js` does not match `nodexjs`,
+while a quoted string stays a regex. The site's search lexes bare values and
+reads bare words the same way, and the shared query corpus pins both
 implementations.
 
 ## Consequences
@@ -93,6 +95,3 @@ implementations.
   note table does not distinguish from two tags.
 - The language server inserts a tag that would not read back as the same
   string from a YAML list (`0.13`, `true`, `a,b`) as a double-quoted string.
-- A bare term that holds a dot is a regex like every bare term: in `foo.bar`
-  the dot matches any character, and the site's search reads the same term as
-  a plain substring.

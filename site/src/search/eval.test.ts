@@ -187,6 +187,19 @@ describe("matchesPage", () => {
   });
 });
 
+describe("a bare word with a dot", () => {
+  it("matches a literal dot under the CLI's reading", () => {
+    const cli = (q: string, body: string) =>
+      matches(
+        compile(q, "cli"),
+        noteFrom("01ARZ3NDEKTSV4RRFFQ69G5FAV", "p", "d", { title: "T" }, body),
+      );
+    expect(cli("node.js", "run node.js now")).toBe(true);
+    expect(cli("node.js", "run nodexjs now")).toBe(false);
+    expect(cli('"node.js"', "run nodexjs now")).toBe(true);
+  });
+});
+
 describe("matchesPage on a merged tag page", () => {
   const merged: SearchPage = {
     kind: "tag",

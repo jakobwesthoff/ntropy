@@ -87,7 +87,7 @@ describe("parse", () => {
       name: "status",
       value: "draft",
     });
-    expect(parse("bare")).toEqual({ kind: "term", text: "bare" });
+    expect(parse("bare")).toEqual({ kind: "term", text: "bare", bare: true });
     expect(parse('"a phrase"')).toEqual({ kind: "term", text: "a phrase" });
     expect(parse('status:"in progress"')).toEqual({
       kind: "field",
@@ -99,65 +99,68 @@ describe("parse", () => {
   it("applies precedence not > and > or with parentheses overriding", () => {
     expect(parse("a or b and not c")).toEqual({
       kind: "or",
-      left: { kind: "term", text: "a" },
+      left: { kind: "term", text: "a", bare: true },
       right: {
         kind: "and",
-        left: { kind: "term", text: "b" },
-        right: { kind: "not", operand: { kind: "term", text: "c" } },
+        left: { kind: "term", text: "b", bare: true },
+        right: {
+          kind: "not",
+          operand: { kind: "term", text: "c", bare: true },
+        },
       },
     });
     expect(parse("(a or b) and c")).toEqual({
       kind: "and",
       left: {
         kind: "or",
-        left: { kind: "term", text: "a" },
-        right: { kind: "term", text: "b" },
+        left: { kind: "term", text: "a", bare: true },
+        right: { kind: "term", text: "b", bare: true },
       },
-      right: { kind: "term", text: "c" },
+      right: { kind: "term", text: "c", bare: true },
     });
   });
 
   it("joins adjacent predicates with and", () => {
     expect(parse("a b")).toEqual({
       kind: "and",
-      left: { kind: "term", text: "a" },
-      right: { kind: "term", text: "b" },
+      left: { kind: "term", text: "a", bare: true },
+      right: { kind: "term", text: "b", bare: true },
     });
     expect(parse("a b or c d")).toEqual({
       kind: "or",
       left: {
         kind: "and",
-        left: { kind: "term", text: "a" },
-        right: { kind: "term", text: "b" },
+        left: { kind: "term", text: "a", bare: true },
+        right: { kind: "term", text: "b", bare: true },
       },
       right: {
         kind: "and",
-        left: { kind: "term", text: "c" },
-        right: { kind: "term", text: "d" },
+        left: { kind: "term", text: "c", bare: true },
+        right: { kind: "term", text: "d", bare: true },
       },
     });
     expect(parse('tag:x "a b" (c)').kind).toBe("and");
     expect(parse("a not b")).toEqual({
       kind: "and",
-      left: { kind: "term", text: "a" },
-      right: { kind: "not", operand: { kind: "term", text: "b" } },
+      left: { kind: "term", text: "a", bare: true },
+      right: { kind: "not", operand: { kind: "term", text: "b", bare: true } },
     });
   });
 
   it("reads a leading or doubled keyword as a bare term", () => {
     expect(parse("and a")).toEqual({
       kind: "and",
-      left: { kind: "term", text: "and" },
-      right: { kind: "term", text: "a" },
+      left: { kind: "term", text: "and", bare: true },
+      right: { kind: "term", text: "a", bare: true },
     });
     expect(parse("a and and b")).toEqual({
       kind: "and",
       left: {
         kind: "and",
-        left: { kind: "term", text: "a" },
-        right: { kind: "term", text: "and" },
+        left: { kind: "term", text: "a", bare: true },
+        right: { kind: "term", text: "and", bare: true },
       },
-      right: { kind: "term", text: "b" },
+      right: { kind: "term", text: "b", bare: true },
     });
   });
 

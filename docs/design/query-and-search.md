@@ -40,8 +40,8 @@ shorthand for a `text:` predicate, so `ntropy search foobar` searches bodies and
 `foobar and tag:work` combines with operators. The dot makes `tag:milestone/0.13`
 a valid unquoted query; other punctuation such as `+` and `#` stays quoted
 (`tag:"c++"`) ([ADR 0077](../adr/0077-punctuation-in-slugs-and-tags.md)). A
-bare term with a dot is a regex like any other, so `.` matches any character
-in `foo.bar`.
+bare term matches literally, its dot included: `node.js` does not match
+`nodexjs`. A quoted string is a pattern, so `"node.js"` does.
 
 Two operands side by side are an `and` that binds like the written one (ADR
 0076): `borrow checker` is `borrow and checker`, `a b or c` is

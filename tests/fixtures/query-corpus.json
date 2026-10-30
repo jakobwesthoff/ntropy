@@ -69,7 +69,14 @@
           "Node.JS"
         ]
       },
-      "body": "fooXbar is not the dotted name.\n"
+      "body": "fooXbar is not the dotted name, and neither is nodexjs.\n"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FD2",
+      "frontmatter": {
+        "title": "Literal dot"
+      },
+      "body": "Run it with node.js here.\n"
     }
   ],
   "cases": [
@@ -291,7 +298,8 @@
         "01ARZ3NDEKTSV4RRFFQ69G5FA2",
         "01ARZ3NDEKTSV4RRFFQ69G5FA3",
         "01ARZ3NDEKTSV4RRFFQ69G5FC1",
-        "01ARZ3NDEKTSV4RRFFQ69G5FD1"
+        "01ARZ3NDEKTSV4RRFFQ69G5FD1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FD2"
       ]
     },
     {
@@ -529,14 +537,32 @@
     {
       "query": "foo.bar",
       "expect": [
-        "01ARZ3NDEKTSV4RRFFQ69G5FA1",
-        "01ARZ3NDEKTSV4RRFFQ69G5FD1"
+        "01ARZ3NDEKTSV4RRFFQ69G5FA1"
       ]
     },
     {
       "query": "\"foo\\.bar\"",
       "expect": [
         "01ARZ3NDEKTSV4RRFFQ69G5FA1"
+      ]
+    },
+    {
+      "query": "node.js",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FD2"
+      ]
+    },
+    {
+      "query": "\"node.js\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FD1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FD2"
+      ]
+    },
+    {
+      "query": "\"node\\.js\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FD2"
       ]
     }
   ]

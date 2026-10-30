@@ -19,7 +19,7 @@ export type Query =
   | { kind: "tag"; value: string }
   | { kind: "field"; name: string; value: string }
   | { kind: "text"; pattern: string }
-  | { kind: "term"; text: string };
+  | { kind: "term"; text: string; bare?: true };
 
 /** A syntax error at a character position, or a pattern that does not compile. */
 export class QueryError extends Error {
@@ -225,7 +225,9 @@ class Parser {
       );
     }
     const word = token.value;
-    if (this.peek()?.kind !== "colon") return { kind: "term", text: word };
+    if (this.peek()?.kind !== "colon") {
+      return { kind: "term", text: word, bare: true };
+    }
     this.advance();
     const valueToken = this.advance();
     if (valueToken === undefined)
