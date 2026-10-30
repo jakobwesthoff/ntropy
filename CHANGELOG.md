@@ -149,10 +149,10 @@ and this project adheres to
   a table row. ntropy now shows control characters, and the bidirectional
   override and isolate characters that can reorder how a title reads,
   escaped as `\n`, `\t` or `\u{1b}` in tables, prompts, warnings, error
-  messages, reports and the picker. A path that would need escaping is no
-  longer printed by `-p`: the command fails, or `search -n -p` leaves it
-  out with a warning, prints the rest and exits non-zero. `ntropy
-  reconcile` renames such a note.
+  messages, reports, the picker and the language server's completions and
+  symbols. A path that would need escaping is no longer printed by `-p`:
+  the command fails, or `search -n -p` leaves it out with a warning, prints
+  the rest and exits non-zero. `ntropy reconcile` renames such a note.
 
 ## v2.2.0 - 2026-10-10
 

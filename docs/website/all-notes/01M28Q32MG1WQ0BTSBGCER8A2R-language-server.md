@@ -14,7 +14,7 @@ Tag completion. Inside a note's `tags:` frontmatter, completion offers the [tags
 
 Go to definition and document links. Jump to, or click straight through, a link to the note it points at.
 
-Workspace symbols. Jump to any note in the vault by title.
+Workspace symbols. Jump to any note in the vault by title. A control character or bidi override in a title shows escaped, such as `\u{1b}`, in the completion menu, in the inserted link and in the symbol list.
 
 The server resolves the vault for each open document with the same rules as the CLI, so there is nothing to configure beyond pointing the editor at the binary. Candidates come from a scan of the saved files: a title or tag you changed in an open buffer shows up in completion after you save.
 

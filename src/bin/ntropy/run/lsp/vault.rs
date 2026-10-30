@@ -12,6 +12,7 @@
 
 use lsp_types::Uri;
 
+use ntropy::text::escape_controls;
 use ntropy::vault::resolve::ResolveError;
 use ntropy::vault::{ResolveOptions, Vault};
 
@@ -71,9 +72,12 @@ fn resolve_from_document(uri: &Uri) -> Lookup {
     };
     match Vault::resolve(&opts) {
         Ok(vault) => Lookup::Found(vault),
-        Err(ResolveError::BrokenPointer { pointer, reason }) => {
-            Lookup::Broken(format!("{}: {reason}", pointer.display()))
-        }
+        // The reason quotes the pointer file's first line, which comes from
+        // the directory the document sits in, and the client may show the
+        // message on a terminal, so it is escaped (ADR 0071).
+        Err(ResolveError::BrokenPointer { pointer, reason }) => Lookup::Broken(
+            escape_controls(&format!("{}: {reason}", pointer.display())).into_owned(),
+        ),
         Err(ResolveError::NoVault | ResolveError::NotAVault(_)) => Lookup::None,
     }
 }
@@ -223,5 +227,24 @@ mod tests {
 
         let uri = uri::from_path(&document).expect("uri");
         assert!(matches!(for_document_with_hint(&uri, None), Lookup::None));
+    }
+
+    #[test]
+    fn a_broken_pointer_message_is_escaped() {
+        // The pointer file's first line comes from the directory the document
+        // sits in, and the client may show the message on a terminal.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let project = dir.path().join("project");
+        std::fs::create_dir_all(&project).expect("project");
+        std::fs::write(project.join(".ntropy-vault"), "./x\u{1b}]0;y\u{7}\n").expect("pointer");
+        let uri = uri::from_path(&project.join("a.md")).expect("uri");
+
+        match for_document(&uri) {
+            Lookup::Broken(message) => {
+                assert!(!message.contains(['\u{1b}', '\u{7}']), "{message:?}");
+                assert!(message.contains("x\\u{1b}]0;y\\u{7}"), "{message:?}");
+            }
+            other => panic!("expected Broken, got {other:?}"),
+        }
     }
 }

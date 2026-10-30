@@ -21,6 +21,7 @@ use lsp_types::{
 
 use ntropy::link;
 use ntropy::note::frontmatter;
+use ntropy::text::escape_controls;
 
 use super::super::cache::CacheEntry;
 use super::super::fuzzy;
@@ -156,22 +157,23 @@ fn item(
     snippet_support: bool,
 ) -> CompletionItem {
     let target = filename(entry);
+    // The title is shown in the client's menu and inserted into the buffer,
+    // so it is escaped like any text from the vault (ADR 0071). The link
+    // target is the canonical `<ulid>-<slug>.md` and needs no escaping.
+    let title = escape_controls(&entry.title);
     let (new_text, format) = match context.kind {
         Kind::Target => (target.clone(), InsertTextFormat::PLAIN_TEXT),
         Kind::Display if snippet_support => (
             // `$0` sits the cursor right after the link, directly on the closing
             // paren with no intervening space.
-            format!("{}]({})$0", escape_snippet(&entry.title), target),
+            format!("{}]({})$0", escape_snippet(&title), target),
             InsertTextFormat::SNIPPET,
         ),
-        Kind::Display => (
-            format!("{}]({})", entry.title, target),
-            InsertTextFormat::PLAIN_TEXT,
-        ),
+        Kind::Display => (format!("{title}]({target})"), InsertTextFormat::PLAIN_TEXT),
     };
 
     CompletionItem {
-        label: entry.title.clone(),
+        label: title.into_owned(),
         kind: Some(CompletionItemKind::REFERENCE),
         detail: Some(target),
         // A constant filter text keeps the client from dropping fuzzy matches;
@@ -432,5 +434,49 @@ mod tests {
         // "see [" is 5 columns; "Quar" ends at column 9.
         assert_eq!(edit.range.start, Position::new(0, 5));
         assert_eq!(edit.range.end, Position::new(0, 9));
+    }
+
+    // -------------------------------------------------------------------------
+    // Titles from the vault are escaped before the client shows or inserts
+    // them (ADR 0071)
+    // -------------------------------------------------------------------------
+
+    /// The completion list for a vault holding one note titled `Evil` plus a
+    /// sequence that retitles the terminal.
+    fn hostile(snippet_support: bool) -> CompletionList {
+        let entries = [entry(ULID_A, "evil", "Evil\u{1b}]0;x\u{7}", &[])];
+        complete("see [", 5, Encoding::Utf8, &entries, snippet_support).expect("completion")
+    }
+
+    #[test]
+    fn a_hostile_title_is_escaped_in_the_label() {
+        assert_eq!(hostile(false).items[0].label, "Evil\\u{1b}]0;x\\u{7}");
+    }
+
+    /// The text the only item of `list` inserts.
+    fn only_new_text(list: &CompletionList) -> &str {
+        match list.items[0].text_edit.as_ref().expect("text edit") {
+            CompletionTextEdit::Edit(edit) => &edit.new_text,
+            other => panic!("unexpected edit: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_hostile_title_is_inserted_escaped() {
+        assert_eq!(
+            only_new_text(&hostile(false)),
+            format!("Evil\\u{{1b}}]0;x\\u{{7}}]({ULID_A}-evil.md)")
+        );
+    }
+
+    #[test]
+    fn a_hostile_title_is_inserted_escaped_in_a_snippet() {
+        // The title is escaped first, and the snippet escaping then protects
+        // that escape's backslashes and closing braces, so the client inserts
+        // `\u{1b}` as text.
+        assert_eq!(
+            only_new_text(&hostile(true)),
+            format!("Evil\\\\u{{1b\\}}]0;x\\\\u{{7\\}}]({ULID_A}-evil.md)$0")
+        );
     }
 }

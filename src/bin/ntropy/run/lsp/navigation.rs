@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 use ntropy::id::Id;
 use ntropy::link;
 use ntropy::note::frontmatter;
+use ntropy::text::escape_controls;
 
 use super::cache::CacheEntry;
 use super::fuzzy;
@@ -98,10 +99,13 @@ pub fn workspace_symbols(query: &str, entries: &[&CacheEntry]) -> Vec<(Id, PathB
 }
 
 /// Build a workspace symbol for a note, or `None` if its path has no URI.
+///
+/// The name is the note's title, escaped (ADR 0071), since a terminal client
+/// shows it as it is.
 pub fn symbol(title: &str, path: &Path) -> Option<WorkspaceSymbol> {
     let location = Location::new(uri::from_path(path)?, file_start());
     Some(WorkspaceSymbol {
-        name: title.to_owned(),
+        name: escape_controls(title).into_owned(),
         kind: SymbolKind::FILE,
         tags: None,
         container_name: None,
@@ -236,5 +240,11 @@ mod tests {
         let entries = entries();
         let refs: Vec<&CacheEntry> = entries.iter().collect();
         assert!(workspace_symbols("zzzz", &refs).is_empty());
+    }
+
+    #[test]
+    fn a_workspace_symbol_is_named_escaped() {
+        let symbol = symbol("Evil\u{1b}]0;x\u{7}", Path::new("/v/all-notes/x.md")).expect("symbol");
+        assert_eq!(symbol.name, "Evil\\u{1b}]0;x\\u{7}");
     }
 }

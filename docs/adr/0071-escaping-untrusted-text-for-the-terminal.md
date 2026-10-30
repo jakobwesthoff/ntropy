@@ -41,10 +41,12 @@ Escaping applies whether or not the output is a terminal, so the output is
 the same everywhere (ADR 0033). It covers table cells, note references in
 prompts and messages, warnings, the reconcile and `init` reports, `info`,
 the vault's path in status lines and passphrase prompts, error messages,
-and the picker's rows, whose search text is escaped too, so the match
-highlights point at what is drawn. In an error message line breaks are
-kept, so a message that spans lines, such as an external tool's output,
-keeps its lines.
+the picker's rows, whose search text is escaped too, so the match
+highlights point at what is drawn, and the language server's completion
+labels, inserted link titles, workspace symbol names and the error it
+shows for a broken vault pointer. In an error message that ends a command
+line breaks are kept, so a message that spans lines, such as an external
+tool's output, keeps its lines.
 
 A path printed for a script (`-p`, `write`, the picker's print-path key) is
 printed as it is, so it names the file on disk. A path that would need
@@ -73,3 +75,5 @@ escaped with the rest of it.
   `ntropy reconcile` renames it. In a vault whose own path holds one, no
   `-p` path is printed at all.
 - The picker matches the query against the escaped title.
+- A link the language server completes for such a title carries the
+  escaped title as its display text.

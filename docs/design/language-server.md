@@ -66,6 +66,11 @@ inserts the target note's canonical title and its standard-Markdown target
 query is replaced by the canonical title; a custom display text is an edit the
 author makes afterward.
 
+The title in the item's label and in the inserted text is escaped like any
+text from the vault (ADR 0071): a control character or bidi override shows as
+`\u{1b}` or similar, so neither the client's menu nor the buffer receives
+it raw.
+
 ### Tags
 
 Completion offers the vault's existing normalized tag set (ADR 0023), fuzzy
@@ -93,8 +98,8 @@ hand.
 - **`textDocument/documentLink`**: hand the editor each link's resolved target
   URI, so links are click-to-open and rendered as links independent of
   `definition`. Both reuse the link-extraction regex of ADR 0028.
-- **`workspace/symbol`**: every note as a symbol named by its title and located
-  at its file. With `nucleo` ranking the query, this is a command-palette jump to
+- **`workspace/symbol`**: every note as a symbol named by its title, escaped
+  (ADR 0071), and located at its file. With `nucleo` ranking the query, this is a command-palette jump to
   any note by title across the vault.
 
 ## Encrypted vaults
