@@ -59,6 +59,14 @@ error, such as `EIO` or `ENOSPC`, is returned.
 
 ## Consequences
 
+- Measured on an Apple M4 Pro with APFS on the internal SSD, against vaults of
+  30,000 and 50,000 notes. A `write` to an encrypted vault takes 28.4 ms
+  instead of 18.8 ms. `new` and `write` in a plaintext vault, which spend 1.2 s
+  to 2.7 s scanning and refreshing views, differ from the unflushed build by
+  less than the run-to-run noise. `reconcile` after every one of 50,000 notes
+  was retitled (25,069 rewritten) takes 19.1 s instead of 18.0 s. A flush after
+  every write took 152 s to 264 s for the same run. `vault encrypt` of 30,000
+  notes is not slower.
 - A flush error after a rename that happened is returned as an error without
   undoing the rename. The note is in place; whether it survives a power loss is
   unknown.

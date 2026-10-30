@@ -27,7 +27,9 @@ change in any release
   empty. Every write and every rename of a note is flushed to disk, the file
   before it is renamed into place and the directory after. `reconcile` and
   `vault encrypt|decrypt|rekey` write everything first and flush once at the
-  end of the run
+  end of the run. On an Apple M4 Pro, a `write` to an encrypted vault takes
+  about 10 ms longer, and `reconcile` over 50,000 retitled notes about one
+  second longer
   ([ADR 0079](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0079-note-writes-are-flushed-to-disk.md)).
 
 ## v2.4.0 - 2026-10-30
