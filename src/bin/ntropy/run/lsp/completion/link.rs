@@ -325,6 +325,26 @@ mod tests {
     }
 
     #[test]
+    fn bracket_in_a_code_span_across_a_line_break_is_suppressed() {
+        assert!(at_marker("x `open\n[|` y", false).is_none());
+    }
+
+    #[test]
+    fn bracket_after_a_lone_backtick_on_an_earlier_line_completes() {
+        assert!(at_marker("x `open\n[|", false).is_some());
+    }
+
+    #[test]
+    fn bracket_in_an_indented_code_block_is_suppressed() {
+        assert!(at_marker("x\n\n    [|\n", false).is_none());
+    }
+
+    #[test]
+    fn bracket_after_a_lone_backtick_in_an_earlier_paragraph_completes() {
+        assert!(at_marker("x `open\n\n[|", false).is_some());
+    }
+
+    #[test]
     fn image_bracket_is_not_a_link() {
         assert!(at_marker("body ![|", false).is_none());
     }

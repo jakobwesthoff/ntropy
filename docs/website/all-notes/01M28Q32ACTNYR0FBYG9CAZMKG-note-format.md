@@ -95,8 +95,9 @@ your editor's preview, and any other Markdown tool follow them for free.
 A link counts as a note link only when its target starts with a valid ULID
 and ends in `.md`. Anything else, such as external URLs, in-page anchors, or
 a ULID that matches no note, is left alone. Image links (`![..](..)`) and
-links inside fenced or inline code are never treated as note links, and
-`reconcile` does not rewrite them.
+links inside code are never treated as note links, and `reconcile` does not
+rewrite them. Code means inline code spans (which may continue over a line
+break), fenced code blocks and indented code blocks.
 
 Links keep the `<ulid>-<slug>.md` form in an encrypted vault too, even
 though the files there are named `<ulid>.age`. Resolution goes through the

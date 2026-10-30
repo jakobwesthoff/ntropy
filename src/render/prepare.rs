@@ -219,7 +219,7 @@ mod tests {
 
     #[test]
     fn links_in_code_and_image_links_are_excluded() {
-        // Extraction already skips fenced code, inline code and images; this
+        // Extraction already skips code (inline, fenced and indented) and images; this
         // pins that the prepared table honors those exclusions from the
         // consumer's side. Only the one prose link survives.
         let source = note(
@@ -231,6 +231,24 @@ mod tests {
                  ```\n[Fenced]({ULID_B}-fenced.md)\n```\n\
                  inline `[Inline]({ULID_B}-inline.md)` code\n\
                  ![Image]({ULID_B}-image.md)\n",
+            ),
+        );
+        let index = link::index(std::slice::from_ref(&source));
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
+        assert_eq!(doc.links.len(), 1);
+        assert_eq!(doc.links[0].display, "Real");
+    }
+
+    #[test]
+    fn links_in_a_multiline_code_span_and_indented_code_are_excluded() {
+        let source = note(
+            ULID_A,
+            "multiline",
+            &format!(
+                "---\ntitle: Multiline\n---\n\
+                 prose [Real]({ULID_B}-real.md)\n\n\
+                 span `starts here\n[Span]({ULID_B}-span.md) ends` there\n\n\
+                 \x20   [Indented]({ULID_B}-indented.md)\n",
             ),
         );
         let index = link::index(std::slice::from_ref(&source));

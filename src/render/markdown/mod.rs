@@ -220,6 +220,21 @@ pub trait Output {
 // Public entry
 // =========================================================
 
+/// The parser options that define what ntropy treats as Markdown.
+///
+/// Rendering and the code-region masking of [`crate::link`] parse with the
+/// same options, so a link is masked exactly when the renderer shows it as
+/// code. GitHub's rendered surface is tables, strikethrough, task lists and
+/// footnotes, with `ENABLE_GFM` supplying the callout kinds on block quotes.
+/// Math stays off by omission, so `$` never gains meaning.
+pub(crate) fn parser_options() -> Options {
+    Options::ENABLE_TABLES
+        | Options::ENABLE_STRIKETHROUGH
+        | Options::ENABLE_TASKLISTS
+        | Options::ENABLE_FOOTNOTES
+        | Options::ENABLE_GFM
+}
+
 /// Walk `body` and render it through `output`, resolving note links against
 /// `links` (ADR 0028).
 ///
@@ -230,21 +245,12 @@ pub fn walk<O: Output>(
     links: &[ResolvedLink],
     output: &mut O,
 ) -> (String, Vec<Warning>) {
-    // GitHub's rendered surface: tables, strikethrough, task lists, and
-    // footnotes, with `ENABLE_GFM` supplying the callout kinds on block
-    // quotes. Math stays off by omission, so `$` never gains meaning.
-    let options = Options::ENABLE_TABLES
-        | Options::ENABLE_STRIKETHROUGH
-        | Options::ENABLE_TASKLISTS
-        | Options::ENABLE_FOOTNOTES
-        | Options::ENABLE_GFM;
-
     let mut walker = Walker::new(links, output);
     // The offset iterator carries each event's byte span. The span identifies
     // note links: a Link event's span is matched against `ResolvedLink::range`
     // (both index the same body bytes) to distinguish note links from ordinary
     // ones.
-    for (event, span) in Parser::new_ext(body, options).into_offset_iter() {
+    for (event, span) in Parser::new_ext(body, parser_options()).into_offset_iter() {
         walker.handle(event, span);
     }
     walker.finish()

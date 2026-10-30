@@ -361,8 +361,16 @@ the shared ULID resolve to the file that keeps it, and the link pass below
 points them at its name.
 
 After renaming, it rewrites stale link targets in note bodies so links keep
-resolving and stay clickable in plain Markdown viewers (ADR 0028); links inside
-fenced or inline code are left untouched.
+resolving and stay clickable in plain Markdown viewers (ADR 0028).
+
+Links inside code are not note links. Code is what the renderer's Markdown
+parser reports as code, parsed with the renderer's own options: inline code
+spans, which may continue over a line break, fenced code blocks and indented
+code blocks. The mask and the rendering agree, so a link that renders as code is
+neither extracted nor rewritten. Inside an HTML block nothing is code, because
+the parser passes the block through as raw HTML. The `reconcile` rewrite, link
+extraction for rendering and site export, and the language server's navigation
+and completion all use this mask.
 
 The `.gitignore` sync adds an entry for every configured view and prunes the
 entries of views removed from config, leaving user-authored lines untouched.

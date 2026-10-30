@@ -30,6 +30,13 @@ change in any release
 ### Fixed
 
 - `delete` refuses an empty selector instead of matching every note.
+- Links inside an inline code span that continues over a line break, and
+  inside indented code blocks, are no longer treated as note links. `reconcile`
+  leaves them alone, and rendering, site export and the language server skip
+  them, as they already did for single-line spans and fenced blocks.
+- An escaped backtick no longer opens a code span, and a backtick fence line
+  whose info text contains a backtick no longer opens a fenced block that
+  hides the rest of the note from link handling.
 
 ## v2.3.0 - 2026-10-30
 

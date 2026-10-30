@@ -53,8 +53,9 @@ static LINK_RE: LazyLock<Regex> =
 
 /// Extract every ntropy link from `body`, in document order.
 ///
-/// Image links (`![..](..)`) and links inside fenced or inline code are
-/// skipped, as is any link whose target is not `<26-char ULID>[-<slug>].md`.
+/// Image links (`![..](..)`) and links inside code (inline spans, fenced and
+/// indented blocks) are skipped, as is any link whose target is not
+/// `<26-char ULID>[-<slug>].md`.
 pub fn extract(body: &str) -> Vec<Link<'_>> {
     let masked = code::masked_ranges(body);
     let mut links = Vec::new();
@@ -64,11 +65,13 @@ pub fn extract(body: &str) -> Vec<Link<'_>> {
         if whole.start() > 0 && body.as_bytes()[whole.start() - 1] == b'!' {
             continue;
         }
-        if code::is_masked(&masked, whole.start()) {
-            continue;
-        }
         let display = captures.get(1).expect("the display group always exists");
         let target = captures.get(2).expect("the target group always exists");
+        // A code span can open inside the link text and swallow the target,
+        // which leaves plain text and code instead of a link.
+        if code::is_masked(&masked, whole.start()) || code::is_masked(&masked, target.start()) {
+            continue;
+        }
         let Some(id) = parse_target(target.as_str()) else {
             continue;
         };
@@ -107,8 +110,9 @@ pub fn at_offset<'l, 'b>(links: &'l [Link<'b>], offset: usize) -> Option<&'l Lin
     links.iter().find(|link| link.range.contains(&offset))
 }
 
-/// Whether `offset` (a byte offset into `body`) falls inside fenced or inline
-/// code. The language server uses this to suppress link completion in code.
+/// Whether `offset` (a byte offset into `body`) falls inside code: an inline
+/// span, a fenced block or an indented block. The language server uses this
+/// to suppress link completion in code.
 pub fn in_code(body: &str, offset: usize) -> bool {
     code::is_masked(&code::masked_ranges(body), offset)
 }
@@ -353,6 +357,39 @@ mod tests {
     }
 
     #[test]
+    fn links_inside_a_code_span_across_a_line_break_are_skipped() {
+        let body = format!("before `start of a code span\n[x]({ULID}-stale.md) ends here` after");
+        assert!(extract(&body).is_empty());
+    }
+
+    #[test]
+    fn links_inside_an_indented_code_block_are_skipped() {
+        let body = format!("text\n\n    [x]({ULID}-a.md)\n");
+        assert!(extract(&body).is_empty());
+    }
+
+    #[test]
+    fn link_whose_target_lies_inside_a_code_span_is_skipped() {
+        // The `[` sits outside the span, so the text renders as `[a ` followed
+        // by code and no link.
+        let body = format!("[a `b]({ULID}-a.md) c`");
+        assert!(extract(&body).is_empty());
+    }
+
+    #[test]
+    fn link_with_a_code_span_in_its_text_is_kept() {
+        let body = format!("[see `x`]({ULID}-a.md)");
+        assert_eq!(extract(&body).len(), 1);
+    }
+
+    #[test]
+    fn in_code_covers_a_code_span_across_a_line_break() {
+        let body = "before `start\nend` after";
+        assert!(in_code(body, body.find("end").expect("present")));
+        assert!(!in_code(body, body.find("after").expect("present")));
+    }
+
+    #[test]
     fn unbalanced_brackets_do_not_panic_or_match() {
         assert!(extract("[oops (no close").is_empty());
         assert!(extract("](stray").is_empty());
@@ -439,6 +476,28 @@ mod tests {
         let notes = vec![note(ULID)];
         let body = format!("[x]({ULID}-t.md)");
         assert!(rewrite_body(&body, &index(&notes)).is_none());
+    }
+
+    #[test]
+    fn links_in_a_code_span_across_a_line_break_are_left_untouched() {
+        let notes = vec![note(ULID)];
+        let body = format!("before `start\n[x]({ULID}-stale.md) ends` after");
+        assert!(rewrite_body(&body, &index(&notes)).is_none());
+    }
+
+    #[test]
+    fn links_in_an_indented_code_block_are_left_untouched() {
+        let notes = vec![note(ULID)];
+        let body = format!("text\n\n    [x]({ULID}-stale.md)\n");
+        assert!(rewrite_body(&body, &index(&notes)).is_none());
+    }
+
+    #[test]
+    fn link_after_a_code_span_across_a_line_break_is_still_rewritten() {
+        let notes = vec![note(ULID)];
+        let body = format!("`start\nend` and [x]({ULID}-stale.md)");
+        let rewrite = rewrite_body(&body, &index(&notes)).expect("a rewrite happens");
+        assert_eq!(rewrite.body, format!("`start\nend` and [x]({ULID}-t.md)"));
     }
 
     #[test]

@@ -1046,6 +1046,29 @@ mod tests {
     }
 
     #[test]
+    fn reconcile_leaves_links_in_code_alone() {
+        let (_guard, session) = vault_with_view();
+        write_note(
+            &session,
+            &format!("{ULID}-target.md"),
+            "---\ntitle: Target\n---\nbody\n",
+        );
+        let content = format!(
+            "---\ntitle: Source\n---\n\
+             a `span that\n[T]({ULID}-old.md) crosses a line` end\n\n\
+             \x20   [T]({ULID}-old.md)\n"
+        );
+        let source = write_note(&session, &format!("{ULID_B}-source.md"), &content);
+
+        let report = reconcile(&session).expect("reconcile");
+        assert!(report.links_rewritten.is_empty());
+        assert_eq!(
+            std::fs::read_to_string(&source).expect("read source"),
+            content
+        );
+    }
+
+    #[test]
     fn reconcile_preserves_frontmatter_bytes_when_rewriting() {
         let (_guard, session) = vault_with_view();
         write_note(

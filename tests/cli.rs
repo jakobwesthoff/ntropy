@@ -4414,6 +4414,33 @@ fn reconcile_rewrites_stale_link_targets() {
 }
 
 #[test]
+fn reconcile_leaves_links_in_code_alone() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "target", "---\ntitle: Target\n---\n");
+    // Both links carry a stale slug, but one sits in a code span that crosses
+    // a line break and the other in an indented code block.
+    let content = format!(
+        "---\ntitle: Source\n---\n\
+         a `span that\n[T]({ULID_A}-old.md) crosses a line` end\n\n\
+         \x20   [T]({ULID_A}-old.md)\n"
+    );
+    write_note(dir.path(), ULID_B, "source", &content);
+    let output = ntropy(dir.path())
+        .arg("reconcile")
+        .output()
+        .expect("run reconcile");
+    assert!(output.status.success(), "{}", rendered(&output));
+    assert!(
+        !String::from_utf8_lossy(&output.stdout).contains(&format!("{ULID_A}-old.md")),
+        "{}",
+        rendered(&output)
+    );
+    let source = std::fs::read_to_string(dir.path().join(format!("all-notes/{ULID_B}-source.md")))
+        .expect("read source");
+    assert_eq!(source, content);
+}
+
+#[test]
 fn reconcile_noop_prints_summary() {
     let dir = setup_vault();
     // An aligned note: nothing to rename, but the summary still prints.
