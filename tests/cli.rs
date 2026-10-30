@@ -4508,14 +4508,34 @@ fn a_dotted_tag_is_found_by_its_quoted_query() {
 }
 
 #[test]
-fn the_stripped_form_of_a_dotted_tag_finds_nothing() {
+fn the_path_form_of_a_dotted_tag_finds_nothing() {
     let dir = vault_with_a_version_tag();
     let output = ntropy(dir.path())
-        .args(["-n", "search", "-p", "tag:milestone/013"])
+        .args(["-n", "search", "-p", "tag:milestone/0-13"])
         .output()
         .expect("run ntropy");
     assert!(!output.status.success());
     assert!(String::from_utf8_lossy(&output.stderr).contains("No notes matched"));
+}
+
+#[test]
+fn tags_differing_only_in_punctuation_are_listed_apart() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "dotted",
+        "---\ntitle: Dotted\ntags: [node.js]\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "dashed",
+        "---\ntitle: Dashed\ntags: [node-js]\n---\nbody\n",
+    );
+    let listing = stdout_of(ntropy(dir.path()).args(["-n", "tags"]));
+    assert!(listing.contains("node.js"), "{listing}");
+    assert!(listing.contains("node-js"), "{listing}");
 }
 
 #[test]

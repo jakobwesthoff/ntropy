@@ -75,8 +75,9 @@ Each note in `all-notes/` is named:
   exactly one representation and nothing to keep in sync.
 - `<slug>` is a normalized form of the note's title. The canonical title lives
   in frontmatter `title` (required); the slug is derived from it and is lossy.
-  Every ASCII character outside `[a-z0-9-]` becomes a `-` (runs collapse), so
-  `Node.js notes` is `node-js-notes`
+  Every ASCII character outside `[a-z0-9-]` except the apostrophe becomes a
+  `-` (runs collapse) and the apostrophe is dropped, so `Node.js notes` is
+  `node-js-notes` and `Don't Panic` is `dont-panic`
   ([ADR 0077](../adr/0077-punctuation-in-slugs-and-tags.md)).
 
 Because the ULID leads the filename and is millisecond-precise, a plain lexical

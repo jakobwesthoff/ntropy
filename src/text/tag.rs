@@ -297,6 +297,12 @@ mod tests {
     }
 
     #[test]
+    fn path_drops_an_apostrophe_but_the_tag_keeps_it() {
+        assert_eq!(path("Don't"), "dont");
+        assert_eq!(normalize("Don't"), "don't");
+    }
+
+    #[test]
     fn path_never_holds_a_dot_segment() {
         assert_eq!(path("../etc"), "etc");
         assert_eq!(path("a/./b"), "a/b");

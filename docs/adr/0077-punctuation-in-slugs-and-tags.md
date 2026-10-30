@@ -14,7 +14,7 @@ which gives grouping values the normalization of tags.
 ## Context
 
 Step 4 of the slug rule dropped punctuation. `Node.js notes` became
-`nodejs-notes`, `Don't Panic` became `dont-panic`, and `a&b` became `ab`.
+`nodejs-notes`, and `a&b` became `ab`.
 Words fused, and titles that differed only in punctuation shared a slug.
 
 Tag segments ran through the same step, so a tag was rewritten without notice:
@@ -24,8 +24,11 @@ and `node.js` became `nodejs`. A bare query value could not hold a dot.
 ## Decision
 
 Step 4 of the slug rule replaces every ASCII character outside `[a-z0-9-]`
-with `-`. Step 5 then collapses runs of `-` and trims them, so `C++ vs. Rust!`
-stays `c-vs-rust` and `Node.js notes` becomes `node-js-notes`.
+with `-`, except the apostrophe, which it drops. Step 5 then collapses runs of
+`-` and trims them, so `C++ vs. Rust!` stays `c-vs-rust` and `Node.js notes`
+becomes `node-js-notes`. The apostrophe is dropped because step 1 already drops
+the typographic apostrophe (U+2019): `Don't Panic` and `Don’t Panic` give the
+same slug, `dont-panic`, and `User's Guide` stays `users-guide`.
 
 The rule covers every slug: note filenames, the `<slug>` in view leaves and
 site page names, and view name suggestions (`By_Tag` becomes `by-tag`).
@@ -62,8 +65,8 @@ entry lists them all.
 
 ## Consequences
 
-- A title that contains an ASCII character outside `[a-z0-9-]` after
-  transliteration gets a new filename on the first `reconcile`, `render`
+- A title that contains an ASCII character outside `[a-z0-9-]` other than the
+  apostrophe gets a new filename on the first `reconcile`, `render`
   defaults to the new name (`./<slug>.pdf`), and the site's note page URL
   `notes/<slug>.html` changes with it.
 - The first `reconcile` after the change replaces view directories named by

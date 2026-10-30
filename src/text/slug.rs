@@ -84,9 +84,11 @@ fn run_pipeline(input: &str, punctuation: Punctuation) -> String {
 
     // Step 4: handle every ASCII character outside `[a-z0-9-]`. The slug form
     // replaces it with `-`, which keeps `node.js` apart from `nodejs` and stops
-    // `a&b` from fusing into `ab`; step 5 collapses the resulting runs. The tag
-    // form keeps what the author typed. Non-ASCII characters never get here:
-    // step 1 already mapped or dropped them.
+    // `a&b` from fusing into `ab`; step 5 collapses the resulting runs. The
+    // apostrophe is dropped instead, because step 1 drops the typographic one
+    // (U+2019) and both spellings of `Don't` must give one slug. The tag form
+    // keeps what the author typed. Non-ASCII characters never get here: step 1
+    // already mapped or dropped them.
     let filtered: String = spaced
         .chars()
         .filter_map(|ch| {
@@ -94,6 +96,7 @@ fn run_pipeline(input: &str, punctuation: Punctuation) -> String {
                 return Some(ch);
             }
             match punctuation {
+                Punctuation::Replace if ch == '\'' => None,
                 Punctuation::Replace => Some('-'),
                 Punctuation::Keep if ch.is_ascii_graphic() && ch != '/' => Some(ch),
                 Punctuation::Keep => None,
@@ -221,8 +224,14 @@ mod tests {
     }
 
     #[test]
-    fn an_apostrophe_becomes_a_dash() {
-        assert_eq!(slugify("Don't Panic"), "don-t-panic");
+    fn an_apostrophe_is_dropped() {
+        assert_eq!(slugify("Don't Panic"), "dont-panic");
+        assert_eq!(slugify("User's Guide"), "users-guide");
+    }
+
+    #[test]
+    fn both_apostrophes_give_the_same_slug() {
+        assert_eq!(slugify("Don\u{2019}t Panic"), slugify("Don't Panic"));
     }
 
     #[test]

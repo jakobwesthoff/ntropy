@@ -66,9 +66,9 @@ untouched.
 Each note in `all-notes/` is named `<ulid>-<slug>.md`. The ULID is 26
 characters, generated when the note is created, and is the note's identity.
 The slug is a lowercased, ASCII form of the title, capped at 72 characters.
-Every ASCII character other than a letter, a digit or a dash, a dot or an
-apostrophe for example, becomes a dash, so `Node.js notes` is filed as
-`node-js-notes`. A title that normalizes to nothing gets the slug
+Every ASCII character other than a letter, a digit or a dash, a dot for
+example, becomes a dash, so `Node.js notes` is filed as `node-js-notes`. An
+apostrophe is dropped, so `Don't Panic` is `dont-panic`. A title that normalizes to nothing gets the slug
 `untitled`. Because the ULID leads and is millisecond-precise, a plain lexical
 sort of `all-notes/` is chronological.
 
