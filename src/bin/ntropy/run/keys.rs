@@ -170,6 +170,31 @@ impl KeyContext {
             .context("while reading a passphrase")
     }
 
+    /// The passphrase of the key an interrupted rekey staged.
+    ///
+    /// That key was wrapped under the passphrase the rekey was given: the one
+    /// in `--new-passphrase-file` if it had one, otherwise the one it was run
+    /// with. It already exists, so a terminal is asked once for it and not
+    /// asked to choose a new one.
+    pub fn staged_passphrase(&self, file: Option<&Path>) -> Result<Passphrase> {
+        use ntropy::keys::PassphrasePrompt;
+        if let Some(path) = file {
+            return self.passphrase_from(Some(path), "the interrupted rekey's passphrase");
+        }
+        if let Some(passphrase) = self.passphrase_from_file()? {
+            return Ok(passphrase);
+        }
+        if !self.may_prompt {
+            anyhow::bail!(
+                "no passphrase available: pass `--new-passphrase-file <PATH>` or \
+                 `--passphrase-file <PATH>`, or run without `-n` so one can be typed"
+            );
+        }
+        TtyPassphrasePrompt
+            .existing("the passphrase given to the interrupted rekey")
+            .context("while reading the passphrase of the staged key")
+    }
+
     /// The vault's *current* passphrase, from the global file or a prompt.
     pub fn existing_passphrase(&self, label: &str) -> Result<Passphrase> {
         use ntropy::keys::PassphrasePrompt;

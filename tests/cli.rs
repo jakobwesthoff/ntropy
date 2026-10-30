@@ -5744,6 +5744,291 @@ mod encrypted {
         assert!(new.output().expect("search").status.success());
     }
 
+    /// An encrypted vault of two notes whose rekey stopped after verifying,
+    /// so every `.rekey` file waits beside its source.
+    fn rekey_stopped_before_its_commit() -> tempfile::TempDir {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+        write_note(vault, ULID_B, "beta", "---\ntitle: Beta\n---\nbody\n");
+        ntropy_convert(vault)
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("encrypt");
+
+        let stopped = ntropy_convert(vault)
+            .env("NTROPY_MIGRATION_FAIL_AFTER", "verify")
+            .args(["vault", "rekey", "-y"])
+            .output()
+            .expect("interrupted rekey");
+        assert!(
+            !stopped.status.success(),
+            "the rekey must stop: {stopped:?}"
+        );
+        dir
+    }
+
+    /// What a crash during the commit leaves for one note: its source is
+    /// gone and its `.rekey` file has taken the final name.
+    fn replace_by_hand(vault: &Path, ulid: &str) {
+        let notes = vault.join("all-notes");
+        let source = notes.join(format!("{ulid}.age"));
+        fs::remove_file(&source).expect("remove source");
+        fs::rename(notes.join(format!("{ulid}.age.rekey")), &source).expect("rename produced");
+    }
+
+    /// The note files `search -p` lists once the rekey has been resumed, after
+    /// checking that the resume itself succeeded.
+    fn resume_rekey_and_list(vault: &Path) -> Vec<String> {
+        let resumed = ntropy_convert(vault)
+            .args(["vault", "rekey", "--resume", "-y"])
+            .output()
+            .expect("resume");
+        assert!(resumed.status.success(), "{resumed:?}");
+
+        let listed = ntropy_convert(vault)
+            .args(["search", "-p"])
+            .output()
+            .expect("search");
+        assert!(listed.status.success(), "{listed:?}");
+        String::from_utf8(listed.stdout)
+            .expect("utf-8")
+            .lines()
+            .map(str::to_owned)
+            .collect()
+    }
+
+    #[test]
+    fn a_rekey_resumes_after_the_first_note_was_replaced() {
+        let dir = rekey_stopped_before_its_commit();
+        let vault = dir.path();
+        replace_by_hand(vault, ULID_A);
+
+        let listed = resume_rekey_and_list(vault);
+
+        assert_eq!(listed.len(), 2, "every note must still open: {listed:?}");
+        assert!(!vault.join(".ntropy/migration.toml").exists());
+    }
+
+    #[test]
+    fn a_rekey_resumes_after_every_note_was_replaced() {
+        let dir = rekey_stopped_before_its_commit();
+        let vault = dir.path();
+        replace_by_hand(vault, ULID_A);
+        replace_by_hand(vault, ULID_B);
+
+        let listed = resume_rekey_and_list(vault);
+
+        assert_eq!(listed.len(), 2, "every note must still open: {listed:?}");
+    }
+
+    #[test]
+    fn a_rekey_resumes_when_a_source_went_before_its_replacement_took_the_name() {
+        let dir = rekey_stopped_before_its_commit();
+        let vault = dir.path();
+        fs::remove_file(vault.join("all-notes").join(format!("{ULID_A}.age")))
+            .expect("remove source");
+
+        let listed = resume_rekey_and_list(vault);
+
+        assert_eq!(listed.len(), 2, "the note must not be lost: {listed:?}");
+    }
+
+    /// `ntropy_convert` with a rekey stopped at `stop`, which must interrupt it.
+    fn rekey_stopped_at(vault: &Path, stop: &str, extra: &[&str]) {
+        let stopped = ntropy_convert(vault)
+            .env("NTROPY_MIGRATION_FAIL_AFTER", stop)
+            .args(["vault", "rekey", "-y"])
+            .args(extra)
+            .output()
+            .expect("interrupted rekey");
+        assert!(
+            !stopped.status.success(),
+            "the rekey must stop: {stopped:?}"
+        );
+    }
+
+    fn encrypted_vault_of_two_notes() -> tempfile::TempDir {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+        write_note(vault, ULID_B, "beta", "---\ntitle: Beta\n---\nbody\n");
+        ntropy_convert(vault)
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("encrypt");
+        dir
+    }
+
+    fn assert_rekey_finished(vault: &Path, listed: &[String]) {
+        assert_eq!(listed.len(), 2, "every note must open: {listed:?}");
+        for leftover in [
+            "migration.toml",
+            "identity.pub.staged",
+            "identity.age.staged",
+        ] {
+            assert!(!vault.join(".ntropy").join(leftover).exists(), "{leftover}");
+        }
+    }
+
+    #[test]
+    fn a_rekey_stopped_after_its_first_replacement_resumes() {
+        let dir = encrypted_vault_of_two_notes();
+        let vault = dir.path();
+        rekey_stopped_at(vault, "commit:1", &[]);
+
+        let listed = resume_rekey_and_list(vault);
+
+        assert_rekey_finished(vault, &listed);
+    }
+
+    #[test]
+    fn a_rekey_stopped_after_its_last_replacement_resumes() {
+        let dir = encrypted_vault_of_two_notes();
+        let vault = dir.path();
+        rekey_stopped_at(vault, "commit", &[]);
+
+        let listed = resume_rekey_and_list(vault);
+
+        assert_rekey_finished(vault, &listed);
+    }
+
+    #[test]
+    fn a_rekey_stopped_between_the_identity_files_resumes_without_any_key() {
+        let dir = encrypted_vault_of_two_notes();
+        let vault = dir.path();
+        rekey_stopped_at(vault, "keys", &[]);
+
+        // No passphrase file and no terminal: the hand-over needs neither.
+        let resumed = ntropy(vault)
+            .args(["-n", "vault", "rekey", "--resume", "-y"])
+            .output()
+            .expect("resume");
+        assert!(resumed.status.success(), "{resumed:?}");
+
+        let listed = ntropy_convert(vault)
+            .args(["search", "-p"])
+            .output()
+            .expect("search");
+        assert!(listed.status.success(), "{listed:?}");
+        assert_rekey_finished(
+            vault,
+            &String::from_utf8(listed.stdout)
+                .expect("utf-8")
+                .lines()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+        );
+    }
+
+    #[test]
+    fn a_resumed_rekey_asks_for_the_passphrase_the_interrupted_one_was_given() {
+        let dir = encrypted_vault_of_two_notes();
+        let vault = dir.path();
+        fs::write(vault.join("new-pw.txt"), "a different passphrase\n").expect("write");
+        rekey_stopped_at(vault, "verify", &["--new-passphrase-file", "new-pw.txt"]);
+
+        let wrong = ntropy_convert(vault)
+            .args(["vault", "rekey", "--resume", "-y"])
+            .output()
+            .expect("resume");
+        assert!(!wrong.status.success());
+        let message = String::from_utf8_lossy(&wrong.stderr);
+        assert!(message.contains("--new-passphrase-file"), "{message}");
+        assert!(vault.join(".ntropy/migration.toml").is_file());
+
+        let right = ntropy_convert(vault)
+            .args([
+                "vault",
+                "rekey",
+                "--resume",
+                "-y",
+                "--new-passphrase-file",
+                "new-pw.txt",
+            ])
+            .output()
+            .expect("resume");
+        assert!(right.status.success(), "{right:?}");
+
+        let mut opened = ntropy(vault);
+        opened.args(["-n", "--passphrase-file", "new-pw.txt", "search", "-p"]);
+        let listed = opened.output().expect("search");
+        assert!(listed.status.success(), "{listed:?}");
+    }
+
+    #[test]
+    fn a_stop_that_names_no_commit_step_is_ignored() {
+        let dir = encrypted_vault_of_two_notes();
+        let vault = dir.path();
+
+        let finished = ntropy_convert(vault)
+            .env("NTROPY_MIGRATION_FAIL_AFTER", "commit:no-such-step")
+            .args(["vault", "rekey", "-y"])
+            .output()
+            .expect("rekey");
+
+        assert!(finished.status.success(), "{finished:?}");
+    }
+
+    #[test]
+    fn decrypt_does_not_resume_a_rekey() {
+        // Finishing it as a decrypt would remove the key files its notes
+        // still need.
+        let dir = encrypted_vault_of_two_notes();
+        let vault = dir.path();
+        rekey_stopped_at(vault, "commit", &[]);
+
+        let refused = ntropy_convert(vault)
+            .args(["vault", "decrypt", "--resume", "-y"])
+            .output()
+            .expect("decrypt");
+
+        assert!(!refused.status.success());
+        let message = String::from_utf8_lossy(&refused.stderr);
+        assert!(message.contains("vault rekey --resume"), "{message}");
+        assert!(vault.join(".ntropy/identity.pub").is_file());
+        assert!(vault.join(".ntropy/identity.age.staged").is_file());
+    }
+
+    #[test]
+    fn rekey_does_not_resume_an_encrypt() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+        let mut interrupted = ntropy_convert(vault);
+        interrupted.env("NTROPY_MIGRATION_FAIL_AFTER", "produce");
+        interrupted
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("interrupted encrypt");
+
+        let refused = ntropy_convert(vault)
+            .args(["vault", "rekey", "--resume", "-y"])
+            .output()
+            .expect("rekey");
+
+        assert!(!refused.status.success());
+        let message = String::from_utf8_lossy(&refused.stderr);
+        assert!(message.contains("vault encrypt --resume"), "{message}");
+    }
+
+    #[test]
+    fn the_passphrase_stays_put_while_a_rekey_is_unfinished() {
+        let dir = encrypted_vault_of_two_notes();
+        let vault = dir.path();
+        rekey_stopped_at(vault, "verify", &[]);
+        fs::write(vault.join("new-pw.txt"), "a different passphrase\n").expect("write");
+
+        let refused = ntropy_convert(vault)
+            .args(["vault", "passphrase", "--new-passphrase-file", "new-pw.txt"])
+            .output()
+            .expect("passphrase");
+
+        assert!(!refused.status.success());
+        let message = String::from_utf8_lossy(&refused.stderr);
+        assert!(message.contains("vault rekey --resume"), "{message}");
+    }
+
     #[test]
     fn vault_passphrase_changes_the_wrapper_and_leaves_notes_alone() {
         let dir = convertible_vault();

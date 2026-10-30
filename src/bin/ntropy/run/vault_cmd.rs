@@ -127,6 +127,7 @@ fn encrypt(
             resume,
             marker: Marker::new(Operation::Encrypt, Some(recipient.as_str()), now()),
             hooks: hooks(global),
+            handover: None,
         },
     )
     .context("while encrypting the vault")?;
@@ -217,6 +218,7 @@ fn decrypt(
             resume,
             marker: Marker::new(Operation::Decrypt, None, now()),
             hooks: hooks(global),
+            handover: None,
         },
     )
     .context("while decrypting the vault")?;
@@ -252,6 +254,32 @@ fn rekey(
     ask(yes, interactive, "Re-encrypt every note to a new key?")?;
 
     let layout = vault.layout().clone();
+    let session = VaultSession::with_cipher(vault.clone(), Arc::new(PlaintextCipher));
+
+    // A rekey that reached the key hand-over has no use for the old key, and
+    // `identity.pub` may already name the new one, so this comes before
+    // anything reads either.
+    let interrupted = migrate::marker::read_at(&layout.migration_file())
+        .context("while checking for an interrupted conversion")?;
+    if resume && let Some(found) = &interrupted {
+        if found.operation != Operation::Rekey {
+            bail!(
+                "a `{}` is in progress; finish it with `{}`",
+                found.operation,
+                found.operation.resume_command()
+            );
+        }
+        if found.handover {
+            let old = migrate::rekey::finish_handover(&layout, hooks(global))
+                .context("while installing the new key")?;
+            if let Some(old) = old {
+                let _ = context.lock_recipient(&old);
+            }
+            println!("Finished installing the new key.");
+            return Ok(());
+        }
+    }
+
     let old_recipient = keys::read_recipient_at(&layout.identity_pub())?
         .ok_or_else(|| anyhow::anyhow!("this vault is not encrypted"))?;
     let old_identity = context.identity_for(&vault, &old_recipient)?;
@@ -259,48 +287,36 @@ fn rekey(
 
     // The new key needs a passphrase to be wrapped under. Naming one changes
     // it; leaving it out reuses whatever opened the old key, so the vault keeps
-    // its passphrase and only the key changes — which is what `rekey` is for.
+    // its passphrase and only the key changes, which is what `rekey` is for.
+    // A resume opens the key the interrupted run staged instead, which is
+    // wrapped under whatever passphrase that run was given.
     let label = vault.root().display().to_string();
-    let passphrase = match new_passphrase_file.as_deref() {
-        Some(path) => context.passphrase_from(Some(path), "the new passphrase")?,
-        None => context.new_passphrase(&label)?,
+    let staged = interrupted.as_ref().is_some_and(|found| found.staged);
+    let passphrase = if resume && staged {
+        context.staged_passphrase(new_passphrase_file.as_deref())?
+    } else {
+        match new_passphrase_file.as_deref() {
+            Some(path) => context.passphrase_from(Some(path), "the new passphrase")?,
+            None => context.new_passphrase(&label)?,
+        }
     };
-    let (new_identity, new_recipient) = age_io::generate_keypair();
-    let target = AgeCipher::new(new_recipient.clone(), Some(new_identity.clone()));
 
-    let mut marker = Marker::new(Operation::Rekey, Some(new_recipient.as_str()), now());
-    marker.source_recipient = Some(old_recipient.as_str());
-
-    let session = VaultSession::with_cipher(vault.clone(), Arc::new(PlaintextCipher));
-    let report = migrate::run(
-        &session,
-        &Migration {
-            operation: Operation::Rekey,
-            source: &source,
-            target: &target,
-            resume,
-            marker,
-            hooks: hooks(global),
-        },
-    )
+    let outcome = migrate::rekey::rekey(&migrate::rekey::Rekey {
+        session: &session,
+        source: &source,
+        source_recipient: &old_recipient,
+        passphrase: &passphrase,
+        resume,
+        hooks: hooks(global),
+        started: now(),
+    })
     .context("while rekeying the vault")?;
-
-    // Only now, with every note readable by the new key, does the vault stop
-    // recording the old one. Doing this earlier would leave an interrupted
-    // rekey unable to read its own sources.
-    keys::write_keypair_at(
-        &layout.identity_pub(),
-        &layout.identity_file(),
-        &new_identity,
-        &passphrase,
-    )
-    .context("while writing the new keypair")?;
     let _ = context.lock_recipient(&old_recipient);
 
     println!(
         "Re-encrypted {} to {}.",
-        plural(report.produced, "note", "notes"),
-        new_recipient.as_str()
+        plural(outcome.report.produced, "note", "notes"),
+        outcome.recipient.as_str()
     );
     Ok(())
 }
@@ -315,6 +331,18 @@ fn passphrase(
         bail!("this vault is not encrypted");
     }
     let layout = vault.layout().clone();
+
+    // The key a conversion is about to install carries the passphrase it was
+    // staged with, so a change made now would be undone when it lands.
+    if let Some(found) = migrate::marker::read_at(&layout.migration_file())
+        .context("while checking for an interrupted conversion")?
+    {
+        bail!(
+            "this vault has an interrupted `{}`; finish it with `{}` before changing the passphrase",
+            found.operation,
+            found.operation.resume_command()
+        );
+    }
 
     let old = context
         .existing_passphrase(&vault.root().display().to_string())
@@ -363,35 +391,71 @@ fn now() -> String {
 
 /// The hooks a run uses.
 ///
-/// Debug builds honour `NTROPY_MIGRATION_FAIL_AFTER=produce|verify` so the CLI
-/// contract tests can interrupt a conversion at a phase boundary through the
-/// real binary. Release builds have no such seam; `cargo test` builds in debug,
-/// so a release-profile test run simply skips those tests.
+/// Debug builds honour `NTROPY_MIGRATION_FAIL_AFTER` so the CLI contract tests
+/// can interrupt a conversion through the real binary. The value names where
+/// to stop: `produce`, `verify`, `commit:<n>` (after the n-th source was
+/// replaced), `commit` (after the last one) or `keys` (between the two
+/// identity files a rekey installs). Release builds have no such seam;
+/// `cargo test` builds in debug, so a release-profile test run simply skips
+/// those tests.
 #[cfg(debug_assertions)]
 fn hooks(_global: &GlobalArgs) -> &'static dyn migrate::MigrationHooks {
-    use ntropy::migrate::{MigrationHooks, Phase};
+    use ntropy::migrate::{MigrateError, MigrationHooks, Phase};
 
-    struct FailAfter(Phase);
-    impl MigrationHooks for FailAfter {
-        fn after_produce(&self) -> std::result::Result<(), migrate::MigrateError> {
-            match self.0 {
-                Phase::Produce => Err(migrate::MigrateError::Interrupted(Phase::Produce)),
-                _ => Ok(()),
+    enum Stop {
+        Produce,
+        Verify,
+        CommitStep(usize),
+        Commit,
+        Keys,
+    }
+
+    struct FailAt(Stop);
+
+    impl FailAt {
+        fn interrupt(&self, here: bool) -> std::result::Result<(), MigrateError> {
+            if !here {
+                return Ok(());
             }
-        }
-        fn after_verify(&self) -> std::result::Result<(), migrate::MigrateError> {
-            match self.0 {
-                Phase::Verify => Err(migrate::MigrateError::Interrupted(Phase::Verify)),
-                _ => Ok(()),
-            }
+            Err(MigrateError::Interrupted(match self.0 {
+                Stop::Produce => Phase::Produce,
+                Stop::Verify => Phase::Verify,
+                Stop::CommitStep(_) | Stop::Commit | Stop::Keys => Phase::Commit,
+            }))
         }
     }
 
-    match std::env::var("NTROPY_MIGRATION_FAIL_AFTER").as_deref() {
-        Ok("produce") => &FailAfter(Phase::Produce),
-        Ok("verify") => &FailAfter(Phase::Verify),
-        _ => &NoHooks,
+    impl MigrationHooks for FailAt {
+        fn after_produce(&self) -> std::result::Result<(), MigrateError> {
+            self.interrupt(matches!(self.0, Stop::Produce))
+        }
+        fn after_verify(&self) -> std::result::Result<(), MigrateError> {
+            self.interrupt(matches!(self.0, Stop::Verify))
+        }
+        fn after_commit_step(&self, replaced: usize) -> std::result::Result<(), MigrateError> {
+            self.interrupt(matches!(self.0, Stop::CommitStep(n) if n == replaced))
+        }
+        fn after_commit(&self) -> std::result::Result<(), MigrateError> {
+            self.interrupt(matches!(self.0, Stop::Commit))
+        }
+        fn between_key_files(&self) -> std::result::Result<(), MigrateError> {
+            self.interrupt(matches!(self.0, Stop::Keys))
+        }
     }
+
+    let stop = match std::env::var("NTROPY_MIGRATION_FAIL_AFTER").as_deref() {
+        Ok("produce") => Stop::Produce,
+        Ok("verify") => Stop::Verify,
+        Ok("commit") => Stop::Commit,
+        Ok("keys") => Stop::Keys,
+        Ok(other) => match other.strip_prefix("commit:").and_then(|n| n.parse().ok()) {
+            Some(replaced) => Stop::CommitStep(replaced),
+            None => return &NoHooks,
+        },
+        Err(_) => return &NoHooks,
+    };
+    // One small allocation, living as long as the process.
+    Box::leak(Box::new(FailAt(stop)))
 }
 
 #[cfg(not(debug_assertions))]

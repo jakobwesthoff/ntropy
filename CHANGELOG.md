@@ -9,6 +9,21 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Fixed
+
+- `ntropy vault rekey` no longer leaves notes encrypted to a key that exists
+  nowhere when it is interrupted. The new key is written to `.ntropy/`
+  (`identity.pub.staged`, `identity.age.staged`) before the first note is
+  replaced, `--resume` continues with that key instead of generating another,
+  and the old key is replaced only after the last note. A note whose source
+  was removed just before its replacement took its name is found again. A
+  rekey now refuses to start while a note does not open with the old key,
+  `vault decrypt --resume` and `vault encrypt --resume` refuse to finish a
+  rekey, and `vault passphrase` refuses while a conversion is unfinished
+  ([ADR 0080](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0080-a-rekey-stages-its-new-key-before-replacing-notes.md)).
+
 ## v2.4.0 - 2026-10-30
 
 ### Changed

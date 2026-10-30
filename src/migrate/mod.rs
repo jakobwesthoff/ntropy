@@ -25,14 +25,17 @@
 
 pub mod marker;
 pub mod plan;
+pub mod rekey;
 
 use std::path::{Path, PathBuf};
 
 pub use marker::{Marker, Operation};
 pub use plan::Conversion;
+pub use rekey::KeyHandover;
 
 use crate::cipher::{CipherError, NoteCipher};
 use crate::fsutil::{self, FsError};
+use crate::keys::KeyError;
 use crate::reconcile;
 use crate::scan::{self, ScanError};
 use crate::session::VaultSession;
@@ -63,6 +66,57 @@ pub enum MigrateError {
 
     #[error("`{}` records marker version {version}, which this ntropy does not understand", .path.display())]
     UnknownMarkerVersion { path: PathBuf, version: u32 },
+
+    #[error(transparent)]
+    Key(#[from] KeyError),
+
+    /// A rekey's marker does not name the key it is converting to.
+    #[error("the rekey marker records no valid target key")]
+    MarkerWithoutRecipient,
+
+    /// The key pair a rekey staged is not in `.ntropy/`.
+    #[error("the staged key is missing: {}; the rekey cannot continue", quoted_list(.0))]
+    StagedKeyMissing(Vec<PathBuf>),
+
+    /// The staged key is not the one the marker names.
+    #[error(
+        "`{}` holds the key `{found}`, but the rekey in progress converts to `{expected}`; \
+         nothing was changed",
+        .path.display()
+    )]
+    StagedKeyMismatch {
+        path: PathBuf,
+        expected: String,
+        found: String,
+    },
+
+    /// The staged identity did not open under the passphrase given.
+    #[error(
+        "`{}` could not be opened; it is wrapped under the passphrase the interrupted \
+         rekey was given (`--new-passphrase-file` if it had one)",
+        .path.display()
+    )]
+    StagedKeyLocked {
+        path: PathBuf,
+        #[source]
+        source: KeyError,
+    },
+
+    /// Notes that the key expected to open them does not open.
+    #[error(
+        "these notes cannot be opened with the key they should be encrypted to: {}; \
+         repair or remove them first",
+        quoted_list(.0)
+    )]
+    UnreadableNotes(Vec<PathBuf>),
+
+    /// Produced files whose note is gone, with no key on disk known to open them.
+    #[error(
+        "these files hold notes whose original is gone: {}; move them away, or remove them \
+         if their key is lost, then start the rekey again",
+        quoted_list(.0)
+    )]
+    StrandedNotes(Vec<PathBuf>),
 
     #[error("could not move the migration marker into place at `{}`", .path.display())]
     MarkerRename {
@@ -181,6 +235,24 @@ pub trait MigrationHooks {
     fn after_verify(&self) -> Result<(), MigrateError> {
         Ok(())
     }
+
+    /// Called after each source has been replaced, with the number replaced so
+    /// far.
+    fn after_commit_step(&self, _replaced: usize) -> Result<(), MigrateError> {
+        Ok(())
+    }
+
+    /// Called once every source has been replaced, before the new key is
+    /// installed.
+    fn after_commit(&self) -> Result<(), MigrateError> {
+        Ok(())
+    }
+
+    /// Called between the two files of the vault's identity, when a rekey
+    /// installs its new key.
+    fn between_key_files(&self) -> Result<(), MigrateError> {
+        Ok(())
+    }
 }
 
 /// The hooks an ordinary run uses: none.
@@ -223,6 +295,8 @@ pub struct Migration<'a> {
     pub marker: Marker,
     /// Where to stop, for crash-safety tests.
     pub hooks: &'a dyn MigrationHooks,
+    /// The new vault identity a rekey installs once every note is replaced.
+    pub handover: Option<KeyHandover>,
 }
 
 /// Run a whole-vault conversion.
@@ -251,6 +325,15 @@ pub fn run(
                 resume: found.operation.resume_command(),
             });
         }
+        // Finishing another operation's conversion would run it with the
+        // wrong ciphers: a decrypt resumed over a rekey removes the key
+        // files its notes still need.
+        (Some(found), true) if found.operation != migration.operation => {
+            return Err(MigrateError::AlreadyInProgress {
+                operation: found.operation,
+                resume: found.operation.resume_command(),
+            });
+        }
         _ => {}
     }
 
@@ -262,6 +345,13 @@ pub fn run(
     if existing.is_none() {
         preflight(&all_notes, migration.operation, migration.source)?;
         marker::write_at(&marker_path, &migration.marker)?;
+    }
+
+    // A rekey interrupted between removing a source and renaming its
+    // replacement holds that note under the temporary name only, where no scan
+    // finds it.
+    if migration.resume && migration.operation == Operation::Rekey {
+        rekey::adopt_orphans(&all_notes, migration.target)?;
     }
 
     let scan = scan::scan_notes_dir(&all_notes, migration.source)?;
@@ -311,6 +401,13 @@ pub fn run(
 
     migration.hooks.after_verify()?;
 
+    // The staged key is the only key the notes written from here on will have.
+    // It is checked while every source is still on disk, so a staged pair that
+    // changed since the marker was written costs nothing.
+    if let Some(handover) = &migration.handover {
+        handover.check_staged()?;
+    }
+
     // -------------------------------------------------------------------------
     // Commit: the point of no return
     // -------------------------------------------------------------------------
@@ -334,10 +431,26 @@ pub fn run(
             fsutil::remove_file(&conversion.source)?;
         }
         report.deleted += 1;
+        migration.hooks.after_commit_step(report.deleted)?;
     }
+
+    migration.hooks.after_commit()?;
 
     if migration.operation == Operation::Encrypt {
         (report.views_removed, report.views_skipped) = remove_view_trees(session)?;
+    }
+
+    // Every note is written to the new key now, which makes the old key the
+    // thing to retire. The marker stays until the new one is in place.
+    if let Some(handover) = &migration.handover {
+        let current = existing.as_ref().unwrap_or(&migration.marker);
+        handover.install(
+            &all_notes,
+            migration.target,
+            &marker_path,
+            current,
+            migration.hooks,
+        )?;
     }
 
     marker::remove_at(&marker_path)?;
@@ -551,6 +664,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect("encrypt")
@@ -615,6 +729,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(operation, None),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
     }
@@ -713,6 +828,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect("encrypt");
@@ -749,6 +865,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect("encrypt");
@@ -762,6 +879,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Decrypt, None),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect("decrypt");
@@ -786,6 +904,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect("encrypt");
@@ -813,6 +932,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Rekey, Some(new_recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect("rekey");
@@ -858,6 +978,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect("encrypt");
@@ -1024,6 +1145,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &FailAfter(Phase::Produce),
+                handover: None,
             },
         )
         .expect_err("interrupted");
@@ -1057,6 +1179,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &FailAfter(Phase::Verify),
+                handover: None,
             },
         )
         .expect_err("interrupted");
@@ -1086,6 +1209,7 @@ mod tests {
             resume,
             marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
             hooks: &NoHooks,
+            handover: None,
         };
 
         // One vault is interrupted and then resumed.
@@ -1093,6 +1217,7 @@ mod tests {
             &interrupted,
             &Migration {
                 hooks: &FailAfter(Phase::Produce),
+                handover: None,
                 ..migration(false)
             },
         )
@@ -1129,6 +1254,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &FailAfter(Phase::Produce),
+                handover: None,
             },
         )
         .expect_err("interrupted");
@@ -1146,6 +1272,7 @@ mod tests {
                 resume: true,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect("resume");
@@ -1173,6 +1300,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &FailAfter(Phase::Produce),
+                handover: None,
             },
         )
         .expect_err("interrupted");
@@ -1185,6 +1313,7 @@ mod tests {
                 resume: true,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect("first resume");
@@ -1200,6 +1329,7 @@ mod tests {
                 resume: true,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect_err("nothing left");
@@ -1219,6 +1349,7 @@ mod tests {
                 resume: true,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect_err("nothing to resume");
@@ -1238,6 +1369,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &FailAfter(Phase::Produce),
+                handover: None,
             },
         )
         .expect_err("interrupted");
@@ -1251,6 +1383,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect_err("already running");
@@ -1302,6 +1435,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &NoHooks,
+                handover: None,
             },
         )
         .expect_err("verification fails");
@@ -1331,6 +1465,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
                 hooks: &FailAfter(Phase::Produce),
+                handover: None,
             },
         )
         .expect_err("interrupted");
@@ -1367,6 +1502,7 @@ mod tests {
                 resume: false,
                 marker: marker_for(Operation::Rekey, Some(new_recipient.as_str())),
                 hooks: &FailAfter(Phase::Produce),
+                handover: None,
             },
         )
         .expect_err("interrupted");
@@ -1408,6 +1544,7 @@ mod tests {
             resume,
             marker: marker_for(Operation::Rekey, Some(new_recipient.as_str())),
             hooks,
+            handover: None,
         };
 
         run(session, &migration(false, &FailAfter(Phase::Verify))).expect_err("interrupted");
@@ -1421,5 +1558,41 @@ mod tests {
             "---\ntitle: Alpha\n---\nbody\n"
         );
         assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn a_resume_of_one_operation_refuses_the_marker_of_another() {
+        // `vault decrypt` removes the key files once it finishes, which a
+        // rekey in progress still needs for its notes.
+        let fixture = encrypted_vault();
+        let session = &fixture.session;
+        let rekeying = marker_for(Operation::Rekey, Some("age1fake".into()));
+        marker::write_at(&session.layout().migration_file(), &rekeying).expect("marker");
+
+        let error = run(
+            session,
+            &Migration {
+                operation: Operation::Decrypt,
+                source: session.cipher(),
+                target: &PlaintextCipher,
+                resume: true,
+                marker: marker_for(Operation::Decrypt, None),
+                hooks: &NoHooks,
+                handover: None,
+            },
+        )
+        .expect_err("refused");
+
+        assert!(matches!(
+            error,
+            MigrateError::AlreadyInProgress {
+                operation: Operation::Rekey,
+                ..
+            }
+        ));
+        assert_eq!(
+            marker::read_at(&session.layout().migration_file()).expect("read"),
+            Some(rekeying)
+        );
     }
 }

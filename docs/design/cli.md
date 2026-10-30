@@ -464,7 +464,10 @@ convert a vault's storage; `rekey` re-encrypts every note to a fresh keypair;
 
 `rekey` replaces the key and keeps the passphrase: whatever opened the old key
 wraps the new one. `--new-passphrase-file` changes that too, using the same
-flag name `vault passphrase` takes for the same purpose.
+flag name `vault passphrase` takes for the same purpose. An interrupted
+`rekey` is finished with `--resume`, which continues with the key the
+interrupted run staged in `.ntropy/` and asks for the passphrase that key was
+wrapped under (`--new-passphrase-file` if the run had one).
 
 ### `lsp`
 

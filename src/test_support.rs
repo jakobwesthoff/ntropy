@@ -163,6 +163,21 @@ pub(crate) mod encrypted {
         }
     }
 
+    /// [`encrypted_vault`] with the identity also wrapped under `passphrase`
+    /// in `.ntropy/identity.age`, as `vault encrypt` leaves it.
+    pub(crate) fn encrypted_vault_with_wrapped_identity(passphrase: &str) -> EncryptedVault {
+        let vault = encrypted_vault();
+        let layout = vault.session.layout();
+        crate::keys::write_keypair_at(
+            &layout.identity_pub(),
+            &layout.identity_file(),
+            &vault.identity,
+            &crate::cipher::Passphrase::new(passphrase),
+        )
+        .expect("write the vault keypair");
+        vault
+    }
+
     /// Encrypt `content` into `all-notes/<ulid>.age` and return its path.
     pub(crate) fn write_encrypted_note(
         session: &VaultSession,

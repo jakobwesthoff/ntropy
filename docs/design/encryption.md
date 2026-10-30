@@ -151,9 +151,10 @@ group under a `vault` namespace:
 - `vault rekey` generates a fresh keypair and re-encrypts every note to it,
   for a suspected identity compromise. It requires the old identity. The
   passphrase is unchanged unless `--new-passphrase-file` names another, since
-  the point of a rekey is the key rather than the passphrase; the new keypair
-  is written only once every note has been converted and verified, so an
-  interrupted rekey can still read its own sources.
+  the point of a rekey is the key rather than the passphrase. The new keypair
+  is staged in `.ntropy/` before the first note is replaced and installed
+  after the last, so at every point of an interrupted rekey each note opens
+  with a key that is on disk.
 
 ### Migration crash safety
 
@@ -171,11 +172,14 @@ step:
 3. Each produced file is verified by decrypting it and comparing against its
    source. Only when every note verifies does the point of no return arrive:
    the sources are deleted (for `encrypt`, the view trees as well, since
-   views are disabled in encrypted vaults) and the marker is removed.
+   views are disabled in encrypted vaults) and the marker is removed. A
+   rekey installs its new keypair between the deletion and the removal of the
+   marker.
 
-A crash anywhere before the final deletion leaves both forms on disk, and
-`--resume` is idempotent: produce whatever lacks a verified target, then
-finish the deletion.
+A crash before the first deletion leaves both forms on disk, and `--resume`
+is idempotent: produce whatever lacks a verified target, then finish the
+deletion. A rekey replaces its notes one at a time, and what a crash leaves
+from then on is described under "Rekey key staging".
 
 A fresh conversion refuses to start, before it writes the marker, while two
 notes share a ULID, as both would be written to the one target their ULID
@@ -184,6 +188,54 @@ names, or while a file already sits at a target, as it would be overwritten
 its own marks a vault as encrypted. The error names the files and says to run
 `reconcile` first or, for a stray `.age` file in a plaintext vault, which
 `reconcile` leaves alone, to move it away.
+
+### Rekey key staging
+
+Both ends of a rekey are encrypted, and every note it writes opens only with
+the new key. `vault rekey` therefore generates that key, wraps it under the
+new passphrase, and writes it as `.ntropy/identity.pub.staged` and
+`.ntropy/identity.age.staged`, flushed to disk, before it writes the marker.
+The marker records `staged = true` and the new recipient. While notes are
+replaced, `identity.pub` and `identity.age` stay as they are: the old key
+opens the notes not yet replaced and the staged key opens the replaced ones.
+
+`--resume` unwraps the staged identity instead of generating a key. The
+passphrase is the one the interrupted run was given: the file named by
+`--new-passphrase-file` if it had one, otherwise the passphrase passed or
+typed. A resume stops when the staged recipient is not the one the marker
+names, and the run checks the same before the first source is replaced.
+Nothing locks a vault, so two rekeys running at once are not supported.
+
+Once the last source is replaced, every note must open with the new key,
+otherwise the rekey stops while the old key is still the vault's identity.
+The marker is then rewritten with `handover = true` and the staged pair is
+installed: `identity.age` first, then `identity.pub`, then the staged files
+are removed, then the marker. The wrapped identity goes first because it is
+the file that opens the notes. Each step skips what is already done, and a
+resume that finds `handover = true` finishes them without asking for any key.
+
+What a crash leaves:
+
+- Before the marker: a staged pair and no marker. The next `vault rekey`
+  replaces the pair, unless a produced `.rekey` file without its note sits
+  beside it. That file may hold a note only the staged key opens, so the
+  command refuses and names it.
+- While notes are replaced: the old and the staged key are both on disk, and
+  each note opens with one of them. A source removed before its replacement
+  took its name leaves the note as `<ulid>.age.rekey`; the resume reads it
+  with the staged key and renames it into place.
+- During the hand-over: every note opens with the staged key, which is
+  `identity.age` or `identity.age.staged`.
+
+A marker without `staged` comes from a rekey that kept its new key in memory.
+A resume of it stages a new key only when every note still opens with the old
+key and no produced file lacks its note. Otherwise it stops and names the
+files, since no key on disk opens them.
+
+A fresh rekey refuses to start while a note does not open with the old key,
+as that note would be left behind and lose its key with the old identity.
+`vault passphrase` refuses while a conversion is unfinished; during a rekey,
+the staged identity would undo the change when it is installed.
 
 The `vault encrypt` completion report always states that plaintext revisions
 previously recorded in git or a sync provider's version history remain
@@ -303,7 +355,8 @@ style:
   `--identity` with the test identity file, exercising the exact code path
   headless users run while keeping tests free of keychain state.
 - **Migration tests interrupt on purpose.** Crash-safety tests inject a
-  failure between the produce, verify, and delete phases, snapshot the
+  failure between the produce, verify, and delete phases, after any number of
+  replaced notes, and between the two identity files of a rekey; snapshot the
   resulting directory state (marker present, both file forms on disk), and
   assert that `--resume` converges to the same result as an uninterrupted
   run.
@@ -317,16 +370,18 @@ version = 1
 operation = "encrypt"          # encrypt | decrypt | rekey
 recipient = "age1..."          # the target key; absent for decrypt
 source_recipient = "age1..."   # rekey only: the key the sources still use
+staged = true                  # rekey only: the new keypair is staged
+handover = true                # rekey only: every note is replaced
 started = "2026-08-06T12:00:00Z"
 ```
 
 `version` lets a future change to the file's shape be told apart from one this
 version wrote. `source_recipient` is what makes a rekey resumable: both ends of
 a rekey are encrypted, so a resume has to know which key still opens the
-untouched sources. For the same reason a rekey writes the new keypair only
-after every note has been converted and verified — recording it earlier would
-leave an interrupted rekey holding sources its own vault no longer names the
-key for.
+untouched sources. `staged` and `handover` are written only when true.
+`staged` tells a missing staged pair, which is damage, from a marker that
+predates staging. `handover` tells a resume that the old key opens nothing any
+more, so it must not ask for it.
 
 A malformed marker is an error rather than a silent "no conversion": a
 half-written file means one *was* running, and treating it as absent would let

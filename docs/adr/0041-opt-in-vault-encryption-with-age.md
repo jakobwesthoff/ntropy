@@ -6,6 +6,8 @@ Date: 2026-08-06
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0080](0080-a-rekey-stages-its-new-key-before-replacing-notes.md).
+
 Interprets the headless-library rule of
 [ADR 0013](0013-library-binary-split-with-thiserror-and-anyhow.md) the same
 way [ADR 0038](0038-pluggable-rendering-engine-with-pandoc-and-typst.md) does,
