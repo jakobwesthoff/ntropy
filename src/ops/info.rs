@@ -15,6 +15,7 @@ use std::path::Path;
 use super::tags::TagCount;
 use crate::config::PerVaultConfig;
 use crate::error::Result;
+use crate::note::filename::has_md_extension;
 use crate::scan;
 use crate::session::VaultSession;
 
@@ -104,8 +105,11 @@ pub fn vault_stats(session: &VaultSession, top_n: usize) -> Result<VaultStats> {
     })
 }
 
-/// The sorted stems of `*.md` files directly inside `templates_dir` (empty when
-/// it is absent), e.g. `default.md` -> `default`.
+/// The sorted stems of the `*.md` files directly inside `templates_dir` (empty
+/// when it is absent), e.g. `default.md` -> `default`.
+///
+/// Only what `new --template <name>` can load on any filesystem counts: a
+/// file (or a link to one) whose extension is lowercase `md`.
 fn template_names(templates_dir: &Path) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(templates_dir) else {
         return Vec::new();
@@ -113,10 +117,7 @@ fn template_names(templates_dir: &Path) -> Vec<String> {
     let mut names: Vec<String> = entries
         .filter_map(|entry| entry.ok())
         .map(|entry| entry.path())
-        .filter(|path| {
-            path.extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("md"))
-        })
+        .filter(|path| has_md_extension(path) && path.is_file())
         .filter_map(|path| path.file_stem().map(|s| s.to_string_lossy().into_owned()))
         .collect();
     names.sort();
@@ -162,6 +163,31 @@ mod tests {
         assert_eq!(stats.top_tags[1].tag, "daily");
         assert!(stats.oldest_date.is_some());
         assert!(stats.newest_date.is_some());
+    }
+
+    #[test]
+    fn template_names_skip_an_uppercase_extension() {
+        // `new --template Standup` opens `Standup.md`, which only a
+        // case-insensitive filesystem resolves to `Standup.MD`.
+        let (_g, session) = vault_with_view();
+        let templates = session.layout().templates_dir();
+        std::fs::create_dir_all(&templates).expect("templates dir");
+        std::fs::write(templates.join("meeting.md"), "x").expect("meeting template");
+        std::fs::write(templates.join("Standup.MD"), "x").expect("uppercase file");
+
+        assert_eq!(template_names(&templates), vec!["meeting"]);
+    }
+
+    #[test]
+    fn template_names_skip_a_directory_named_like_a_template() {
+        // A directory cannot be read as a template, so listing it would
+        // advertise a name `new --template` fails on.
+        let (_g, session) = vault_with_view();
+        let templates = session.layout().templates_dir();
+        std::fs::create_dir_all(templates.join("drafts.md")).expect("directory");
+        std::fs::write(templates.join("meeting.md"), "x").expect("meeting template");
+
+        assert_eq!(template_names(&templates), vec!["meeting"]);
     }
 
     #[test]

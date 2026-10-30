@@ -16,11 +16,23 @@
 //! not appear in a synced directory. The slug still exists on a parsed note;
 //! it is derived from the decrypted title instead of read from the name.
 
+use std::path::Path;
+
 use crate::id::{Id, ULID_LEN};
 use crate::text::slug;
 
 /// The plaintext note file extension.
 pub const MD_EXT: &str = ".md";
+
+/// Whether `path` names a Markdown file: its extension is exactly `md`.
+///
+/// Lowercase only, the way ntropy writes notes and the way a template name
+/// becomes `<name>.md`, so the answer does not depend on whether the
+/// filesystem folds case.
+pub fn has_md_extension(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext == MD_EXT.trim_start_matches('.'))
+}
 /// The encrypted note file extension.
 pub const AGE_EXT: &str = ".age";
 
@@ -347,6 +359,17 @@ mod tests {
         // and the prefix fails as a ULID.
         let name = format!("{}-x.md", "é".repeat(13));
         assert!(matches!(parse(&name), Err(FilenameError::Id { .. })));
+    }
+
+    #[test]
+    fn has_md_extension_accepts_only_lowercase_md() {
+        assert!(has_md_extension(Path::new("templates/meeting.md")));
+        assert!(!has_md_extension(Path::new("templates/Meeting.MD")));
+        assert!(!has_md_extension(Path::new("templates/Meeting.Md")));
+        assert!(!has_md_extension(Path::new("notes.markdown")));
+        assert!(!has_md_extension(Path::new("README")));
+        // A dotfile's name is its stem, not an extension.
+        assert!(!has_md_extension(Path::new(".md")));
     }
 
     #[test]

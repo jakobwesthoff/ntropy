@@ -28,6 +28,7 @@ use ignore::{WalkBuilder, WalkState};
 
 use crate::cipher::NoteCipher;
 use crate::note::Note;
+use crate::note::filename::has_md_extension;
 
 /// The outcome of scanning a vault's `all-notes/` directory.
 #[derive(Debug, Default)]
@@ -120,7 +121,7 @@ pub fn scan_notes_dir(all_notes_dir: &Path, cipher: &dyn NoteCipher) -> Result<S
 
                 let path = entry.path();
                 if !has_extension(path, note_ext) {
-                    if warn_about_markdown && has_extension(path, "md") {
+                    if warn_about_markdown && has_md_extension(path) {
                         warnings.lock().expect("warnings lock").push(ScanWarning {
                             path: path.to_path_buf(),
                             message:
@@ -161,7 +162,8 @@ pub fn scan_notes_dir(all_notes_dir: &Path, cipher: &dyn NoteCipher) -> Result<S
     Ok(Scan { notes, warnings })
 }
 
-/// Whether a path carries `extension` (case-sensitive, as on disk).
+/// Whether a path carries `extension`, compared exactly: a plaintext vault's
+/// `md` is the same rule as [`has_md_extension`].
 fn has_extension(path: &Path, extension: &str) -> bool {
     path.extension().and_then(|e| e.to_str()) == Some(extension)
 }
@@ -431,6 +433,22 @@ mod tests {
         assert_eq!(scan.notes.len(), 1);
         assert_eq!(scan.notes[0].title, "Note");
         // The nested `.md` is never traversed, and resources raise no warnings.
+        assert!(!scan.has_warnings());
+    }
+
+    #[test]
+    fn an_uppercase_md_note_is_a_resource() {
+        // The note extension is lowercase `md`; anything else in
+        // `all-notes/` is a resource, ignored without a warning (ADR 0019).
+        let (_guard, notes) = temp_notes_dir();
+        write(
+            &notes,
+            &format!("{ULID_A}-shouting.MD"),
+            "---\ntitle: Shouting\n---\n",
+        );
+
+        let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
+        assert!(scan.notes.is_empty());
         assert!(!scan.has_warnings());
     }
 

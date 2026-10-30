@@ -30,9 +30,9 @@ path; passing both a path and `--vault` to `init` is rejected as a conflict:
     └── templates/        # default.md and today.md, plus your own
 ```
 
-Only top-level `*.md` files in `all-notes/` are notes. Subdirectories and
-non-`.md` files there are ignored, so images and attachments can live next to
-the notes.
+Only top-level `*.md` files in `all-notes/` are notes, extension in lowercase.
+Subdirectories and all other files there, `.MD` files included, are ignored,
+so images and attachments can live next to the notes.
 
 ## How the active vault is resolved
 

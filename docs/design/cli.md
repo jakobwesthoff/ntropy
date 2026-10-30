@@ -354,8 +354,12 @@ Report the active vault and which rule resolved it (`--vault`, `$NTROPY_VAULT`,
 a `.ntropy-vault` pointer, the current-directory walk-up, or the global
 default), the configured global default vault, and vault statistics: note, tag,
 view and template counts, the number of notes skipped with warnings, the
-creation-date span, the most-used tags, and the template names. Unlike the data
-commands this is a human report, printed the same way piped or on a TTY.
+creation-date span, the most-used tags, and the template names. A template
+name is the stem of a file in `.ntropy/templates/` with the lowercase extension
+`.md`, the file `new --template <name>` opens. On a case-insensitive
+filesystem the OS also resolves that name to a file such as `Meeting.MD`,
+which `info` does not list. Unlike the data commands this is a human report,
+printed the same way piped or on a TTY.
 
 `--print`/`-p` replaces the report with the active vault's path alone and skips
 the scan behind the statistics. Resolution canonicalizes the root, so the path

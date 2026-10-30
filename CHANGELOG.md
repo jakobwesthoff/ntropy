@@ -39,6 +39,11 @@ and this project adheres to
   and renames it into place. If ntropy is killed or crashes during the
   write, the old `config.toml` stays intact instead of being left truncated.
   The rewritten file gets the default permissions of a new file.
+- `ntropy info` lists only templates with a lowercase `.md` extension, so
+  every name it lists loads with `ntropy new --template` on any filesystem.
+  A `Meeting.MD` was listed as `Meeting`, which `new --template Meeting`
+  could not find on a case-sensitive filesystem, and a directory named like
+  a template was listed although it cannot be loaded.
 
 ## v2.2.0 - 2026-10-10
 

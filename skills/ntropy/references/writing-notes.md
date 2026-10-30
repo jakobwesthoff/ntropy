@@ -190,7 +190,9 @@ alone). DO NOT link by title or by relative folder paths into views.
 ## Templates
 
 `ntropy new` stamps a note from a template in `<vault>/.ntropy/templates/`
-unless `--empty` says otherwise; the filename minus `.md` is the template name:
+unless `--empty` says otherwise; the filename minus `.md` is the template name.
+Name template files with a lowercase `.md`: `ntropy info` lists no other file
+as a template, and `new --template` opens `<name>.md`:
 
 ```bash
 ntropy new --print Standup --template meeting   # uses .ntropy/templates/meeting.md

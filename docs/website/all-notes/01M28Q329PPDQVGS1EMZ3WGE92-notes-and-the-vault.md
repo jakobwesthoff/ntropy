@@ -35,9 +35,10 @@ A vault is an ordinary directory with a few well-known children:
 └── .ntropy/          # config, templates, and themes
 ```
 
-Only top-level `*.md` files in `all-notes/` are notes. ntropy leaves
-subdirectories and non-`.md` files alone, so images and attachments can sit
-right next to your notes without being adopted as notes.
+Only top-level `*.md` files in `all-notes/` are notes, with the extension in
+lowercase. ntropy leaves subdirectories and all other files alone, including a
+`.MD` file, so images and attachments can sit right next to your notes without
+being adopted as notes.
 
 A vault can also store its notes [encrypted at
 rest](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md), in which case

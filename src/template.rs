@@ -19,6 +19,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::note::filename::MD_EXT;
 use crate::note::frontmatter;
 use crate::vault::seed;
 
@@ -84,7 +85,7 @@ pub fn load_named(templates_dir: &Path, name: &str) -> Result<String, TemplateEr
             name: name.to_string(),
         });
     }
-    let path = templates_dir.join(format!("{name}.md"));
+    let path = templates_dir.join(format!("{name}{MD_EXT}"));
     match std::fs::read_to_string(&path) {
         Ok(text) => Ok(text),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(TemplateError::NotFound {
