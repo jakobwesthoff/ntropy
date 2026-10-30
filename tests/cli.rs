@@ -4409,6 +4409,76 @@ fn reconcile_renames_and_reports() {
     );
 }
 
+// ---- Punctuation in slugs and tags ----
+
+/// Run `command` and return its stdout, failing the test when it exits non-zero.
+fn stdout_of(command: &mut Command) -> String {
+    let output = command.output().expect("run ntropy");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("utf-8 stdout")
+}
+
+#[test]
+fn reconcile_renames_a_note_whose_title_holds_a_dot() {
+    let dir = setup_vault();
+    // The filename carries the slug the dot-dropping rule produced.
+    write_note(
+        dir.path(),
+        ULID_A,
+        "nodejs-notes",
+        "---\ntitle: Node.js notes\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "linker",
+        &format!("---\ntitle: Linker\n---\n[notes]({ULID_A}-nodejs-notes.md)\n"),
+    );
+
+    stdout_of(ntropy(dir.path()).args(["-n", "reconcile"]));
+
+    let notes = dir.path().join("all-notes");
+    assert!(notes.join(format!("{ULID_A}-node-js-notes.md")).exists());
+    assert!(!notes.join(format!("{ULID_A}-nodejs-notes.md")).exists());
+    let linker = fs::read_to_string(notes.join(format!("{ULID_B}-linker.md"))).expect("linker");
+    assert!(linker.contains(&format!("[notes]({ULID_A}-node-js-notes.md)")));
+}
+
+#[test]
+fn new_names_the_file_after_a_title_with_a_dot() {
+    let dir = setup_vault();
+    let printed = stdout_of(ntropy(dir.path()).args(["-n", "new", "Node.js", "--print"]));
+    assert!(printed.trim_end().ends_with("-node-js.md"), "{printed}");
+}
+
+#[test]
+fn a_view_leaf_is_named_after_the_replaced_slug() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "node-js",
+        "---\ntitle: Node.js\ntags: [x]\n---\nbody\n",
+    );
+    stdout_of(ntropy(dir.path()).args(["-n", "reconcile"]));
+    let leaves: Vec<String> = fs::read_dir(dir.path().join("by-tag/x"))
+        .expect("group dir")
+        .map(|entry| {
+            entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(leaves.len(), 1);
+    assert!(leaves[0].ends_with("-node-js.md"), "{leaves:?}");
+}
+
 /// A note titled `Plan` under a drifted name, and a file without frontmatter
 /// holding the name `<ULID_A>-plan.md` the note would be renamed to. The scan
 /// skips that file, so nothing but the rename itself stands in the way.

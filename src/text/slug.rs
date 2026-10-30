@@ -59,12 +59,19 @@ pub fn normalize_segment(input: &str) -> String {
         }
     }
 
-    // Step 4: drop anything outside `[a-z0-9-]`. Punctuation is removed, not
-    // replaced, so `C++` becomes `c` and `a&b` (spaces already handled) keeps
-    // its surrounding separators.
+    // Step 4: replace every ASCII character outside `[a-z0-9-]` with `-`.
+    // Replacing instead of dropping keeps `node.js` apart from `nodejs` and
+    // stops `a&b` from fusing into `ab`; step 5 collapses the resulting runs.
+    // Non-ASCII characters never get here: step 1 already mapped or dropped them.
     let filtered: String = spaced
         .chars()
-        .filter(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || *ch == '-')
+        .map(|ch| {
+            if ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' {
+                ch
+            } else {
+                '-'
+            }
+        })
         .collect();
 
     // Step 5: collapse consecutive `-` and trim leading/trailing `-`.
@@ -176,9 +183,32 @@ mod tests {
     }
 
     #[test]
-    fn punctuation_is_removed_not_replaced() {
+    fn punctuation_runs_collapse_to_one_dash() {
         assert_eq!(slugify("C++ vs. Rust!"), "c-vs-rust");
         assert_eq!(slugify("a & b"), "a-b");
+    }
+
+    #[test]
+    fn a_dot_becomes_a_dash() {
+        assert_eq!(slugify("Node.js notes"), "node-js-notes");
+    }
+
+    #[test]
+    fn an_apostrophe_becomes_a_dash() {
+        assert_eq!(slugify("Don't Panic"), "don-t-panic");
+    }
+
+    #[test]
+    fn an_underscore_and_an_ampersand_become_dashes() {
+        assert_eq!(slugify("a&b_c"), "a-b-c");
+    }
+
+    #[test]
+    fn unmapped_non_ascii_letters_stay_dropped() {
+        // Only ASCII characters are replaced; letters the transliteration
+        // does not know vanish without splitting the word around them.
+        assert_eq!(slugify("Gdańsk"), "gdask");
+        assert_eq!(slugify("a日b"), "ab");
     }
 
     #[test]

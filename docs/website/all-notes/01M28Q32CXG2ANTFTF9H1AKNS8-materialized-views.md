@@ -54,14 +54,14 @@ A view's name is its directory, and ntropy removes anything in that directory th
 
 ```bash
 $ ntropy view add By_Tag --field tags
-error: while adding the view: `By_Tag` is not a valid view name: the segment `By_Tag` may only hold lowercase letters, digits and single dashes, at most 72 characters (try `bytag`)
+error: while adding the view: `By_Tag` is not a valid view name: the segment `By_Tag` may only hold lowercase letters, digits and single dashes, at most 72 characters (try `by-tag`)
 ```
 
 If `config.toml` holds a view whose name breaks these rules, for example one added with an older ntropy that accepted `By_Tag` or `my.view`, ntropy leaves that view alone. Every command that syncs views prints a warning for it, the other views carry on, and `--strict` makes `reconcile` and `site` fail on it. Its old directory stays on disk and stays ignored by git. To fix it, remove it and add it again under a valid name, then delete the old directory:
 
 ```bash
 ntropy view remove By_Tag
-ntropy view add bytag --field tags
+ntropy view add by-tag --field tags
 rm -r By_Tag
 ```
 

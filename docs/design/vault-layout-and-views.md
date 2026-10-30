@@ -75,6 +75,9 @@ Each note in `all-notes/` is named:
   exactly one representation and nothing to keep in sync.
 - `<slug>` is a normalized form of the note's title. The canonical title lives
   in frontmatter `title` (required); the slug is derived from it and is lossy.
+  Every ASCII character outside `[a-z0-9-]` becomes a `-` (runs collapse), so
+  `Node.js notes` is `node-js-notes`
+  ([ADR 0077](../adr/0077-punctuation-in-slugs-and-tags.md)).
 
 Because the ULID leads the filename and is millisecond-precise, a plain lexical
 sort of `all-notes/` is chronological. The readable creation date is not stored
@@ -164,7 +167,7 @@ directory of their own inside the vault:
 the name only; a view's grouping values are normalized separately (above).
 
 `view add` refuses an invalid name and suggests the nearest valid one
-(`By_Tag` becomes `bytag`). A configured view whose name is invalid is skipped
+(`By_Tag` becomes `by-tag`). A configured view whose name is invalid is skipped
 with a warning by every command that syncs views or exports a site, and the
 other views carry on; `--strict` turns that warning into a failure of
 `reconcile` and `site`. `view list` and `view remove` work on any configured

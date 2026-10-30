@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn suggests_the_normalized_name() {
         let suggest = |raw| ViewName::suggest(raw).map(|name| name.to_string());
-        assert_eq!(suggest("By_Tag").as_deref(), Some("bytag"));
+        assert_eq!(suggest("By_Tag").as_deref(), Some("by-tag"));
         assert_eq!(suggest("Area/Work").as_deref(), Some("area/work"));
         assert_eq!(suggest("area work").as_deref(), Some("area-work"));
         assert_eq!(suggest("/etc/").as_deref(), Some("etc"));

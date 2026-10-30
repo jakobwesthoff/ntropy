@@ -258,7 +258,8 @@ inter-note links get the ULID-based refresh treatment.
 ## Slug and normalization facts
 
 Knowing what filenames will look like helps you predict paths: slugs are
-lowercase ASCII with `-` for whitespace, German-aware transliteration
+lowercase ASCII with `-` for whitespace and for every other ASCII character
+outside `a-z0-9-` (`Node.js` becomes `node-js`), German-aware transliteration
 (`ä→ae`, `ö→oe`, `ü→ue`, `ß→ss`), other non-ASCII best-effort transliterated or
 dropped, capped near 72 characters, and `untitled` when nothing survives. The
 full title always remains in frontmatter, so never shorten a title for the

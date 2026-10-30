@@ -203,7 +203,7 @@ fn view_add_suggests_a_valid_name() {
     let output = run(ntropy(&vault).args(["view", "add", "By_Tag", "--field", "tags"]));
     assert!(!output.status.success());
     assert!(
-        stderr(&output).contains("(try `bytag`)"),
+        stderr(&output).contains("(try `by-tag`)"),
         "{}",
         stderr(&output)
     );

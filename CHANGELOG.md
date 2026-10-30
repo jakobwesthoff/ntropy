@@ -26,6 +26,13 @@ change in any release
   query stays one, and beside other arguments it is grouped:
   `search tag:work and 'status:open or status:new'` now means
   `tag:work and (status:open or status:new)`. Blank arguments are ignored.
+- Slugs replace every ASCII character outside `a-z`, `0-9` and `-` with a dash
+  instead of dropping it, so `Node.js notes` is filed as
+  `<ulid>-node-js-notes.md`, not `<ulid>-nodejs-notes.md`, and `a&b` no longer
+  fuses into `ab`. The first `reconcile` renames existing notes whose titles
+  hold such characters and relinks the notes that point at them. The default
+  `render` file name and the site's note page URL follow the new filename
+  ([ADR 0077](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0077-punctuation-in-slugs-and-tags.md)).
 
 ### Fixed
 

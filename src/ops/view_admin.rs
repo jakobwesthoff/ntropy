@@ -347,7 +347,7 @@ mod tests {
         assert_eq!(
             err.to_string(),
             "`By_Tag` is not a valid view name: the segment `By_Tag` may only hold \
-             lowercase letters, digits and single dashes, at most 72 characters (try `bytag`)"
+             lowercase letters, digits and single dashes, at most 72 characters (try `by-tag`)"
         );
         let err = add_view(&v, "all-notes", "tags").expect_err("invalid");
         assert_eq!(

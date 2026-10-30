@@ -63,10 +63,12 @@ untouched.
 
 Each note in `all-notes/` is named `<ulid>-<slug>.md`. The ULID is 26
 characters, generated when the note is created, and is the note's identity.
-The slug is a lowercased, ASCII form of the title, capped at 72 characters;
-a title that normalizes to nothing gets the slug `untitled`. Because the ULID
-leads and is millisecond-precise, a plain lexical sort of `all-notes/` is
-chronological.
+The slug is a lowercased, ASCII form of the title, capped at 72 characters.
+Every ASCII character other than a letter, a digit or a dash, a dot or an
+apostrophe for example, becomes a dash, so `Node.js notes` is filed as
+`node-js-notes`. A title that normalizes to nothing gets the slug
+`untitled`. Because the ULID leads and is millisecond-precise, a plain lexical
+sort of `all-notes/` is chronological.
 
 When you change a title, the slug drifts. `ntropy reconcile` renames the file
 to match again, and ntropy does the same for a single note when you close the

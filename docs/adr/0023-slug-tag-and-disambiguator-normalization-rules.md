@@ -8,6 +8,8 @@ Accepted
 
 Amended 2026-10-30 by [ADR 0068](0068-unique-view-leaf-names-per-directory-ignoring-case.md).
 
+Amended 2026-10-30 by [ADR 0077](0077-punctuation-in-slugs-and-tags.md).
+
 ## Context
 
 Earlier decisions left slug normalization (ADR 0004), tag normalization (ADR

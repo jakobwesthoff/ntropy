@@ -613,6 +613,27 @@ mod tests {
     }
 
     #[test]
+    fn reconcile_renames_a_note_whose_slug_dropped_a_dot() {
+        let (_guard, session) = vault_with_view();
+        let old = write_note(
+            &session,
+            &format!("{ULID}-nodejs-notes.md"),
+            "---\ntitle: Node.js notes\n---\nbody\n",
+        );
+
+        let report = reconcile(&session).expect("reconcile");
+        assert_eq!(report.renamed.len(), 1);
+        assert!(!old.exists());
+        assert!(
+            session
+                .layout()
+                .all_notes()
+                .join(format!("{ULID}-node-js-notes.md"))
+                .exists()
+        );
+    }
+
+    #[test]
     fn reconcile_leaves_aligned_files() {
         let (_guard, session) = vault_with_view();
         write_note(
