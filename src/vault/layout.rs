@@ -47,6 +47,10 @@ pub const README_FILE: &str = "README.md";
 pub const IDENTITY_PUB_FILE: &str = "identity.pub";
 /// The passphrase-wrapped vault identity, inside [`NTROPY_DIR`].
 pub const IDENTITY_FILE: &str = "identity.age";
+/// The new recipient a rekey has staged, inside [`NTROPY_DIR`] (ADR 0080).
+pub const IDENTITY_PUB_STAGED_FILE: &str = "identity.pub.staged";
+/// The new wrapped identity a rekey has staged, inside [`NTROPY_DIR`] (ADR 0080).
+pub const IDENTITY_STAGED_FILE: &str = "identity.age.staged";
 /// The marker recording a whole-vault conversion in progress, inside
 /// [`NTROPY_DIR`].
 pub const MIGRATION_FILE: &str = "migration.toml";
@@ -181,6 +185,18 @@ impl Layout {
         self.ntropy_dir().join(IDENTITY_FILE)
     }
 
+    /// `<root>/.ntropy/identity.pub.staged`, the recipient of the keypair a
+    /// rekey is about to install.
+    pub fn identity_pub_staged(&self) -> PathBuf {
+        self.ntropy_dir().join(IDENTITY_PUB_STAGED_FILE)
+    }
+
+    /// `<root>/.ntropy/identity.age.staged`, the wrapped identity of the
+    /// keypair a rekey is about to install.
+    pub fn identity_file_staged(&self) -> PathBuf {
+        self.ntropy_dir().join(IDENTITY_STAGED_FILE)
+    }
+
     /// `<root>/.ntropy/migration.toml`, present only while a whole-vault
     /// conversion is under way.
     pub fn migration_file(&self) -> PathBuf {
@@ -278,6 +294,14 @@ mod tests {
         assert_eq!(
             layout.identity_file(),
             PathBuf::from("/vault/.ntropy/identity.age")
+        );
+        assert_eq!(
+            layout.identity_pub_staged(),
+            PathBuf::from("/vault/.ntropy/identity.pub.staged")
+        );
+        assert_eq!(
+            layout.identity_file_staged(),
+            PathBuf::from("/vault/.ntropy/identity.age.staged")
         );
         assert_eq!(
             layout.migration_file(),

@@ -302,6 +302,30 @@ mod acquire {
         Ok(())
     }
 
+    /// Write a keypair that other files are about to depend on, and flush it.
+    ///
+    /// [`write_keypair_at`] followed by a flush of both files and of their
+    /// directories. A rekey stages its new keypair this way before the first
+    /// note is replaced: every note that rekey writes is readable only with
+    /// this key, so it has to survive a power loss before any of them exists.
+    pub fn stage_keypair_at(
+        recipient_path: &Path,
+        wrapped_path: &Path,
+        identity: &Identity,
+        passphrase: &Passphrase,
+    ) -> Result<(), KeyError> {
+        write_keypair_at(recipient_path, wrapped_path, identity, passphrase)?;
+        for path in [wrapped_path, recipient_path] {
+            fsutil::sync_file(path)?;
+        }
+        for path in [wrapped_path, recipient_path] {
+            if let Some(parent) = path.parent() {
+                fsutil::sync_dir(parent)?;
+            }
+        }
+        Ok(())
+    }
+
     /// Unwrap the identity stored at `path`.
     pub fn unwrap_identity_at(path: &Path, passphrase: &Passphrase) -> Result<Identity, KeyError> {
         let armored = fsutil::read_to_string_if_exists(path)?
@@ -341,7 +365,7 @@ mod acquire {
 #[cfg(feature = "encryption")]
 pub use acquire::{
     Acquisition, acquire, change_passphrase_at, lock, read_identity_file, read_recipient_at,
-    remove_keypair_at, unlock, unwrap_identity_at, write_keypair_at,
+    remove_keypair_at, stage_keypair_at, unlock, unwrap_identity_at, write_keypair_at,
 };
 
 #[cfg(test)]
@@ -1017,5 +1041,54 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn a_staged_keypair_reads_back_as_the_identity_it_was_made_from() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().expect("temp dir");
+        let recipient_path = dir.path().join("identity.pub.staged");
+        let wrapped_path = dir.path().join("identity.age.staged");
+        let (identity, recipient) = age_io::generate_keypair();
+
+        stage_keypair_at(
+            &recipient_path,
+            &wrapped_path,
+            &identity,
+            &Passphrase::new("staged"),
+        )
+        .expect("stage");
+
+        assert_eq!(
+            read_recipient_at(&recipient_path).expect("read"),
+            Some(recipient.clone())
+        );
+        let unwrapped = unwrap_identity_at(&wrapped_path, &Passphrase::new("staged"))
+            .expect("unwrap with the staging passphrase");
+        assert_eq!(unwrapped.to_public(), recipient);
+        let mode = std::fs::metadata(&wrapped_path)
+            .expect("metadata")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600, "got {:o}", mode & 0o777);
+    }
+
+    #[test]
+    fn staging_with_an_empty_passphrase_writes_nothing() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let recipient_path = dir.path().join("identity.pub.staged");
+        let wrapped_path = dir.path().join("identity.age.staged");
+        let (identity, _) = age_io::generate_keypair();
+
+        assert!(
+            stage_keypair_at(
+                &recipient_path,
+                &wrapped_path,
+                &identity,
+                &Passphrase::new(""),
+            )
+            .is_err()
+        );
+        assert!(!recipient_path.exists() && !wrapped_path.exists());
     }
 }

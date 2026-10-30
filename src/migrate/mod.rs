@@ -64,6 +64,13 @@ pub enum MigrateError {
     #[error("`{}` records marker version {version}, which this ntropy does not understand", .path.display())]
     UnknownMarkerVersion { path: PathBuf, version: u32 },
 
+    #[error("could not move the migration marker into place at `{}`", .path.display())]
+    MarkerRename {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
+
     #[error("could not serialize the migration marker")]
     Serialize(#[from] toml::ser::Error),
 

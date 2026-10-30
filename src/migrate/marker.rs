@@ -74,6 +74,22 @@ pub struct Marker {
     /// know which key still opens the sources.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_recipient: Option<String>,
+    /// Whether the new keypair of a rekey was staged in `.ntropy/` before this
+    /// marker was written (ADR 0080).
+    ///
+    /// A marker without it comes from a rekey that kept its new key in
+    /// memory only. Resuming one has no key to load, so the two cases have to
+    /// be told apart: a missing staged pair is damage when this is set and
+    /// the expected state when it is not.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub staged: bool,
+    /// Whether a rekey has replaced every note and is installing its staged
+    /// keypair (ADR 0080).
+    ///
+    /// From here on the old key opens nothing, so a resume must not ask for
+    /// it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub handover: bool,
     /// When the conversion began, for the reader of a stale marker.
     pub started: String,
 }
@@ -86,6 +102,8 @@ impl Marker {
             operation,
             recipient,
             source_recipient: None,
+            staged: false,
+            handover: false,
             started,
         }
     }
@@ -117,11 +135,23 @@ pub fn read_at(path: &Path) -> Result<Option<Marker>, MigrateError> {
 ///
 /// Flushed before it is relied upon: the marker is what stops the next command
 /// from touching a vault mid-conversion, and a marker that did not reach the
-/// disk protects nothing.
+/// disk protects nothing. The temporary file is flushed before the rename, so
+/// a power loss leaves the old marker or the whole new one. A marker that
+/// reads as empty blocks every command and a resume alike, and a rekey
+/// rewrites its marker at a point where no note is readable without it.
 pub fn write_at(path: &Path, marker: &Marker) -> Result<(), MigrateError> {
     let text = toml::to_string_pretty(marker)?;
-    fsutil::atomic_write(path, text.as_bytes())?;
-    fsutil::sync_file(path)?;
+
+    let mut staging = path.as_os_str().to_os_string();
+    staging.push(".tmp");
+    let staging = PathBuf::from(staging);
+
+    fsutil::atomic_write(&staging, text.as_bytes())?;
+    fsutil::sync_file(&staging)?;
+    std::fs::rename(&staging, path).map_err(|source| MigrateError::MarkerRename {
+        path: path.to_path_buf(),
+        source,
+    })?;
     if let Some(parent) = path.parent() {
         fsutil::sync_dir(parent)?;
     }
@@ -196,6 +226,58 @@ mod tests {
         marker.source_recipient = Some("age1old".into());
         write_at(&path, &marker).expect("write");
         assert_eq!(read_at(&path).expect("read"), Some(marker));
+    }
+
+    #[test]
+    fn a_staged_and_handed_over_marker_roundtrips() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("migration.toml");
+        let mut marker = marker();
+        marker.operation = Operation::Rekey;
+        marker.staged = true;
+        marker.handover = true;
+        write_at(&path, &marker).expect("write");
+        assert_eq!(read_at(&path).expect("read"), Some(marker));
+    }
+
+    #[test]
+    fn the_new_flags_are_left_out_while_false_and_read_as_false() {
+        // Markers written before the flags existed carry neither, and must
+        // read as a rekey that staged nothing.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("migration.toml");
+        write_at(&path, &marker()).expect("write");
+        let text = std::fs::read_to_string(&path).expect("read");
+        assert!(
+            !text.contains("staged") && !text.contains("handover"),
+            "{text}"
+        );
+
+        let found = read_at(&path).expect("read").expect("present");
+        assert!(!found.staged && !found.handover);
+    }
+
+    #[test]
+    fn writing_a_marker_leaves_no_temporary_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        write_at(&dir.path().join("migration.toml"), &marker()).expect("write");
+        let names: Vec<_> = std::fs::read_dir(dir.path())
+            .expect("read dir")
+            .map(|e| e.expect("entry").file_name())
+            .collect();
+        assert_eq!(names, ["migration.toml"]);
+    }
+
+    #[test]
+    fn a_marker_path_that_cannot_be_replaced_is_reported() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("migration.toml");
+        std::fs::create_dir(&path).expect("a directory where the marker belongs");
+
+        assert!(matches!(
+            write_at(&path, &marker()),
+            Err(MigrateError::MarkerRename { .. })
+        ));
     }
 
     #[test]
