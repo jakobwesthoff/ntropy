@@ -7,7 +7,9 @@ Date: 2026-10-30
 Accepted
 
 Amends [ADR 0072](0072-export-paths-stay-inside-the-vault-and-the-output.md),
-which decides which referenced paths `render --to html` and `site` copy.
+which decides which referenced paths `render --to html` and `site` copy, and
+[ADR 0070](0070-trust-model-for-discovered-vaults.md), whose residual on
+followed symlinks now holds for typst alone.
 
 ## Context
 
@@ -18,12 +20,15 @@ whole tree ([ADR 0057](0057-html-artifact-as-a-page-with-a-files-directory.md));
 copied the vault's `.ntropy/`, with its configuration and, in an encrypted
 vault, the passphrase-protected identity, and, in a vault that is a git
 checkout, `.git/`, whose history holds deleted notes and notes the export
-leaves out. A note that carries such a link may come from someone else.
+leaves out. Symlinks were followed, so a file or folder in the vault that
+pointed elsewhere on the machine was copied from there, and a theme's
+stylesheet, icons and templates were read from wherever their symlinks
+pointed. A note that carries such a link may come from someone else.
 
 ## Decision
 
-This decision covers the html and site exports: the files notes reference
-and the files of a site theme.
+This decision covers the html and site exports: the files notes reference,
+the files of a site theme, and the files the site theme loader reads.
 
 ### Names never copied
 
@@ -65,15 +70,38 @@ file copies it unless the name is listed. A link that names a hidden
 directory mirrors it, without the hidden entries inside it. A theme's
 hidden files are left out the same way.
 
+### Symlinks
+
+A file is copied only when the path it resolves to lies inside the vault; a
+theme's file may also resolve inside the theme's directory, so a theme kept
+outside the vault still works. Paths are compared by their components, so
+`/vault2` does not count as inside `/vault`. This is one rule without
+exceptions: it applies to a link that names the file, to every entry of a
+mirrored directory and to a theme, wherever the symlink sits, a symlinked
+`all-notes/` or asset folder included. A symlink that stays inside the vault
+keeps working, and the path it resolves to is judged by the same rules as
+any other, so a symlink into `.ntropy` is refused. A path that exists but
+does not resolve, such as a dangling symlink or a loop, is refused too. A
+symlink to a directory found while mirroring is not followed, so a loop or a
+second path into the same tree stays out of the walk.
+
+The site theme loader applies the same containment to `style.css`,
+`icons/*.svg` and `templates/**/*.html`: a file that resolves outside the
+theme's directory and the vault fails the load with an error naming it,
+since a dropped template would render a different site.
+
 ### Reporting
 
-A link to a listed path copies nothing, gets a warning, and the page keeps
-the link as written, as a path outside the vault does (ADR 0072).
+A link to a listed path, or to one that resolves outside the vault or
+does not resolve, copies nothing, gets a warning, and the page keeps the
+link as written, as a path outside the vault does (ADR 0072).
 
 Inside a mirrored directory or a theme, what is left out is reported once
-per linked directory, at one of two levels. A `.ntropy` entry is a warning,
-naming its path. Hidden entries and the other listed entries are a `note:`
-line that counts them and names up to five distinct listed names. A skip
+per linked directory, at one of two levels. Entries that resolve outside,
+entries that do not resolve and symlinked directories are counted in a
+warning, and a `.ntropy` entry is named in it by its path. Hidden entries
+and the other listed entries are a `note:` line that counts them and names
+up to five distinct listed names. A skip
 that protects against a hostile or surprising link counts for `--strict`;
 routine metadata inside a folder, such as the `.DS_Store` the Finder leaves
 in nearly every folder, does not, so a `note:` line never fails a strict
@@ -91,3 +119,9 @@ directory for `render --to html`, the output directory for `site`.
 - Earlier renders and site exports stored inside the vault are ordinary
   files and are copied by a directory link that reaches them. `render` and
   `site` warn about an output inside the vault only for an encrypted vault.
+- Images and files beside the notes of a symlinked `all-notes/`, and the
+  files of an asset folder that is a symlink to elsewhere, are no longer
+  copied; the note pages are still exported. Assets kept outside the vault
+  have to be copied into it.
+- ADR 0070's accepted residual that file copies follow a symlink out of the
+  vault now holds for typst alone, which follows a symlink inside its root.

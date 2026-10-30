@@ -26,7 +26,10 @@ anything else    copied into the site's assets/ as it is
 ```
 
 Hidden files, and the names a [website export](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md)
-never copies such as a theme's `.git`, stay out of `assets/`.
+never copies such as a theme's `.git`, stay out of `assets/`, as does a
+file that is a symlink to somewhere outside the theme and the vault. If
+`style.css`, an icon or a template is such a symlink, the theme does not
+load and the error names the file.
 
 Start from the built-in theme, which has the same layout:
 

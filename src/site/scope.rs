@@ -7,9 +7,11 @@
 //! A note's link can name any path in the vault, and a linked directory is
 //! mirrored with its whole tree; a theme's directory is copied the same way.
 //! [`ExportScope`] answers, for every path an export is about to copy,
-//! whether it may: an entry on [`NEVER_COPIED`] never, at any depth, and,
-//! below a mirrored directory, no hidden entry either. A path named directly
-//! is judged by [`ExportScope::verdict`], a directory by [`ExportScope::walk`].
+//! whether it may: only what resolves inside the vault (for a theme file:
+//! inside the theme or the vault), an entry on [`NEVER_COPIED`] never, at
+//! any depth, and, below a mirrored directory, no hidden entry either. A
+//! path named directly is judged by [`ExportScope::verdict`], a directory by
+//! [`ExportScope::walk`].
 
 use std::collections::BTreeSet;
 use std::ffi::{OsStr, OsString};
@@ -136,6 +138,12 @@ pub enum Refusal {
     /// The path is, or lies inside, an entry of [`NEVER_COPIED`]; the
     /// component as written or as found on disk.
     Listed(String),
+    /// The path resolves outside what the export may read from; how that
+    /// reads in a warning, such as `the vault`.
+    Outside(&'static str),
+    /// The path exists but does not resolve: a dangling symlink, a loop, a
+    /// directory on the way that cannot be read.
+    Unresolvable,
 }
 
 impl Refusal {
@@ -146,6 +154,12 @@ impl Refusal {
             Refusal::Listed(component) => format!(
                 "{subject} `{shown}` is or lies inside `{component}`, which exports never copy; not copied"
             ),
+            Refusal::Outside(reach) => {
+                format!("{subject} `{shown}` resolves outside {reach}; not copied")
+            }
+            Refusal::Unresolvable => {
+                format!("{subject} `{shown}` cannot be resolved; not copied")
+            }
         }
     }
 }
@@ -164,6 +178,14 @@ pub struct Walk {
     pub listed_names: BTreeSet<String>,
     /// How many hidden entries were left out.
     pub hidden: usize,
+    /// How many entries resolve outside what the export may read from.
+    pub outside: usize,
+    /// How many entries exist but do not resolve.
+    pub unresolvable: usize,
+    /// How many symlinks to a directory were not followed.
+    pub symlinked_dirs: usize,
+    /// What the export may read from, for the warning's wording.
+    pub reach: &'static str,
 }
 
 /// How many distinct names a note line spells out before it counts the rest.
@@ -181,20 +203,44 @@ impl Walk {
     }
 
     /// The warning about what this walk left out, if anything worth one:
-    /// what `subject` (such as ``referenced directory `/x` ``) left out, the
-    /// entries named by their path below `shown`.
+    /// what `subject` (such as ``referenced directory `/x` ``) left out,
+    /// counted by kind in a fixed order, and the `.ntropy` entries named by
+    /// their path below `shown`.
     pub fn warning(&self, subject: &str, shown: &str) -> Option<String> {
-        if self.ntropy.is_empty() {
+        let mut parts = Vec::new();
+        if self.outside > 0 {
+            let reach = self.reach;
+            parts.push(counted(
+                self.outside,
+                &format!("entry that resolves outside {reach}"),
+                &format!("entries that resolve outside {reach}"),
+            ));
+        }
+        if self.unresolvable > 0 {
+            parts.push(counted(
+                self.unresolvable,
+                "entry that cannot be resolved",
+                "entries that cannot be resolved",
+            ));
+        }
+        if self.symlinked_dirs > 0 {
+            parts.push(counted(
+                self.symlinked_dirs,
+                "symlinked directory",
+                "symlinked directories",
+            ));
+        }
+        parts.extend(
+            self.ntropy
+                .iter()
+                .map(|relative| format!("`{}`", below(shown, relative))),
+        );
+        if parts.is_empty() {
             return None;
         }
-        let paths: Vec<String> = self
-            .ntropy
-            .iter()
-            .map(|relative| format!("`{}`", below(shown, relative)))
-            .collect();
         Some(format!(
             "{subject} `{shown}`: left out {}",
-            paths.join(", ")
+            parts.join(", ")
         ))
     }
 
@@ -236,6 +282,13 @@ fn counted(count: usize, singular: &str, plural: &str) -> String {
     format!("{count} {}", if count == 1 { singular } else { plural })
 }
 
+/// The resolved form of each of `dirs` that can be resolved.
+fn resolved(dirs: &[&Path]) -> Vec<PathBuf> {
+    dirs.iter()
+        .filter_map(|dir| std::fs::canonicalize(dir).ok())
+        .collect()
+}
+
 /// `relative` below `shown`, a `/`-separated path, without a doubled slash.
 fn below(shown: &str, relative: &str) -> String {
     format!("{}/{relative}", shown.trim_end_matches('/'))
@@ -251,18 +304,22 @@ fn below(shown: &str, relative: &str) -> String {
 pub struct ExportScope {
     /// The base as given; the paths an export builds start with it.
     base: PathBuf,
-    /// The base with every symlink resolved, or `None` when it cannot be
-    /// resolved, so a resolved path can be judged below it.
-    canonical_base: Option<PathBuf>,
+    /// The resolved directories a copied file must resolve into, in order:
+    /// the vault root, or a theme's directory and then the vault root. A
+    /// directory that cannot be resolved is left out, so with none left
+    /// nothing that exists is copied.
+    boundaries: Vec<PathBuf>,
+    /// How the boundaries read in a warning.
+    reach: &'static str,
     /// The export's own output, never walked: `(resolved parent, name)`,
     /// since the output may not exist yet when the walk runs.
     excluded: Vec<(PathBuf, OsString)>,
 }
 
 impl ExportScope {
-    /// The scope below `base`, leaving out `excluded`, the export's own
-    /// output.
-    pub fn new(base: &Path, excluded: &[&Path]) -> Self {
+    /// The scope of the files notes reference, below the vault root,
+    /// leaving out `excluded`, the export's own output.
+    pub fn new(vault_root: &Path, excluded: &[&Path]) -> Self {
         let excluded = excluded
             .iter()
             .filter_map(|path| {
@@ -271,9 +328,22 @@ impl ExportScope {
             })
             .collect();
         ExportScope {
-            base: base.to_path_buf(),
-            canonical_base: std::fs::canonicalize(base).ok(),
+            base: vault_root.to_path_buf(),
+            boundaries: resolved(&[vault_root]),
+            reach: "the vault",
             excluded,
+        }
+    }
+
+    /// The scope of a theme's files: below its directory, resolving into it
+    /// or into the vault. The second boundary lets a theme reach a vault
+    /// asset; the first keeps a theme kept outside the vault usable.
+    pub fn for_theme(theme_dir: &Path, vault_root: &Path) -> Self {
+        ExportScope {
+            base: theme_dir.to_path_buf(),
+            boundaries: resolved(&[theme_dir, vault_root]),
+            reach: "the theme and the vault",
+            excluded: Vec::new(),
         }
     }
 
@@ -296,17 +366,31 @@ impl ExportScope {
         {
             return Err(Refusal::Listed(component));
         }
-        if let Some(component) = self.resolved_listed(path) {
-            return Err(Refusal::Listed(component));
-        }
-        Ok(())
+        self.resolve(path).map(|_| ())
     }
 
-    /// The listed component of where `path` resolves to, below the base.
-    fn resolved_listed(&self, path: &Path) -> Option<String> {
-        let canonical_base = self.canonical_base.as_ref()?;
-        let resolved = std::fs::canonicalize(path).ok()?;
-        listed_component(resolved.strip_prefix(canonical_base).ok()?)
+    /// Where `path` resolves, if it exists and may be read from there.
+    ///
+    /// Every unclear case is refused: a path that exists but does not
+    /// resolve, and one that resolves outside every boundary (compared by
+    /// path components, so `/vault2` does not count as inside `/vault`). A
+    /// path that resolves inside is checked by name below the boundary that
+    /// holds it, which catches a symlink to a listed entry.
+    pub fn resolve(&self, path: &Path) -> Result<Option<PathBuf>, Refusal> {
+        match std::fs::symlink_metadata(path) {
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            _ => {}
+        }
+        let resolved = std::fs::canonicalize(path).map_err(|_| Refusal::Unresolvable)?;
+        let below = self
+            .boundaries
+            .iter()
+            .find_map(|boundary| resolved.strip_prefix(boundary).ok())
+            .ok_or(Refusal::Outside(self.reach))?;
+        match listed_component(below) {
+            Some(component) => Err(Refusal::Listed(component)),
+            None => Ok(Some(resolved)),
+        }
     }
 
     /// The root-absolute vault path a page links for `dest`, written in a
@@ -320,7 +404,10 @@ impl ExportScope {
     /// Every file below `dir` that may be copied, and what was left out.
     /// `dir` itself is judged by [`ExportScope::verdict`] first.
     pub fn walk(&self, dir: &Path) -> Result<Walk, FsError> {
-        let mut walk = Walk::default();
+        let mut walk = Walk {
+            reach: self.reach,
+            ..Walk::default()
+        };
         self.walk_into(dir, "", &mut walk)?;
         walk.files.sort();
         walk.ntropy.sort();
@@ -362,13 +449,21 @@ impl ExportScope {
                 walk.hidden += 1;
                 continue;
             }
-            if file_type.is_symlink()
-                && let Some(component) = self.resolved_listed(&path)
-            {
-                walk.left_out(component, relative);
-                continue;
-            }
-            if file_type.is_dir() {
+            if file_type.is_symlink() {
+                // A symlink is copied from where it points, so it is judged
+                // there; one to a directory is not followed, which keeps a
+                // loop or a second path into the same tree out of the walk.
+                match self.resolve(&path) {
+                    Err(Refusal::Listed(component)) => walk.left_out(component, relative),
+                    Err(Refusal::Outside(_)) => walk.outside += 1,
+                    // A symlink entry exists, so `Ok(None)`, "not found",
+                    // cannot come back; counted with the unresolvable
+                    // ones all the same rather than copied.
+                    Err(Refusal::Unresolvable) | Ok(None) => walk.unresolvable += 1,
+                    Ok(Some(resolved)) if resolved.is_dir() => walk.symlinked_dirs += 1,
+                    Ok(Some(_)) => walk.files.push((relative, path)),
+                }
+            } else if file_type.is_dir() {
                 self.walk_into(&path, &relative, walk)?;
             } else {
                 walk.files.push((relative, path));
@@ -481,6 +576,46 @@ mod tests {
     }
 
     #[test]
+    fn a_sibling_whose_name_extends_the_vault_s_is_outside() {
+        let parent = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(parent.path().join("vault")).expect("vault");
+        std::fs::create_dir_all(parent.path().join("vault2")).expect("sibling");
+        std::fs::write(parent.path().join("vault2/x.png"), "png").expect("file");
+        std::os::unix::fs::symlink("../vault2/x.png", parent.path().join("vault/x.png"))
+            .expect("symlink");
+        let scope = ExportScope::new(&parent.path().join("vault"), &[]);
+        assert_eq!(
+            scope.verdict(&scope.vault_path("/x.png")),
+            Err(Refusal::Outside("the vault"))
+        );
+    }
+
+    #[test]
+    fn a_vault_root_that_cannot_be_resolved_refuses_what_exists() {
+        let elsewhere = tempfile::tempdir().expect("temp dir");
+        let scope = ExportScope::new(Path::new("/no-such-vault"), &[]);
+        assert_eq!(
+            scope.verdict(elsewhere.path()),
+            Err(Refusal::Outside("the vault"))
+        );
+    }
+
+    #[test]
+    fn a_symlink_loop_cannot_be_resolved() {
+        let vault = tempfile::tempdir().expect("temp dir");
+        std::os::unix::fs::symlink("b", vault.path().join("a")).expect("symlink a");
+        std::os::unix::fs::symlink("a", vault.path().join("b")).expect("symlink b");
+        let scope = ExportScope::new(vault.path(), &[]);
+        assert_eq!(
+            scope.verdict(&scope.vault_path("/a")),
+            Err(Refusal::Unresolvable)
+        );
+        let walk = scope.walk(vault.path()).expect("the walk reads the vault");
+        assert_eq!(walk.unresolvable, 2);
+        assert!(walk.files.is_empty(), "{:?}", walk.files);
+    }
+
+    #[test]
     fn a_walk_reports_by_category() {
         let mut walk = Walk::default();
         assert_eq!(walk.warning("referenced directory", "/x"), None);
@@ -542,6 +677,7 @@ mod tests {
             walk,
             Walk {
                 files: walk.files.clone(),
+                reach: "the vault",
                 ..Walk::default()
             }
         );

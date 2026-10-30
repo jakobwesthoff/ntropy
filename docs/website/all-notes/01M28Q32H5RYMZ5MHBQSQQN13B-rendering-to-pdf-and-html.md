@@ -70,7 +70,8 @@ warnings do.
   the grammars its code needs, and the images it shows, the way a
   browser saves a page. A linked folder is copied without the files a
   [website export](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md)
-  never copies, such as `.ntropy`, `.git` and every hidden file. Move or
+  never copies, such as `.ntropy`, `.git`, every hidden file, and a file
+  a symlink brings in from outside the vault. Move or
   send the two together. The page keeps
   the header, the scheme switch, and the outline, and drops what needs
   a site: the sidebar, the search, breadcrumbs, and the pager.

@@ -6,6 +6,8 @@ Date: 2026-10-30
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0073](0073-what-html-and-site-exports-copy-from-the-vault.md).
+
 ## Context
 
 ntropy resolves its vault from `--vault`, then `$NTROPY_VAULT`, then a walk

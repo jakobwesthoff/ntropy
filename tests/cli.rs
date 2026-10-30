@@ -2725,6 +2725,52 @@ fn render_to_html_does_not_mirror_its_own_files_directory() {
     );
 }
 
+/// A vault whose one note links `assets/secret.txt`, a symlink to the
+/// `outside.svg` beside the vault.
+fn vault_with_a_symlink_out() -> tempfile::TempDir {
+    let dir = vault_beside_a_file("[secret](/assets/secret.txt)");
+    let vault = dir.path().join("vault");
+    fs::create_dir_all(vault.join("assets")).expect("the asset folder");
+    std::os::unix::fs::symlink(
+        dir.path().join("outside.svg"),
+        vault.join("assets/secret.txt"),
+    )
+    .expect("symlink");
+    dir
+}
+
+#[test]
+fn site_refuses_a_symlink_out_of_the_vault() {
+    let dir = vault_with_a_symlink_out();
+    let (output, page) = site_climber(dir.path());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_none_named(&dir.path().join("site"), "secret.txt");
+    assert!(
+        stderr.contains(
+            "warning: referenced path `/assets/secret.txt` resolves outside the vault; not copied"
+        ),
+        "{stderr}"
+    );
+    assert!(page.contains("href=\"/assets/secret.txt\""), "{page}");
+    assert!(output.status.success(), "{stderr}");
+}
+
+#[test]
+fn render_to_html_refuses_a_symlink_out_of_the_vault() {
+    let dir = vault_with_a_symlink_out();
+    let (output, page) = render_climber(dir.path());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_none_named(&dir.path().join("render"), "secret.txt");
+    assert!(
+        stderr.contains(
+            "warning: referenced path `/assets/secret.txt` resolves outside the vault; not copied"
+        ),
+        "{stderr}"
+    );
+    assert!(page.contains("href=\"/assets/secret.txt\""), "{page}");
+    assert!(output.status.success(), "{stderr}");
+}
+
 /// A vault with one note and a `corporate` theme configured vault-wide.
 fn themed_vault() -> tempfile::TempDir {
     let dir = setup_vault();

@@ -254,9 +254,15 @@ with everything below it, at any depth, judged on the path as written and
 on the path it resolves to; and, below a linked directory, every hidden
 entry. A link that names such a path directly is a warning and the page
 keeps it as written; a link that names a hidden file that is not listed
-copies it. What a linked directory or the theme left out is reported once
-per link: a `.ntropy` entry as a warning, the rest as a `note:` line that
-`--strict` does not count. Each file is copied once, however many links
+copies it. A file is copied only when it resolves inside the vault (a
+theme's file: inside the theme or the vault), compared by path components,
+whatever symlink leads there, a symlinked `all-notes/` or asset folder
+included; a path that exists but does not resolve is refused, and a
+symlink to a directory found while mirroring is not followed. What a
+linked directory or the theme left out is reported once per link: entries
+that resolve outside or not at all, symlinked directories and a `.ntropy`
+entry as a warning, the rest as a `note:` line that `--strict` does not
+count. Each file is copied once, however many links
 reach it, and the output directory itself is never mirrored. Local asset
 paths in note bodies are rewritten relative to the page. A reference to a file outside the vault is a warning and the
 file is not copied, as is a reference to a path that does not exist.
@@ -287,8 +293,11 @@ vault theme alike
     anything else    copied under assets/ as it is
 
 Hidden files and the names an export never copies, such as a theme's
-`.git`, stay out of `assets/`, as they stay out of a linked directory
+`.git`, stay out of `assets/`, as they stay out of a linked directory, and
+so does a file that resolves outside the theme and the vault
 ([ADR 0073](../adr/0073-what-html-and-site-exports-copy-from-the-vault.md)).
+Loading a theme fails, naming the file, when its `style.css`, an icon or a
+template resolves outside the theme and the vault.
 Every page links `style.css` and `render --to html` copies it beside the
 artifact; a directory without it is not a theme. A theme provides the
 palettes for both light and dark mode; the page follows the system

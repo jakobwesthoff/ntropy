@@ -99,7 +99,7 @@ impl Renderer for Html {
         match &self.settings.theme_dir {
             Some(dir) => {
                 // Copied by the rules of a linked directory (ADR 0073).
-                let walk = ExportScope::new(dir, &[]).walk(dir)?;
+                let walk = ExportScope::for_theme(dir, &doc.vault_root).walk(dir)?;
                 let subject = "theme";
                 let name = self
                     .settings
@@ -582,6 +582,34 @@ mod tests {
             ctx.warnings,
             ["theme `corporate`: left out `corporate/.ntropy`"]
         );
+    }
+
+    #[test]
+    fn a_vault_theme_file_symlinked_out_of_the_theme_and_the_vault_is_left_out() {
+        let theme_dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(theme_dir.path().join("style.css"), "body {}").expect("css");
+        let outside = tempfile::tempdir().expect("temp dir");
+        std::fs::write(outside.path().join("secret.txt"), "secret").expect("secret");
+        std::os::unix::fs::symlink(
+            outside.path().join("secret.txt"),
+            theme_dir.path().join("secret.txt"),
+        )
+        .expect("symlink");
+        let settings = DocumentSettings {
+            theme: Some(SiteTheme {
+                name: "corporate".to_string(),
+                ..SiteTheme::builtin()
+            }),
+            theme_dir: Some(theme_dir.path().to_path_buf()),
+            ..DocumentSettings::default()
+        };
+        let document = doc("Themed", "{}", "text\n", Vec::new());
+        let mut ctx = FakeContext::new();
+        Html::new(settings)
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        let copies: Vec<&str> = ctx.copies.iter().map(|(_, to)| to.as_str()).collect();
+        assert_eq!(copies, ["style.css"]);
     }
 
     #[test]

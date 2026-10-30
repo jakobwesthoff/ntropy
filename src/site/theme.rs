@@ -25,6 +25,7 @@ use std::sync::OnceLock;
 
 use super::embedded::{self, Asset};
 use super::icons;
+use super::scope::{ExportScope, Refusal};
 use crate::render::RenderError;
 use crate::render::theme::validate_name;
 use crate::vault::layout::Layout;
@@ -142,7 +143,12 @@ pub fn builtin_templates() -> &'static BTreeMap<String, String> {
 /// could never be reached.
 pub fn load(layout: &Layout, name: &str) -> Result<SiteTheme, RenderError> {
     validate_name(name)?;
+    // Every file the theme is read from must resolve into the theme's
+    // directory or the vault (ADR 0073): what it holds ends up in every
+    // page, so a symlink elsewhere on the machine would publish that file.
+    let scope = ExportScope::for_theme(&layout.site_theme_dir(name), layout.root());
     let path = stylesheet_path(layout, name);
+    contained(&scope, &path)?;
     let stylesheet = match std::fs::read_to_string(&path) {
         Ok(stylesheet) => stylesheet,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
@@ -153,8 +159,8 @@ pub fn load(layout: &Layout, name: &str) -> Result<SiteTheme, RenderError> {
         }
         Err(source) => return Err(RenderError::ThemeRead { path, source }),
     };
-    let icons = load_icons(&layout.site_theme_dir(name).join(icons::ICONS_DIR))?;
-    let templates = load_templates(&layout.site_theme_dir(name).join(TEMPLATES_DIR))?;
+    let icons = load_icons(&scope, &layout.site_theme_dir(name).join(icons::ICONS_DIR))?;
+    let templates = load_templates(&scope, &layout.site_theme_dir(name).join(TEMPLATES_DIR))?;
     Ok(SiteTheme {
         name: name.to_string(),
         stylesheet,
@@ -165,7 +171,10 @@ pub fn load(layout: &Layout, name: &str) -> Result<SiteTheme, RenderError> {
 
 /// The built-in icons with those of `icons_dir` layered over them; a
 /// missing directory keeps the built-in set.
-fn load_icons(icons_dir: &Path) -> Result<BTreeMap<String, String>, RenderError> {
+fn load_icons(
+    scope: &ExportScope,
+    icons_dir: &Path,
+) -> Result<BTreeMap<String, String>, RenderError> {
     let mut icons = builtin_icons().clone();
     let entries = match std::fs::read_dir(icons_dir) {
         Ok(entries) => entries,
@@ -191,6 +200,7 @@ fn load_icons(icons_dir: &Path) -> Result<BTreeMap<String, String>, RenderError>
         else {
             continue;
         };
+        contained(scope, &path)?;
         let svg = std::fs::read_to_string(&path).map_err(|source| RenderError::ThemeRead {
             path: path.clone(),
             source,
@@ -204,11 +214,27 @@ fn load_icons(icons_dir: &Path) -> Result<BTreeMap<String, String>, RenderError>
     Ok(icons)
 }
 
+/// Refuse `path`, a file of the theme, when it resolves outside the theme's
+/// directory and the vault. Only containment is checked here: a file that
+/// cannot be read fails at its read with the reason the system gives.
+fn contained(scope: &ExportScope, path: &Path) -> Result<(), RenderError> {
+    match scope.resolve(path) {
+        Err(Refusal::Outside(reach)) => Err(RenderError::ThemeRead {
+            path: path.to_path_buf(),
+            source: std::io::Error::other(format!("it resolves outside {reach}")),
+        }),
+        _ => Ok(()),
+    }
+}
+
 /// The `.html` files under `templates_dir`, recursively, by their path
 /// below it; a missing directory is no template at all. Whether they
 /// parse is checked when the page environment is built
 /// ([`super::page::Templates::new`]).
-fn load_templates(templates_dir: &Path) -> Result<BTreeMap<String, String>, RenderError> {
+fn load_templates(
+    scope: &ExportScope,
+    templates_dir: &Path,
+) -> Result<BTreeMap<String, String>, RenderError> {
     if !templates_dir.is_dir() {
         return Ok(BTreeMap::new());
     }
@@ -226,6 +252,7 @@ fn load_templates(templates_dir: &Path) -> Result<BTreeMap<String, String>, Rend
                 ),
             });
         }
+        contained(scope, &path)?;
         let source = std::fs::read_to_string(&path)
             .map_err(|source| RenderError::ThemeRead { path, source })?;
         templates.insert(relative, source);
@@ -336,6 +363,60 @@ mod tests {
             theme.templates.is_empty(),
             "no templates directory, none of its own"
         );
+    }
+
+    /// A vault with a `corporate` theme and, beside the vault, `secret.txt`;
+    /// `link` inside the theme is a symlink to that file.
+    fn theme_linking_out(link: &str) -> (tempfile::TempDir, tempfile::TempDir, Layout) {
+        let (dir, layout) = vault();
+        let theme_dir = layout.site_theme_dir("corporate");
+        std::fs::create_dir_all(theme_dir.join("icons")).expect("icons dir");
+        std::fs::create_dir_all(theme_dir.join("templates")).expect("templates dir");
+        if link != STYLESHEET {
+            std::fs::write(theme_dir.join(STYLESHEET), "body {}").expect("write css");
+        }
+        let outside = tempfile::tempdir().expect("temp dir");
+        let secret = outside.path().join("secret.txt");
+        std::fs::write(
+            &secret,
+            "<svg viewBox=\"0 0 24 24\"><text>secret</text></svg>",
+        )
+        .expect("secret");
+        std::os::unix::fs::symlink(&secret, theme_dir.join(link)).expect("symlink");
+        (dir, outside, layout)
+    }
+
+    /// The load fails naming `link` as a file it refused to read.
+    fn assert_refused(layout: &Layout, link: &str) {
+        let err = load(layout, "corporate").expect_err("the theme is refused");
+        let RenderError::ThemeRead { path, source } = &err else {
+            panic!("not a read error: {err}");
+        };
+        assert!(path.ends_with(link), "{}", path.display());
+        assert!(
+            source
+                .to_string()
+                .contains("resolves outside the theme and the vault"),
+            "{source}"
+        );
+    }
+
+    #[test]
+    fn a_stylesheet_symlinked_out_of_the_vault_is_refused() {
+        let (_dir, _outside, layout) = theme_linking_out(STYLESHEET);
+        assert_refused(&layout, STYLESHEET);
+    }
+
+    #[test]
+    fn an_icon_symlinked_out_of_the_vault_is_refused() {
+        let (_dir, _outside, layout) = theme_linking_out("icons/x.svg");
+        assert_refused(&layout, "icons/x.svg");
+    }
+
+    #[test]
+    fn a_template_symlinked_out_of_the_vault_is_refused() {
+        let (_dir, _outside, layout) = theme_linking_out("templates/page.html");
+        assert_refused(&layout, "templates/page.html");
     }
 
     #[test]

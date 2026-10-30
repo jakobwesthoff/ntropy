@@ -74,6 +74,14 @@ page. The site is never copied into itself, but an earlier render or site
 export stored inside the vault is an ordinary folder, which a link to a
 folder holding it copies.
 
+Only files inside the vault are copied. A file or folder that is a symlink
+to somewhere else on the machine is left out with a warning, wherever the
+symlink sits: an asset folder like `assets -> ~/Pictures`, or an
+`all-notes/` that is itself a symlink, whose notes still become pages but
+whose images and files beside them are not copied. The rule has no
+exceptions, so copy such files into the vault to have them in the site. A
+symlink that stays inside the vault works as before.
+
 Each page carries a sidebar with the views and the top-level tags,
 breadcrumbs, an outline of the note's headings that follows your
 position while you scroll, and previous/next links that follow the

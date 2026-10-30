@@ -30,7 +30,9 @@ laid out as follows.
 ```
 
 Hidden files and the names an export never copies (`.git`, `.DS_Store`
-and the like) stay out of `assets/`.
+and the like) stay out of `assets/`, and so does a file symlinked from
+outside the theme and the vault. A `style.css`, icon or template symlinked
+from outside them fails the theme's load with an error naming the file.
 
 ```bash
 ntropy site theme init mine    # copies the built-in theme to .ntropy/themes/site/mine/

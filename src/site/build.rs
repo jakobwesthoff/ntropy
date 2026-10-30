@@ -382,7 +382,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     // its repository does not publish it.
     match input.theme {
         Some((theme, dir)) => {
-            let walk = ExportScope::new(dir, &excluded).walk(dir)?;
+            let walk = ExportScope::for_theme(dir, input.vault_root).walk(dir)?;
             let subject = "theme";
             warnings.extend(walk.warning(subject, &theme.name));
             notes.extend(walk.note(subject, &theme.name));
@@ -2268,5 +2268,235 @@ mod tests {
         })
         .expect("the site builds");
         assert_eq!(targets(&built), ["files/assets/pic.png"]);
+    }
+
+    // =========================================================
+    // Symlinks that lead out of the vault (ADR 0073)
+    // =========================================================
+
+    /// A directory beside the vault, standing for anywhere else on the
+    /// machine, holding `secret.txt` and `pictures/photo.jpg`.
+    fn elsewhere() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp dir");
+        write_files(
+            dir.path(),
+            &[("secret.txt", "secret"), ("pictures/photo.jpg", "jpg")],
+        );
+        dir
+    }
+
+    fn symlink(target: &Path, link: &Path) {
+        std::fs::create_dir_all(link.parent().expect("a link has a parent")).expect("link dir");
+        std::os::unix::fs::symlink(target, link).expect("symlink");
+    }
+
+    #[test]
+    fn a_link_to_a_file_symlinked_out_of_the_vault_is_not_copied() {
+        let vault = reserved_vault();
+        let outside = elsewhere();
+        symlink(
+            &outside.path().join("secret.txt"),
+            &vault.path().join("assets/secret.txt"),
+        );
+        let built = site_linking(vault.path(), "[secret](/assets/secret.txt)\n");
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+        assert_eq!(
+            built.warnings,
+            ["referenced path `/assets/secret.txt` resolves outside the vault; not copied"]
+        );
+        let page = text(&built, "notes/linker.html");
+        assert!(
+            page.contains("<a href=\"/assets/secret.txt\">secret</a>"),
+            "{page}"
+        );
+    }
+
+    #[test]
+    fn a_symlinked_asset_folder_out_of_the_vault_is_refused() {
+        let vault = reserved_vault();
+        let outside = elsewhere();
+        symlink(&outside.path().join("pictures"), &vault.path().join("pics"));
+        let built = site_linking(
+            vault.path(),
+            "[pictures](/pics) ![photo](/pics/photo.jpg)\n",
+        );
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+    }
+
+    #[test]
+    fn a_file_symlinked_out_of_the_vault_is_left_out_of_a_linked_directory() {
+        let vault = reserved_vault();
+        let outside = elsewhere();
+        symlink(
+            &outside.path().join("secret.txt"),
+            &vault.path().join("assets/secret.txt"),
+        );
+        let built = site_linking(vault.path(), "[assets](/assets)\n");
+        assert_eq!(targets(&built), ["files/assets/pic.png"]);
+        assert_eq!(
+            built.warnings,
+            ["referenced directory `/assets`: left out 1 entry that resolves outside the vault"]
+        );
+    }
+
+    #[test]
+    fn a_symlinked_all_notes_leaves_the_images_beside_the_notes_out() {
+        let vault = tempfile::tempdir().expect("temp dir");
+        let outside = elsewhere();
+        write_files(outside.path(), &[("notes/diagram.png", "png")]);
+        symlink(
+            &outside.path().join("notes"),
+            &vault.path().join("all-notes"),
+        );
+        let built = site_linking(vault.path(), "![diagram](diagram.png)\n");
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+        assert!(
+            built.file("notes/linker.html").is_some(),
+            "the note's page is exported"
+        );
+    }
+
+    #[test]
+    fn a_dangling_symlink_in_a_linked_directory_is_reported() {
+        let vault = reserved_vault();
+        symlink(
+            &vault.path().join("no-such-target"),
+            &vault.path().join("assets/dangling"),
+        );
+        let built = site_linking(vault.path(), "[assets](/assets)\n");
+        assert_eq!(targets(&built), ["files/assets/pic.png"]);
+        assert_eq!(
+            built.warnings,
+            ["referenced directory `/assets`: left out 1 entry that cannot be resolved"]
+        );
+    }
+
+    #[test]
+    fn a_link_to_a_dangling_symlink_is_reported() {
+        let vault = reserved_vault();
+        symlink(
+            &vault.path().join("no-such-target"),
+            &vault.path().join("assets/dangling"),
+        );
+        let built = site_linking(vault.path(), "[dangling](/assets/dangling)\n");
+        assert_eq!(
+            built.warnings,
+            ["referenced path `/assets/dangling` cannot be resolved; not copied"]
+        );
+    }
+
+    #[test]
+    fn a_symlinked_directory_in_a_linked_directory_is_skipped() {
+        let vault = reserved_vault();
+        write_files(vault.path(), &[("gallery/a.jpg", "a")]);
+        symlink(
+            &vault.path().join("gallery"),
+            &vault.path().join("assets/gallery"),
+        );
+        let built = site_linking(vault.path(), "[assets](/assets)\n");
+        assert_eq!(targets(&built), ["files/assets/pic.png"]);
+        assert_eq!(
+            built.warnings,
+            ["referenced directory `/assets`: left out 1 symlinked directory"]
+        );
+    }
+
+    #[test]
+    fn a_symlink_that_stays_inside_the_vault_is_followed() {
+        let vault = reserved_vault();
+        symlink(
+            &vault.path().join("assets/pic.png"),
+            &vault.path().join("alias.png"),
+        );
+        let built = site_linking(vault.path(), "![alias](/alias.png)\n");
+        assert_eq!(targets(&built), ["files/alias.png"]);
+    }
+
+    #[test]
+    fn a_vault_given_through_a_symlink_is_judged_by_where_it_resolves() {
+        let parent = tempfile::tempdir().expect("temp dir");
+        let vault = reserved_vault();
+        let outside = elsewhere();
+        symlink(
+            &outside.path().join("secret.txt"),
+            &vault.path().join("assets/secret.txt"),
+        );
+        let through = parent.path().join("vault");
+        symlink(vault.path(), &through);
+        let built = site_linking(
+            &through,
+            "![pic](/assets/pic.png) [s](/assets/secret.txt)\n",
+        );
+        assert_eq!(targets(&built), ["files/assets/pic.png"]);
+    }
+
+    /// A vault theme `corporate` holding `style.css`, plus `files`.
+    fn theme_in(vault: &Path, files: &[(&str, &str)]) -> PathBuf {
+        let theme_dir = vault.join(".ntropy/themes/site/corporate");
+        write_files(&theme_dir, &[("style.css", "body {}")]);
+        write_files(&theme_dir, files);
+        theme_dir
+    }
+
+    fn site_with_theme(vault: &Path, theme_dir: &Path) -> Built {
+        let notes = vec![note(vault, A, "Linker", "", "text\n")];
+        let vault_ids = ids(&notes);
+        let theme = SiteTheme {
+            name: "corporate".to_string(),
+            ..SiteTheme::builtin()
+        };
+        build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &SiteOptions::default(),
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault,
+            theme: Some((&theme, theme_dir)),
+            output_dir: None,
+        })
+        .expect("the site builds")
+    }
+
+    #[test]
+    fn a_theme_file_symlinked_into_ntropy_is_refused() {
+        let vault = reserved_vault();
+        let theme_dir = theme_in(vault.path(), &[]);
+        symlink(
+            Path::new("../../../../config.toml"),
+            &theme_dir.join("fonts/x.woff2"),
+        );
+        let built = site_with_theme(vault.path(), &theme_dir);
+        assert_eq!(targets(&built), ["assets/style.css"]);
+    }
+
+    #[test]
+    fn a_theme_file_symlinked_out_of_the_vault_is_refused() {
+        let vault = reserved_vault();
+        let outside = elsewhere();
+        let theme_dir = theme_in(vault.path(), &[]);
+        symlink(
+            &outside.path().join("secret.txt"),
+            &theme_dir.join("fonts/x.woff2"),
+        );
+        let built = site_with_theme(vault.path(), &theme_dir);
+        assert_eq!(targets(&built), ["assets/style.css"]);
+        assert_eq!(
+            built.warnings,
+            ["theme `corporate`: left out 1 entry that resolves outside the theme and the vault"]
+        );
+    }
+
+    #[test]
+    fn a_theme_file_symlinked_elsewhere_in_the_vault_is_copied() {
+        let vault = reserved_vault();
+        let theme_dir = theme_in(vault.path(), &[]);
+        symlink(
+            &vault.path().join("assets/pic.png"),
+            &theme_dir.join("pic.png"),
+        );
+        let built = site_with_theme(vault.path(), &theme_dir);
+        assert_eq!(targets(&built), ["assets/pic.png", "assets/style.css"]);
     }
 }

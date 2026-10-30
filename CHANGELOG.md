@@ -166,6 +166,15 @@ and this project adheres to
   naming such a file is a warning and keeps its text in the page.
   Metadata left out of a linked folder is a `note:` line, which `--strict`
   does not count.
+- `render --to html` and `site` followed symlinks, so a file or folder in
+  the vault that pointed elsewhere on the machine was copied into the
+  output, and a site theme's stylesheet, icons and templates were read from
+  wherever they pointed. Both now copy only what resolves inside the vault
+  (for a theme: inside the theme or the vault), with a warning for the
+  rest, whatever symlink leads there: an asset folder such as
+  `assets -> ~/Pictures` and the images beside the notes of a symlinked
+  `all-notes/` are no longer copied, so copy such files into the vault. A
+  theme whose stylesheet, icon or template points outside fails to load.
 - Note titles, file names, link targets in note bodies, template names,
   view names, `.gitignore` entries and the vault's path reached the terminal
   unchanged. A vault you did not write could use them to send escape
