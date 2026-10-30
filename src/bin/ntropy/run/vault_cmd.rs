@@ -79,6 +79,14 @@ fn encrypt(
         if !blocking.is_empty() {
             bail!("{}", blocking_views_message(&blocking));
         }
+        // A conversion that would overwrite a note is refused here too, for
+        // the same reason: once the keypair exists, the refusal from inside
+        // the conversion would leave a vault marked encrypted.
+        migrate::preflight(
+            &vault.layout().all_notes(),
+            Operation::Encrypt,
+            &PlaintextCipher,
+        )?;
     }
     ask(yes, interactive, "Encrypt every note in this vault?")?;
 

@@ -132,7 +132,9 @@ locked vault. For scripts, `--identity <path>` (or `$NTROPY_IDENTITY`) and
 
 Converting an existing vault is `ntropy vault encrypt` (and `vault decrypt`
 back). Both rewrite every note, ask first unless given `-y`, and are safe to
-interrupt: `--resume` finishes one that was.
+interrupt: `--resume` finishes one that was. They refuse to start while two
+note files share a ULID or a file sits where a converted note would go; run
+`ntropy reconcile` first, or move the named files away.
 
 ## Configuration files
 

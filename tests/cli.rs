@@ -4337,6 +4337,28 @@ mod encrypted {
     }
 
     #[test]
+    fn vault_encrypt_refuses_a_copied_note_before_writing_a_key() {
+        // The keypair alone marks a vault as encrypted, so the refusal has to
+        // come before it, leaving a plaintext vault to reconcile.
+        let dir = convertible_vault();
+        let vault = dir.path();
+        copied_note(vault);
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "encrypt", "-y"]));
+        });
+
+        assert!(!vault.join(".ntropy/identity.pub").exists());
+        assert!(!vault.join(".ntropy/identity").exists());
+        assert!(vault.join(format!("all-notes/{ULID_A}-plan.md")).is_file());
+        assert!(
+            vault
+                .join(format!("all-notes/{ULID_A}-plan-b.md"))
+                .is_file()
+        );
+    }
+
+    #[test]
     fn an_encrypted_vault_is_searchable_afterwards() {
         // The end-to-end proof: convert, then read it back through the CLI.
         let dir = convertible_vault();

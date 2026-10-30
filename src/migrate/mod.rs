@@ -88,6 +88,55 @@ pub enum MigrateError {
     /// A test asked the conversion to stop at a phase boundary.
     #[error("interrupted after the {0} phase")]
     Interrupted(Phase),
+
+    /// Notes share a ULID with another note (ADR 0067). Converting would
+    /// write both to one file, or leave the copies behind unconverted.
+    #[error(
+        "nothing was converted: these copies share a ULID with another note: {}; \
+         run `ntropy reconcile` first, which gives each copy a ULID of its own",
+        quoted_list(.0)
+    )]
+    DuplicateIds(Vec<PathBuf>),
+
+    /// Files sit where the conversion would write notes, and would be
+    /// overwritten (ADR 0067).
+    #[error(
+        "nothing was converted: the conversion would overwrite {}; {}",
+        quoted_list(.paths),
+        targets_exist_hint(.operation)
+    )]
+    TargetsExist {
+        operation: Operation,
+        paths: Vec<PathBuf>,
+    },
+}
+
+/// `paths` as a comma-separated list of quoted file names.
+fn quoted_list(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| {
+            let name = path.file_name().unwrap_or(path.as_os_str());
+            format!("`{}`", name.to_string_lossy())
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// What to do about files a conversion would overwrite.
+///
+/// Before decrypting, such a file is a plaintext note dropped in next to the
+/// encrypted one it collides with, which `reconcile` adopts under a ULID of
+/// its own. In a plaintext vault a stray `.age` file is a resource that
+/// `reconcile` leaves alone, so only moving it helps.
+fn targets_exist_hint(operation: &Operation) -> &'static str {
+    match operation {
+        Operation::Decrypt => {
+            "run `ntropy reconcile` first, which encrypts a plaintext note found there \
+             under a ULID of its own, or move the files away"
+        }
+        Operation::Encrypt | Operation::Rekey => "move or remove these files first",
+    }
 }
 
 /// The three phases of a conversion, as a value tests can name.
@@ -200,8 +249,11 @@ pub fn run(
 
     // The marker goes down before the first target so that a crash between
     // here and the end is recognizable as an unfinished conversion rather than
-    // a vault that mysteriously holds two copies of everything.
+    // a vault that mysteriously holds two copies of everything. A fresh run
+    // first makes sure it will overwrite nothing; a resumed one has already
+    // produced targets of its own, which the check would mistake for strays.
     if existing.is_none() {
+        preflight(&all_notes, migration.operation, migration.source)?;
         marker::write_at(&marker_path, &migration.marker)?;
     }
 
@@ -283,6 +335,65 @@ pub fn run(
 
     marker::remove_at(&marker_path)?;
     Ok(report)
+}
+
+/// Refuse a conversion that would overwrite a note or leave one behind
+/// (ADR 0067).
+///
+/// Two notes sharing a ULID would both be written to the one target their
+/// ULID names, or the copy the scan skips would stay unconverted, in a rekey
+/// encrypted to a key that is about to be replaced. A file already at a
+/// target, which the source scan does not see as a note, would be replaced.
+/// `vault encrypt` calls this before it writes the vault's keypair, which on
+/// its own marks a vault as encrypted; `run` calls it again for every fresh
+/// conversion.
+pub fn preflight(
+    all_notes: &Path,
+    operation: Operation,
+    source: &dyn NoteCipher,
+) -> Result<(), MigrateError> {
+    let scan = scan::scan_notes_dir(all_notes, source)?;
+    if !scan.duplicates.is_empty() {
+        let copies = scan.duplicates.into_iter().map(|d| d.note.path).collect();
+        return Err(MigrateError::DuplicateIds(copies));
+    }
+
+    let conversions = plan::conversions(all_notes, operation, &scan.notes);
+    let mut occupied: Vec<PathBuf> = conversions
+        .into_iter()
+        .flat_map(|c| {
+            [&c.target, &c.final_target]
+                .into_iter()
+                .filter(|target| holds_another_file(target, &c.source))
+                .cloned()
+                .collect::<Vec<_>>()
+        })
+        .collect();
+    occupied.sort();
+    occupied.dedup();
+    if occupied.is_empty() {
+        Ok(())
+    } else {
+        Err(MigrateError::TargetsExist {
+            operation,
+            paths: occupied,
+        })
+    }
+}
+
+/// Whether something other than `source` itself sits at `target`.
+///
+/// A rekey's final target is its source's own name, and on a case-insensitive
+/// filesystem a target can name the source under another spelling; neither
+/// is in the way.
+fn holds_another_file(target: &Path, source: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+
+    let Ok(found) = std::fs::symlink_metadata(target) else {
+        return false;
+    };
+    !std::fs::symlink_metadata(source)
+        .is_ok_and(|own| own.dev() == found.dev() && own.ino() == found.ino())
 }
 
 /// Whether `path` reads back through `cipher` as exactly `expected`.
@@ -475,6 +586,105 @@ mod tests {
             .collect();
         out.sort();
         out
+    }
+
+    // -------------------------------------------------------------------------
+    // Conversions that would overwrite a note (ADR 0067)
+    // -------------------------------------------------------------------------
+
+    /// Start a fresh conversion of `operation`.
+    fn start(
+        session: &VaultSession,
+        operation: Operation,
+        source: &dyn NoteCipher,
+        target: &dyn NoteCipher,
+    ) -> Result<MigrationReport, MigrateError> {
+        run(
+            session,
+            &Migration {
+                operation,
+                source,
+                target,
+                resume: false,
+                marker: marker_for(operation, None),
+                hooks: &NoHooks,
+            },
+        )
+    }
+
+    #[test]
+    fn encrypt_refuses_while_two_notes_share_a_ulid() {
+        let (_guard, session) = plaintext_vault();
+        std::fs::write(
+            session
+                .layout()
+                .all_notes()
+                .join(format!("{ULID_A}-alpha-copy.md")),
+            "---\ntitle: Alpha\n---\ncopied body\n",
+        )
+        .expect("write copy");
+        let before = listing(&session);
+        let (_, target) = fresh_target();
+
+        let result = start(&session, Operation::Encrypt, &PlaintextCipher, &target);
+
+        let err = result.expect_err("a copy would be left behind or overwritten");
+        assert!(
+            err.to_string().contains(&format!("{ULID_A}-alpha-copy.md")),
+            "{err}"
+        );
+        assert_eq!(listing(&session), before, "nothing was converted");
+        assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn encrypt_refuses_when_a_target_file_exists() {
+        // A stray `.age` file is a resource in a plaintext vault, but the
+        // conversion would write a note over it.
+        let (_guard, session) = plaintext_vault();
+        let stray = session.layout().all_notes().join(format!("{ULID_A}.age"));
+        std::fs::write(&stray, "stray bytes").expect("write stray");
+        let (_, target) = fresh_target();
+
+        let result = start(&session, Operation::Encrypt, &PlaintextCipher, &target);
+
+        let err = result.expect_err("the stray file would be overwritten");
+        assert!(err.to_string().contains(&format!("{ULID_A}.age")), "{err}");
+        assert_eq!(std::fs::read(&stray).expect("read stray"), b"stray bytes");
+        assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn decrypt_refuses_when_a_target_file_exists() {
+        // A plaintext note dropped next to the encrypted note it would be
+        // decrypted to: the encrypted scan sees only the `.age` file.
+        let fixture = encrypted_vault();
+        let session = &fixture.session;
+        crate::test_support::encrypted::write_encrypted_note(
+            session,
+            ULID_A,
+            "---\ntitle: Plan\n---\nencrypted\n",
+        );
+        let stray = session
+            .layout()
+            .all_notes()
+            .join(format!("{ULID_A}-plan.md"));
+        std::fs::write(&stray, "---\ntitle: Plan\n---\nstray\n").expect("write stray");
+
+        let result = start(
+            session,
+            Operation::Decrypt,
+            session.cipher(),
+            &PlaintextCipher,
+        );
+
+        let err = result.expect_err("the stray note would be overwritten");
+        assert!(err.to_string().contains("ntropy reconcile"), "{err}");
+        assert_eq!(
+            std::fs::read_to_string(&stray).expect("read stray"),
+            "---\ntitle: Plan\n---\nstray\n"
+        );
+        assert!(!session.layout().migration_file().exists());
     }
 
     // -------------------------------------------------------------------------

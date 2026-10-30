@@ -62,6 +62,12 @@ and this project adheres to
   vault, `reconcile` does the same for a plaintext note whose ULID is already
   taken, then encrypts it; before, such a note stayed unencrypted with a
   warning.
+- `vault encrypt`, `vault decrypt` and `vault rekey` refuse to start while
+  two note files share a ULID, or while a file sits where a converted note
+  would be written. Before, encrypting such a vault failed halfway and left
+  it mid-conversion, and decrypting replaced a plaintext note lying next to
+  its encrypted twin. `vault encrypt` refuses before it writes the vault's
+  key.
 - `reconcile`, and the filename realignment after an edit or a `write`, no
   longer rename a note over an existing file. Two files sharing a ULID and a
   title, such as a note copied by hand, could be renamed to one name, and the

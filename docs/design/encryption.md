@@ -177,6 +177,14 @@ A crash anywhere before the final deletion leaves both forms on disk, and
 `--resume` is idempotent: produce whatever lacks a verified target, then
 finish the deletion.
 
+A fresh conversion refuses to start, before it writes the marker, while two
+notes share a ULID, as both would be written to the one target their ULID
+names, or while a file already sits at a target, as it would be overwritten
+(ADR 0067). `vault encrypt` checks this before it writes the keypair, which on
+its own marks a vault as encrypted. The error names the files and says to run
+`reconcile` first or, for a stray `.age` file in a plaintext vault, which
+`reconcile` leaves alone, to move it away.
+
 The `vault encrypt` completion report always states that plaintext revisions
 previously recorded in git or a sync provider's version history remain
 readable there; cleaning that history is the user's job. The line is

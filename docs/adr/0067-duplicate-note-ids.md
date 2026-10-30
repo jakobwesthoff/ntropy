@@ -70,6 +70,17 @@ note already has, or that copies another plaintext note, first gets a ULID of
 its own; the encrypted file of the shared ULID keeps it. The ULIDs already
 taken are read from the file names, so this works on a locked vault.
 
+### Vault conversions refuse to overwrite a note
+
+`vault encrypt`, `decrypt` and `rekey` refuse to start while copies exist,
+as both files would be written to the one target their ULID names, or a
+rekey would leave a copy encrypted to the key it replaces. They also refuse
+while a file the source scan does not count as a note, such as a plaintext
+note beside its encrypted twin before `decrypt`, sits at a target, as the
+conversion would overwrite it. The check runs on fresh conversions only,
+before the migration marker is written; `vault encrypt` runs it before it
+writes the vault's keypair, which alone marks a vault as encrypted.
+
 ### No rename replaces a file
 
 No rename of a note replaces an existing file. A destination that already
