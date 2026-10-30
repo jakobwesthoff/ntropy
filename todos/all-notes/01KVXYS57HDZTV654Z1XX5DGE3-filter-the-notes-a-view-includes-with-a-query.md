@@ -2,6 +2,7 @@
 title: "Filter the notes a view includes with a query"
 kind: feature
 component: view
+horizon: next
 origin: discussion
 ---
 # Filter the notes a view includes with a query

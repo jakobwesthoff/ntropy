@@ -2,7 +2,6 @@
 title: "The CLI rejects two-word search that the docs promise works"
 kind: bug
 component: query
-status: needs-discussion
 origin: implementation
 ---
 # The CLI rejects two-word search that the docs promise works
@@ -40,61 +39,41 @@ The website's client-side search reads the same input differently.
 `and` (ADR 0052, amended). The CLI and the site therefore disagree on
 `entrance anim` as well.
 
-## Options
+## Proposal
 
-1. Fix the docs to match the CLI. The website example and the skill example
-   become `ntropy search '"borrow checker"'` or `ntropy search borrow and
-   checker`. No grammar change.
-2. Make juxtaposition an implicit `and` in the CLI grammar, matching the site
-   search, so the documented example works. This amends ADR 0012, flips the
-   parser test, and needs cases in `tests/fixtures/query-corpus.json` so the
-   CLI and site evaluators stay in step. The implicit `and` has to bind like
-   the explicit one, so `a b or c` parses as `(a and b) or c`.
+Make juxtaposition an implicit `and` in the CLI grammar, matching the site
+search, so the documented example works. This amends ADR 0012, flips the
+parser test, and needs cases in `tests/fixtures/query-corpus.json` so the CLI
+and site evaluators stay in step.
 
-### Arguments for an implicit `and` (option 2)
+- The implicit `and` binds like the explicit one, so `a b or c` parses as
+  `(a and b) or c`.
+- It also applies after a parenthesised group (`(a) b`, the case in the
+  current parser test).
+- `delete` takes the same selector and keeps requiring exactly one match, so
+  the broader reading deletes nothing more.
+- Juxtaposition semantics are a shared principle of CLI and site. ADR 0052
+  gains the amendment link when the work lands.
 
-- It is what people type. `search` joins its trailing arguments, so
-  `ntropy search borrow checker` is the natural spelling without shell quoting.
-  Search engines, `fd`, the site search and most issue trackers read a space
-  as AND.
-- The CLI and the exported site would read the same text the same way, as far
-  as the CLI's predicates go, instead of documenting a divergence.
-- It fits the grammar. Each bare word is already a `text:` term, so
-  `borrow checker` is `text:borrow and text:checker`, and mixed input such as
-  `watcher tag:settings` works too. Joining bare words into one phrase instead
-  would not compose with predicates. An exact phrase stays available as
-  `"borrow checker"`.
-- Agents write two-word searches routinely and currently hit the error.
-- The most common slip, a forgotten operator in `tag:work status:done`, errors
-  today and would do what was meant.
+Each bare word is already a `text:` term, so `borrow checker` is
+`text:borrow and text:checker`, and mixed input such as `watcher tag:settings`
+works too. An exact phrase stays available as `"borrow checker"`. The cost is
+that a mistyped operator, as in `tag:work nd status:done`, no longer errors:
+it searches bodies for `nd`.
 
-### Arguments for keeping the strict grammar (option 1)
+## Decisions
 
-- A mistyped operator fails loudly today. `tag:work nd status:done` errors;
-  with an implicit `and` it searches bodies for `nd` and most likely returns
-  nothing, with no hint why.
-- No grammar change, no ADR amendment, no work in the TypeScript evaluator.
-  Only the two docs change.
-
-## Open questions
-
-- Whether the implicit `and` also applies after a parenthesised group (`(a) b`,
-  the case in the current parser test). Nothing found so far argues for
-  treating it differently.
-- `delete` takes the same selector. It still requires exactly one match, so a
-  broader reading should not delete more, but that is worth confirming.
-- Whether site and CLI should share juxtaposition semantics as a principle,
-  recorded in ADR 0052, or only for this case.
+- 2026-10-30, user: option 2, two terms side by side are an implicit `and` that binds like the explicit one, matching the site search. Option 1 (fix the docs to match the strict CLI) is dropped.
+- 2026-10-30, lead: the implicit `and` also applies after a parenthesised group (`(a) b`); `delete` keeps requiring exactly one match; juxtaposition semantics are recorded as a shared principle of CLI and site, and ADR 0052 gains the amendment link when the work lands.
 
 ## Acceptance
 
 - The website page, the skill reference and the CLI agree on what
   `ntropy search borrow checker` does.
-- Whatever the CLI accepts is pinned by a parser test, and for option 2 by
-  query-corpus cases.
+- The parser test and query-corpus cases pin the implicit `and`.
 
 ## Related
 
 The skills repository's `skills/ntropy-todos/SKILL.md` (*Finding work*) tells
-agents that two bare words are a syntax error. If option 2 lands, that note
+agents that two bare words are a syntax error. When this lands, that note
 goes.

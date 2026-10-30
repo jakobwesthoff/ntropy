@@ -2,6 +2,7 @@
 title: "Add CLI commands to insert links and list backlinks"
 kind: feature
 component: cli
+horizon: next
 origin: discussion
 ---
 # Add CLI commands to insert links and list backlinks

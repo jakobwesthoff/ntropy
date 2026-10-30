@@ -3,6 +3,7 @@ title: "Support Windows"
 kind: feature
 component: project
 status: needs-discussion
+horizon: someday
 origin: discussion
 tags: [windows]
 ---
@@ -24,3 +25,7 @@ macOS and Linux.
   panicking. How should a Windows build handle a broken pipe? One option is to
   map a `BrokenPipe` error on stdout writes to a quiet exit instead of letting
   `println!` panic.
+
+## Revisit when
+
+No trigger known; reconsider at the next sweep.

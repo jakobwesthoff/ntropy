@@ -2,6 +2,7 @@
 title: "Add comparison operators and date ranges to queries"
 kind: feature
 component: query
+horizon: next
 origin: discussion
 ---
 # Add comparison operators and date ranges to queries

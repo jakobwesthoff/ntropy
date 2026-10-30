@@ -2,6 +2,7 @@
 title: "Let vaults set default values for fields that notes lack"
 kind: feature
 component: vault
+horizon: next
 ---
 # Let vaults set default values for fields that notes lack
 

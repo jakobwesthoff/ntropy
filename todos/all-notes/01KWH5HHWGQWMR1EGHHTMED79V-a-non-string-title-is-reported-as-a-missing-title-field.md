@@ -2,7 +2,6 @@
 title: "A non-string title is reported as a missing title field"
 kind: bug
 component: note
-status: needs-discussion
 impact: low
 origin: review
 tags: [error-handling]
@@ -41,15 +40,14 @@ fails with the missing-title error. Tags drop values the same way:
 `extract_tags` in `src/note/frontmatter.rs` (around lines 143 to 151)
 uses `filter_map(Value::as_str)`, so `tags: [2026, rust]` loses `2026`.
 
-## Options
+## Proposal
 
-1. Coerce scalar titles and tags to their string rendering, so `2026`
-   becomes "2026". This is the most forgiving and fits the permissive
-   frontmatter of ADR 0005.
-2. Keep the strict behaviour but add a distinct error variant, such as
-   ``the `title` field is not a string (found a number)``, so the user can
-   fix the file, plus a per-entry warning for dropped tags.
+Coerce scalar titles and tags to their string rendering, so `title: 2026`
+becomes "2026" and `tags: [2026, rust]` keeps both tags. This fits the
+permissive frontmatter of ADR 0005, which may need a one-line amendment. A
+title or tag that is not a scalar (a list or a mapping) still needs an error
+that says what was found instead of reporting a missing field.
 
-Either way the current message misdiagnoses the file. The direction,
-coercion or a better error, has to be settled before implementing. ADR
-0005 documents the permissive schema and may need a one-line amendment.
+## Decisions
+
+- 2026-10-30, user: coerce scalar values to strings, for titles and for tags.

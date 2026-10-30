@@ -2,6 +2,7 @@
 title: "Show link target previews on hover"
 kind: feature
 component: lsp
+horizon: next
 origin: discussion
 ---
 # Show link target previews on hover

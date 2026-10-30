@@ -2,7 +2,6 @@
 title: "Atomic writes do not fsync, so a power loss can truncate a note"
 kind: bug
 component: vault
-status: needs-discussion
 origin: review
 tags: [durability]
 ---
@@ -27,8 +26,12 @@ Every note write, config write and `.gitignore` write goes through this function
 
 ## Suggested fix
 
-Open the temporary file explicitly, write it, and call `File::sync_all()` before the rename. Optionally call `sync_all()` on the parent directory afterwards to persist the directory entry. The alternative is the `tempfile` crate's `NamedTempFile::persist` with an explicit sync; the crate is already a dev-dependency and would move to a regular one. An fsync per write costs milliseconds, which is negligible for a CLI that writes small files on explicit user action.
+Open the temporary file explicitly, write it, and call `File::sync_all()` before the rename. Optionally call `sync_all()` on the parent directory afterwards to persist the directory entry. The alternative is the `tempfile` crate's `NamedTempFile::persist` with an explicit sync; the crate is already a dev-dependency and would move to a regular one. The cost of the sync is not known yet: the measurement below decides whether it is acceptable.
 
-## Open questions
+## Measurement first
 
-Is crash durability in scope for ntropy at all? If not, the doc comment on `atomic_write` should stop promising more than the code delivers, and the todo closes without code changes.
+Before the sync lands, measure what it costs on a vault of 30,000 to 50,000 notes: ordinary note writes and operations that write many notes, such as a `reconcile` that renames or relinks, with and without the file and directory sync. The result decides whether the cost is acceptable. If it is not, bring the numbers back to the user before choosing a cheaper scope.
+
+## Decisions
+
+- 2026-10-30, user: yes, flush the file and its directory on ordinary note writes, but only after measuring the cost on a vault of 30,000 to 50,000 notes. The measurement comes first and decides whether the cost is acceptable.

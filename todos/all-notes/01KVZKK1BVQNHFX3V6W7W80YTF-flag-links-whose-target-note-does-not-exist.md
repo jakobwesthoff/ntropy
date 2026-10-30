@@ -2,6 +2,7 @@
 title: "Flag links whose target note does not exist"
 kind: feature
 component: lsp
+horizon: next
 origin: discussion
 ---
 # Flag links whose target note does not exist

@@ -2,6 +2,7 @@
 title: "Support editing multiple notes at once"
 kind: feature
 component: cli
+horizon: someday
 origin: discussion
 tags: [ux]
 ---
@@ -22,3 +23,7 @@ touched note when the editor exits.
 - Should all selected notes open in one editor invocation, for example
   `nvim file1 file2 ...`?
 - Should every touched note be reconciled on the single editor exit?
+
+## Revisit when
+
+No trigger known; reconsider at the next sweep.

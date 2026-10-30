@@ -2,6 +2,7 @@
 title: "Add an ntropy skill command that prints and installs the agent skill"
 kind: feature
 component: cli
+horizon: next
 ---
 # Add an ntropy skill command that prints and installs the agent skill
 

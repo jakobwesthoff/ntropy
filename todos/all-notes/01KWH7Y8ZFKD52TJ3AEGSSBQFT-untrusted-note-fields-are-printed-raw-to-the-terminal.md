@@ -328,4 +328,4 @@ stay unchanged. Only the new tests exercise the escape path.
 ## Relations
 
 - Relates to: [View names are used as unvalidated paths, so a config can delete files outside the vault](01KWH7Y8ZFKD52TJ3AEGSSBQFR-view-names-are-used-as-unvalidated-paths-so-a-config-can-delete-files.md), the view name and field cells share the root cause. The fixes are independent.
-- Relates to: [Decide whether walk-up vault discovery needs a trust boundary](01KWH7Y8ZFKD52TJ3AEGSSBQFS-decide-whether-walk-up-vault-discovery-needs-a-trust-boundary.md), walk-up discovery is what makes a hostile vault reachable without a deliberate open.
+- Relates to: [Document the trust model of walk-up vault discovery](01KWH7Y8ZFKD52TJ3AEGSSBQFS-document-the-trust-model-of-walk-up-vault-discovery.md), walk-up discovery is what makes a hostile vault reachable without a deliberate open.

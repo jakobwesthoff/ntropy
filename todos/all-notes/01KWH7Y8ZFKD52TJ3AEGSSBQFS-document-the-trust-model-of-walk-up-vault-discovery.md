@@ -1,19 +1,20 @@
 ---
-title: "Decide whether walk-up vault discovery needs a trust boundary"
-kind: investigation
+title: "Document the trust model of walk-up vault discovery"
+kind: docs
 component: vault
-status: needs-discussion
 impact: low
 origin: review
 tags: [security]
 ---
-# Decide whether walk-up vault discovery needs a trust boundary
+# Document the trust model of walk-up vault discovery
 
-Found in the 2026-07-02 security review of vault discovery. ntropy finds its vault by walking up from the working directory. A command run inside an untrusted tree (a cloned repository, a synced folder, an extracted archive) silently uses that tree's vault: its `config.toml` view definitions, its templates and its notes. Nothing asks for confirmation, and there is no allowlist or opt-in, unlike git's `safe.directory`, which was added after CVE-2022-24765. The open question is whether ntropy should gate this or document the trust model and keep the default.
+Found in the 2026-07-02 security review of vault discovery. ntropy finds its vault by walking up from the working directory. A command run inside an untrusted tree (a cloned repository, a synced folder, an extracted archive) silently uses that tree's vault: its `config.toml` view definitions, its templates and its notes. Nothing asks for confirmation, and there is no allowlist or opt-in, unlike git's `safe.directory`, which was added after CVE-2022-24765. The user decided to document the trust model and keep the default instead of adding a gate.
 
-## Recommendation
+## Outcome
 
-The security triage ran after the code review on 2026-07-02. It verified the execution surface and recommends against building a trust boundary. Instead, the primitives get hardened (the view-name, terminal-escape and frontmatter-parser fixes, each in its own todo, see Relations), and the threat model goes into a new ADR with a binding "no execution in config" invariant. This is a proposal for the user to accept. The ADR must not be written as a decided record until the user confirms the "document, don't gate" direction.
+Document, do not gate. The security triage ran after the code review on 2026-07-02, verified the execution surface and found no reason for a trust boundary. The primitives get hardened (the view-name, terminal-escape and frontmatter-parser fixes, each in its own todo, see Relations), and the work of this todo is a new ADR on the trust model of vault discovery with the invariant "nothing in a vault is ever executed", plus the design doc. The ADR is titled "Trust model for discovered vaults" and follows the sketch below.
+
+Five gate options were considered (no gate, uid ownership check, pointer restriction, trust store, walk-up opt-in) and rejected. Each protects only against low-severity misdirection and costs either the default walk-up behaviour (ADR 0016) or machinery out of proportion for a single-user, local notes CLI. The reason git has `safe.directory` does not carry over: repository-local config there selects executables (hooks, `core.pager`, `core.fsmonitor`), and CVE-2022-24765 was code execution, while ntropy's config selects no executable (verified below). The uid ownership check stays the pre-decided escalation if a trigger fires: it catches a foreign-uid `.ntropy/` in a world-writable ancestor and archives extracted as root, but misses the dominant case of a repository you cloned or a folder you synced.
 
 ## Context
 
@@ -23,7 +24,7 @@ The security triage ran after the code review on 2026-07-02. It verified the exe
 
 ### The pointer file
 
-`resolve_pointer` (around lines 137-161) reads the first line of `.ntropy-vault` as a path. The path may be absolute, relative to the pointer's directory, or `~`-expanded (`expand_tilde`, around lines 164-175). The only constraint is that the target must already be a vault. A `.ntropy-vault` committed into a cloned repository can therefore redirect ntropy to any existing vault. Once redirected, everything (config, templates and notes) comes from the target vault, and the hostile tree contributes only the redirect. A redirect to the user's own vault yields only ordinary operations on that vault, and after the view-name fix those cannot escape it. This is no worse than plain `.ntropy/` adoption. The pointer restriction option below covers the alternative.
+`resolve_pointer` (around lines 137-161) reads the first line of `.ntropy-vault` as a path. The path may be absolute, relative to the pointer's directory, or `~`-expanded (`expand_tilde`, around lines 164-175). The only constraint is that the target must already be a vault. A `.ntropy-vault` committed into a cloned repository can therefore redirect ntropy to any existing vault. Once redirected, everything (config, templates and notes) comes from the target vault, and the hostile tree contributes only the redirect. A redirect to the user's own vault yields only ordinary operations on that vault, and after the view-name fix those cannot escape it. This is no worse than plain `.ntropy/` adoption. Restricting pointer targets was rejected because it removes the reason for ADR 0026 (a vault that lives elsewhere, external), and `ntropy info` already shows the source (`ResolveSource::Pointer`, `resolve.rs`, around lines 39-40; `run/mod.rs`, around lines 339-347).
 
 ### Execution-influence surface: verified empty
 
@@ -53,23 +54,13 @@ The finding was first rated medium as an amplifier. It drops to low once the vie
 
 Standalone, this reduces to a documentation and invariant item, not a code change.
 
-## Options
-
-Ranked by the triage.
-
-1. Do nothing at the trust layer. Harden the primitives and write the ADR. This is the recommendation. git's `safe.directory` exists because repository-local config selects executables (hooks, `core.pager`, `core.fsmonitor`), and CVE-2022-24765 was code execution. ntropy's config selects no executable (verified above), so the premise of the analogy does not hold. Once the primitives are fixed, every gating option protects only against low-severity misdirection, and each one costs either the default walk-up behaviour (ADR 0016) or machinery out of proportion for a single-user, local notes CLI. This option must come with the binding invariant below.
-2. uid ownership check. Reserved for escalation, not v1. It catches a foreign-uid `.ntropy/` in a world-writable ancestor (`/tmp` on a shared machine) and archives extracted as root. It misses the dominant case, a repository you cloned or a folder you synced, where every file is owned by you. Since it misses the main attack and the primitives are fixed anyway, its edge cases (sudo, containers, NFS uid mapping) are not worth the cost now. Implement it if an escalation trigger fires.
-3. Pointer restriction. Rejected. Disallowing absolute or `~` targets, or confining targets below the pointer's directory, removes the reason for ADR 0026 ("a vault that lives elsewhere ... external", `docs/adr/0026`, around lines 12-15) in order to close a low-severity misdirection. `ntropy info` already shows the source (`ResolveSource::Pointer`, `resolve.rs`, around lines 39-40; `run/mod.rs`, around lines 339-347). A per-command stderr notice was rejected too: it would fire on every command for users who keep external vaults on purpose.
-4. Trust store, a `safe.directory` analogue. Rejected for v1. It is git-level machinery for consequences that are not git-level, and it taxes every legitimate multi-vault user.
-5. Walk-up opt-in. Rejected. It removes the default mode of operation to defend a surface that hardening has already closed. It has the worst cost-benefit of the five.
-
-### Interaction with the view-name fix
+## Interaction with the view-name fix
 
 With view names validated (the `ViewName` newtype from the view-name todo), the destructive residual is effectively gone. Plain adoption confines view sync to validated directories under the adopted root, which is the attacker's own tree. A pointer redirect syncs the target vault with the target's own config, which is the user's trusted config. Hostile config never mixes with user data, so nothing left justifies a gate.
 
 ## ADR sketch
 
-Write this only after the user accepts "document, don't gate". The ADR is titled "Trust model for discovered vaults":
+The ADR is titled "Trust model for discovered vaults":
 
 1. Precedence, restated with references to ADRs 0016 and 0026 rather than a copy of them.
 2. The trust assumption, stated plainly: a vault found by walk-up is trusted to the same degree as the working directory's contents. ntropy treats everything inside a vault as untrusted data, never as instructions. Display is sanitized (the terminal-escape todo), view names are validated before they become paths (the view-name todo), frontmatter parsing is bounded (the frontmatter-parser todo), and templates are inert placeholder substitution.
@@ -77,10 +68,6 @@ Write this only after the user accepts "document, don't gate". The ADR is titled
 4. Accepted residuals, named: committed `.ntropy-vault` misdirection (operations use the target vault's own config, and `delete` stays behind a selector and confirmation); a planted vault in a world-writable ancestor can be adopted, since walk-up runs to `/`; auto-opened content may be attacker-authored, and editor-side execution is out of scope.
 5. Non-goals: no trust store, no ownership check and no opt-in walk-up in v1.
 6. Revisit triggers: config gains any execution-adjacent field. The most likely accidental path is "fixing" the `$EDITOR`-with-arguments limitation by adding an `editor` config key, which would invalidate this decision (see the editor todo in Relations). Vault content gains an interpreted role. Windows support arrives (ADR 0020 is Unix-only).
-
-## Open questions
-
-- Does the user accept the "document, don't gate" direction, or choose a gate from the options above? The ADR waits on this answer.
 
 ## Other verified points
 
@@ -92,9 +79,13 @@ Write this only after the user accepts "document, don't gate". The ADR is titled
 
 ## Done when
 
-- The user confirms the "document, don't gate" direction, or chooses a gate from the options.
-- If accepted, the ADR is written per the sketch, with the no-execution-in-config invariant as its centerpiece and the uid ownership check named as the pre-decided escalation. It cross-references the view-name, terminal-escape and frontmatter-parser todos.
+- The ADR is written per the sketch, with the no-execution-in-config invariant as its centerpiece and the uid ownership check named as the pre-decided escalation. It cross-references the view-name, terminal-escape and frontmatter-parser todos.
+- The design doc describes the trust model of vault discovery.
 - The `$EDITOR`-with-arguments todo is updated to point at this decision, so a future editor fix cannot silently break the invariant.
+
+## Decisions
+
+- 2026-10-30, user: document, do not gate. The work is a new ADR on the trust model of vault discovery with the invariant "nothing in a vault is ever executed", plus the design doc.
 
 ## Relations
 

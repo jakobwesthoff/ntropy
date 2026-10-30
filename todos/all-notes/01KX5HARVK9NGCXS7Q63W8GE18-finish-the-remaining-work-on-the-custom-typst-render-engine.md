@@ -29,6 +29,7 @@ themes (ADR 0045). Remaining theming work:
 ## Decisions
 
 - 2026-07-10, user: smart quotes are deferred again during basic theming.
+- 2026-10-30, user: verify the `../` behaviour with a render, correct the two stale texts, then the todo shrinks to smart quotes only.
 
 ## Asset paths in the design doc
 

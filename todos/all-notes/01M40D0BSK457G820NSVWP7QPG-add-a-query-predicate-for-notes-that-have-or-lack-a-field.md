@@ -2,6 +2,7 @@
 title: "Add a query predicate for notes that have or lack a field"
 kind: feature
 component: query
+horizon: next
 ---
 # Add a query predicate for notes that have or lack a field
 

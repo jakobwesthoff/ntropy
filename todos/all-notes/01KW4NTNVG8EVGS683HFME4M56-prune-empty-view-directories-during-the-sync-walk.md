@@ -2,6 +2,7 @@
 title: "Prune empty view directories during the sync walk"
 kind: improvement
 component: view
+horizon: next
 origin: idea
 tags: [performance]
 ---

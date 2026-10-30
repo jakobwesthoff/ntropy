@@ -3,6 +3,7 @@ title: "Update only the affected groups after a note mutation"
 kind: improvement
 component: view
 status: needs-discussion
+horizon: someday
 origin: idea
 tags: [performance]
 ---
@@ -60,3 +61,7 @@ the note itself, not from a cache, and keeps within ADR 0002.
 - `src/ops/delete.rs`: `delete_note` (would need to parse before removing).
 - `src/view/leaf.rs`: per-group disambiguation, which bounds the blast radius.
 - ADR 0002 (stateless scan; this stays within it, with no persisted index).
+
+## Revisit when
+
+View sync latency after a mutation becomes noticeable.

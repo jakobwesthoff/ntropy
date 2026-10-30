@@ -2,7 +2,6 @@
 title: "Code masking misses multiline code spans and cites a missing limitation doc"
 kind: bug
 component: note
-status: needs-discussion
 origin: review
 ---
 # Code masking misses multiline code spans and cites a missing limitation doc
@@ -32,13 +31,13 @@ Only ntropy-shaped targets (`<ULID>[-slug].md`) inside a multiline span are affe
 
 ## Suggested fix
 
-Write the actual limitation list (indented code blocks are not masked; inline spans are single-line, if that stays the case) into ADR 0028 or the relevant design doc, and point the `code.rs` module comment at it.
+Mask inline code spans that cross a line break, with a small state machine that carries an open backtick run across lines. Then write the remaining limitation (indented code blocks are not masked) into ADR 0028 or the relevant design doc, and point the `code.rs` module comment at it.
 
-## Open questions
+## Decisions
 
-Should multiline inline spans be masked? A small state machine that carries an open backtick run across lines would do it. Or is the single-line scope an accepted limitation?
+- 2026-10-30, user: mask inline code spans that cross a line break. The option to document the single-line scope as a limitation is dropped.
 
 ## Done when
 
-- A test pins the chosen behaviour for a multiline inline span that contains an ntropy link.
+- A test pins that a multiline inline span containing an ntropy link is masked.
 - The limitation is documented where maintainers can find it, and the module doc's claim matches an existing document.

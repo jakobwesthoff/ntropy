@@ -3,6 +3,7 @@ title: "Add distribution channels beyond crates.io"
 kind: feature
 component: project
 status: needs-discussion
+horizon: someday
 origin: discussion
 ---
 # Add distribution channels beyond crates.io
@@ -18,3 +19,7 @@ documented in the README).
 - Should a shell or one-line installer script fetch the prebuilt release
   binaries?
 - Should a Nix flake be added?
+
+## Revisit when
+
+No trigger known; reconsider at the next sweep.

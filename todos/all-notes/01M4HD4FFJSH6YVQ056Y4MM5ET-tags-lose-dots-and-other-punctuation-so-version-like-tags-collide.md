@@ -2,7 +2,6 @@
 title: "Tags lose dots and other punctuation, so version-like tags collide"
 kind: bug
 component: note
-status: needs-discussion
 origin: implementation
 ---
 # Tags lose dots and other punctuation, so version-like tags collide
@@ -39,30 +38,35 @@ Nothing warns the author that the tag they wrote is not the tag ntropy stores.
 The ntropy-todos skill now restricts tag names to lowercase letters, digits,
 hyphens and `/` as a workaround.
 
-## Options
+## Proposal
 
-- Keep the slug rules for view directory names, but store and match the tag
-  with dots preserved (`0.13` stays `0.13` in `tags -n` and queries). Only the
-  materialized path is slugified. Two tags that differ only by a dot would then
-  share a view directory, which needs the view collision handling to cover tag
-  directories too.
-- Allow punctuation in tags altogether. Any change has to keep the view
-  directories safe: a segment of `.` or `..`, a leading dot (a hidden
-  directory), and characters that are invalid on some filesystems.
-- Keep today's normalization and make it visible. `write`, `reconcile` or
-  `--strict` warn when a tag changes under normalization, so `milestone/0.13`
-  does not turn into `milestone/013` unnoticed.
+Tags keep their punctuation as written: they are stored and matched with it,
+so `0.13` stays `0.13` in `tags -n` and in queries. Only the view directory
+name is normalized, and the normalization replaces every character outside
+`[a-z0-9-]` with `-` instead of dropping it. This applies to all slugs, note
+filenames included, so `reconcile` renames existing notes whose titles contain
+such characters once. Links resolve by ULID and are relinked. The materialized
+path keeps to safe segments: no `.` or `..`, no leading dot, no characters that
+are invalid on some filesystems.
 
 ## Open questions
 
-- The query grammar's bare value (`[letters, digits, /, _, -]`,
-  `docs/design/query-and-search.md`) excludes the dot, so tags with dots would
-  need quoting in queries unless the bare-value character set grows as well.
+- Whether the query grammar's bare value (`[letters, digits, /, _, -]`,
+  `docs/design/query-and-search.md`) grows to include `.`, or tags with dots
+  stay quoted in queries.
+- Collision handling when two tags share a view directory (`node.js` and
+  `node-js` both become `node-js`, `0.13` and `0-13` both become `0-13`). The view collision
+  handling has to cover tag directories too.
 - The site search (ADR 0052) and its shared query corpus
   (`tests/fixtures/query-corpus.json`) must follow whatever the CLI decides.
 
+## Decisions
+
+- 2026-10-30, user: tags keep their punctuation as written (stored and matched with it); only the view directory name is normalized.
+- 2026-10-30, user: the normalization replaces every character outside `[a-z0-9-]` with `-` instead of dropping it, and this applies to all slugs, note filenames included, so `reconcile` renames existing notes whose titles contain such characters once (links resolve by ULID and are relinked). The option to keep normalization and warn is dropped.
+
 ## Acceptance
 
-- A decision recorded as an ADR 0023 amendment or a new ADR.
-- Whatever is chosen, an author can no longer lose information from a tag
-  without being told.
+- The decision is recorded as an ADR 0023 amendment or a new ADR.
+- An author can no longer lose information from a tag, and the slug change
+  is covered by a `reconcile` test that renames an existing note.

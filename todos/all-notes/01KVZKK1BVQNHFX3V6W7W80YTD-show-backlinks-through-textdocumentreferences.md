@@ -2,6 +2,7 @@
 title: "Show backlinks through textDocument/references"
 kind: feature
 component: lsp
+horizon: next
 origin: discussion
 ---
 # Show backlinks through textDocument/references
