@@ -45,6 +45,19 @@
         "priority": "2"
       },
       "body": "nothing here\nRUST in caps only\n"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FC1",
+      "frontmatter": {
+        "title": "Numeric tags",
+        "tags": [
+          2026,
+          0.13,
+          true,
+          "plain-text"
+        ]
+      },
+      "body": "Numbers as tags.\n"
     }
   ],
   "cases": [
@@ -264,7 +277,8 @@
       "query": "not tag:rust",
       "expect": [
         "01ARZ3NDEKTSV4RRFFQ69G5FA2",
-        "01ARZ3NDEKTSV4RRFFQ69G5FA3"
+        "01ARZ3NDEKTSV4RRFFQ69G5FA3",
+        "01ARZ3NDEKTSV4RRFFQ69G5FC1"
       ]
     },
     {
@@ -416,6 +430,34 @@
     {
       "query": ") tag:rust",
       "error": true
+    },
+    {
+      "query": "tag:2026",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FC1"
+      ]
+    },
+    {
+      "query": "tag:\"0.13\"",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FC1"
+      ]
+    },
+    {
+      "query": "tag:true",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FC1"
+      ]
+    },
+    {
+      "query": "tag:plain-text",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FC1"
+      ]
+    },
+    {
+      "query": "tag:2025",
+      "expect": []
     }
   ]
 }

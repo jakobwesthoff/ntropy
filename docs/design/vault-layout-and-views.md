@@ -104,15 +104,20 @@ note bodies at all.
 Frontmatter is permissive: any YAML fields the user adds are preserved
 untouched and are available for filtering. A set of recognized fields carry
 special meaning, currently `title` (required, canonical) and `tags` (a flat
-list of strings). Timestamps are derived, never stored: `created` from the
+list of strings). A number or boolean in either field is read as its text
+(ADR 0081), so `title: 2026` is the title "2026"; the YAML parser keeps no
+source spelling, so `1.50` reads as `1.5`, and a value whose spelling matters is
+quoted. A list or mapping as `title`, or as an entry of `tags`, makes the note
+malformed, with a message that names what was found. Timestamps are derived, never stored: `created` from the
 ULID, `modified` from filesystem mtime. `modified` is soft information used for
 conveniences like a "recently changed" ordering; nothing important depends on
 its accuracy.
 
 ### Tags
 
-`tags` is a flat YAML list of strings in which a forward slash denotes
-hierarchy by convention, for example:
+`tags` is a flat YAML list of strings (numbers and booleans read as their text,
+ADR 0081) in which a forward slash denotes hierarchy by convention, for
+example:
 
     tags: [programming/rust, programming/cli, area/work]
 

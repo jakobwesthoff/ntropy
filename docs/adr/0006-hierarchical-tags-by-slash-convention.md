@@ -6,6 +6,9 @@ Date: 2026-06-24
 
 Accepted
 
+Amended by [ADR 0081](0081-numbers-and-booleans-in-titles-and-tags-read-as-text.md),
+which reads numbers and booleans in `title` and `tags` as their text.
+
 ## Context
 
 Tags are the primary axis for filtering and for tag-based views, which should

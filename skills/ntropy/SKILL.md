@@ -204,7 +204,8 @@ views itself. What you feed it has to be a well-formed note, since nothing
 stamped a skeleton for you: a YAML frontmatter block first, `title` in it (the
 title you passed to `new`, so the filename slug matches), `tags` a flat list of
 strings if present, no `id`/`created`/`modified` fields, YAML-quoting for values
-with `: ` in them, then the Markdown body. Text that is not a well-formed note
+with `: ` in them and for numbers whose spelling matters (`1.50` reads as
+`1.5`), then the Markdown body. Text that is not a well-formed note
 is refused and nothing is written.
 
 **Rewrite an existing note:** read it out, transform, write it back. `-P` and

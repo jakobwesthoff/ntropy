@@ -3976,6 +3976,87 @@ fn strict_makes_malformed_fatal() {
     });
 }
 
+/// The stdout of `ntropy search -n <args>` in `vault`, which must succeed.
+fn search_stdout(vault: &Path, args: &[&str]) -> String {
+    let output = ntropy(vault)
+        .args(["search", "-n"])
+        .args(args)
+        .output()
+        .expect("run ntropy");
+    assert!(
+        output.status.success(),
+        "search {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout).expect("utf-8 output")
+}
+
+#[test]
+fn a_numeric_title_is_listed_as_its_text() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "2026", "---\ntitle: 2026\n---\n");
+    let listing = search_stdout(dir.path(), &[]);
+    assert!(
+        listing.lines().any(|line| line.contains(ULID_A)
+            && line.split_whitespace().any(|word| word == "2026")),
+        "the note is listed under the title 2026:\n{listing}"
+    );
+}
+
+#[test]
+fn a_numeric_tag_is_found_by_its_text() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "numbers",
+        "---\ntitle: Numbers\ntags: [2026, 1.5]\n---\n",
+    );
+    let found = search_stdout(dir.path(), &["tag:2026"]);
+    assert!(found.contains(ULID_A), "tag:2026 finds the note:\n{found}");
+}
+
+#[test]
+fn a_list_title_is_skipped_with_a_warning_naming_the_list() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "good", "---\ntitle: Good\n---\n");
+    write_note(dir.path(), ULID_B, "bad", "---\ntitle: [a, b]\n---\n");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn a_list_title_is_fatal_under_strict() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "good", "---\ntitle: Good\n---\n");
+    write_note(dir.path(), ULID_B, "bad", "---\ntitle: [a, b]\n---\n");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n", "--strict"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn a_list_in_the_tags_is_skipped_with_a_warning_naming_its_position() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "good", "---\ntitle: Good\n---\n");
+    write_note(
+        dir.path(),
+        ULID_B,
+        "bad",
+        "---\ntitle: Bad\ntags: [a, [b, c]]\n---\n",
+    );
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
 /// A note and a hand-made copy of it: the same ULID in two files. The copy's
 /// name is the longer one, so the original keeps the ULID (ADR 0067).
 fn copied_note(vault: &Path) {

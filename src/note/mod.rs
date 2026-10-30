@@ -390,6 +390,34 @@ mod tests {
     }
 
     #[test]
+    fn a_numeric_title_is_the_notes_title_and_slug() {
+        let note = Note::parse(note_path("2026"), "---\ntitle: 2026\n---\n", None).expect("parse");
+        assert_eq!(note.title, "2026");
+        assert!(note.slug_is_aligned());
+    }
+
+    #[test]
+    fn a_float_title_names_the_file_after_the_number_it_parsed_to() {
+        // `1.10` parses to the number 1.1, so reconcile renames a file named
+        // after what was typed.
+        let note = Note::parse(note_path("1-10"), "---\ntitle: 1.10\n---\n", None).expect("parse");
+        assert_eq!(note.title, "1.1");
+        assert_eq!(
+            note.canonical_filename(),
+            filename::build_from_title(&note.id, "1.1")
+        );
+    }
+
+    #[test]
+    fn a_list_title_is_refused_with_what_was_found() {
+        let err = Note::parse(note_path("x"), "---\ntitle: [a]\n---\n", None).expect_err("list");
+        assert_eq!(
+            err.to_string(),
+            "the `title` field is a list, expected a string, number or boolean"
+        );
+    }
+
+    #[test]
     fn slug_alignment_detects_drift() {
         let aligned =
             Note::parse(note_path("aligned"), "---\ntitle: Aligned\n---\n", None).expect("parse");

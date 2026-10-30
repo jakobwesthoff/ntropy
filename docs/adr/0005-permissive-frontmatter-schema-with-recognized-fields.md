@@ -6,6 +6,9 @@ Date: 2026-06-24
 
 Accepted
 
+Amended by [ADR 0081](0081-numbers-and-booleans-in-titles-and-tags-read-as-text.md),
+which reads numbers and booleans in `title` and `tags` as their text.
+
 ## Context
 
 Filtering by arbitrary frontmatter fields rules out a fixed closed schema, but

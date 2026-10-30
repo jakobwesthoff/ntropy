@@ -1,0 +1,20 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - search
+    - "-n"
+    - "--strict"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+ID                          DATE        TITLE  TAGS  PATH
+[ULID....................]  [DATE....]  Good         [VAULT]/all-notes/[ULID....................]-good.md
+
+----- stderr -----
+warning: skipped `[ULID....................]-bad.md`: the `title` field is a list, expected a string, number or boolean

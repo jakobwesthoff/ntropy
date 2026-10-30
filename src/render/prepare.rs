@@ -139,6 +139,18 @@ mod tests {
     }
 
     #[test]
+    fn numeric_title_is_text_while_the_mapping_keeps_the_number() {
+        let source = note(ULID_A, "year", "---\ntitle: 2026\n---\nBody.\n");
+        let index = link::index(std::slice::from_ref(&source));
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
+        assert_eq!(doc.title, "2026");
+        assert_eq!(
+            doc.frontmatter.get(serde_yaml_ng::Value::from("title")),
+            Some(&serde_yaml_ng::Value::from(2026))
+        );
+    }
+
+    #[test]
     fn empty_body_prepares_without_links() {
         let source = note(ULID_A, "empty", "---\ntitle: Empty\n---\n");
         let index = link::index(std::slice::from_ref(&source));

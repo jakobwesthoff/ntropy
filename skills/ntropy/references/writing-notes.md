@@ -70,7 +70,8 @@ file, so the "Frontmatter rules" below are your contract:
 - `title` is required, and should be the title you passed to `new` — the
   filename slug was derived from it. A different title is not an error; `write`
   realigns the filename to it and prints the new path.
-- `tags`, if present, is a flat list of strings; no `id`, `created` or
+- `tags`, if present, is a flat list of strings (a number or boolean reads as
+  its text); no `id`, `created` or
   `modified` fields; YAML-quote any value containing `: ` or starting with YAML
   syntax.
 - Then the Markdown body, conventionally opening with `# <title>`.
@@ -151,11 +152,15 @@ Body is ordinary Markdown.
 
 - **`title` is required** and canonical: full case, punctuation, Unicode. A
   note without one is malformed (skipped with a warning; an error under
-  `--strict`).
-- **`tags` is a flat YAML list of strings.** A `/` inside a tag denotes
+  `--strict`). A number or boolean title reads as its text, and YAML does not
+  keep how a number was written (`1.50` reads as `1.5`), so quote a title whose
+  spelling matters. A list or mapping title is malformed too.
+- **`tags` is a flat YAML list of strings** (numbers and booleans read as their
+  text, `1.50` as `1.5`; quote a tag whose spelling matters). A `/` inside a tag denotes
   hierarchy: `area/roadmap` is one tag with two levels, understood by both
   queries and views. Tags are lowercase-normalized, so `Rust` and `rust` are
-  the same tag. Never nest YAML structures inside `tags`.
+  the same tag. Never nest YAML structures inside `tags`: a list or mapping entry
+  makes the note malformed.
 - **Every other field is free** (`status`, `project`, `author`, anything) and
   becomes queryable and view-groupable just by existing. Unknown fields are
   preserved untouched when ntropy rewrites a note.

@@ -37,6 +37,14 @@ change in any release
 - An escaped backtick no longer opens a code span, and a backtick fence line
   whose info text contains a backtick no longer opens a fenced block that
   hides the rest of the note from link handling.
+- A number or boolean in `title` or `tags` is read as its text. `title: 2026`
+  was reported as a missing title and `tags: [2026, rust]` lost the tag `2026`;
+  now they are the title "2026" and both tags. YAML does not keep how a number
+  was written, so `1.50` reads as `1.5`; quote a value whose spelling matters.
+  A list or mapping as the title, or as an entry of `tags`, now skips the note
+  with a warning that names what was found and, for `tags`, the entry's
+  position, where a tag entry was dropped without a word
+  ([ADR 0081](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0081-numbers-and-booleans-in-titles-and-tags-read-as-text.md)).
 
 ## v2.3.0 - 2026-10-30
 

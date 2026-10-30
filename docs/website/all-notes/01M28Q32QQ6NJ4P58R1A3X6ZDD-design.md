@@ -102,3 +102,4 @@ made.
 - [0074. typst runs in ntropy's working directory](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0074-typst-runs-in-ntropys-working-directory.md)
 - [0075. Version numbers cover the CLI, not the library](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)
 - [0076. Adjacent terms in a query are an implicit and](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md)
+- [0081. Numbers and booleans in titles and tags read as text](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0081-numbers-and-booleans-in-titles-and-tags-read-as-text.md)

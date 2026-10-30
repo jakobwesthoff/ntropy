@@ -31,7 +31,11 @@ Two fields carry special meaning. The rest are yours.
   punctuation, and Unicode. The filename slug is derived from it, so the
   title is the truth and the slug is a readable echo. A note with no `title`,
   or with a blank one, is malformed: ntropy skips it with a warning, or fails
-  under `--strict`.
+  under `--strict`. A number or `true`/`false` is read as its text, so
+  `title: 2026` is the title "2026". YAML does not keep how a number was
+  written, so `1.50` reads as `1.5` and `0x1F` as `31`; quote a title whose
+  spelling matters. A list or a mapping as the title is malformed too, and the
+  warning says which it found.
 - `tags` is a flat list of strings. A forward slash denotes hierarchy by
   convention: `area/roadmap` is one tag with two levels, which both
   [queries](01M28Q32FC8RW01C5DSEEV77DW-query-language.md) and
@@ -39,7 +43,10 @@ Two fields carry special meaning. The rest are yours.
   ntropy normalizes each tag when it reads the note: segments are lowercased
   and slugified the same way a title is, so `Rust` and `rust` are the same
   tag, and exact duplicates collapse into one. A lone string instead of a
-  list is accepted as a single tag.
+  list is accepted as a single tag. Numbers and booleans are read as their
+  text like a title is (`tags: [2026, rust]` holds both) and quoting a tag
+  keeps its spelling. A list or a mapping inside `tags` makes the note
+  malformed, and the warning names the entry by its position.
 - Everything else (`status`, `due`, `author`, anything you like) is a free
   field. Filter on it, build a view from it, or just keep it for yourself.
 
