@@ -457,6 +457,54 @@ mod tests {
     }
 
     #[test]
+    fn a_multibyte_char_across_the_ulid_width_is_a_warning() {
+        // ADR 0019: one badly named file never breaks a query. A panic inside
+        // the parallel walker takes the whole scan down with it (and with
+        // older `ignore` releases it hung instead), so the scan runs on its
+        // own thread and the channel tells a panic from a hang. The deadline
+        // only bounds a hang; a healthy scan answers at once.
+        use std::sync::mpsc::{self, RecvTimeoutError};
+        use std::time::Duration;
+
+        let (_guard, notes) = temp_notes_dir();
+        write(
+            &notes,
+            &format!("{ULID_A}-good.md"),
+            "---\ntitle: Good\n---\n",
+        );
+        // `é` occupies bytes 25..27, across the 26-byte ULID width.
+        write(
+            &notes,
+            &format!("{}é-xx.md", "a".repeat(25)),
+            "---\ntitle: X\n---\n",
+        );
+
+        let (sender, receiver) = mpsc::channel();
+        let dir = notes.clone();
+        std::thread::spawn(move || {
+            let scan = scan_notes_dir(&dir, &crate::cipher::PlaintextCipher);
+            // The receiver outlives the deadline only when the test already
+            // failed, so a send error has nobody left to tell.
+            let _ = sender.send(scan);
+        });
+        let scan = match receiver.recv_timeout(Duration::from_secs(30)) {
+            Ok(scan) => scan.expect("scan"),
+            Err(RecvTimeoutError::Timeout) => panic!("scan hung"),
+            Err(RecvTimeoutError::Disconnected) => panic!("scan panicked"),
+        };
+
+        assert_eq!(scan.notes.len(), 1);
+        assert_eq!(scan.warnings.len(), 1);
+        assert!(
+            scan.warnings[0]
+                .message
+                .contains("does not start with a valid ULID"),
+            "unexpected warning: {}",
+            scan.warnings[0].message
+        );
+    }
+
+    #[test]
     fn empty_notes_dir_yields_nothing() {
         let (_guard, notes) = temp_notes_dir();
         let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");

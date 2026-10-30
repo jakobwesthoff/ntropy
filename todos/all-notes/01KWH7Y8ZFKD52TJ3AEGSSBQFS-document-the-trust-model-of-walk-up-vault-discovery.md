@@ -90,6 +90,5 @@ The ADR is titled "Trust model for discovered vaults":
 ## Relations
 
 - Relates to: [Unbounded frontmatter size lets one note slow every scan](01KWH7Y8ZFKD52TJ3AEGSSBQFQ-unbounded-frontmatter-size-lets-one-note-slow-every-scan.md), a primitive fix this recommendation relies on
-- Relates to: [Filename parse panics on a multibyte character straddling byte 26](01KWH5HHWGQWMR1EGHHTMED79T-filename-parse-panics-on-a-multibyte-character-straddling-byte-26.md), the same untrusted-file trigger reached through walk-up discovery
 - Relates to: [View names are used as unvalidated paths, so a config can delete files outside the vault](01KWH7Y8ZFKD52TJ3AEGSSBQFR-view-names-are-used-as-unvalidated-paths-so-a-config-can-delete-files.md), the view-name fix that removes the destructive residual
 - Relates to: [EDITOR values with arguments fail to launch](01KWH6MQT7T5CJE5J1PQYSVDQA-editor-values-with-arguments-fail-to-launch.md), the likeliest route to breaking the no-execution invariant

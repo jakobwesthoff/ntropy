@@ -14,6 +14,13 @@ and this project adheres to
   before it builds. Its crates.io entry links the project page and lists
   keywords and categories.
 
+### Fixed
+
+- A file in `all-notes/` whose name has a multibyte character across its
+  26th byte, such as `aaaaaaaaaaaaaaaaaaaaaaaaaé-xx.md`, no longer makes
+  every command that scans the vault crash. It is skipped with a warning,
+  like any other file whose name does not start with a ULID.
+
 ## v2.2.0 - 2026-10-10
 
 ### Added

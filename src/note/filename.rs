@@ -5,11 +5,11 @@
 //! Building and parsing note filenames (ADR 0004, ADR 0041).
 //!
 //! A plaintext vault names its notes `<ulid>-<slug>.md`. The ULID is
-//! fixed-width (26 chars) and leads the name, so the split is by position: the
-//! first 26 characters are the identity, a single `-` separates it from the
-//! slug, and the slug runs to the `.md` extension. Identity is read from the
-//! filename and never stored in frontmatter, so this parse is the only place a
-//! note's id is recovered from disk.
+//! fixed-width (26 ASCII chars) and leads the name, so the split is by
+//! position: the first 26 bytes are the identity, a single `-` separates it
+//! from the slug, and the slug runs to the `.md` extension. Identity is read
+//! from the filename and never stored in frontmatter, so this parse is the only
+//! place a note's id is recovered from disk.
 //!
 //! An encrypted vault names its notes `<ulid>.age` and carries no slug at all,
 //! because a slug is derived from the title and the title is exactly what must
@@ -141,7 +141,18 @@ pub fn parse(name: &str) -> Result<ParsedFilename, FilenameError> {
         return Err(FilenameError::TooShort(name.to_string()));
     }
 
-    let (id_part, rest) = stem.split_at(ULID_LEN);
+    // A split inside a multibyte character means a non-ASCII byte sits within
+    // the first 26, and a ULID is 26 ASCII characters, so the name cannot
+    // start with one. The stem is at least 28 bytes here and a ULID exactly
+    // 26, so parsing it whole is certain to fail and yields the error source.
+    let Some((id_part, rest)) = stem.split_at_checked(ULID_LEN) else {
+        return Err(FilenameError::Id {
+            name: name.to_string(),
+            source: stem
+                .parse::<Id>()
+                .expect_err("a stem longer than 26 bytes is never a ULID"),
+        });
+    };
     let id = id_part.parse::<Id>().map_err(|source| FilenameError::Id {
         name: name.to_string(),
         source,
@@ -303,5 +314,44 @@ mod tests {
         // ULID.
         let name = "0IARZ3NDEKTSV4RRFFQ69G5FAV-note.md";
         assert!(matches!(parse(name), Err(FilenameError::Id { .. })));
+    }
+
+    // A file created outside ntropy can put a multibyte character across the
+    // 26th byte, where the identity ends. Such a prefix holds a non-ASCII byte
+    // and so can never be a ULID; it must be reported, not split.
+
+    #[test]
+    fn parse_rejects_a_two_byte_char_straddling_the_ulid_width() {
+        // `é` occupies bytes 25..27.
+        let name = format!("{}é-xx.md", "a".repeat(25));
+        assert!(matches!(parse(&name), Err(FilenameError::Id { .. })));
+    }
+
+    #[test]
+    fn parse_rejects_a_three_byte_char_straddling_the_ulid_width() {
+        // `€` occupies bytes 25..28.
+        let name = format!("{}€-xx.md", "a".repeat(25));
+        assert!(matches!(parse(&name), Err(FilenameError::Id { .. })));
+    }
+
+    #[test]
+    fn parse_rejects_a_four_byte_char_straddling_the_ulid_width() {
+        // `😀` occupies bytes 24..28.
+        let name = format!("{}😀-xx.md", "a".repeat(24));
+        assert!(matches!(parse(&name), Err(FilenameError::Id { .. })));
+    }
+
+    #[test]
+    fn parse_rejects_a_boundary_aligned_multibyte_prefix() {
+        // Thirteen `é` fill exactly 26 bytes, so the split lands on a boundary
+        // and the prefix fails as a ULID.
+        let name = format!("{}-x.md", "é".repeat(13));
+        assert!(matches!(parse(&name), Err(FilenameError::Id { .. })));
+    }
+
+    #[test]
+    fn parse_accepts_a_multibyte_slug() {
+        let parsed = parse(&format!("{ULID}-über.md")).expect("parse");
+        assert_eq!(parsed.slug, "über");
     }
 }
