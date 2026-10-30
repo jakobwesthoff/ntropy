@@ -26,7 +26,12 @@ const ULID_C: &str = "01CRZ3NDEKTSV4RRFFQ69G5FAV";
 /// with a `by-tag` view configured.
 fn setup_vault() -> tempfile::TempDir {
     let dir = tempfile::tempdir().expect("temp dir");
-    let root = dir.path();
+    scaffold_vault(dir.path());
+    dir
+}
+
+/// Lay out a vault at `root`, which may not exist yet.
+fn scaffold_vault(root: &Path) {
     fs::create_dir_all(root.join("all-notes")).expect("all-notes");
     fs::create_dir_all(root.join(".ntropy")).expect(".ntropy");
     fs::write(
@@ -34,7 +39,6 @@ fn setup_vault() -> tempfile::TempDir {
         "[[view]]\nname = \"by-tag\"\nfield = \"tags\"\n",
     )
     .expect("config");
-    dir
 }
 
 fn write_note(vault: &Path, ulid: &str, slug: &str, content: &str) {
@@ -45,15 +49,32 @@ fn write_note(vault: &Path, ulid: &str, slug: &str, content: &str) {
     .expect("write note");
 }
 
+/// The global config directory every test command uses unless it sets its own.
+///
+/// Nothing exists there, so the global config reads as empty and no test sees
+/// the host's default vault or a broken host config. The path is relative to
+/// the command's working directory, always a test's temp directory, so a
+/// stray write stays inside the test, and the value is the same in every
+/// snapshot's metadata, where insta-cmd records set variables verbatim.
+const NO_CONFIG_DIR: &str = "no-such-config-dir";
+
+/// The `ntropy` binary run in `cwd`, isolated from the host's vault selection
+/// and global config.
+fn ntropy_bin(cwd: &Path) -> Command {
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
+    cmd.current_dir(cwd);
+    cmd.env_remove("NTROPY_VAULT");
+    cmd.env("NTROPY_CONFIG_DIR", NO_CONFIG_DIR);
+    cmd
+}
+
 /// A `ntropy` command run from inside `vault`, so the vault resolves by cwd
 /// walk-up and its (temp) path never enters the snapshotted argument list.
 /// `EDITOR=true` makes any editor launch a no-op.
 fn ntropy(vault: &Path) -> Command {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
-    cmd.current_dir(vault);
+    let mut cmd = ntropy_bin(vault);
     cmd.env("EDITOR", "true");
     cmd.env_remove("VISUAL");
-    cmd.env_remove("NTROPY_VAULT");
     cmd
 }
 
@@ -117,9 +138,8 @@ fn print_content_and_print_are_mutually_exclusive() {
 
 #[test]
 fn bare_invocation_prints_help() {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
-    cmd.env_remove("NTROPY_VAULT");
-    assert_cmd_snapshot!(cmd);
+    let dir = tempfile::tempdir().expect("temp dir");
+    assert_cmd_snapshot!(ntropy_bin(dir.path()));
 }
 
 #[test]
@@ -129,10 +149,8 @@ fn init_creates_and_is_idempotent() {
     // Run from the temp dir and create a relative `vault/` subdir, so neither
     // the args nor the printed path carry the (variable) temp path.
     let invoke = || {
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
-        cmd.current_dir(dir.path());
+        let mut cmd = ntropy_bin(dir.path());
         cmd.args(["init", "vault"]);
-        cmd.env_remove("NTROPY_VAULT");
         cmd
     };
 
@@ -146,10 +164,8 @@ fn init_uses_vault_flag_when_path_omitted() {
 
     // Run from the temp dir with a relative `--vault`, so the printed path is
     // stable and the cwd (which has no vault) is clearly not the target.
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
-    cmd.current_dir(dir.path());
+    let mut cmd = ntropy_bin(dir.path());
     cmd.args(["--vault", "via-flag", "init"]);
-    cmd.env_remove("NTROPY_VAULT");
     assert_cmd_snapshot!(cmd);
 
     assert!(dir.path().join("via-flag/.ntropy").exists());
@@ -161,10 +177,8 @@ fn init_uses_vault_flag_when_path_omitted() {
 fn init_rejects_path_and_vault_together() {
     let dir = tempfile::tempdir().expect("temp dir");
 
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
-    cmd.current_dir(dir.path());
+    let mut cmd = ntropy_bin(dir.path());
     cmd.args(["--vault", "from-flag", "init", "from-arg"]);
-    cmd.env_remove("NTROPY_VAULT");
     assert_cmd_snapshot!(cmd);
 
     // Neither candidate target is created on the conflict.
@@ -213,9 +227,7 @@ fn config_dir_override_hides_the_os_config() {
 fn init_set_default_writes_the_overridden_config() {
     let dir = tempfile::tempdir().expect("temp dir");
 
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
-    cmd.current_dir(dir.path());
-    cmd.env_remove("NTROPY_VAULT");
+    let mut cmd = ntropy_bin(dir.path());
     isolate_os_config_dir(&mut cmd, &dir.path().join("home"));
     // Relative, so it lands next to the vault in the working directory.
     cmd.env("NTROPY_CONFIG_DIR", "config");
@@ -3010,11 +3022,34 @@ fn info_reports_vault_and_stats() {
     fs::write(templates.join("default.md"), "x").expect("default template");
     fs::write(templates.join("meeting.md"), "x").expect("meeting template");
 
-    let mut settings = redacted(dir.path());
-    // The global default vault is host-specific, so redact that whole line.
-    settings.add_filter(r"(?m)^Default vault: .*$", "Default vault: [DEFAULT]");
-    settings.bind(|| {
+    // The test commands read an empty global config, so the report pins
+    // `Default vault: (not set)`.
+    redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
+        cmd.arg("info");
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn info_reports_a_set_default_vault() {
+    // The vault and the global config side by side, so the config directory
+    // is a relative path that stays the same in the snapshot's metadata.
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = dir.path().join("vault");
+    scaffold_vault(&vault);
+    let canonical = fs::canonicalize(&vault).expect("canonical vault");
+    let config_dir = dir.path().join("config");
+    fs::create_dir_all(&config_dir).expect("config dir");
+    fs::write(
+        config_dir.join("config.toml"),
+        format!("default_vault = {:?}\n", canonical.to_string_lossy()),
+    )
+    .expect("global config");
+
+    redacted(&vault).bind(|| {
+        let mut cmd = ntropy(&vault);
+        cmd.env("NTROPY_CONFIG_DIR", "../config");
         cmd.arg("info");
         assert_cmd_snapshot!(cmd);
     });
@@ -3078,9 +3113,7 @@ fn info_print_honors_the_vault_flag() {
     let vault = setup_vault();
     let elsewhere = tempfile::tempdir().expect("temp dir");
 
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
-    cmd.current_dir(elsewhere.path());
-    cmd.env_remove("NTROPY_VAULT");
+    let mut cmd = ntropy_bin(elsewhere.path());
     cmd.arg("--vault").arg(vault.path());
     cmd.args(["info", "--print"]);
     let output = cmd.output().expect("run ntropy");
@@ -3096,18 +3129,11 @@ fn info_print_honors_the_vault_flag() {
 /// leave it substituting an empty string into `cd`.
 #[test]
 fn info_print_fails_without_a_vault() {
+    // The empty global config of the test commands leaves no default vault,
+    // so no resolution rule can match.
     let dir = tempfile::tempdir().expect("temp dir");
-    // The global default vault comes from the user's config directory, which
-    // `directories` derives from `HOME`, or from `XDG_CONFIG_HOME` where that
-    // applies. Pointing both at an empty directory takes the host's own
-    // default out of play so no resolution rule can match.
-    let home = tempfile::tempdir().expect("home dir");
 
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
-    cmd.current_dir(dir.path());
-    cmd.env_remove("NTROPY_VAULT");
-    cmd.env("HOME", home.path());
-    cmd.env("XDG_CONFIG_HOME", home.path().join("config"));
+    let mut cmd = ntropy_bin(dir.path());
     cmd.args(["info", "--print"]);
     let output = cmd.output().expect("run ntropy");
 
@@ -3687,10 +3713,7 @@ mod encrypted {
     fn info_reports_encryption_state() {
         let dir = setup_encrypted_vault();
         let vault = dir.path();
-        let mut settings = redacted(vault);
-        // The global default vault is host-specific, so redact that whole line.
-        settings.add_filter(r"(?m)^Default vault: .*$", "Default vault: [DEFAULT]");
-        settings.bind(|| {
+        redacted(vault).bind(|| {
             assert_cmd_snapshot!(ntropy_encrypted(vault).arg("info"));
         });
     }
@@ -3702,9 +3725,7 @@ mod encrypted {
         let mut cmd = ntropy(vault);
         cmd.env_remove("NTROPY_IDENTITY");
         cmd.args(["-n", "info"]);
-        let mut settings = redacted(vault);
-        settings.add_filter(r"(?m)^Default vault: .*$", "Default vault: [DEFAULT]");
-        settings.bind(|| {
+        redacted(vault).bind(|| {
             assert_cmd_snapshot!(cmd);
         });
     }

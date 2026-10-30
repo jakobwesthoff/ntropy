@@ -7,12 +7,13 @@ info:
     - info
   env:
     EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 Active vault:  [VAULT] (via current directory)
-Default vault: [DEFAULT]
+Default vault: (not set)
 Encryption:    on (locked)
 
 Notes:     (locked; run `ntropy unlock` for note statistics)

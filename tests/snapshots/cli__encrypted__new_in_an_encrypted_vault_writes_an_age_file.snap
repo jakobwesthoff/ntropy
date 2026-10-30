@@ -9,6 +9,7 @@ info:
     - Quarterly Review
   env:
     EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
     NTROPY_IDENTITY: test-identity.txt
 ---
 success: true

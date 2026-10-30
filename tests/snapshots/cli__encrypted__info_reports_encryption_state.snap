@@ -7,13 +7,14 @@ info:
     - info
   env:
     EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
     NTROPY_IDENTITY: test-identity.txt
 ---
 success: true
 exit_code: 0
 ----- stdout -----
 Active vault:  [VAULT] (via current directory)
-Default vault: [DEFAULT]
+Default vault: (not set)
 Encryption:    on (unlocked)
 
 Notes:     0

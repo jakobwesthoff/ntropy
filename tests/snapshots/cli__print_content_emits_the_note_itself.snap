@@ -9,6 +9,7 @@ info:
     - 01ARZ3NDEKTSV4RRFFQ69G5FAV
   env:
     EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
 ---
 success: true
 exit_code: 0

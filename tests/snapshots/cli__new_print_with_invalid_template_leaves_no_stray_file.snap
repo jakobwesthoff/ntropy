@@ -8,6 +8,7 @@ info:
     - "--print"
   env:
     EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
 ---
 success: false
 exit_code: 1

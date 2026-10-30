@@ -3,6 +3,8 @@ source: tests/cli.rs
 info:
   program: ntropy
   args: []
+  env:
+    NTROPY_CONFIG_DIR: no-such-config-dir
 ---
 success: true
 exit_code: 0
