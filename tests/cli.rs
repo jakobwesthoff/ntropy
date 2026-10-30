@@ -5,12 +5,14 @@
 //! CLI contract tests: run the real binary and snapshot stdout, stderr and exit
 //! code with `insta-cmd` (ADR 0021).
 //!
-//! Only non-interactive paths are exercised; the picker and editor TUIs are
-//! validated manually (ADR 0021). Interactivity keys off the controlling
-//! terminal (ADR 0036), which exists for a local `cargo test` but not
-//! necessarily in CI, so every invocation that would branch on it must pass
-//! `-n` or `--print` to stay deterministic across both. Snapshots redact the
-//! temporary vault path and ULIDs so they are stable across runs.
+//! Interactivity keys off the controlling terminal (ADR 0036), which exists for
+//! a local `cargo test` but not necessarily in CI. An invocation that would
+//! branch on it either passes `-n` or `--print`, or runs on a pseudo-terminal
+//! that the test hands the child as its own controlling terminal; either way
+//! both environments take the same branch. The editor launch and its terminal
+//! binding are tested the second way. The picker TUI is validated manually
+//! (ADR 0021). Snapshots redact the temporary vault path and ULIDs so they are
+//! stable across runs.
 
 use std::fs;
 use std::path::Path;
@@ -3407,6 +3409,166 @@ fn broken_stdout_pipe_exits_via_sigpipe_not_panic() {
         !stderr.contains("panicked"),
         "stderr must not contain a panic message, got: {stderr}"
     );
+}
+
+/// The editor launch, run for real on a pseudo-terminal.
+///
+/// ntropy opens the editor only in interactive mode, which needs a controlling
+/// terminal (ADR 0036). These tests give the child one of its own, so the
+/// interactive branch runs the same way locally and in CI, and a stub editor
+/// records how it was started.
+#[cfg(unix)]
+mod editor_launch {
+    use super::*;
+
+    use std::io;
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::unix::process::CommandExt;
+    use std::path::PathBuf;
+    use std::process::{Output, Stdio};
+
+    /// Run `cmd` to completion with a fresh pseudo-terminal as its controlling
+    /// terminal. stdout and stderr stay pipes and are returned.
+    fn output_on_own_terminal(cmd: &mut Command) -> Output {
+        let mut master = -1;
+        let mut slave = -1;
+        // SAFETY: `master` and `slave` are valid pointers to `c_int`s, and the
+        // name, termios and winsize arguments may be null. `null_mut` is used
+        // because macOS declares them `*mut` while Linux declares them `*const`.
+        let rc = unsafe {
+            libc::openpty(
+                &mut master,
+                &mut slave,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+            )
+        };
+        assert_eq!(rc, 0, "openpty failed: {}", io::Error::last_os_error());
+        // SAFETY: both descriptors were just returned by `openpty`, are open,
+        // and nothing else in this process owns them.
+        let (master, slave) =
+            unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) };
+
+        // `openpty` has no close-on-exec variant, so a child that another test
+        // thread forks in between can inherit both ends. That is harmless:
+        // nothing here waits for end-of-file or hangup on the terminal.
+        for fd in [&master, &slave] {
+            // SAFETY: `fd` is an open descriptor owned by this function.
+            let rc = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) };
+            assert_ne!(rc, -1, "fcntl failed: {}", io::Error::last_os_error());
+        }
+
+        cmd.stdin(Stdio::from(slave))
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        // SAFETY: the closure runs in the forked child before `exec` and calls
+        // only `setsid` and `ioctl`, which are async-signal-safe and allocate
+        // nothing. std has already moved the slave onto fd 0 when pre-exec
+        // closures run, so fd 0 is the terminal to claim.
+        unsafe {
+            cmd.pre_exec(|| {
+                // A new session has no controlling terminal, so the slave can
+                // become this one's. A forked child is never a process group
+                // leader, which is what `setsid` requires.
+                if libc::setsid() == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+                // `TIOCSCTTY` is a `c_uint` on macOS, while `ioctl` takes a
+                // `c_ulong` there and an `Ioctl` on Linux; `as _` fits both.
+                if libc::ioctl(0, libc::TIOCSCTTY as _, 0) == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let output = cmd.output().expect("run ntropy on its own terminal");
+        // The master end stays open until the child is gone; closing it early
+        // would hang up the terminal under the running editor.
+        drop(master);
+        output
+    }
+
+    /// Write a stub editor to `<vault>/stub-bin/editor` and return its path.
+    ///
+    /// The stub records, in `<vault>/stub-bin/editor-args`, whether its stdin,
+    /// stdout and stderr are terminals (`tty` or `no-tty` on the first line),
+    /// then each argument it received on a line of its own.
+    fn write_stub_editor(vault: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let bin = vault.join(STUB_BIN);
+        fs::create_dir_all(&bin).expect("stub-bin dir");
+        let script = r#"#!/bin/sh
+out="${0%/*}/editor-args"
+if [ -t 0 ] && [ -t 1 ] && [ -t 2 ]; then
+  echo tty > "$out"
+else
+  echo no-tty > "$out"
+fi
+for arg in "$@"; do
+  printf '%s\n' "$arg" >> "$out"
+done
+"#;
+        let stub = bin.join("editor");
+        fs::write(&stub, script).expect("write stub editor");
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).expect("chmod stub editor");
+
+        // The stub's path goes into `$EDITOR` as is, so a character the shell
+        // treats specially would change what runs. Failing here names the
+        // cause instead of failing on a confusing editor error.
+        let text = stub.to_str().expect("temp paths are UTF-8");
+        assert!(
+            text.bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"/._-".contains(&b)),
+            "the editor tests need a TMPDIR without characters special to the shell, got {text}"
+        );
+        stub
+    }
+
+    /// What the stub editor recorded: the terminal line and its arguments.
+    fn recorded_launch(vault: &Path) -> (String, Vec<String>) {
+        let record = fs::read_to_string(vault.join(STUB_BIN).join("editor-args"))
+            .expect("the stub editor ran and wrote its record");
+        let mut lines = record.lines().map(str::to_string);
+        let terminal = lines
+            .next()
+            .expect("the record starts with the terminal line");
+        (terminal, lines.collect())
+    }
+
+    /// Assert that `path` names a note in the vault whose filename ends in
+    /// `suffix`.
+    fn assert_is_note(vault: &Path, path: &str, suffix: &str) {
+        let note = fs::canonicalize(path).expect("the editor's argument is an existing file");
+        let all_notes = fs::canonicalize(vault.join("all-notes")).expect("all-notes");
+        assert_eq!(note.parent(), Some(all_notes.as_path()), "got {path}");
+        assert!(path.ends_with(suffix), "got {path}");
+    }
+
+    #[test]
+    fn new_opens_the_editor_on_the_note_with_the_terminal_attached() {
+        // A single-word `$EDITOR` is the program itself. The editor's stdin,
+        // stdout and stderr are the terminal even though ntropy's own stdout
+        // and stderr are pipes here (ADR 0036).
+        let dir = setup_vault();
+        let vault = dir.path();
+        let stub = write_stub_editor(vault);
+
+        let mut cmd = ntropy(vault);
+        cmd.env("EDITOR", &stub).args(["new", "Editor Test"]);
+        let output = output_on_own_terminal(&mut cmd);
+
+        assert!(
+            output.status.success(),
+            "stderr: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let (terminal, args) = recorded_launch(vault);
+        assert_eq!(terminal, "tty");
+        assert_eq!(args.len(), 1, "got {args:?}");
+        assert_is_note(vault, &args[0], "-editor-test.md");
+    }
 }
 
 /// Encrypted-vault behaviour, compiled only where encryption exists.
