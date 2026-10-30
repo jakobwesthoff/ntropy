@@ -57,6 +57,14 @@ prints bytes that drive the terminal. Where the note's file name is the
 cause, the message says to run `ntropy reconcile`, which gives the note its
 canonical name. `--print-content` prints the note itself, unchanged.
 
+A file ntropy names after text from the vault follows the same rule.
+Without `-o`, `render` names its artifact after the note's file name
+(ADR 0044); when that name would need escaping, or starts with `-` so that
+it reads as an option, which a canonical slug never does, `render` refuses
+before the engine runs, creates nothing, and says to run `ntropy reconcile`
+or to name the artifact with `-o`. The name is not taken from the title
+instead, as other artifacts link to a note's artifact by it.
+
 Values the user typed, such as a selector echoed in `no note matches`, are
 shown as typed; inside an error message that ends the command they are
 escaped with the rest of it.
@@ -71,9 +79,12 @@ escaped with the rest of it.
   sequences escaped.
 - Titles can still look alike through homoglyphs or invisible characters
   such as U+200B; the ULID in every note reference tells them apart.
-- A note whose file name holds an escaped character has no `-p` path until
-  `ntropy reconcile` renames it. In a vault whose own path holds one, no
-  `-p` path is printed at all.
+- A note whose file name holds an escaped character has no `-p` path and
+  no default `render` artifact until `ntropy reconcile` renames it. In a
+  vault whose own path holds one, no `-p` path is printed at all.
+- Links from other artifacts to such a note name its file-name slug and
+  lead nowhere until `ntropy reconcile` renames it; a name given with `-o`
+  does not change that.
 - The picker matches the query against the escaped title.
 - A link the language server completes for such a title carries the
   escaped title as its display text.

@@ -425,7 +425,30 @@ fn render_escapes_an_engine_warning() {
 }
 
 #[test]
-fn render_names_a_hostile_default_output_escaped() {
+fn render_names_a_hostile_output_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-plain.md"),
+        "---\ntitle: Plain\n---\nbody\n",
+    );
+
+    let output = run(ntropy(&vault)
+        .args(["render", "--to", "typst", "-o"])
+        .arg(format!("x{RETITLE}.typ"))
+        .arg(ULID_A));
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_no_raw_controls(&output);
+    assert!(
+        stdout(&output).contains(&format!("Rendered x{RETITLE_SHOWN}.typ (typst via typst, ")),
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
+fn render_refuses_a_hostile_default_name() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");
     note(
@@ -435,13 +458,101 @@ fn render_names_a_hostile_default_output_escaped() {
     );
 
     let output = run(ntropy(&vault).args(["render", "--to", "typst", ULID_A]));
-    assert!(output.status.success(), "{}", stderr(&output));
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
     assert_no_raw_controls(&output);
     assert!(
-        stdout(&output).contains(&format!("Rendered x{RETITLE_SHOWN}.typ (typst via typst, ")),
-        "{}",
-        stdout(&output)
+        !vault.join(format!("x{RETITLE}.typ")).exists(),
+        "the refused artifact was written"
     );
+    assert!(
+        stderr(&output).contains(&format!(
+            "the default artifact name `x{RETITLE_SHOWN}.typ` holds control or bidi \
+             characters; run `ntropy reconcile` to rename the note, or name the artifact \
+             with `-o`"
+        )),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn render_refuses_a_hostile_default_name_for_html_before_touching_its_files() {
+    // Under `--force` the files directory of an earlier render is cleared
+    // before the engine runs; the refusal comes first, so a page and files
+    // directory of that name are left as they are.
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-x{RETITLE}.md"),
+        "---\ntitle: Plain\n---\nbody\n",
+    );
+    let page = vault.join(format!("x{RETITLE}.html"));
+    let files = vault.join(format!("x{RETITLE}_files"));
+    fs::write(&page, "earlier page").expect("planted page");
+    fs::create_dir_all(&files).expect("planted files directory");
+    fs::write(files.join("keep"), "keep me").expect("planted file");
+
+    let output = run(ntropy(&vault).args(["render", "--to", "html", "--force", ULID_A]));
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert_no_raw_controls(&output);
+    assert!(stdout(&output).is_empty(), "{}", stdout(&output));
+    assert!(
+        files.join("keep").exists(),
+        "the files directory was cleared"
+    );
+    assert_eq!(
+        fs::read_to_string(&page).expect("the page is still there"),
+        "earlier page"
+    );
+}
+
+#[test]
+fn render_refuses_a_default_name_that_reads_as_an_option() {
+    // A canonical slug never starts with `-`; this one comes from a file
+    // name ntropy did not create, and `-x.typ` on a command line reads as an
+    // option.
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}--x.md"),
+        "---\ntitle: Plain\n---\nbody\n",
+    );
+
+    let output = run(ntropy(&vault).args(["render", "--to", "typst", "-p", ULID_A]));
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert!(stdout(&output).is_empty(), "{}", stdout(&output));
+    assert!(
+        !vault.join("-x.typ").exists(),
+        "the refused artifact was written"
+    );
+    assert!(
+        stderr(&output).contains(
+            "the default artifact name `-x.typ` starts with `-`; run `ntropy reconcile` to \
+             rename the note, or name the artifact with `-o`"
+        ),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn render_accepts_a_clean_output_for_a_hostile_note() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-x{RETITLE}.md"),
+        "---\ntitle: Plain\n---\nbody\n",
+    );
+
+    let output =
+        run(ntropy(&vault).args(["render", "--to", "typst", "-p", "-o", "plain.typ", ULID_A]));
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_no_raw_controls(&output);
+    assert_eq!(stdout(&output), "plain.typ\n");
+    assert!(vault.join("plain.typ").is_file());
 }
 
 #[test]

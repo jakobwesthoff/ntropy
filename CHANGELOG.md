@@ -44,6 +44,13 @@ and this project adheres to
 - Ctrl-U in the picker moves the selection half a page toward worse matches
   instead of clearing the query. Backspace and Ctrl-W still edit the
   query.
+- A path that holds a control or bidi character is no longer printed by
+  `-p`, `write` or Ctrl-Y in the picker: the command fails, or
+  `search -n -p` leaves it out with a warning, prints the rest and exits
+  non-zero. `render` without `-o` refuses to name its artifact after a note
+  file whose name holds such a character or whose slug starts with `-`, and
+  writes nothing. Run `ntropy reconcile` to give such a note its canonical
+  name, or pass `-o` to name the artifact.
 
 ### Fixed
 
@@ -150,9 +157,7 @@ and this project adheres to
   override and isolate characters that can reorder how a title reads,
   escaped as `\n`, `\t` or `\u{1b}` in tables, prompts, warnings, error
   messages, reports, the picker and the language server's completions and
-  symbols. A path that would need escaping is no longer printed by `-p`:
-  the command fails, or `search -n -p` leaves it out with a warning, prints
-  the rest and exits non-zero. `ntropy reconcile` renames such a note.
+  symbols.
 
 ## v2.2.0 - 2026-10-10
 

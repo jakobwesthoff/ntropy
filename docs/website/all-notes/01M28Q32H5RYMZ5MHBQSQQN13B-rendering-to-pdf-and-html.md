@@ -39,6 +39,12 @@ render and ends with a report naming the artifact, the format and engine
 that produced it, and its size:
 `Rendered quarterly-review.pdf (pdf via typst, 12.4 KiB)`.
 
+A note file that ntropy did not name, such as one from a cloned vault, can
+carry characters a terminal acts on, or start its slug with `-`. ntropy
+does not name an artifact after such a file: `render` without `-o` stops
+before writing anything and says to run `ntropy reconcile`, which gives
+the note its canonical name, or to name the artifact with `-o`.
+
 ntropy converts the note to Typst with its own engine and only typesets
 the PDF with [typst](https://typst.app), so that is the single tool you
 install yourself, for example with `brew install typst`. The Homebrew
@@ -89,7 +95,9 @@ The link is a plain relative reference, so whether a click opens the
 other file is up to your PDF viewer. It finds nothing if the target was
 never rendered, or was rendered into a different directory or under a
 different name. Two notes whose slugs are identical also share an
-artifact name, so a link to either reaches whichever was written last.
+artifact name, so a link to either reaches whichever was written last. A
+link to a note whose file name `render` refuses to use leads nowhere
+until `ntropy reconcile` renames that note.
 
 The `typst` format emits the same link, and it always points at
 `<slug>.pdf`, never at a `.typ` file: the Typst document is the source of

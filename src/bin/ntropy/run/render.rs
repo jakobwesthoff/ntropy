@@ -11,6 +11,7 @@
 //! production [`RenderContext`] that stages files in a temporary directory and
 //! spawns tools through `std::process::Command`.
 
+use std::borrow::Cow;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode, Stdio};
@@ -21,6 +22,7 @@ use ntropy::link;
 use ntropy::ops;
 use ntropy::render::{Invocation, Registry, RenderContext, RenderError, ToolOutput, prepare};
 use ntropy::session::VaultSession;
+use ntropy::text::escape_controls;
 
 use crate::cli::GlobalArgs;
 
@@ -167,16 +169,21 @@ pub fn cmd_render(
     };
 
     // The default artifact name is the note's slug plus the format's extension,
-    // in the current directory; `-o` overrides it.
-    let named_after_note = output.is_none();
-    let output_path = output.unwrap_or_else(|| default_output_path(&note.slug, &extension));
-
-    // A path `--print` could not print as it is fails before the engine
-    // writes anything there (ADR 0071). The slug is the rest of the note's
-    // file name, which `ntropy reconcile` realigns.
-    if print {
-        output::checked_path(&output_path, named_after_note)?;
-    }
+    // in the current directory; `-o` overrides it. A path `--print` could not
+    // print as it is fails before the engine writes anything there (ADR 0071).
+    let output_path = match output {
+        Some(path) => {
+            if print {
+                output::checked_path(&path, false)?;
+            }
+            path
+        }
+        None => {
+            let path = default_output_path(&note.slug, &extension);
+            check_default_name(&path)?;
+            path
+        }
+    };
 
     // Announce the work before the engine runs: external typesetting can take
     // a few seconds, and under `--print` stdout stays reserved for the path
@@ -276,6 +283,29 @@ pub fn cmd_render(
 /// relative to the current directory.
 fn default_output_path(slug: &str, extension: &str) -> PathBuf {
     PathBuf::from(format!("{slug}.{extension}"))
+}
+
+/// Refuse a default artifact name that a canonical slug could not produce
+/// (ADR 0071).
+///
+/// A plaintext note's slug is the rest of its file name as it is on disk, so
+/// a file ntropy did not create can carry characters that would reach the
+/// terminal, or a leading `-` that makes the name read as an option. The
+/// refusal comes before anything is written: `ntropy reconcile` gives the
+/// note its canonical name, or `-o` names the artifact. The name is not
+/// taken from the title instead, as other artifacts link to this one by it
+/// (ADR 0044).
+fn check_default_name(path: &Path) -> Result<()> {
+    const REMEDY: &str =
+        "run `ntropy reconcile` to rename the note, or name the artifact with `-o`";
+    let name = path.to_string_lossy();
+    if let Cow::Owned(escaped) = escape_controls(&name) {
+        bail!("the default artifact name `{escaped}` holds control or bidi characters; {REMEDY}");
+    }
+    if name.starts_with('-') {
+        bail!("the default artifact name `{name}` starts with `-`; {REMEDY}");
+    }
+    Ok(())
 }
 
 /// Whether `dir` is a directory holding at least one entry.

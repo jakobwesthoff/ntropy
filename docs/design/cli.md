@@ -229,7 +229,11 @@ correctly, and is a successful no-op without it, like `delete`.
   note's filename and the format's extension. The `html` format also writes
   `<stem>_files/` beside the artifact (ADR 0057). That default name is what
   a note link in another artifact points at (ADR 0044), so a set of notes
-  rendered without `-o` into one directory cross-references itself.
+  rendered without `-o` into one directory cross-references itself. A
+  default name that holds a control or bidi character, or starts with `-`,
+  is refused before the engine runs; `ntropy reconcile` renames the note,
+  or `-o` names the artifact (ADR 0071). Links from other artifacts to such
+  a note lead nowhere until it is renamed.
 - `--force` replaces an existing artifact, and for `html` a non-empty files
   directory beside it; without the flag either is refused before the
   engine runs.

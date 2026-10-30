@@ -47,9 +47,13 @@ model.
   `<stem>_files/` beside the artifact
   ([html-engine.md](html-engine.md)). An existing artifact, or a
   non-empty files directory, is refused unless `--force` is given,
-  which replaces both.
+  which replaces both. A default name that holds a control or bidi
+  character, or starts with `-`, is refused before the engine runs;
+  `ntropy reconcile` renames the note, or `-o` names the artifact
+  (ADR 0071).
 - `--print` / `-p` prints the artifact's path to stdout as one line on
-  success, so `open "$(ntropy render -p ...)"` composes. Without it, a
+  success, so `open "$(ntropy render -p ...)"` composes. A path that
+  would need escaping is refused before the engine runs (ADR 0071). Without it, a
   `Rendering <reference>...` line announces the work before the engine
   runs, and a completion report names the artifact, the format and engine
   that produced it, and its size:

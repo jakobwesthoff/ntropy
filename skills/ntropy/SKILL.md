@@ -81,6 +81,9 @@ language for filtering, and materialized symlink views for filesystem browsing.
    directory without `-o` and the cross-references find each other; rename
    an artifact and its incoming links break. Rendering again over an
    existing artifact needs `--force`; `render` never overwrites silently.
+   A note whose file name holds a control or bidi character, or whose slug
+   starts with `-`, has no default name: run `ntropy reconcile` first, or
+   pass `-o`.
 13. **`site` is a reserved frontmatter key.** A note's `site` table shapes
    the exported website's navigation (`order`, `label`, `hidden`, `index`,
    `listing`, `related`) and picks the theme template that renders the note
@@ -95,7 +98,8 @@ language for filtering, and materialized symlink views for filesystem browsing.
    `\u{1b}`), so a title in the table can differ from the one in the file.
    For a note's exact text use `-P`. A `-p` path is exact; a note whose file
    name would need escaping has none, and `-p` fails or leaves it out with
-   a warning until `ntropy reconcile` renames it.
+   a warning until `ntropy reconcile` renames it; `render` without `-o`
+   refuses it too.
 
 ## Do / don't
 
@@ -127,7 +131,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy write <id\|filename\|path>` | Replace that note's content with the whole note text read from stdin, then realign the filename and refresh views. Names its target, never searches: a full ULID, the filename, or the path. Refuses text that is not a well-formed note. Prints the resulting path. |
 | `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, or `-P` to print one note's text. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
-| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`), `typst` for the emitted document, or `html` for a web page with a `<stem>_files/` directory beside it; the last two need no external tool. Resolves to exactly one note; `-p` prints the artifact path; an existing artifact is refused without `--force`. |
+| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`), `typst` for the emitted document, or `html` for a web page with a `<stem>_files/` directory beside it; the last two need no external tool. Resolves to exactly one note; `-p` prints the artifact path; an existing artifact is refused without `--force`; a default name from a file name with control or bidi characters, or a leading `-`, is refused (run `ntropy reconcile` or pass `-o`). |
 | `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website: a page per note, a tag tree, a page per view and group, a front page, sidebar, search, works from disk. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `--theme` overrides the site theme. `site theme init <name>` copies the built-in theme into the vault. Warnings name missing files, dangling links, and unresolvable navigation; `--strict` fails on them. Details: [references/site.md](references/site.md). |
 | `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
