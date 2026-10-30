@@ -29,7 +29,7 @@ use anyhow::{Context, Result};
 use crossterm::style::Attribute;
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     execute, queue, style, terminal,
 };
 
@@ -210,35 +210,15 @@ fn run_loop<T, A: Copy>(
         clear_all = false;
 
         match event::read().context("while reading a key event")? {
-            Event::Key(key) if key.kind == KeyEventKind::Press => {
-                // An accept key ends the picker exactly as Enter does, with no
-                // selection when nothing matches.
-                if let Some(action) = accept_key(keys, key.code, key.modifiers) {
-                    return Ok(state.into_selected().map(|item| (item, Some(action))));
+            Event::Key(key) => match handle_key(&mut state, keys, key) {
+                Flow::Continue => {}
+                // With nothing matching there is nothing to return, so the
+                // picker ends without a selection, as on abort.
+                Flow::Accept(action) => {
+                    return Ok(state.into_selected().map(|item| (item, action)));
                 }
-                let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
-                match key.code {
-                    KeyCode::Enter => return Ok(state.into_selected().map(|item| (item, None))),
-                    KeyCode::Esc => return Ok(None),
-                    KeyCode::Char('c') if ctrl => return Ok(None),
-                    // The list is bottom-anchored with the best match at the
-                    // bottom, so Up moves toward worse matches (up the screen)
-                    // and Down toward the best (down toward the prompt).
-                    KeyCode::Up => state.select_worse(),
-                    KeyCode::Down => state.select_better(),
-                    KeyCode::Char('p') if ctrl => state.select_worse(),
-                    KeyCode::Char('n') if ctrl => state.select_better(),
-                    KeyCode::Char('u') if ctrl => state.clear_query(),
-                    KeyCode::Char('w') if ctrl => state.delete_word(),
-                    KeyCode::Backspace => state.backspace(),
-                    // Plain typing (no Ctrl/Alt) edits the query. TODO: no
-                    // intra-query cursor movement (Left/Right) in v1.
-                    KeyCode::Char(c) if !ctrl && !key.modifiers.contains(KeyModifiers::ALT) => {
-                        state.push_char(c)
-                    }
-                    _ => {}
-                }
-            }
+                Flow::Abort => return Ok(None),
+            },
             Event::Resize(new_cols, new_rows) => {
                 // The column layout depends only on the width, so a height-only
                 // resize skips the rebuild. On Unix, crossterm reports at most
@@ -256,6 +236,60 @@ fn run_loop<T, A: Copy>(
             _ => {}
         }
     }
+}
+
+/// What a key press means for the picker's loop.
+#[derive(Debug, PartialEq, Eq)]
+enum Flow<A> {
+    /// Keep reading keys; the state may have changed.
+    Continue,
+    /// End with the selected item, chosen by Enter (`None`) or by the accept
+    /// key with this action.
+    Accept(Option<A>),
+    /// End without a selection.
+    Abort,
+}
+
+/// Apply one key event to the picker state and say whether the picker goes on.
+///
+/// Only presses count. Where crossterm also reports repeats and releases
+/// (Windows, or Unix with keyboard enhancement enabled), acting on them would
+/// apply one key press more than once.
+fn handle_key<T, A: Copy>(
+    state: &mut PickerState<T>,
+    keys: &[AcceptKey<A>],
+    key: KeyEvent,
+) -> Flow<A> {
+    if key.kind != KeyEventKind::Press {
+        return Flow::Continue;
+    }
+    // An accept key ends the picker exactly as Enter does.
+    if let Some(action) = accept_key(keys, key.code, key.modifiers) {
+        return Flow::Accept(Some(action));
+    }
+    let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+    match key.code {
+        KeyCode::Enter => return Flow::Accept(None),
+        KeyCode::Esc => return Flow::Abort,
+        KeyCode::Char('c') if ctrl => return Flow::Abort,
+        // The list is bottom-anchored with the best match at the bottom, so Up
+        // moves toward worse matches (up the screen) and Down toward the best
+        // (down toward the prompt).
+        KeyCode::Up => state.select_worse(),
+        KeyCode::Down => state.select_better(),
+        KeyCode::Char('p') if ctrl => state.select_worse(),
+        KeyCode::Char('n') if ctrl => state.select_better(),
+        KeyCode::Char('u') if ctrl => state.clear_query(),
+        KeyCode::Char('w') if ctrl => state.delete_word(),
+        KeyCode::Backspace => state.backspace(),
+        // Plain typing (no Ctrl/Alt) edits the query. TODO: no intra-query
+        // cursor movement (Left/Right) in v1.
+        KeyCode::Char(c) if !ctrl && !key.modifiers.contains(KeyModifiers::ALT) => {
+            state.push_char(c)
+        }
+        _ => {}
+    }
+    Flow::Continue
 }
 
 /// The color of the divider lines that frame the prompt.
@@ -705,5 +739,137 @@ mod tests {
     fn stats_degrade_to_a_truncation_when_too_narrow() {
         let line = stats_line(4, Some(1), 100, 200, None, "^Y path");
         assert_eq!(line.chars().count(), 4);
+    }
+
+    // -------------------------------------------------------------------------
+    // Key handling
+    // -------------------------------------------------------------------------
+
+    /// A picker over three rows that all contain an `a`, so a typed `a` keeps
+    /// every row, with a list `height` rows tall.
+    fn picker(height: usize) -> PickerState<String> {
+        let items: Vec<String> = ["alpha", "beta", "gamma"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let rows = items
+            .iter()
+            .map(|s| Row {
+                display: s.clone(),
+                detail: String::new(),
+                search: s.clone(),
+            })
+            .collect();
+        PickerState::new(items, rows, height)
+    }
+
+    fn press(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, KeyModifiers::NONE)
+    }
+
+    fn ctrl(c: char) -> KeyEvent {
+        KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL)
+    }
+
+    /// Feed `events` to the picker one after the other, expecting it to go on.
+    fn feed(state: &mut PickerState<String>, events: &[KeyEvent]) {
+        for &event in events {
+            assert_eq!(handle_key::<_, Action>(state, &KEYS, event), Flow::Continue);
+        }
+    }
+
+    #[test]
+    fn enter_accepts_without_an_action() {
+        let mut s = picker(10);
+        assert_eq!(
+            handle_key(&mut s, &KEYS, press(KeyCode::Enter)),
+            Flow::Accept(None)
+        );
+    }
+
+    #[test]
+    fn an_accept_key_accepts_with_its_action() {
+        let mut s = picker(10);
+        assert_eq!(
+            handle_key(&mut s, &KEYS, ctrl('y')),
+            Flow::Accept(Some(Action::First))
+        );
+    }
+
+    #[test]
+    fn esc_and_ctrl_c_abort() {
+        let mut s = picker(10);
+        assert_eq!(handle_key(&mut s, &KEYS, press(KeyCode::Esc)), Flow::Abort);
+        assert_eq!(handle_key(&mut s, &KEYS, ctrl('c')), Flow::Abort);
+    }
+
+    #[test]
+    fn up_and_ctrl_p_move_toward_worse_matches() {
+        let mut s = picker(10);
+        feed(&mut s, &[press(KeyCode::Up)]);
+        assert_eq!(s.selected_rank(), Some(2));
+        feed(&mut s, &[ctrl('p')]);
+        assert_eq!(s.selected_rank(), Some(3));
+    }
+
+    #[test]
+    fn down_and_ctrl_n_move_toward_the_best() {
+        let mut s = picker(10);
+        feed(&mut s, &[press(KeyCode::Up), press(KeyCode::Up)]);
+        feed(&mut s, &[press(KeyCode::Down)]);
+        assert_eq!(s.selected_rank(), Some(2));
+        feed(&mut s, &[ctrl('n')]);
+        assert_eq!(s.selected_rank(), Some(1));
+    }
+
+    #[test]
+    fn typing_edits_the_query() {
+        let mut s = picker(10);
+        feed(
+            &mut s,
+            &[press(KeyCode::Char('a')), press(KeyCode::Char('B'))],
+        );
+        assert_eq!(s.query(), "aB");
+    }
+
+    #[test]
+    fn alt_letters_and_unbound_ctrl_letters_do_nothing() {
+        let mut s = picker(10);
+        feed(
+            &mut s,
+            &[
+                KeyEvent::new(KeyCode::Char('a'), KeyModifiers::ALT),
+                ctrl('x'),
+            ],
+        );
+        assert_eq!(s.query(), "");
+        assert_eq!(s.selected_rank(), Some(1));
+    }
+
+    #[test]
+    fn backspace_deletes_a_character_and_ctrl_w_a_word() {
+        let mut s = picker(10);
+        for c in "al ph".chars() {
+            feed(&mut s, &[press(KeyCode::Char(c))]);
+        }
+        feed(&mut s, &[press(KeyCode::Backspace)]);
+        assert_eq!(s.query(), "al p");
+        feed(&mut s, &[ctrl('w')]);
+        assert_eq!(s.query(), "al ");
+    }
+
+    #[test]
+    fn ctrl_u_clears_the_query() {
+        let mut s = picker(10);
+        feed(&mut s, &[press(KeyCode::Char('a')), ctrl('u')]);
+        assert_eq!(s.query(), "");
+    }
+
+    #[test]
+    fn a_key_release_is_ignored() {
+        let mut s = picker(10);
+        let release =
+            KeyEvent::new_with_kind(KeyCode::Enter, KeyModifiers::NONE, KeyEventKind::Release);
+        assert_eq!(handle_key(&mut s, &KEYS, release), Flow::Continue);
     }
 }
