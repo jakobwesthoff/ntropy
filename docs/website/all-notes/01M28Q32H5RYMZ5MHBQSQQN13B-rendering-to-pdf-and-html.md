@@ -68,7 +68,10 @@ warnings do.
   gives it, and needs no tool either. Beside `report.html` it writes a
   `report_files/` directory holding the theme, the fonts, the scripts,
   the grammars its code needs, and the images it shows, the way a
-  browser saves a page. Move or send the two together. The page keeps
+  browser saves a page. A linked folder is copied without the files a
+  [website export](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md)
+  never copies, such as `.ntropy`, `.git` and every hidden file. Move or
+  send the two together. The page keeps
   the header, the scheme switch, and the outline, and drops what needs
   a site: the sidebar, the search, breadcrumbs, and the pager.
 

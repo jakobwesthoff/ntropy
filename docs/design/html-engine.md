@@ -77,6 +77,12 @@ language without a grammar. A path that starts with `/` is read from the
 vault root, its `.` and `..` parts resolved as a relative path's are, so
 one that climbs above the root lies outside the vault too
 ([ADR 0072](../adr/0072-export-paths-stay-inside-the-vault-and-the-output.md)).
+A linked directory and the theme leave out what the site leaves out, the
+never-copied entries and every hidden entry below the linked directory,
+reported as the site reports it, a `note:` line never counting toward
+`--strict`
+([ADR 0073](../adr/0073-what-html-and-site-exports-copy-from-the-vault.md));
+the artifact and its files directory are never mirrored into themselves.
 Every file the engine writes besides the page lies inside
 `<stem>_files/`; a target outside it fails the render. The theme is
 selected as the site selects

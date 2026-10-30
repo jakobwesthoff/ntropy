@@ -80,6 +80,14 @@ pub trait RenderContext {
     /// `--strict`, counts it toward a failing exit like a scan warning.
     fn warn(&mut self, message: &str);
 
+    /// Report something the engine left out as routine, such as the hidden
+    /// entries of a linked folder (ADR 0073). Unlike a warning it never
+    /// counts toward `--strict`. A context that does not tell the two apart
+    /// reports it as a warning, which is the stricter reading.
+    fn note(&mut self, message: &str) {
+        self.warn(message);
+    }
+
     /// The path the final artifact must land at. Absolute: an engine hands it
     /// to its tool verbatim, where a relative name starting with `-` could
     /// read as an option and a lone `-` as standard output.
@@ -341,6 +349,51 @@ pub enum RenderError {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A context that knows warnings only, so a note reaches it through the
+    /// trait's default.
+    struct WarningsOnly {
+        warnings: Vec<String>,
+    }
+
+    impl RenderContext for WarningsOnly {
+        fn stage_file(&mut self, _name: &str, _contents: &[u8]) -> Result<PathBuf, RenderError> {
+            unreachable!("the test stages nothing")
+        }
+
+        fn run(&mut self, _invocation: &Invocation) -> Result<ToolOutput, RenderError> {
+            unreachable!("the test runs no tool")
+        }
+
+        fn write_output(&mut self, _contents: &[u8]) -> Result<(), RenderError> {
+            unreachable!("the test writes no artifact")
+        }
+
+        fn write_file(&mut self, _relative: &str, _contents: &[u8]) -> Result<(), RenderError> {
+            unreachable!("the test writes no file")
+        }
+
+        fn copy_file(&mut self, _from: &Path, _relative: &str) -> Result<(), RenderError> {
+            unreachable!("the test copies no file")
+        }
+
+        fn warn(&mut self, message: &str) {
+            self.warnings.push(message.to_string());
+        }
+
+        fn output_path(&self) -> &Path {
+            Path::new("note.html")
+        }
+    }
+
+    #[test]
+    fn a_context_without_notes_reports_a_note_as_a_warning() {
+        let mut ctx = WarningsOnly {
+            warnings: Vec::new(),
+        };
+        ctx.note("left out 1 hidden entry");
+        assert_eq!(ctx.warnings, ["left out 1 hidden entry"]);
+    }
 
     /// Every [`RenderError`] Display string is user-facing, so each is pinned.
     #[test]

@@ -550,6 +550,12 @@ impl RenderContext for ProcessContext {
         self.warnings += 1;
     }
 
+    fn note(&mut self, message: &str) {
+        // Printed like a warning, but never counted: a note does not fail a
+        // strict run (ADR 0073).
+        output::note(message);
+    }
+
     fn output_path(&self) -> &Path {
         &self.output
     }
@@ -767,6 +773,13 @@ mod tests {
         ctx.warn("remote image dropped");
         ctx.warn("raw HTML dropped");
         assert_eq!(ctx.warning_count(), 2);
+    }
+
+    #[test]
+    fn a_note_is_not_counted_as_a_warning() {
+        let mut ctx = ProcessContext::new(PathBuf::from("out.html")).expect("context");
+        ctx.note("referenced directory `/assets`: left out 1 hidden entry");
+        assert_eq!(ctx.warning_count(), 0);
     }
 
     #[test]

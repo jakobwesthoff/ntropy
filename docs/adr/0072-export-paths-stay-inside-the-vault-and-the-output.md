@@ -6,6 +6,8 @@ Date: 2026-10-30
 
 Accepted
 
+Amended 2026-10-30 by [ADR 0073](0073-what-html-and-site-exports-copy-from-the-vault.md).
+
 Extends how [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md),
 [ADR 0054](0054-site-navigation-and-url-scheme.md)
 and [ADR 0057](0057-html-artifact-as-a-page-with-a-files-directory.md)

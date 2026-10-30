@@ -155,6 +155,17 @@ and this project adheres to
   as outside the vault, like a relative one: the export warns and copies
   nothing. Both commands also refuse to write any file outside their
   output.
+- A link in a note to a directory made `render --to html` and `site` copy
+  the directory's whole tree, so a link to `/` put `.ntropy/`, with the
+  configuration and an encrypted vault's identity file, and `.git/`, with
+  the repository's history, into the output. Both now leave out note
+  tools' configuration, version-control directories, sync and trash
+  folders, credentials such as `.ssh` and `.env`, and file-manager files
+  such as `.DS_Store`, at any depth, and every hidden entry of a linked
+  directory; a site theme's files are copied by the same rules. A link
+  naming such a file is a warning and keeps its text in the page.
+  Metadata left out of a linked folder is a `note:` line, which `--strict`
+  does not count.
 - Note titles, file names, link targets in note bodies, template names,
   view names, `.gitignore` entries and the vault's path reached the terminal
   unchanged. A vault you did not write could use them to send escape

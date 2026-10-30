@@ -42,11 +42,15 @@ relative, there is no client-side routing.
 - Scan warnings and export warnings print to stderr; `--strict` makes both
   kinds fail the exit code. The site is written either way. Export
   warnings are: a referenced file that is missing or lies outside the
-  vault, a fence language without a grammar, a link to a note outside
+  vault, a referenced path the export never copies, a linked directory
+  that left out a `.ntropy` entry or has nothing to copy, a fence
+  language without a grammar, a link to a note outside
   the exported set, a configured index note that is not exported, a
   note's `site` table that is no mapping or holds a key of the wrong
   type, a `root` that names no page, and a nav item the site cannot
-  resolve.
+  resolve. Hidden entries and other metadata left out of a linked
+  directory or the theme print as `note:` lines, which `--strict` does
+  not count (see Assets).
 - An encrypted vault exports like a plaintext one; every note is
   decrypted in memory as for any read ([encryption.md](encryption.md)).
   When the output directory lies inside the vault, a warning says so, as
@@ -103,7 +107,8 @@ One directory per node:
                                  assets/grammars/ the highlighting
                                  grammars the site's code blocks need
     files/<vault path>           vault files and directories the notes
-                                 reference
+                                 reference, without what the export
+                                 never copies (see Assets)
 
 The `views/` and `tags/` prefixes keep a view named `notes` or `tags`
 from colliding with the note pages. A view's `<name>` is a valid view
@@ -239,10 +244,21 @@ following a link inside close it.
 
 The export copies the files inside the vault that exported notes
 reference through images or links, plus the theme's files. A link to a
-directory inside the vault copies the directory with its whole tree, so
-the link resolves in the site as it does in the vault; an empty directory
-is a warning. Local asset paths in note bodies are rewritten relative to
-the page. A reference to a file outside the vault is a warning and the
+directory inside the vault copies the directory with its tree, so
+the link resolves in the site as it does in the vault; a directory that
+has nothing to copy is a warning. Some paths are never copied
+([ADR 0073](../adr/0073-what-html-and-site-exports-copy-from-the-vault.md)):
+an entry on the never-copied list (the vault's `.ntropy`, version-control
+directories, sync and trash folders, credentials, file-manager metadata),
+with everything below it, at any depth, judged on the path as written and
+on the path it resolves to; and, below a linked directory, every hidden
+entry. A link that names such a path directly is a warning and the page
+keeps it as written; a link that names a hidden file that is not listed
+copies it. What a linked directory or the theme left out is reported once
+per link: a `.ntropy` entry as a warning, the rest as a `note:` line that
+`--strict` does not count. Each file is copied once, however many links
+reach it, and the output directory itself is never mirrored. Local asset
+paths in note bodies are rewritten relative to the page. A reference to a file outside the vault is a warning and the
 file is not copied, as is a reference to a path that does not exist.
 A path that starts with `/` is read from the vault root, its `.` and `..`
 parts resolved as a relative path's are; one that climbs above the root
@@ -270,6 +286,9 @@ vault theme alike
     templates/*.html the page templates, rendered with and never copied
     anything else    copied under assets/ as it is
 
+Hidden files and the names an export never copies, such as a theme's
+`.git`, stay out of `assets/`, as they stay out of a linked directory
+([ADR 0073](../adr/0073-what-html-and-site-exports-copy-from-the-vault.md)).
 Every page links `style.css` and `render --to html` copies it beside the
 artifact; a directory without it is not a theme. A theme provides the
 palettes for both light and dark mode; the page follows the system

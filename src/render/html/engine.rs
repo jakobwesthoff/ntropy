@@ -21,6 +21,7 @@ use crate::render::{PreparedDocument, RenderContext, RenderError, Renderer, file
 use crate::site::build::{self, FILES_DIR};
 use crate::site::model::SiteMeta;
 use crate::site::page::{self, NoteContext, NoteFragment, Page, PageKind, TagLink, Templates};
+use crate::site::scope::ExportScope;
 use crate::site::{DocumentSettings, SiteTheme, frontend, nav, theme};
 
 /// The theme directory whose files stay out of the artifact: the icons are
@@ -41,13 +42,14 @@ impl Html {
 
 /// Where the page's links point: note links at the sibling artifact by
 /// default name, vault files at their mirror inside the files directory,
-/// both relative to the page; a path that climbs out of the vault stays
-/// as written, unresolved.
+/// both relative to the page; a path that climbs out of the vault, or that
+/// the export does not copy, stays as written, unresolved.
 struct DocumentTargets<'a> {
     /// The files directory's name, `<stem>_files`.
     files: &'a str,
     /// The note's directory as a root-absolute path within the vault.
     note_dir: &'a str,
+    scope: &'a ExportScope,
 }
 
 impl Targets for DocumentTargets<'_> {
@@ -56,7 +58,7 @@ impl Targets for DocumentTargets<'_> {
     }
 
     fn asset_href(&self, dest: &str) -> String {
-        match resolve_root_relative(self.note_dir, dest) {
+        match self.scope.href_path(self.note_dir, dest) {
             Some(path) => format!("{}/{FILES_DIR}{path}", self.files),
             None => dest.to_string(),
         }
@@ -75,9 +77,15 @@ impl Renderer for Html {
             .map(|name| name.to_string_lossy().into_owned())
             .unwrap_or_default();
         let note_dir = build::root_absolute_dir(&doc.vault_root, &doc.path);
+        // The artifact and its files directory may land inside the vault; a
+        // link to a directory holding them must not mirror them into
+        // themselves.
+        let artifact = ctx.output_path().to_path_buf();
+        let scope = ExportScope::new(&doc.vault_root, &[&artifact, &files_path]);
         let targets = DocumentTargets {
             files: &files,
             note_dir: &note_dir,
+            scope: &scope,
         };
         let emitted = emitter::emit(&doc.body, &doc.links, &targets, Some(&doc.title));
         for warning in &emitted.warnings {
@@ -90,7 +98,21 @@ impl Renderer for Html {
         let templates = Templates::new(&theme)?;
         match &self.settings.theme_dir {
             Some(dir) => {
-                for (relative, from) in build::files_under(dir)? {
+                // Copied by the rules of a linked directory (ADR 0073).
+                let walk = ExportScope::new(dir, &[]).walk(dir)?;
+                let subject = "theme";
+                let name = self
+                    .settings
+                    .theme
+                    .as_ref()
+                    .map_or("", |theme| theme.name.as_str());
+                if let Some(warning) = walk.warning(subject, name) {
+                    ctx.warn(&warning);
+                }
+                if let Some(note) = walk.note(subject, name) {
+                    ctx.note(&note);
+                }
+                for (relative, from) in walk.files {
                     if !relative.starts_with(ICONS_PREFIX) && !theme::is_template(&relative) {
                         ctx.copy_file(&from, &relative)?;
                     }
@@ -142,12 +164,15 @@ impl Renderer for Html {
                 )),
             }
         }
-        let mut warnings = Vec::new();
-        for copy in build::mirrored(&doc.vault_root, &referenced, &mut warnings)? {
+        let mirror = build::mirrored(&scope, &referenced)?;
+        for copy in &mirror.copies {
             ctx.copy_file(&copy.from, &copy.to)?;
         }
-        for warning in &warnings {
+        for warning in &mirror.warnings {
             ctx.warn(warning);
+        }
+        for note in &mirror.notes {
+            ctx.note(note);
         }
 
         let body = NoteFragment {
@@ -227,6 +252,7 @@ mod tests {
     struct FakeContext {
         output: PathBuf,
         warnings: Vec<String>,
+        notes: Vec<String>,
         written: Option<Vec<u8>>,
         files: BTreeMap<String, Vec<u8>>,
         copies: Vec<(PathBuf, String)>,
@@ -237,6 +263,7 @@ mod tests {
             FakeContext {
                 output: PathBuf::from("/artifacts/note.html"),
                 warnings: Vec::new(),
+                notes: Vec::new(),
                 written: None,
                 files: BTreeMap::new(),
                 copies: Vec::new(),
@@ -279,6 +306,10 @@ mod tests {
 
         fn warn(&mut self, message: &str) {
             self.warnings.push(message.to_string());
+        }
+
+        fn note(&mut self, message: &str) {
+            self.notes.push(message.to_string());
         }
 
         fn output_path(&self) -> &Path {
@@ -476,6 +507,131 @@ mod tests {
             "{joined}"
         );
         assert_eq!(ctx.warnings.len(), 2, "{joined}");
+    }
+
+    /// A vault with an ordinary asset beside the vault's `.ntropy`, a
+    /// repository and Finder metadata, and `Linker` at `all-notes/note.md`
+    /// whose body is `body`.
+    fn linking(body: &str) -> (tempfile::TempDir, PreparedDocument) {
+        let vault = tempfile::tempdir().expect("temp dir");
+        for (path, contents) in [
+            (".ntropy/config.toml", "[site]\n"),
+            (".git/HEAD", "ref: refs/heads/main\n"),
+            ("assets/pic.png", "png"),
+            ("assets/.DS_Store", "ds"),
+        ] {
+            let file = vault.path().join(path);
+            std::fs::create_dir_all(file.parent().expect("a fixture file has a parent"))
+                .expect("fixture directory");
+            std::fs::write(&file, contents).expect("fixture file");
+        }
+        let mut document = doc("Linker", "{}", body, Vec::new());
+        document.vault_root = vault.path().to_path_buf();
+        document.path = vault.path().join("all-notes/note.md");
+        (vault, document)
+    }
+
+    #[test]
+    fn a_linked_vault_root_leaves_listed_entries_out_of_the_files_directory() {
+        let (_vault, document) = linking("[root](/)\n");
+        let mut ctx = FakeContext::new();
+        Html::new(DocumentSettings::default())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        let copies: Vec<&str> = ctx.copies.iter().map(|(_, to)| to.as_str()).collect();
+        assert_eq!(copies, ["files/assets/pic.png"]);
+    }
+
+    #[test]
+    fn what_a_linked_vault_root_leaves_out_is_a_warning_or_a_note() {
+        let (_vault, document) = linking("[root](/)\n");
+        let mut ctx = FakeContext::new();
+        Html::new(DocumentSettings::default())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert_eq!(
+            ctx.warnings,
+            ["referenced directory `/`: left out `/.ntropy`"]
+        );
+        assert_eq!(
+            ctx.notes,
+            ["referenced directory `/`: left out 2 never-copied entries (`.DS_Store`, `.git`)"]
+        );
+    }
+
+    #[test]
+    fn a_vault_theme_carrying_a_vault_configuration_warns() {
+        let theme_dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(theme_dir.path().join("style.css"), "body {}").expect("css");
+        std::fs::create_dir_all(theme_dir.path().join(".ntropy")).expect("nested vault");
+        std::fs::write(theme_dir.path().join(".ntropy/config.toml"), "").expect("config");
+        let settings = DocumentSettings {
+            theme: Some(SiteTheme {
+                name: "corporate".to_string(),
+                ..SiteTheme::builtin()
+            }),
+            theme_dir: Some(theme_dir.path().to_path_buf()),
+            ..DocumentSettings::default()
+        };
+        let document = doc("Themed", "{}", "text\n", Vec::new());
+        let mut ctx = FakeContext::new();
+        Html::new(settings)
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert_eq!(
+            ctx.warnings,
+            ["theme `corporate`: left out `corporate/.ntropy`"]
+        );
+    }
+
+    #[test]
+    fn a_vault_theme_s_hidden_files_are_left_out_with_a_note() {
+        let theme_dir = tempfile::tempdir().expect("temp dir");
+        std::fs::write(theme_dir.path().join("style.css"), "body {}").expect("css");
+        std::fs::write(theme_dir.path().join(".DS_Store"), "ds").expect("Finder metadata");
+        std::fs::write(theme_dir.path().join(".editorconfig"), "root = true\n")
+            .expect("hidden file");
+        let settings = DocumentSettings {
+            theme: Some(SiteTheme {
+                name: "corporate".to_string(),
+                ..SiteTheme::builtin()
+            }),
+            theme_dir: Some(theme_dir.path().to_path_buf()),
+            ..DocumentSettings::default()
+        };
+        let document = doc("Themed", "{}", "text\n", Vec::new());
+        let mut ctx = FakeContext::new();
+        Html::new(settings)
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        let copies: Vec<&str> = ctx.copies.iter().map(|(_, to)| to.as_str()).collect();
+        assert_eq!(copies, ["style.css"]);
+        assert_eq!(
+            ctx.notes,
+            ["theme `corporate`: left out 1 hidden entry and 1 never-copied entry (`.DS_Store`)"]
+        );
+    }
+
+    #[test]
+    fn a_link_into_ntropy_stays_as_written_in_the_artifact() {
+        let (_vault, document) = linking("[config](/.ntropy/config.toml)\n");
+        let mut ctx = FakeContext::new();
+        Html::new(DocumentSettings::default())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert!(
+            ctx.page()
+                .contains("<a href=\"/.ntropy/config.toml\">config</a>"),
+            "{}",
+            ctx.page()
+        );
+        assert!(ctx.copies.is_empty(), "{:?}", ctx.copies);
+        assert_eq!(
+            ctx.warnings,
+            [
+                "referenced path `/.ntropy/config.toml` is or lies inside `.ntropy`, which exports never copy; not copied"
+            ]
+        );
     }
 
     #[test]

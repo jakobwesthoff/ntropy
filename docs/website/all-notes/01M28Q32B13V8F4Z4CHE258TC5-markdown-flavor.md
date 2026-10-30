@@ -50,6 +50,9 @@ Local images and files referenced from a note are copied into the HTML
 artifact's files directory and into the site export. A path that starts
 with `/` is read from the vault root. A path that leaves the vault, from
 the note or from the root, is not copied: the export warns and the page
-keeps the path as written. Rendering to PDF reads
+keeps the path as written. The same holds for a path the export never
+copies, such as `.ntropy` or `.git`
+([Exporting a website](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md)
+lists them). Rendering to PDF reads
 them from the vault: the `typst` compiler runs with the vault as its root,
 so a path that leaves the vault cannot be resolved.

@@ -35,6 +35,7 @@ use crate::query::Query;
 use crate::render::html::{self, Targets, frontmatter};
 use crate::render::markdown::resolve_root_relative;
 use crate::render::{LinkTarget, RenderError, ResolvedLink, join_within};
+use crate::site::scope::ExportScope;
 use crate::view::ViewDef;
 
 use super::SiteOptions;
@@ -72,6 +73,9 @@ pub struct Input<'a> {
     /// The vault theme with the directory its files live in, or `None` for
     /// the built-in theme.
     pub theme: Option<(&'a SiteTheme, &'a Path)>,
+    /// The directory the site is written to, so a link to a directory
+    /// holding it does not mirror the site into itself.
+    pub output_dir: Option<&'a Path>,
 }
 
 /// One file the export writes, with its contents.
@@ -97,8 +101,12 @@ pub struct Built {
     pub copies: Vec<Copy>,
     /// Export warnings: a referenced file that is missing or outside the
     /// vault, a link to a note outside the exported set, a configured index
-    /// note that is not exported.
+    /// note that is not exported, a path an export never copies.
     pub warnings: Vec<String>,
+    /// What the export left out as routine, such as the hidden entries and
+    /// Finder metadata of a linked folder (ADR 0073). Reported, but never a
+    /// warning.
+    pub notes: Vec<String>,
 }
 
 impl Built {
@@ -126,8 +134,11 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         input.fallback_title,
     )?;
     let mut warnings = model.warnings.clone();
+    let mut notes = Vec::new();
     let mut files = Vec::new();
     let mut copies = Vec::new();
+    let excluded: Vec<&Path> = input.output_dir.into_iter().collect();
+    let scope = ExportScope::new(input.vault_root, &excluded);
     // Every page inlines the selected theme's icon sprite and renders with
     // its templates, parsed once here.
     let theme = SiteTheme::selected(input.theme.map(|(theme, _)| theme));
@@ -138,6 +149,7 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         templates: &templates,
         icons: &icons,
         vars: &input.options.vars,
+        scope: &scope,
     };
 
     // The grammars every page's code blocks need, written once under
@@ -365,10 +377,16 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     }
 
     // The theme's files under `assets/`, the stylesheet among them; the
-    // templates were rendered with and are not served.
+    // templates were rendered with and are not served. A theme directory is
+    // copied by the rules of a linked one (ADR 0073), so a theme cloned with
+    // its repository does not publish it.
     match input.theme {
-        Some((_, dir)) => {
-            for (relative, from) in files_under(dir)? {
+        Some((theme, dir)) => {
+            let walk = ExportScope::new(dir, &excluded).walk(dir)?;
+            let subject = "theme";
+            warnings.extend(walk.warning(subject, &theme.name));
+            notes.extend(walk.note(subject, &theme.name));
+            for (relative, from) in walk.files {
                 if theme::is_template(&relative) {
                     continue;
                 }
@@ -391,54 +409,76 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
         }
     }
 
-    copies.extend(mirrored(input.vault_root, &referenced, &mut warnings)?);
+    let mirror = mirrored(&scope, &referenced)?;
+    copies.extend(mirror.copies);
+    warnings.extend(mirror.warnings);
+    notes.extend(mirror.notes);
 
     Ok(Built {
         files,
         copies,
         warnings,
+        notes,
     })
 }
 
+/// The vault files referenced paths bring into an export, and what the
+/// export reports about them.
+#[derive(Debug, Default)]
+pub(crate) struct Mirrored {
+    pub copies: Vec<Copy>,
+    pub warnings: Vec<String>,
+    pub notes: Vec<String>,
+}
+
 /// The copies that mirror `referenced`, root-absolute vault paths, under
-/// `files/`. A linked directory is mirrored with its whole tree, so the
-/// link resolves in the site the way it does in the vault; an empty
-/// directory and a path that does not exist are warnings.
+/// `files/`. A linked directory is mirrored with its tree, so the link
+/// resolves in the site the way it does in the vault, without what the
+/// scope leaves out (ADR 0073). A path that does not exist, one that is
+/// refused, and a directory that has nothing to copy are warnings; routine
+/// metadata left out of a directory is a note. Each target is copied once,
+/// however many links reach it.
 pub(crate) fn mirrored(
-    vault_root: &Path,
+    scope: &ExportScope,
     referenced: &[String],
-    warnings: &mut Vec<String>,
-) -> Result<Vec<Copy>, crate::fsutil::FsError> {
-    let mut copies = Vec::new();
+) -> Result<Mirrored, crate::fsutil::FsError> {
+    let mut mirror = Mirrored::default();
+    let mut targets: HashSet<String> = HashSet::new();
+    let mut copy = |mirror: &mut Mirrored, from: PathBuf, to: String| {
+        if targets.insert(to.clone()) {
+            mirror.copies.push(Copy { from, to });
+        }
+    };
     for path in referenced {
-        let from = vault_root.join(path.trim_start_matches('/'));
-        if from.is_file() {
-            copies.push(Copy {
-                from,
-                to: format!("{FILES_DIR}{path}"),
-            });
+        let from = scope.vault_path(path);
+        if let Err(refusal) = scope.verdict(&from) {
+            mirror
+                .warnings
+                .push(refusal.message("referenced path", path));
+        } else if from.is_file() {
+            copy(&mut mirror, from, format!("{FILES_DIR}{path}"));
         } else if from.is_dir() {
-            let inside = files_under(&from)?;
-            if inside.is_empty() {
-                warnings.push(format!(
-                    "referenced directory is empty, nothing to copy: {}",
-                    from.display()
-                ));
+            let walk = scope.walk(&from)?;
+            let subject = "referenced directory";
+            if walk.files.is_empty() {
+                mirror
+                    .warnings
+                    .push(format!("{subject} `{path}` has nothing to copy"));
             }
-            for (relative, file) in inside {
-                copies.push(Copy {
-                    from: file,
-                    to: format!("{FILES_DIR}{path}/{relative}"),
-                });
+            mirror.warnings.extend(walk.warning(subject, path));
+            mirror.notes.extend(walk.note(subject, path));
+            let base = format!("{FILES_DIR}{}", path.trim_end_matches('/'));
+            for (relative, file) in walk.files {
+                copy(&mut mirror, file, format!("{base}/{relative}"));
             }
         } else {
-            warnings.push(format!(
+            mirror.warnings.push(format!(
                 "referenced file not found in the vault: {}",
                 from.display()
             ));
         }
     }
-    Ok(copies)
+    Ok(mirror)
 }
 
 /// Write a built site into `dir`, creating directories as needed.
@@ -527,10 +567,12 @@ pub(crate) fn root_absolute_dir(vault_root: &Path, note_path: &Path) -> String {
 
 /// Where a note page's links point: note links at the target's page,
 /// vault files at their mirror under `files/`, both relative to the page.
+/// A path the export does not copy keeps its text.
 struct PageTargets<'a> {
     model: &'a Model,
     prefix: String,
     note_dir: &'a str,
+    scope: &'a ExportScope,
 }
 
 impl Targets for PageTargets<'_> {
@@ -542,7 +584,7 @@ impl Targets for PageTargets<'_> {
     }
 
     fn asset_href(&self, dest: &str) -> String {
-        match resolve_root_relative(self.note_dir, dest) {
+        match self.scope.href_path(self.note_dir, dest) {
             Some(path) => format!("{}{FILES_DIR}{path}", self.prefix),
             None => dest.to_string(),
         }
@@ -608,6 +650,7 @@ fn render_note(
         model,
         prefix: prefix.clone(),
         note_dir,
+        scope: export.scope,
     };
     let emitted = html::emit(&note.body, links, &targets, Some(&note.title));
     let entry = &model.notes[index];
@@ -735,12 +778,13 @@ fn crumbs(trail: &[model::Crumb], prefix: &str) -> Vec<Crumb> {
 }
 
 /// What every page of one export shares: the model, the theme's templates
-/// and icon sprite, and the config's `[site.vars]`.
+/// and icon sprite, the config's `[site.vars]`, and what the export may copy.
 struct Export<'a> {
     model: &'a Model,
     templates: &'a Templates,
     icons: &'a str,
     vars: &'a toml::Table,
+    scope: &'a ExportScope,
 }
 
 /// The chrome of a page at `at`: sidebar with the current trail open, the
@@ -900,6 +944,7 @@ mod tests {
             fallback_title: "Vault",
             vault_root: vault,
             theme: None,
+            output_dir: None,
         })
         .expect("the site builds")
     }
@@ -953,8 +998,7 @@ mod tests {
             "{joined}"
         );
         assert!(
-            joined.contains("referenced directory is empty, nothing to copy")
-                && joined.contains("assets/empty"),
+            joined.contains("referenced directory `/all-notes/assets/empty` has nothing to copy"),
             "{joined}"
         );
         assert_eq!(built.warnings.len(), 5, "{joined}");
@@ -1264,6 +1308,7 @@ mod tests {
             fallback_title: "Vault",
             vault_root: vault.path(),
             theme: Some((&theme, &theme_dir)),
+            output_dir: None,
         })
         .expect("builds");
         let theme_copies: Vec<&str> = built
@@ -1339,6 +1384,7 @@ mod tests {
             fallback_title: "Vault",
             vault_root: vault.path(),
             theme: Some((&theme, &theme_dir)),
+            output_dir: None,
         })
         .expect("builds");
         let probe = |path: &str| text(&built, path);
@@ -1412,6 +1458,7 @@ mod tests {
             fallback_title: "Vault",
             vault_root: vault.path(),
             theme: Some((&theme, &theme_dir)),
+            output_dir: None,
         })
         .expect("builds");
         assert_eq!(text(&built, "notes/welcome.html"), "splash:Welcome:note");
@@ -1451,6 +1498,7 @@ mod tests {
             fallback_title: "Vault",
             vault_root: vault.path(),
             theme: None,
+            output_dir: None,
         })
         .expect("builds");
         assert!(built.file("assets/style.css").is_some());
@@ -1489,6 +1537,7 @@ mod tests {
             fallback_title: "Vault",
             vault_root: vault.path(),
             theme: Some((&theme, &theme_dir)),
+            output_dir: None,
         })
         .expect_err("the render error surfaces");
         let message = err.to_string();
@@ -1545,6 +1594,7 @@ mod tests {
             fallback_title: "Docs",
             vault_root: vault,
             theme: None,
+            output_dir: None,
         })
         .expect("the site builds")
     }
@@ -1645,6 +1695,7 @@ mod tests {
             fallback_title: "Docs",
             vault_root: vault.path(),
             theme: None,
+            output_dir: None,
         })
         .expect("the site builds");
         // The root's child groups are the sidebar's sections, so a note
@@ -1689,6 +1740,7 @@ mod tests {
             fallback_title: "Docs",
             vault_root: vault.path(),
             theme: None,
+            output_dir: None,
         })
         .expect("the site builds");
         // The rooted group holds a note of its own, so it is the first
@@ -1726,6 +1778,7 @@ mod tests {
             fallback_title: "Docs",
             vault_root: vault.path(),
             theme: None,
+            output_dir: None,
         })
         .expect("the site builds");
         let install = text(&built, "notes/install.html");
@@ -1764,6 +1817,7 @@ mod tests {
                 fallback_title: "Docs",
                 vault_root: vault.path(),
                 theme: None,
+                output_dir: None,
             })
             .expect("the site builds")
         };
@@ -1832,6 +1886,7 @@ mod tests {
                 .collect(),
             copies,
             warnings: Vec::new(),
+            notes: Vec::new(),
         }
     }
 
@@ -1882,5 +1937,336 @@ mod tests {
             &handmade(&["index.html", "../escape.html"], Vec::new()),
         );
         assert!(!tmp.path().join("out/index.html").exists());
+    }
+
+    // =========================================================
+    // What a link never brings into the site (ADR 0073)
+    // =========================================================
+
+    /// A vault holding, beside an ordinary asset, what an export must never
+    /// copy: the vault's `.ntropy`, a repository at the root and two inside
+    /// an asset folder (one a worktree's `.git` file), Finder metadata, a
+    /// hidden directory, a folder holding only a hidden file, and a symlink
+    /// into `.ntropy`.
+    fn reserved_vault() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp dir");
+        write_files(
+            dir.path(),
+            &[
+                (".ntropy/config.toml", "[site]\n"),
+                (".git/HEAD", "ref: refs/heads/main\n"),
+                (".well-known/x", "x"),
+                ("assets/pic.png", "png"),
+                ("assets/.DS_Store", "ds"),
+                ("assets/repo/.git/config", "[core]\n"),
+                ("assets/wt/.git", "gitdir: /no-such-repository\n"),
+                ("keep/.gitkeep", ""),
+            ],
+        );
+        std::os::unix::fs::symlink(".ntropy", dir.path().join("cfg")).expect("symlink");
+        dir
+    }
+
+    /// The site of one exported note whose body is `body`.
+    fn site_linking(vault: &Path, body: &str) -> Built {
+        let notes = vec![note(vault, A, "Linker", "", body)];
+        let vault_ids = ids(&notes);
+        build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &SiteOptions::default(),
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault,
+            theme: None,
+            output_dir: None,
+        })
+        .expect("the site builds")
+    }
+
+    /// The copy targets of `built`, sorted, each with empty components
+    /// dropped, so a doubled slash does not hide which file is copied.
+    fn targets(built: &Built) -> Vec<String> {
+        let mut targets: Vec<String> = built
+            .copies
+            .iter()
+            .map(|copy| {
+                copy.to
+                    .split('/')
+                    .filter(|part| !part.is_empty())
+                    .collect::<Vec<_>>()
+                    .join("/")
+            })
+            .collect();
+        targets.sort();
+        targets
+    }
+
+    /// `files` written into the vault, each with its parent directories.
+    fn write_files(vault: &Path, files: &[(&str, &str)]) {
+        for (path, contents) in files {
+            let file = vault.join(path);
+            std::fs::create_dir_all(file.parent().expect("a fixture file has a parent"))
+                .expect("fixture directory");
+            std::fs::write(&file, contents).expect("fixture file");
+        }
+    }
+
+    #[test]
+    fn a_linked_vault_root_leaves_listed_and_hidden_entries_out() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[root](/)\n");
+        assert_eq!(targets(&built), ["files/assets/pic.png"]);
+    }
+
+    #[test]
+    fn a_link_into_ntropy_is_not_copied_and_stays_as_written() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[config](/.ntropy/config.toml)\n");
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+        let page = text(&built, "notes/linker.html");
+        assert!(
+            page.contains("<a href=\"/.ntropy/config.toml\">config</a>"),
+            "{page}"
+        );
+        assert_eq!(
+            built.warnings,
+            [
+                "referenced path `/.ntropy/config.toml` is or lies inside `.ntropy`, which exports never copy; not copied"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_link_to_the_ntropy_directory_is_not_copied() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[vault config](/.ntropy)\n");
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+    }
+
+    #[test]
+    fn a_link_into_git_is_not_copied_and_stays_as_written() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[head](/.git/HEAD)\n");
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+        let page = text(&built, "notes/linker.html");
+        assert!(page.contains("<a href=\"/.git/HEAD\">head</a>"), "{page}");
+    }
+
+    #[test]
+    fn a_repository_inside_an_asset_folder_is_left_out() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[assets](/assets)\n");
+        assert!(
+            !targets(&built).iter().any(|to| to.contains("/.git")),
+            "{:?}",
+            targets(&built)
+        );
+    }
+
+    #[test]
+    fn a_finder_metadata_file_in_an_asset_folder_is_left_out() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[assets](/assets)\n");
+        assert!(
+            !targets(&built).contains(&"files/assets/.DS_Store".to_string()),
+            "{:?}",
+            targets(&built)
+        );
+    }
+
+    #[test]
+    fn a_symlink_to_ntropy_is_refused() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[file](/cfg/config.toml) [directory](/cfg)\n");
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+    }
+
+    #[test]
+    fn a_case_variant_of_ntropy_is_refused() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[config](/.NTROPY/config.toml)\n");
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+        assert_eq!(
+            built.warnings,
+            [
+                "referenced path `/.NTROPY/config.toml` is or lies inside `.NTROPY`, which exports never copy; not copied"
+            ]
+        );
+    }
+
+    // A case-insensitive filesystem holds `CVS` and `CVs` as one directory,
+    // so each case gets a vault of its own.
+
+    #[test]
+    fn a_cvs_folder_is_left_out() {
+        let vault = tempfile::tempdir().expect("temp dir");
+        write_files(
+            vault.path(),
+            &[
+                ("assets/pic.png", "png"),
+                ("assets/CVS/Entries", "/x/1.1///\n"),
+            ],
+        );
+        let built = site_linking(vault.path(), "[assets](/assets)\n");
+        assert_eq!(targets(&built), ["files/assets/pic.png"]);
+    }
+
+    #[test]
+    fn a_folder_named_cvs_in_another_case_is_copied() {
+        let vault = tempfile::tempdir().expect("temp dir");
+        write_files(vault.path(), &[("assets/CVs/resume.pdf", "pdf")]);
+        let built = site_linking(vault.path(), "[assets](/assets)\n");
+        assert_eq!(targets(&built), ["files/assets/CVs/resume.pdf"]);
+    }
+
+    #[test]
+    fn a_direct_link_to_a_hidden_file_is_copied() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[well known](/.well-known/x)\n");
+        assert_eq!(targets(&built), ["files/.well-known/x"]);
+    }
+
+    #[test]
+    fn a_hidden_entry_below_a_linked_directory_is_left_out() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[root](/)\n");
+        assert!(
+            !targets(&built).contains(&"files/.well-known/x".to_string()),
+            "{:?}",
+            targets(&built)
+        );
+    }
+
+    #[test]
+    fn a_linked_hidden_directory_still_leaves_its_hidden_entries_out() {
+        let vault = reserved_vault();
+        std::fs::write(vault.path().join(".well-known/.secret"), "s").expect("hidden file");
+        let built = site_linking(vault.path(), "[well known](/.well-known)\n");
+        assert_eq!(targets(&built), ["files/.well-known/x"]);
+    }
+
+    #[test]
+    fn a_folder_of_only_left_out_entries_has_nothing_to_copy() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[keep](/keep)\n");
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+        assert_eq!(
+            built.warnings,
+            ["referenced directory `/keep` has nothing to copy"]
+        );
+    }
+
+    #[test]
+    fn a_linked_vault_root_warns_about_ntropy_by_its_paths() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[root](/)\n");
+        assert_eq!(
+            built.warnings,
+            ["referenced directory `/`: left out `/.ntropy`, `/cfg`"]
+        );
+    }
+
+    #[test]
+    fn a_linked_vault_root_notes_the_routine_metadata_it_left_out() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[root](/)\n");
+        assert_eq!(
+            built.notes,
+            [
+                "referenced directory `/`: left out 2 hidden entries and 4 never-copied entries (`.DS_Store`, `.git`)"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_linked_vault_root_copies_without_an_empty_path_component() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[root](/)\n");
+        assert!(
+            built
+                .copies
+                .iter()
+                .all(|copy| copy.to.split('/').all(|part| !part.is_empty())),
+            "{:?}",
+            targets(&built)
+        );
+    }
+
+    #[test]
+    fn overlapping_directory_links_copy_each_file_once() {
+        let vault = reserved_vault();
+        let built = site_linking(vault.path(), "[root](/) [assets](/assets)\n");
+        let all = targets(&built);
+        let mut unique = all.clone();
+        unique.dedup();
+        assert_eq!(all, unique);
+    }
+
+    #[test]
+    fn a_vault_theme_leaves_its_repository_and_hidden_files_out() {
+        let vault = reserved_vault();
+        let theme_dir = vault.path().join(".ntropy/themes/site/corporate");
+        write_files(
+            &theme_dir,
+            &[
+                ("style.css", "body {}"),
+                ("fonts/a.woff2", "font"),
+                (".git/HEAD", "ref: refs/heads/main\n"),
+                (".DS_Store", "ds"),
+                (".editorconfig", "root = true\n"),
+            ],
+        );
+        let notes = vec![note(vault.path(), A, "Linker", "", "text\n")];
+        let vault_ids = ids(&notes);
+        let theme = SiteTheme {
+            name: "corporate".to_string(),
+            ..SiteTheme::builtin()
+        };
+        let built = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &SiteOptions::default(),
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault.path(),
+            theme: Some((&theme, &theme_dir)),
+            output_dir: None,
+        })
+        .expect("the site builds");
+        assert_eq!(
+            targets(&built),
+            ["assets/fonts/a.woff2", "assets/style.css"]
+        );
+        assert_eq!(
+            built.notes,
+            [
+                "theme `corporate`: left out 1 hidden entry and 2 never-copied entries (`.DS_Store`, `.git`)"
+            ]
+        );
+    }
+
+    #[test]
+    fn a_link_to_a_directory_holding_the_output_does_not_mirror_the_site() {
+        let vault = reserved_vault();
+        let output = vault.path().join("site");
+        write_files(vault.path(), &[("site/index.html", "earlier run")]);
+        let notes = vec![note(vault.path(), A, "Linker", "", "[root](/)\n")];
+        let vault_ids = ids(&notes);
+        let built = build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &SiteOptions::default(),
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault.path(),
+            theme: None,
+            output_dir: Some(&output),
+        })
+        .expect("the site builds");
+        assert_eq!(targets(&built), ["files/assets/pic.png"]);
     }
 }

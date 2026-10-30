@@ -29,6 +29,9 @@ laid out as follows.
   anything else    copied into the site's assets/ as it is
 ```
 
+Hidden files and the names an export never copies (`.git`, `.DS_Store`
+and the like) stay out of `assets/`.
+
 ```bash
 ntropy site theme init mine    # copies the built-in theme to .ntropy/themes/site/mine/
                                # refuses to overwrite an existing directory

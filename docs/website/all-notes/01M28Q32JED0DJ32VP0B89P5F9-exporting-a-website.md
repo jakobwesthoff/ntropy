@@ -33,8 +33,11 @@ warns about a referenced file that is missing or lies outside the vault,
 a code fence whose language has no highlighting grammar, a link to a note
 outside the exported set, a configured index note that is not exported,
 a `site` table that is no mapping or holds a key of the wrong type, a
-`root` that names no page, a nav item the site cannot resolve, and a
-`template` the theme does not have.
+`root` that names no page, a nav item the site cannot resolve, a
+`template` the theme does not have, and a link to a file the export never
+copies (see below). Metadata the export leaves out of a linked folder, such
+as `.DS_Store`, prints as a `note:` line instead, which `--strict` does not
+count.
 
 The output is plaintext, so writing it inside an
 [encrypted vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md) prints
@@ -49,8 +52,27 @@ each listing the notes carrying the tag or any tag below it. Every
 becomes a tree under `views/`, nested like its directory; a view over
 `tags` is skipped, since the tag pages already are that view. Images and
 files the notes link are copied under `files/`, a linked directory with
-its whole tree. Links are relative, so the site works from `file://` and
+its tree. Links are relative, so the site works from `file://` and
 from any path on a host.
+
+Some files are never copied, whether a note links them directly or they
+sit in a linked folder or in the site theme, at any depth:
+
+- note tools' configuration: `.ntropy`, `.ntropy-vault`, `.obsidian`;
+- version control and its history: `.bzr`, `.fslckout`, `.git`, `.hg`,
+  `.jj`, `.pijul`, `.svn`, `CVS`, `_darcs`;
+- sync tools' state: `.dropbox.cache`, `.stfolder`, `.stversions`;
+- trash: `$RECYCLE.BIN` and every `.Trash…` folder;
+- credentials: `.aws`, `.env`, `.gnupg`, `.netrc`, `.ssh`;
+- file-manager metadata: `.DS_Store`, `Thumbs.db`.
+
+Names match in any letter case, except `CVS`, so a folder `CVs` is
+copied. A linked folder also leaves out every hidden file and folder in
+it; a hidden file that a note links by name is copied unless it is on the
+list. A link to a listed file is a warning and keeps its text in the
+page. The site is never copied into itself, but an earlier render or site
+export stored inside the vault is an ordinary folder, which a link to a
+folder holding it copies.
 
 Each page carries a sidebar with the views and the top-level tags,
 breadcrumbs, an outline of the note's headings that follows your

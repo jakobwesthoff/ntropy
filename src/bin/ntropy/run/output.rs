@@ -211,6 +211,13 @@ pub fn warn(message: &str) {
     eprintln!("warning: {}", escape_controls(message));
 }
 
+/// Print `message` as a note on stderr, escaped as a warning is: something
+/// the command did on purpose that the reader may still want to know, such
+/// as metadata an export left out (ADR 0073). A note never fails `--strict`.
+pub fn note(message: &str) {
+    eprintln!("note: {}", escape_controls(message));
+}
+
 /// The text `main` prints after `error: ` for an error that ends the command:
 /// the whole context chain on one line, escaped (ADR 0071).
 ///

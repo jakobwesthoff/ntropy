@@ -99,12 +99,17 @@ pub fn cmd_site(
         fallback_title: &fallback_title,
         vault_root: session.root(),
         theme: loaded_theme.as_ref().zip(theme_dir.as_deref()),
+        output_dir: Some(&absolute_output),
     })
     .context("while building the site")?;
     site::write(&built, &absolute_output).context("while writing the site")?;
 
     for warning in &built.warnings {
         output::warn(warning);
+    }
+    // Notes are reported and never counted toward `--strict` (ADR 0073).
+    for note in &built.notes {
+        output::note(note);
     }
 
     // `--print` writes exactly the entry page's path to stdout for command

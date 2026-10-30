@@ -2616,6 +2616,115 @@ fn site_does_not_mirror_the_directory_above_the_vault_root() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// What a link never brings into an export (ADR 0073)
+// ---------------------------------------------------------------------------
+
+/// A temporary directory holding a vault at `vault/` whose one note,
+/// `Climber`, has `body` as its body, with a repository's `HEAD`, an asset
+/// and Finder metadata beside the vault's `.ntropy`.
+fn vault_with_metadata(body: &str) -> tempfile::TempDir {
+    let dir = vault_beside_a_file(body);
+    let vault = dir.path().join("vault");
+    fs::create_dir_all(vault.join(".git")).expect("the repository directory");
+    fs::write(vault.join(".git/HEAD"), "ref: refs/heads/main\n").expect("HEAD");
+    fs::create_dir_all(vault.join("assets")).expect("the asset folder");
+    fs::write(vault.join("assets/pic.png"), "png").expect("the asset");
+    fs::write(vault.join("assets/.DS_Store"), "ds").expect("Finder metadata");
+    dir
+}
+
+/// No file named `name` lies below `root`.
+fn assert_none_named(root: &Path, name: &str) {
+    assert_eq!(
+        files_named(root, name),
+        Vec::<PathBuf>::new(),
+        "`{name}` was copied"
+    );
+}
+
+#[test]
+fn site_leaves_listed_entries_out_and_warns() {
+    let dir = vault_with_metadata("[root](/) [config](/.ntropy/config.toml)");
+    let (output, page) = site_climber(dir.path());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    let site = dir.path().join("site");
+    assert_none_named(&site, "config.toml");
+    assert_none_named(&site, "HEAD");
+    assert_none_named(&site, ".DS_Store");
+    assert_eq!(
+        files_named(&site, "pic.png"),
+        [site.join("files/assets/pic.png")]
+    );
+    assert!(
+        stderr.contains(
+            "warning: referenced path `/.ntropy/config.toml` is or lies inside `.ntropy`, which exports never copy; not copied"
+        ),
+        "{stderr}"
+    );
+    assert!(page.contains("href=\"/.ntropy/config.toml\""), "{page}");
+}
+
+#[test]
+fn render_to_html_leaves_listed_entries_out() {
+    let dir = vault_with_metadata("[root](/) [config](/.ntropy/config.toml)");
+    let (output, page) = render_climber(dir.path());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    let files = dir.path().join("render/out_files");
+    assert_none_named(&files, "config.toml");
+    assert_none_named(&files, "HEAD");
+    assert_none_named(&files, ".DS_Store");
+    assert_eq!(
+        files_named(&files, "pic.png"),
+        [files.join("files/assets/pic.png")]
+    );
+    assert!(
+        stderr.contains(
+            "warning: referenced path `/.ntropy/config.toml` is or lies inside `.ntropy`, which exports never copy; not copied"
+        ),
+        "{stderr}"
+    );
+    assert!(page.contains("href=\"/.ntropy/config.toml\""), "{page}");
+}
+
+#[test]
+fn site_strict_passes_when_only_metadata_is_left_out() {
+    let dir = vault_with_metadata("[assets](/assets)");
+    let out = dir.path().join("site");
+    let output = site(
+        &dir.path().join("vault"),
+        &["-o", &out.to_string_lossy(), "--strict"],
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(
+            "note: referenced directory `/assets`: left out 1 never-copied entry (`.DS_Store`)"
+        ),
+        "{stderr}"
+    );
+    assert!(output.status.success(), "{stderr}");
+    assert_none_named(&out, ".DS_Store");
+}
+
+#[test]
+fn render_to_html_does_not_mirror_its_own_files_directory() {
+    let dir = vault_with_metadata("[root](/)");
+    let vault = dir.path().join("vault");
+    let output = render_to_html(
+        &vault,
+        ULID_A,
+        &["-o", &vault.join("x.html").to_string_lossy()],
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{stderr}");
+    assert!(
+        !vault.join("x_files/files/x_files").exists(),
+        "the files directory was mirrored into itself"
+    );
+}
+
 /// A vault with one note and a `corporate` theme configured vault-wide.
 fn themed_vault() -> tempfile::TempDir {
     let dir = setup_vault();

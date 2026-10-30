@@ -69,7 +69,7 @@ ntropy site theme init mine                   # copy the built-in theme to .ntro
 | `tags/index.html`, `tags/<a>/<b>/index.html` | the tag tree and one page per tag, listing the notes under it and its child tags |
 | `views/<name>/index.html`, `views/<name>/<group>/index.html` | one index per configured view and one page per group; a view over `tags` gets none (the tag pages are that view) |
 | `assets/` | the theme's files, the page scripts, the search data, the grammars the site's code needs |
-| `files/<vault path>` | images and files the notes reference, copied from the vault |
+| `files/<vault path>` | images and files the notes reference, copied from the vault without vault and version-control metadata, credentials, file-manager files (`.ntropy`, `.git`, `.ssh`, `.DS_Store` and the like) and, inside a linked folder, hidden entries |
 
 Every page has the sidebar, breadcrumbs, an outline of the note's headings,
 previous/next links, a light/dark/system switch, and the search (a palette
@@ -233,7 +233,9 @@ into one directory cross-references itself. No external tool is needed.
 
 `render` refuses an existing artifact of any format, and a non-empty
 `<stem>_files/`, unless `--force` replaces them. Warnings are the export's
-(missing or out-of-vault files, a fence language without a grammar).
+(missing or out-of-vault files, links to files the export never copies, a
+fence language without a grammar). Metadata left out of a linked folder is
+a `note:` line, which `--strict` does not count.
 
 ## Do / don't
 

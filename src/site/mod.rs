@@ -13,6 +13,7 @@
 //! - [`model`]: the site's structure, computed from the notes and views.
 //! - [`nav`]: the navigation fragments built from the model.
 //! - [`build`]: every file of a site, built in memory, and their writing.
+//! - [`scope`]: which vault files an html or site export may copy.
 //! - [`frontend`]: the embedded page script and highlighting grammars.
 //! - [`search`]: the search data every site embeds for the page script.
 //! - [`embedded`]: the assets the build script embeds, inflated on demand.
@@ -26,6 +27,7 @@ pub mod model;
 pub mod nav;
 pub mod options;
 pub mod page;
+pub mod scope;
 pub mod search;
 pub mod theme;
 
