@@ -189,7 +189,12 @@ relative to the vault, for example:
 Relative links keep the entire vault relocatable: moving or copying the vault
 does not break them. The `../` depth is computed per link from its position in
 the view tree. When two notes would collide on `<date>-<slug>` within one
-group, a short ULID-derived tail disambiguates them.
+group, a short ULID-derived tail disambiguates them. The leaf names of one
+group directory are unique without regard to case: when a tailed name equals
+another note's name, or differs from it only in case, which a
+case-insensitive filesystem such as default APFS stores as one entry, the
+tails of both grow, a plain name gaining one, until no two names match
+(ADR 0068).
 
 Symlinks are used rather than hardlinks: a symlink has an unambiguous canonical
 target, can point at the real note anywhere in the tree, and signals that the

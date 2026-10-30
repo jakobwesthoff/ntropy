@@ -48,7 +48,8 @@ by-status/in-progress/2026-07-06-refactor-the-parser.md
 ```
 
 Two notes colliding on `<date>-<slug>` in one group get a short ULID-derived
-tail appended to disambiguate.
+tail appended to disambiguate. Leaf names in one group differ even ignoring
+case, so every note has its leaf on a case-insensitive filesystem too.
 
 ## Freshness and drift
 

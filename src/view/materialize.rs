@@ -623,4 +623,62 @@ mod sync_tests {
             "but is empty"
         );
     }
+
+    /// Two notes titled `Review` on one day, and a third on that day whose
+    /// title slugifies to `review-<suffix>`, all tagged `t`. The ULIDs end in
+    /// `tail_a` and `tail_b`, so `Review`'s disambiguated names are
+    /// `…-review-<tail_a>` and `…-review-<tail_b>`.
+    fn colliding_reviews(session: &VaultSession, tail_a: &str, suffix: &str) {
+        let prefix = "01ARZ3NDEKTSV4RRFFQ69G5";
+        write_note(
+            session,
+            &format!("{prefix}{tail_a}-review.md"),
+            "---\ntitle: Review\ntags: [t]\n---\nx\n",
+        );
+        write_note(
+            session,
+            &format!("{prefix}FBW-review.md"),
+            "---\ntitle: Review\ntags: [t]\n---\nx\n",
+        );
+        write_note(
+            session,
+            &format!("{prefix}YYY-review-{suffix}.md"),
+            &format!("---\ntitle: Review {suffix}\ntags: [t]\n---\nx\n"),
+        );
+    }
+
+    #[test]
+    fn a_note_whose_name_equals_a_disambiguated_name_keeps_its_leaf() {
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        colliding_reviews(&session, "123", "123");
+
+        sync(&session);
+
+        assert_eq!(
+            std::fs::read_dir(group_dir(&session, "t"))
+                .expect("read")
+                .count(),
+            3,
+            "every note has a leaf"
+        );
+    }
+
+    #[test]
+    fn leaves_differing_only_in_case_both_exist() {
+        // On a case-insensitive filesystem `…-review-FAV.md` and
+        // `…-review-fav.md` are one entry, so the second link could not be
+        // made; on a case-sensitive one the names already differ.
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        colliding_reviews(&session, "FAV", "fav");
+
+        sync(&session);
+
+        assert_eq!(
+            std::fs::read_dir(group_dir(&session, "t"))
+                .expect("read")
+                .count(),
+            3,
+            "every note has a leaf"
+        );
+    }
 }

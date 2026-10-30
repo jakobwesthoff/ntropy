@@ -68,6 +68,13 @@ and this project adheres to
   it mid-conversion, and decrypting replaced a plaintext note lying next to
   its encrypted twin. `vault encrypt` refuses before it writes the vault's
   key.
+- A note whose view leaf name equaled another note's disambiguated name, such
+  as a slug `review-123` beside two notes titled `Review` whose ULID tail was
+  `123`, is no longer missing from the view. On a case-insensitive
+  filesystem, a leaf name differing from another only in case, such as
+  `review-fav` beside a tail `FAV`, no longer stops the view sync with "File
+  exists". Leaf names in a group directory are now unique ignoring case; the
+  site export's page names follow the same rule.
 - `reconcile`, and the filename realignment after an edit or a `write`, no
   longer rename a note over an existing file. Two files sharing a ULID and a
   title, such as a note copied by hand, could be renamed to one name, and the

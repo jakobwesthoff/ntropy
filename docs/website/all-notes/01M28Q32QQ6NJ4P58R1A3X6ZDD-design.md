@@ -93,4 +93,5 @@ made.
 - [0064. View names are validated slug segments](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0064-view-names-are-validated-slug-segments.md)
 - [0066. Editor value run through the shell](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0066-editor-value-run-through-the-shell.md)
 - [0067. Duplicate note IDs](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0067-duplicate-note-ids.md)
+- [0068. Unique view leaf names per directory, ignoring case](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0068-unique-view-leaf-names-per-directory-ignoring-case.md)
 - [0069. Picker paging keys and a hand-drawn renderer](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0069-picker-paging-keys-and-a-hand-drawn-renderer.md)

@@ -21,7 +21,7 @@ by-status/
 └── todo/
 ```
 
-Each leaf is named `<date>-<slug>.md`, where the date is the note's creation date and the slug comes from its title. When two notes in one group would get the same name, ntropy appends a short tail of each note's ULID to tell them apart. The links are relative, so a moved or copied vault keeps working.
+Each leaf is named `<date>-<slug>.md`, where the date is the note's creation date and the slug comes from its title. When two notes in one group would get the same name, ntropy appends a short tail of each note's ULID to tell them apart, and makes it longer where needed so that no two names in a directory differ only in letter case, which macOS's default filesystem would treat as one file. The links are relative, so a moved or copied vault keeps working.
 
 Because the leaves are symlinks to the canonical files, there is still exactly one copy of every note; the view is another door into it. `cd` into it, `grep` it, point a file browser at it, open the links in any editor. ntropy refreshes views after every command that changes notes, and `ntropy reconcile` brings them back in sync after edits made outside ntropy. Both sync incrementally: only the links that changed are touched.
 
