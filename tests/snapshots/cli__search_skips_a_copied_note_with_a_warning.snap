@@ -1,0 +1,19 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - search
+    - "-n"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+ID                          DATE        TITLE  TAGS  PATH
+[ULID....................]  [DATE....]  Plan         [VAULT]/all-notes/[ULID....................]-plan.md
+
+----- stderr -----
+warning: skipped `[ULID....................]-plan-b.md`: its id is also used by `[ULID....................]-plan.md`

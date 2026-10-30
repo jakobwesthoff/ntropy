@@ -47,6 +47,13 @@ and this project adheres to
 
 ### Fixed
 
+- Two note files that share a ULID, such as a note file copied by hand, are
+  detected. The one with the shorter file name keeps the ULID, and every
+  command that reads the vault skips the other with a warning naming it,
+  which `--strict` makes fail. Links to that ULID resolve to the note that
+  keeps it; before, they went to whichever file was read first. A full ULID
+  passed to `edit` or `delete` still matches both files, and `new`, `today`
+  and `write` report the copy, which their view refresh leaves out.
 - `reconcile`, and the filename realignment after an edit or a `write`, no
   longer rename a note over an existing file. Two files sharing a ULID and a
   title, such as a note copied by hand, could be renamed to one name, and the

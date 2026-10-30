@@ -8,6 +8,8 @@ Accepted
 
 Amended 2026-10-30 by [ADR 0064](0064-view-names-are-validated-slug-segments.md).
 
+Amended 2026-10-30 by [ADR 0067](0067-duplicate-note-ids.md).
+
 ## Context
 
 Scanning `all-notes/` can meet files that are not well-formed notes: malformed

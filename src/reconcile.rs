@@ -20,6 +20,7 @@ use crate::fsutil;
 use crate::gitignore;
 use crate::link;
 use crate::note::Note;
+use crate::note::duplicate::Duplicate;
 use crate::scan::{self, ScanWarning};
 use crate::session::VaultSession;
 use crate::vault::{Vault, ViewName};
@@ -74,6 +75,9 @@ pub struct ReconcileReport {
 pub struct ViewRefresh {
     /// Warnings from scanning `all-notes/`.
     pub warnings: Vec<ScanWarning>,
+    /// Copies the scan left out of the views because another file keeps their
+    /// ULID (ADR 0067); each also has its warning in `warnings`.
+    pub duplicates: Vec<Duplicate>,
     /// Configured views that were not synced.
     pub skipped_views: Vec<SkippedView>,
 }
@@ -97,6 +101,7 @@ pub fn refresh_views(session: &VaultSession) -> Result<ViewRefresh> {
     skipped_views.extend(unsafe_views);
     Ok(ViewRefresh {
         warnings: scan.warnings,
+        duplicates: scan.duplicates,
         skipped_views,
     })
 }

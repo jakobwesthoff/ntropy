@@ -307,8 +307,11 @@ No picker and no prompt, terminal or not: stdin carries the payload, so the
 invocation is scripted by construction. Afterwards the note is realigned and
 views refreshed, exactly as on editor exit, and the resulting path is printed,
 which is how a caller learns the new name when a written title renamed the file.
-When a file already holds the name the title calls for, the note keeps its old
-name, which is the path printed, and a `warning: did not rename ...` line goes
+When a note file shares its ULID with another file, the views are refreshed
+without the copy, and `new`, `today`, `write` and the editor round trip print
+its scan warning; other scan warnings are left to the commands that list
+notes (ADR 0067). When a file already holds the name the title calls for, the
+note keeps its old name, which is the path printed, and a `warning: did not rename ...` line goes
 to stderr (ADR 0067). The content is written either way; the warning fails the
 command only under `--strict`.
 

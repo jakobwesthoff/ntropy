@@ -49,6 +49,12 @@ Malformed or badly named top-level note files are skipped with a stderr warning
 (`--strict` makes that fatal); see
 [ADR 0019](../adr/0019-scan-robustness-and-resource-tolerance.md).
 
+Two files can carry one ULID when a note file is copied by hand. The scan keeps
+one of them, the one with the shorter file name, then the one first in byte
+order, and skips every other with a warning naming the one it kept (ADR 0067).
+Everything that works from the scan, links included, sees the kept file alone;
+a full ULID given as a selector still matches all of them.
+
 The one file an encrypted vault does not ignore is a plaintext `.md`: it warns,
 naming `reconcile`, which encrypts such a file in place. A stray `.age` file in
 a plaintext vault stays a silent resource.

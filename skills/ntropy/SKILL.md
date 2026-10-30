@@ -28,7 +28,8 @@ language for filtering, and materialized symlink views for filesystem browsing.
    terminal exists — piping or capturing the output does NOT prevent that, so
    `$(ntropy search …)` without `-n` hangs waiting for keys.
 2. **NEVER hand-create files in `all-notes/`.** You would have to invent a
-   ULID, and a wrong or duplicate one corrupts note identity. ntropy allocates
+   ULID: a wrong one corrupts note identity, and a file carrying another
+   note's ULID, such as a copy, is skipped by every command with a warning. ntropy allocates
    the identity, the location and the filename; only the content is yours.
 3. **Author a note with `new --empty` then `write`.** This is the path to
    prefer whenever you already know what the note should say. `ntropy new

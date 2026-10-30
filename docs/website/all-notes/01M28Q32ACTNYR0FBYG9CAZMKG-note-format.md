@@ -67,6 +67,12 @@ editor it opened for you. In an [encrypted
 vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md) the file is named
 `<ulid>.age` with no slug at all, so there is nothing to drift.
 
+Copying a note file by hand copies its ULID, and two files then claim one
+identity. ntropy keeps the one with the shorter file name as the note and
+skips the other with a warning that names the note it kept, so searches,
+views and links see one note per ULID. Passing that ULID to `edit` or `delete`
+still matches both files.
+
 ## Linking between notes
 
 Notes link to each other with ordinary Markdown links. Nothing custom:

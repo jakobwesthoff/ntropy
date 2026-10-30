@@ -28,6 +28,7 @@ use ignore::{WalkBuilder, WalkState};
 
 use crate::cipher::NoteCipher;
 use crate::note::Note;
+use crate::note::duplicate::{self, Duplicate};
 use crate::note::filename::has_md_extension;
 
 /// The outcome of scanning a vault's `all-notes/` directory.
@@ -39,6 +40,9 @@ pub struct Scan {
     /// One entry per skipped top-level `.md` file, ordered by path for
     /// determinism.
     pub warnings: Vec<ScanWarning>,
+    /// Notes whose ULID another note keeps (ADR 0067), ordered by path. Each
+    /// is left out of `notes` and has its warning in `warnings`.
+    pub duplicates: Vec<Duplicate>,
 }
 
 /// A single skipped file and the human-readable reason.
@@ -46,6 +50,22 @@ pub struct Scan {
 pub struct ScanWarning {
     pub path: PathBuf,
     pub message: String,
+}
+
+impl ScanWarning {
+    /// The warning for a copy the scan skipped because another file keeps its
+    /// ULID.
+    pub fn for_duplicate(duplicate: &Duplicate) -> Self {
+        let keeper = duplicate
+            .keeper
+            .file_name()
+            .unwrap_or(duplicate.keeper.as_os_str())
+            .to_string_lossy();
+        ScanWarning {
+            path: duplicate.note.path.clone(),
+            message: format!("its id is also used by `{keeper}`"),
+        }
+    }
 }
 
 /// Why a scan could not run at all (as opposed to a per-file warning).
@@ -145,7 +165,7 @@ pub fn scan_notes_dir(all_notes_dir: &Path, cipher: &dyn NoteCipher) -> Result<S
             })
         });
 
-    let mut notes = Arc::into_inner(notes)
+    let notes = Arc::into_inner(notes)
         .expect("sole owner after walk")
         .into_inner()
         .expect("notes mutex");
@@ -154,12 +174,22 @@ pub fn scan_notes_dir(all_notes_dir: &Path, cipher: &dyn NoteCipher) -> Result<S
         .into_inner()
         .expect("warnings mutex");
 
+    // Every consumer of `notes` (link resolution, view leaf names, site pages)
+    // assumes one note per ULID, so the copies leave the set here, each with
+    // a warning naming the file that keeps the ULID.
+    let (mut notes, duplicates) = duplicate::split(notes);
+    warnings.extend(duplicates.iter().map(ScanWarning::for_duplicate));
+
     // Parallel collection arrives in nondeterministic order; impose the
     // canonical orderings so callers and snapshots are stable.
     notes.sort_by_key(|n| std::cmp::Reverse(n.id));
     warnings.sort_by(|a, b| a.path.cmp(&b.path));
 
-    Ok(Scan { notes, warnings })
+    Ok(Scan {
+        notes,
+        warnings,
+        duplicates,
+    })
 }
 
 /// Whether a path carries `extension`, compared exactly: a plaintext vault's
@@ -528,5 +558,94 @@ mod tests {
         let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
         assert!(scan.notes.is_empty());
         assert!(!scan.has_warnings());
+    }
+
+    /// The file names of the scanned notes, in scan order.
+    fn note_names(scan: &Scan) -> Vec<String> {
+        scan.notes
+            .iter()
+            .map(|n| {
+                n.path
+                    .file_name()
+                    .expect("name")
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_copied_note_is_skipped_with_a_warning_naming_the_keeper() {
+        // `cp <ULID>-plan.md <ULID>-plan-b.md`: one identity, two files.
+        let (_guard, notes) = temp_notes_dir();
+        write(
+            &notes,
+            &format!("{ULID_A}-plan.md"),
+            "---\ntitle: Plan\n---\n",
+        );
+        write(
+            &notes,
+            &format!("{ULID_A}-plan-b.md"),
+            "---\ntitle: Plan\n---\n",
+        );
+
+        let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
+
+        assert_eq!(note_names(&scan), [format!("{ULID_A}-plan.md")]);
+        assert_eq!(scan.warnings.len(), 1, "{:?}", scan.warnings);
+        assert!(
+            scan.warnings[0]
+                .path
+                .ends_with(format!("{ULID_A}-plan-b.md"))
+        );
+        assert!(
+            scan.warnings[0]
+                .message
+                .contains(&format!("{ULID_A}-plan.md")),
+            "{}",
+            scan.warnings[0].message
+        );
+    }
+
+    #[test]
+    fn retitling_the_keeper_keeps_it_the_keeper() {
+        // Only the names decide, so a title edited outside ntropy, which
+        // leaves the keeper's name drifted and the copy's aligned, cannot
+        // hand the identity to the copy.
+        let (_guard, notes) = temp_notes_dir();
+        write(
+            &notes,
+            &format!("{ULID_A}-plan.md"),
+            "---\ntitle: Plan v1\n---\n",
+        );
+        write(
+            &notes,
+            &format!("{ULID_A}-plan-v2.md"),
+            "---\ntitle: Plan v2\n---\n",
+        );
+
+        let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
+
+        assert_eq!(note_names(&scan), [format!("{ULID_A}-plan.md")]);
+    }
+
+    #[test]
+    fn the_keeper_is_the_same_on_every_scan() {
+        // The walker collects in parallel, in no fixed order; the keeper
+        // must not depend on it.
+        let (_guard, notes) = temp_notes_dir();
+        for slug in ["plan", "plan-2", "plan-copy", "plan-b"] {
+            write(
+                &notes,
+                &format!("{ULID_A}-{slug}.md"),
+                "---\ntitle: Plan\n---\n",
+            );
+        }
+
+        for _ in 0..20 {
+            let scan = scan_notes_dir(&notes, &crate::cipher::PlaintextCipher).expect("scan");
+            assert_eq!(note_names(&scan), [format!("{ULID_A}-plan.md")]);
+            assert_eq!(scan.warnings.len(), 3);
+        }
     }
 }

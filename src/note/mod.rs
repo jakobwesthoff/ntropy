@@ -10,6 +10,7 @@
 //! text held in memory for `text:` search (ADR 0030). Timestamps are derived,
 //! never stored: `created` from the ULID, `modified` from filesystem mtime.
 
+pub mod duplicate;
 pub mod filename;
 pub mod frontmatter;
 

@@ -65,13 +65,26 @@ pub fn search(session: &VaultSession, query: Option<&str>) -> Result<Matches> {
 
 /// Resolve a `<id|query>` selector to its matching notes.
 ///
-/// A selector that is a full 26-character ULID resolves to the single note with
-/// that identity (zero or one result); anything else is treated as a query.
+/// A selector that is a full 26-character ULID resolves to every file carrying
+/// that identity: the note, plus any copy the scan skipped because the note
+/// keeps the ULID (ADR 0067), so a ULID two files share stays ambiguous
+/// rather than quietly meaning one of them. Anything else is treated as a
+/// query over the notes.
 pub fn resolve_selection(session: &VaultSession, selector: &str) -> Result<Matches> {
     match as_ulid(selector) {
         Some(id) => {
             let scan = scan_vault(session)?;
-            let notes = scan.notes.into_iter().filter(|n| n.id == id).collect();
+            let copies = scan
+                .duplicates
+                .into_iter()
+                .map(|duplicate| duplicate.note)
+                .filter(|n| n.id == id);
+            let notes = scan
+                .notes
+                .into_iter()
+                .filter(|n| n.id == id)
+                .chain(copies)
+                .collect();
             Ok(Matches {
                 notes,
                 warnings: scan.warnings,
@@ -177,6 +190,28 @@ mod tests {
         let m = resolve_selection(&v, ULID_A).expect("resolve");
         assert_eq!(m.notes.len(), 1);
         assert_eq!(m.notes[0].id.to_string(), ULID_A);
+    }
+
+    #[test]
+    fn a_full_ulid_selector_sees_every_file_of_that_id() {
+        // A query sees only the note that keeps the ULID; the ULID itself
+        // names the copy as well, keeper first.
+        let (_g, v) = temp_vault();
+        write(&v, ULID_A, "plan", "---\ntitle: Plan\ntags: [work]\n---\n");
+        write(
+            &v,
+            ULID_A,
+            "plan-b",
+            "---\ntitle: Plan B\ntags: [work]\n---\n",
+        );
+        write(&v, ULID_B, "other", "---\ntitle: Other\n---\n");
+
+        let by_ulid = resolve_selection(&v, ULID_A).expect("resolve");
+        let titles: Vec<&str> = by_ulid.notes.iter().map(|n| n.title.as_str()).collect();
+        assert_eq!(titles, ["Plan", "Plan B"]);
+
+        let by_query = resolve_selection(&v, "tag:work").expect("resolve");
+        assert_eq!(by_query.notes.len(), 1);
     }
 
     #[test]

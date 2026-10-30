@@ -3231,6 +3231,102 @@ fn strict_makes_malformed_fatal() {
     });
 }
 
+/// A note and a hand-made copy of it: the same ULID in two files. The copy's
+/// name is the longer one, so the original keeps the ULID (ADR 0067).
+fn copied_note(vault: &Path) {
+    write_note(vault, ULID_A, "plan", "---\ntitle: Plan\n---\noriginal\n");
+    write_note(vault, ULID_A, "plan-b", "---\ntitle: Plan B\n---\ncopy\n");
+}
+
+#[test]
+fn search_skips_a_copied_note_with_a_warning() {
+    let dir = setup_vault();
+    copied_note(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["search", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+
+    let strict = ntropy(dir.path())
+        .args(["search", "-n", "--strict"])
+        .output()
+        .expect("run ntropy");
+    assert_eq!(strict.status.code(), Some(1), "{}", rendered(&strict));
+}
+
+#[test]
+fn delete_by_ulid_refuses_when_two_files_share_it() {
+    // A ULID names both files, so it is as ambiguous as a query matching two
+    // notes, even though searches show only the one that keeps it.
+    let dir = setup_vault();
+    copied_note(dir.path());
+
+    let out = ntropy(dir.path())
+        .args(["delete", ULID_A, "-f", "-n"])
+        .output()
+        .expect("run ntropy");
+
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("is ambiguous (2 matches)"));
+    let notes = dir.path().join("all-notes");
+    assert!(notes.join(format!("{ULID_A}-plan.md")).exists());
+    assert!(notes.join(format!("{ULID_A}-plan-b.md")).exists());
+}
+
+#[test]
+fn edit_by_ulid_lists_both_files_that_share_it() {
+    let dir = setup_vault();
+    copied_note(dir.path());
+
+    let out = ntropy(dir.path())
+        .args(["edit", ULID_A, "-n"])
+        .output()
+        .expect("run ntropy");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("Plan B"), "{}", rendered(&out));
+    assert_eq!(stdout.lines().count(), 3, "header and two rows: {stdout}");
+}
+
+#[test]
+fn new_print_reports_a_copied_note() {
+    // The view refresh after `new` leaves the copy out of the views; the
+    // person learns why from the warning.
+    let dir = setup_vault();
+    copied_note(dir.path());
+
+    let out = ntropy(dir.path())
+        .args(["new", "-p", "Another"])
+        .output()
+        .expect("run ntropy");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!("skipped `{ULID_A}-plan-b.md`")),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn new_print_stays_quiet_about_other_scan_warnings() {
+    // Malformed notes are reported by the commands that list notes, not on
+    // every note creation.
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_B, "bad", "---\ntags: [x]\n---\n");
+
+    let out = ntropy(dir.path())
+        .args(["new", "-p", "Another"])
+        .output()
+        .expect("run ntropy");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(out.stderr.is_empty(), "{}", rendered(&out));
+}
+
 #[test]
 fn edit_alias_lists_multiple_matches() {
     // `edit` is a hidden alias of `search`; a multi-match selector lists the
@@ -3670,6 +3766,32 @@ done
         assert_eq!(terminal, "tty");
         assert_eq!(args.len(), 1, "got {args:?}");
         assert_is_note(vault, &args[0], "-editor-test.md");
+    }
+
+    #[test]
+    fn today_reports_a_copied_note_after_the_editor() {
+        // The editor round trip refreshes the views like `--print` does, so
+        // it reports the copy the refresh left out the same way.
+        let dir = setup_vault();
+        let vault = dir.path();
+        let templates = vault.join(".ntropy/templates");
+        fs::create_dir_all(&templates).expect("templates dir");
+        fs::write(templates.join("today.md"), "---\ntitle: {{date}}\n---\n")
+            .expect("write today template");
+        copied_note(vault);
+        let stub = write_stub_editor(vault);
+
+        let mut cmd = ntropy(vault);
+        cmd.env("EDITOR", &stub).arg("today");
+        let output = run_on_own_terminal(&mut cmd).output;
+
+        assert!(output.status.success(), "{}", rendered(&output));
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains(&format!("skipped `{ULID_A}-plan-b.md`")),
+            "{}",
+            rendered(&output)
+        );
     }
 
     #[test]

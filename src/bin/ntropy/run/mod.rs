@@ -540,9 +540,9 @@ fn cmd_new(
     // Open the editor only when interactive and not explicitly suppressed;
     // otherwise create-and-print for scripting (ADR 0015).
     if !print && interactive {
-        open_and_refresh_from(session, &path, Some(&initial))?;
+        open_and_refresh_from(session, &path, Some(&initial), CopyWarnings::Print)?;
     } else {
-        refresh_views(session)?;
+        refresh_views(session, CopyWarnings::Print)?;
         println!("{}", path.display());
     }
     Ok(ExitCode::SUCCESS)
@@ -565,7 +565,7 @@ fn cmd_write(global: &GlobalArgs, session: &VaultSession, target: &str) -> Resul
     let realignment =
         reconcile::realign(session, &note.path).context("while realigning the written note")?;
     output::print_refused_renames(realignment.refused.as_slice());
-    refresh_views(session)?;
+    refresh_views(session, CopyWarnings::Print)?;
 
     // The content is written whether or not the rename was refused, so the
     // path printed is where it lives now and a refusal only fails `--strict`.
@@ -588,9 +588,14 @@ fn cmd_today(session: &VaultSession, print: bool, interactive: bool) -> Result<E
         let initial = outcome
             .created
             .then(|| format!("{}{}", outcome.note.raw_header, outcome.note.body));
-        open_and_refresh_from(session, &outcome.note.path, initial.as_deref())?;
+        open_and_refresh_from(
+            session,
+            &outcome.note.path,
+            initial.as_deref(),
+            CopyWarnings::Print,
+        )?;
     } else {
-        refresh_views(session)?;
+        refresh_views(session, CopyWarnings::Print)?;
         println!("{}", outcome.note.path.display());
     }
     Ok(ExitCode::SUCCESS)
@@ -785,8 +790,10 @@ fn cmd_tags(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode> {
 /// Only the touched note is realigned, so an out-of-band drift elsewhere is
 /// never renamed silently (ADR 0004); the view sync then reflects any title
 /// or tag change made during the edit.
+///
+/// The note was picked from a search, whose scan already printed its warnings.
 fn open_and_refresh(session: &VaultSession, path: &Path) -> Result<()> {
-    open_and_refresh_from(session, path, None)
+    open_and_refresh_from(session, path, None, CopyWarnings::AlreadyPrinted)
 }
 
 /// Open a note in the editor, then realign its filename and sync views.
@@ -797,7 +804,12 @@ fn open_and_refresh(session: &VaultSession, path: &Path) -> Result<()> {
 /// A failed edit still runs the post-processing when the note was written: the
 /// error is reported afterwards, so a `:cq` that saved first behaves as it does
 /// in a plaintext vault (ADR 0041).
-fn open_and_refresh_from(session: &VaultSession, path: &Path, initial: Option<&str>) -> Result<()> {
+fn open_and_refresh_from(
+    session: &VaultSession,
+    path: &Path,
+    initial: Option<&str>,
+    copy_warnings: CopyWarnings,
+) -> Result<()> {
     let hint = session.is_encrypted().then(|| session.root().to_path_buf());
     let launcher = |target: &Path| editor::open(target, hint.as_deref());
 
@@ -807,17 +819,37 @@ fn open_and_refresh_from(session: &VaultSession, path: &Path, initial: Option<&s
     let realignment =
         reconcile::realign(session, path).context("while realigning the edited note")?;
     output::print_refused_renames(realignment.refused.as_slice());
-    refresh_views(session)?;
+    refresh_views(session, copy_warnings)?;
     outcome?;
     Ok(())
 }
 
+/// Whether a view refresh reports the copies it left out of the views.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CopyWarnings {
+    /// Nothing before the refresh reported them.
+    Print,
+    /// A search before the refresh printed every scan warning already.
+    AlreadyPrinted,
+}
+
 /// Sync the views after a change, reporting any view that was skipped.
 ///
-/// Only skipped views are reported here; scan warnings are left to the
-/// commands that resolve and list notes.
-fn refresh_views(session: &VaultSession) -> Result<()> {
+/// A copy of a note, a second file carrying its ULID, is left out of the
+/// views, so its warning is reported here unless a search already printed it
+/// (ADR 0067). Other scan warnings are left to the commands that resolve and
+/// list notes, so creating a note does not repeat every malformed file in
+/// the vault.
+fn refresh_views(session: &VaultSession, copy_warnings: CopyWarnings) -> Result<()> {
     let refresh = reconcile::refresh_views(session).context("while refreshing views")?;
+    if copy_warnings == CopyWarnings::Print {
+        let warnings: Vec<ScanWarning> = refresh
+            .duplicates
+            .iter()
+            .map(ScanWarning::for_duplicate)
+            .collect();
+        output::print_warnings(&warnings);
+    }
     print_skipped_views(&refresh.skipped_views);
     Ok(())
 }
