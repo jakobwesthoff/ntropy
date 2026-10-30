@@ -10,6 +10,8 @@ Amended 2026-10-30 by [ADR 0076](0076-adjacent-terms-in-a-query-are-an-implicit-
 
 Amended 2026-10-30 by [ADR 0077](0077-punctuation-in-slugs-and-tags.md).
 
+Amended 2026-10-30 by [ADR 0078](0078-field-names-in-a-query-ignore-letter-case.md).
+
 ## Context
 
 Filtering needs boolean expressions (`tag:foo and not tag:bar`) from the start,

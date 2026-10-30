@@ -8,8 +8,9 @@
 //! but every `text` node carries a compiled regex matcher, so an invalid
 //! pattern fails here, once, before any scanning. Evaluation is then a pure
 //! single-pass walk over a note: tag predicates use the segment sub-path rule,
-//! field predicates compare frontmatter values exactly, and text predicates run
-//! the embedded grep engine over the in-memory body.
+//! field predicates find the field by its name with letter case folded and
+//! compare its value exactly, and text predicates run the embedded grep engine
+//! over the in-memory body.
 
 use serde_yaml_ng::Value;
 
@@ -45,7 +46,8 @@ impl Prepared {
             Query::Not(a) => Prepared::Not(Box::new(Prepared::from_ast(a)?)),
             Query::Tag(t) => Prepared::Tag(t.clone()),
             Query::Field { name, value } => Prepared::Field {
-                name: name.clone(),
+                // Folded once here; `field_matches` folds each frontmatter key.
+                name: name.to_lowercase(),
                 value: value.clone(),
             },
             Query::Text(pattern) => Prepared::Text(TextMatcher::new(pattern)?),
@@ -65,14 +67,28 @@ impl Prepared {
     }
 }
 
-/// Exact frontmatter match: scalar equality, or membership for a list field.
+/// Frontmatter match on every key whose name equals `name` once letter case is
+/// folded. `name` arrives folded already.
+///
+/// YAML keys are case-sensitive, but the keywords `tag` and `text` are not,
+/// and a query that names `Status` should not silently miss a `status` key.
+/// A note may hold keys that differ only in case (`Status` and `status`); the
+/// predicate holds if any of them matches, so no value is hidden and the
+/// result does not depend on key order.
 fn field_matches(note: &Note, name: &str, value: &str) -> bool {
-    match note.frontmatter.get(Value::from(name)) {
-        Some(Value::Sequence(seq)) => seq
+    note.frontmatter.iter().any(|(key, field)| {
+        matches!(key, Value::String(key) if key.to_lowercase() == name)
+            && value_matches(field, value)
+    })
+}
+
+/// Exact match of one field's value: scalar equality, or membership for a list.
+fn value_matches(field: &Value, value: &str) -> bool {
+    match field {
+        Value::Sequence(seq) => seq
             .iter()
             .any(|item| scalar_to_string(item).as_deref() == Some(value)),
-        Some(scalar) => scalar_to_string(scalar).as_deref() == Some(value),
-        None => false,
+        scalar => scalar_to_string(scalar).as_deref() == Some(value),
     }
 }
 
@@ -157,6 +173,63 @@ mod tests {
         assert!(matches("areas:home", &n));
         assert!(matches("areas:work", &n));
         assert!(!matches("areas:school", &n));
+    }
+
+    #[test]
+    fn field_name_in_the_query_ignores_case() {
+        let n = note("title: T\nstatus: done\n", "");
+        assert!(matches("Status:done", &n));
+    }
+
+    #[test]
+    fn field_name_in_the_frontmatter_ignores_case() {
+        let n = note("title: T\nStatus: done\n", "");
+        assert!(matches("status:done", &n));
+    }
+
+    #[test]
+    fn field_name_with_non_ascii_letters_ignores_case() {
+        let n = note("title: T\nGröße: wide\n", "");
+        assert!(matches("größe:wide", &n));
+        assert!(matches("GRÖßE:wide", &n));
+    }
+
+    #[test]
+    fn field_list_membership_ignores_name_case() {
+        let n = note("title: T\nAreas: [home, work]\n", "");
+        assert!(matches("areas:work", &n));
+    }
+
+    #[test]
+    fn field_value_stays_case_sensitive() {
+        let n = note("title: T\nstatus: done\n", "");
+        assert!(!matches("status:Done", &n));
+        assert!(!matches("Status:Done", &n));
+    }
+
+    #[test]
+    fn keys_differing_only_in_case_match_through_the_first_key() {
+        let n = note("title: T\nStatus: open\nstatus: done\n", "");
+        assert!(matches("status:open", &n));
+    }
+
+    #[test]
+    fn keys_differing_only_in_case_match_through_the_second_key() {
+        let n = note("title: T\nStatus: open\nstatus: done\n", "");
+        assert!(matches("STATUS:done", &n));
+    }
+
+    #[test]
+    fn keys_differing_only_in_case_hide_no_value_from_a_wrong_one() {
+        let n = note("title: T\nStatus: open\nstatus: done\n", "");
+        assert!(!matches("status:blocked", &n));
+    }
+
+    #[test]
+    fn frontmatter_keys_named_tag_or_text_stay_unreachable() {
+        let n = note("title: T\ntag: x\nText: y\n", "nothing\n");
+        assert!(!matches("tag:x", &n));
+        assert!(!matches("text:y", &n));
     }
 
     #[test]

@@ -60,8 +60,12 @@ arguments are ignored.
   `programming/rust`, and `area/programming`; `tag:programming/rust` matches
   any tag containing that consecutive chain.
 - **`field:value`** — frontmatter equality for scalars, membership for list
-  fields. Exact and case-sensitive: `status:Done` does not match `status:
-  done`. Quote multi-word values: `status:"in progress"`.
+  fields. The value is exact and case-sensitive (`status:Done` does not match
+  `status: done`); the field name ignores letter case (`Status:done` finds a
+  `status` key). A note with keys that differ only in case (`Status` and
+  `status`) matches when any of them does. `tag` and `text` are reserved in
+  any letter case, so a frontmatter field with such a name cannot be queried.
+  Quote multi-word values: `status:"in progress"`.
 - **`text:pattern`** (and bare words / bare quoted phrases) — a regex over the
   note body, smart-case: all-lowercase patterns match case-insensitively, one
   literal uppercase character makes the match case-sensitive. An invalid regex

@@ -148,6 +148,51 @@ describe("matches", () => {
   });
 });
 
+describe("field names", () => {
+  const cased = noteFrom(
+    "01ARZ3NDEKTSV4RRFFQ69G5FAV",
+    "notes/x.html",
+    "2026-01-01",
+    { title: "Case", Status: "Done", Größe: "wide", Owner: "a", owner: "b" },
+    "",
+  );
+  const cli = (query: string) => matches(compile(query), cased);
+  const reader = (query: string) =>
+    matches(compile(query, "reader"), cased, "reader");
+
+  it("ignores letter case in the query's field name", () => {
+    expect(cli("status:Done")).toBe(true);
+  });
+
+  it("ignores letter case in the frontmatter key", () => {
+    expect(cli("STATUS:Done")).toBe(true);
+  });
+
+  it("folds non-ASCII letters", () => {
+    expect(cli("größe:wide")).toBe(true);
+    expect(cli("GRÖßE:wide")).toBe(true);
+  });
+
+  it("keeps the CLI value case-sensitive", () => {
+    expect(cli("status:done")).toBe(false);
+  });
+
+  it("matches through either of two keys that differ only in case", () => {
+    expect(cli("owner:a")).toBe(true);
+    expect(cli("OWNER:b")).toBe(true);
+    expect(cli("owner:c")).toBe(false);
+  });
+
+  it("folds the name in the reader's reading too", () => {
+    expect(reader("STATUS:don")).toBe(true);
+  });
+
+  it("keeps the reader's value a case-insensitive substring", () => {
+    expect(reader("status:DON")).toBe(true);
+    expect(reader("status:xyz")).toBe(false);
+  });
+});
+
 describe("matchesPage", () => {
   const tag: SearchPage = {
     kind: "tag",

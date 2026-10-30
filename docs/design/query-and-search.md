@@ -5,8 +5,9 @@ How ntropy filters and searches notes. Consolidates
 [ADR 0005](../adr/0005-permissive-frontmatter-schema-with-recognized-fields.md),
 [ADR 0006](../adr/0006-hierarchical-tags-by-slash-convention.md),
 [ADR 0030](../adr/0030-replace-ripgrep-stack-with-regex-crate-for-full-text-search.md),
-[ADR 0012](../adr/0012-query-dsl-with-hand-rolled-parser.md), and
-[ADR 0076](../adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md).
+[ADR 0012](../adr/0012-query-dsl-with-hand-rolled-parser.md),
+[ADR 0076](../adr/0076-adjacent-terms-in-a-query-are-an-implicit-and.md), and
+[ADR 0078](../adr/0078-field-names-in-a-query-ignore-letter-case.md).
 
 ## One mechanism
 
@@ -73,7 +74,15 @@ that quoted form is a plain regex and does not match across a line break.
   case-insensitive (ADR 0006), and `tag:milestone/0.13` matches
   `milestone/0.13` but not `milestone/013`.
 - `field:value` matches when the frontmatter scalar equals `value`, or when a
-  list-valued field contains it (exact, case-sensitive).
+  list-valued field contains it (exact, case-sensitive). The field name ignores
+  letter case ([ADR 0078](../adr/0078-field-names-in-a-query-ignore-letter-case.md)):
+  `Status:done` finds a `status` key and `status:done` finds a `Status` key,
+  with the Unicode lowercase fold, so `größe:x` finds `Größe`. A note can hold
+  keys that differ only in case. The predicate matches when any of them holds a
+  matching value, whatever the order of the keys. `tag` and `text` are
+  reserved: in any letter case before the colon they are the keywords above, so
+  a frontmatter field with such a name cannot be queried, and the grammar has
+  no escape for it. Views group by the exact field name.
 - `text:` (and the bare-term shorthand) is a **regex** evaluated by the `regex`
   crate over the note body (ADR 0030), compiled with **smart-case**:
   case-insensitive unless the pattern contains a literal uppercase character. An
@@ -105,4 +114,5 @@ mixing both (`tag:work and text:"deadline"`) costs a single scan.
 Tag matching is case-insensitive (tags are lowercase-normalized,
 [ADR 0023](../adr/0023-slug-tag-and-disambiguator-normalization-rules.md)) and
 keeps punctuation ([ADR 0077](../adr/0077-punctuation-in-slugs-and-tags.md));
-arbitrary `field:value` predicates match the frontmatter value exactly.
+arbitrary `field:value` predicates match the frontmatter value exactly, under a
+case-folded field name.

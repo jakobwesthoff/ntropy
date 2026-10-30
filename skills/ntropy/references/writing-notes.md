@@ -174,7 +174,8 @@ Body is ordinary Markdown.
   [site.md](site.md).
 
 For clean vaults, reuse field names and values consistently: `field:value`
-queries match exactly (case-sensitive), and views group per distinct value, so
+queries match values exactly (case-sensitive, the field name ignores case),
+and views group per distinct value, so
 `status: done` and `status: Done` behave as different query values even though
 a view folds them into one normalized directory. Pick one spelling and stick to
 it. Before inventing a new tag or field value, check what the vault already

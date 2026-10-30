@@ -7,7 +7,8 @@
 // Two semantics share one parser and one evaluator. The CLI's, mirroring
 // `src/query/eval.rs` and `src/query/text_search.rs`: a bare term is a
 // smart-case regex over the body, `tag:` uses the sub-path rule, `field:`
-// compares a scalar or list member exactly. The reader's, which the site
+// compares a scalar or list member exactly, finding the field by its name
+// with letter case folded. The reader's, which the site
 // uses: a bare term is a case-insensitive substring of the title, a tag, a
 // frontmatter value, or the body, and `tag:` and `field:` match partially.
 // `text:` is a regular expression over the body in both; a pattern using a
@@ -217,22 +218,27 @@ export function contains(haystack: string, needle: string): boolean {
   return needle !== "" && haystack.toLowerCase().includes(needle.toLowerCase());
 }
 
-/** Exact frontmatter match in the CLI's reading, substring in the reader's. */
+/**
+ * Frontmatter match in the CLI's reading (exact) or the reader's (substring).
+ * The field is found by its name with letter case folded, and a note holding
+ * keys that differ only in case matches if any of them does, as in the CLI.
+ */
 function fieldMatches(
   note: SearchNote,
   name: string,
   value: string,
   semantics: Semantics,
 ): boolean {
-  if (!Object.hasOwn(note.frontmatter, name)) return false;
-  const field = note.frontmatter[name];
+  const folded = name.toLowerCase();
   const test = (item: unknown) => {
     const text = scalarText(item);
     if (text === null) return false;
     return semantics === "cli" ? text === value : contains(text, value);
   };
-  if (Array.isArray(field)) return field.some(test);
-  return test(field);
+  return Object.entries(note.frontmatter).some(([key, field]) => {
+    if (key.toLowerCase() !== folded) return false;
+    return Array.isArray(field) ? field.some(test) : test(field);
+  });
 }
 
 /** A scalar's text as the CLI compares it; non-scalars have none. */

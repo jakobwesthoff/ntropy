@@ -88,7 +88,8 @@ amended):
 - Two predicates side by side are joined by `and`, so `entrance anim`
   finds what holds both.
 - `tag:` matches a whole segment as in the CLI or any part of a tag, so
-  `tag:wis` finds `wisdome`; `field:` matches a substring of a value.
+  `tag:wis` finds `wisdome`; `field:` finds its field by name with letter case folded, as in the CLI, and
+  matches a case-insensitive substring of a value.
 - `text:` is a regex over the body, as in the CLI, with the same refusal
   of constructs Rust's `regex` lacks. `and`, `or`, `not`, and parentheses
   are the CLI's.

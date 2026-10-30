@@ -1004,6 +1004,36 @@ fn search_still_reads_a_double_quoted_phrase_inside_the_query() {
 }
 
 #[test]
+fn search_field_name_in_the_query_ignores_letter_case() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "draft",
+        "---\ntitle: Draft\nstatus: draft\n---\nbody\n",
+    );
+
+    let (listing, output) = search_listing(dir.path(), &["Status:draft"]);
+
+    assert!(listing.contains(ULID_A), "{}", rendered(&output));
+}
+
+#[test]
+fn search_field_name_in_the_frontmatter_ignores_letter_case() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "draft",
+        "---\ntitle: Draft\nStatus: draft\n---\nbody\n",
+    );
+
+    let (listing, output) = search_listing(dir.path(), &["status:draft"]);
+
+    assert!(listing.contains(ULID_A), "{}", rendered(&output));
+}
+
+#[test]
 fn search_phrase_argument_matches_across_a_line_break() {
     let dir = setup_vault();
     write_note(

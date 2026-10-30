@@ -77,6 +77,36 @@
         "title": "Literal dot"
       },
       "body": "Run it with node.js here.\n"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FE1",
+      "frontmatter": {
+        "title": "Case",
+        "Status": "Shipped",
+        "Reviewers": [
+          "Mia"
+        ],
+        "Größe": "wide"
+      },
+      "body": "Case fixture.\n"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FE2",
+      "frontmatter": {
+        "title": "Twin",
+        "Owner": "alpha",
+        "owner": "beta"
+      },
+      "body": "Case fixture.\n"
+    },
+    {
+      "id": "01ARZ3NDEKTSV4RRFFQ69G5FE3",
+      "frontmatter": {
+        "title": "Reserved",
+        "tag": "zzreservedtag",
+        "text": "zzreservedtext"
+      },
+      "body": "Case fixture zzreservedtext.\n"
     }
   ],
   "cases": [
@@ -299,7 +329,10 @@
         "01ARZ3NDEKTSV4RRFFQ69G5FA3",
         "01ARZ3NDEKTSV4RRFFQ69G5FC1",
         "01ARZ3NDEKTSV4RRFFQ69G5FD1",
-        "01ARZ3NDEKTSV4RRFFQ69G5FD2"
+        "01ARZ3NDEKTSV4RRFFQ69G5FD2",
+        "01ARZ3NDEKTSV4RRFFQ69G5FE1",
+        "01ARZ3NDEKTSV4RRFFQ69G5FE2",
+        "01ARZ3NDEKTSV4RRFFQ69G5FE3"
       ]
     },
     {
@@ -563,6 +596,76 @@
       "query": "\"node\\.js\"",
       "expect": [
         "01ARZ3NDEKTSV4RRFFQ69G5FD2"
+      ]
+    },
+    {
+      "query": "status:done",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FA2"
+      ]
+    },
+    {
+      "query": "status:Shipped",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FE1"
+      ]
+    },
+    {
+      "query": "STATUS:Shipped",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FE1"
+      ]
+    },
+    {
+      "query": "status:shipped",
+      "expect": []
+    },
+    {
+      "query": "reviewers:Mia",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FE1"
+      ]
+    },
+    {
+      "query": "größe:wide",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FE1"
+      ]
+    },
+    {
+      "query": "GRÖßE:wide",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FE1"
+      ]
+    },
+    {
+      "query": "owner:alpha",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FE2"
+      ]
+    },
+    {
+      "query": "OWNER:beta",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FE2"
+      ]
+    },
+    {
+      "query": "owner:gamma",
+      "expect": []
+    },
+    {
+      "query": "tag:zzreservedtag",
+      "expect": []
+    },
+    {
+      "query": "Tag:zzreservedtag",
+      "expect": []
+    },
+    {
+      "query": "text:zzreservedtext",
+      "expect": [
+        "01ARZ3NDEKTSV4RRFFQ69G5FE3"
       ]
     }
   ]

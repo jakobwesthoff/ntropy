@@ -40,6 +40,14 @@ change in any release
   `node.js`, used to be a syntax error and now matches the dot literally, in
   the CLI and in the site's search; a quoted string is still a pattern
   ([ADR 0077](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0077-punctuation-in-slugs-and-tags.md)).
+- A field predicate finds its field with letter case folded, in the CLI and
+  in the site's search, so `Status:done` finds a note with a `status` key
+  instead of matching nothing. A note with keys that differ only in case
+  (`Status` and `status`) matches when any of them holds the value. Values
+  stay case-sensitive in the CLI. `tag` and `text` are reserved names in any
+  letter case, so a frontmatter field with such a name still cannot be
+  queried
+  ([ADR 0078](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0078-field-names-in-a-query-ignore-letter-case.md)).
 
 ### Fixed
 
