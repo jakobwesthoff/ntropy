@@ -96,7 +96,3 @@ render as plain code blocks.
 ## Revisit when
 
 No trigger known; reconsider at the next sweep.
-
-## Relations
-
-- Relates to: [Finish the remaining work on the custom Typst render engine](01KX5HARVK9NGCXS7Q63W8GE18-finish-the-remaining-work-on-the-custom-typst-render-engine.md), the math part of that engine's remaining work

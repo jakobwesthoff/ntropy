@@ -98,15 +98,17 @@ impl Renderer for Typst {
 
             // The document is compiled to a PDF by the external `typst` binary.
             // It rides on stdin, which typst reads as the main file when the
-            // input argument is `-`, and the note's own directory becomes the
-            // working directory so relative asset paths in the document resolve
-            // against the note (the "Asset paths" contract of
-            // `docs/design/typst-engine.md`). The output path reaches typst as
-            // an argument verbatim; it must already be absolute, since a
-            // relative path would resolve inside the moved working directory,
-            // landing the artifact next to the note. Absolutizing is the host's
-            // job, keeping the engine headless: it touches neither the
-            // filesystem nor the working directory itself.
+            // input argument is `-` and places at the compile root. A relative
+            // path would therefore resolve against the vault root, which is why
+            // the emitter writes local image paths root-absolute, leaving only a
+            // path that climbs out of the vault as written (the "Asset paths"
+            // contract of `docs/design/typst-engine.md`). The output path
+            // reaches typst as an argument verbatim; it must already be
+            // absolute, since a relative path would resolve inside the note's
+            // directory, the tool's working directory, landing the artifact
+            // next to the note. Absolutizing is the host's job, keeping the
+            // engine headless: it touches neither the filesystem nor the
+            // working directory itself.
             Format::Pdf => {
                 // `--root` grants the compiler the whole vault, so a theme can
                 // reach assets outside `all-notes/` by a vault-absolute path

@@ -220,20 +220,15 @@ compiling a `typst`-format artifact by hand takes `typst compile --root
 <vault>`. An artifact whose note and theme reference no files compiles
 on its own.
 
-The pdf pipeline makes that premise hold via stdin: `typst compile -`
-with the note's directory as the invocation's working directory, the
-emitted document fed on stdin. Verified against typst 0.15.0: the stdin
-document is treated as living at the project root, the root defaults to
-the working directory, and relative paths resolve against it — so the
-vault stays untouched and the pipeline compiles the `typst` format's
-identical bytes.
+The pdf pipeline runs `typst compile --root <vault> - <output>` and feeds
+the emitted document on stdin, so it compiles the `typst` format's
+identical bytes without writing the document to a file. A document read
+from stdin sits at the compile root, and its relative paths resolve
+against the root.
 
-The root is also typst's file-access sandbox, and the stdin document
-always sits at the root, so note-relative resolution and access above
-the note's directory are mutually exclusive. Consequence: assets
-referenced with `../` above the note's directory are unsupported and
-fail the compile with typst's explicit "would escape the project root"
-error.
+The root is also typst's sandbox for the paths a document names: a path
+left as written because it climbs out of the vault fails the compile
+with typst's "would escape the project root" error.
 
 - **Paragraphs: blank-line separation**, not `#par()[...]`. Typst reads a
   blank line as a paragraph break natively. The escaping rules make the
@@ -355,9 +350,9 @@ The engine registers as `typst` (the value `--engine` accepts), is the
 default engine for the formats `typst` (the emitted document as the
 artifact) and `pdf` (that identical document compiled).
 
-The pdf format's invocation feeds the document on stdin and controls
-the working directory (see Asset paths). `Invocation` carries a stdin
-payload and a working-directory field for this, and the fake context's
+The pdf format's invocation feeds the document on stdin (see Asset
+paths) and runs typst in the note's directory. `Invocation` carries a
+stdin payload and a working-directory field, and the fake context's
 recorded transcript includes both, keeping the exact invocation
 snapshot-testable without the tools installed. This follows ADR 0038's
 rule that the context contract grows only when a real engine needs it.

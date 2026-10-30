@@ -13,6 +13,11 @@ while keeping its engine abstraction, registry, and capability model.
 from a prior converter implementation lives in
 `docs/research/markdown-to-typst-conversion.md`.
 
+Amended 2026-09-07 by [ADR 0045](0045-vault-render-themes.md): the
+compile root is the vault, and the emitter, not the working directory,
+anchors a note's relative asset paths to its own directory, so a note
+reaches assets above it as long as they stay inside the vault.
+
 ## Context
 
 The pandoc engine of ADR 0038 was a stopgap. Of the two tools it
