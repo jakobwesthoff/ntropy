@@ -31,6 +31,12 @@
 pub mod error;
 pub(crate) mod fsutil;
 
+/// The error of a filesystem operation, the payload of [`error::Error::Fs`].
+///
+/// The filesystem primitives stay internal; only their error is public, so
+/// a caller can name the type it matches out of [`error::Error`].
+pub use fsutil::FsError;
+
 pub mod datetime;
 pub mod id;
 pub mod text;

@@ -8,6 +8,11 @@ and this project adheres to
 
 ## Unreleased
 
+### Added
+
+- The library re-exports `FsError`, the payload of `Error::Fs`, as
+  `ntropy::FsError`, so code using the library can name it.
+
 ### Changed
 
 - The crate declares its minimum Rust version, 1.92, which Cargo checks
