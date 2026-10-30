@@ -50,7 +50,3 @@ Constraints any replacement has to keep:
 - What does it add to build time and binary size?
 - Does its test backend give tests at least as good as the current
   `debug_render` snapshots?
-
-## Relations
-
-- Relates to: [Picker prompt line is not clipped to the terminal width](01KWH6QRNAMFX7MM7GT6NM4CJ0-picker-prompt-line-is-not-clipped-to-the-terminal-width.md), a framework would clip the prompt

@@ -371,10 +371,11 @@ fn draw<T>(
     // Prompt, framed by a second divider below it. The clear erases what a
     // longer previous query left behind.
     let prompt_row = list_rows + 1;
+    let (prompt, prompt_col) = prompt_line(state.query(), cols);
     queue!(
         tty,
         cursor::MoveTo(0, prompt_row),
-        style::Print(format!("{PROMPT_PREFIX}{}", state.query())),
+        style::Print(prompt),
         terminal::Clear(terminal::ClearType::UntilNewLine),
         cursor::MoveTo(0, prompt_row + 1),
     )?;
@@ -401,7 +402,6 @@ fn draw<T>(
 
     // Park the cursor at the end of the query so typing reads naturally, and
     // only now make it visible again.
-    let prompt_col = (PROMPT_PREFIX.width() + state.query().width()) as u16;
     queue!(
         tty,
         cursor::MoveTo(prompt_col, prompt_row),
@@ -411,6 +411,23 @@ fn draw<T>(
 
     tty.flush().context("while flushing the picker frame")?;
     Ok(())
+}
+
+/// The prompt line for a terminal `cols` wide, and the column the cursor parks
+/// at after the query.
+///
+/// A query too wide for the terminal shows its end, where typing happens, as
+/// shells do. One column stays free after the visible query so the cursor sits
+/// behind its last character, inside the terminal. The line never exceeds
+/// `cols`, so it cannot wrap onto the divider below and break the frame.
+fn prompt_line(query: &str, cols: u16) -> (String, u16) {
+    let cols = cols as usize;
+    let prefix = PROMPT_PREFIX.width();
+    let shown = layout::fit_suffix(query, cols.saturating_sub(prefix + 1));
+    // On a terminal narrower than the prefix even the prefix is cut.
+    let line = layout::fit_prefix(&format!("{PROMPT_PREFIX}{shown}"), cols).to_string();
+    let cursor = (prefix + shown.width()).min(cols.saturating_sub(1));
+    (line, cursor as u16)
 }
 
 /// Draw a full-width colored divider line.
@@ -733,6 +750,49 @@ mod tests {
     fn terminals_too_narrow_for_any_row_share_one_layout() {
         // Every width up to the pointer leaves a zero-width row.
         assert!(!needs_rebuild(row_width(0), 2));
+    }
+
+    // -------------------------------------------------------------------------
+    // Prompt line
+    // -------------------------------------------------------------------------
+
+    const LONG_QUERY: &str = "abcdefghijklmnopqrstuvwxyz0123";
+
+    #[test]
+    fn a_long_query_shows_its_end() {
+        let (line, _) = prompt_line(LONG_QUERY, 20);
+        assert!(line.width() <= 20, "{line:?} is {} columns", line.width());
+        assert!(line.ends_with(&LONG_QUERY[13..]), "{line:?}");
+    }
+
+    #[test]
+    fn the_cursor_stays_inside_the_terminal() {
+        let (_, cursor) = prompt_line(LONG_QUERY, 20);
+        assert_eq!(cursor, 19);
+    }
+
+    #[test]
+    fn a_wide_character_is_not_split_at_the_cut() {
+        // Five columns are left for the query after the prefix and the
+        // cursor's column; `本語` fills four, `語本語` would need six.
+        assert_eq!(prompt_line("日本語日本語", 8), ("❯ 本語".to_string(), 6));
+    }
+
+    #[test]
+    fn a_terminal_narrower_than_the_prefix_keeps_the_cursor_on_screen() {
+        let (line, cursor) = prompt_line("abc", 1);
+        assert!(line.width() <= 1, "{line:?} is {} columns", line.width());
+        assert_eq!(cursor, 0);
+    }
+
+    #[test]
+    fn a_zero_width_terminal_parks_the_cursor_at_zero() {
+        assert_eq!(prompt_line("abc", 0).1, 0);
+    }
+
+    #[test]
+    fn a_short_query_is_shown_whole() {
+        assert_eq!(prompt_line("alpha", 40), ("❯ alpha".to_string(), 7));
     }
 
     #[test]

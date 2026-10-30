@@ -89,6 +89,9 @@ and this project adheres to
 
 - The picker no longer cuts an emoji apart at a column edge, such as
   keeping `#` without the rest of `#️⃣` or half of a flag.
+- A query wider than the terminal no longer breaks the picker's frame. The
+  prompt shows the end of the query, where you type, and the cursor stays
+  on the screen.
 
 ## v2.2.0 - 2026-10-10
 

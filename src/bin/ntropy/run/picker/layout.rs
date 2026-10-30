@@ -226,6 +226,26 @@ pub(super) fn fit_prefix(s: &str, max: usize) -> &str {
     &s[..end]
 }
 
+/// The longest suffix of `s` that starts on a grapheme boundary and is at most
+/// `max` display columns wide; the mirror of [`fit_prefix`], for text whose
+/// end matters more than its start, such as a query being typed.
+///
+/// Like `fit_prefix` it measures string widths, and since suffix widths are
+/// not monotonic either, it tries the grapheme boundaries in order from the
+/// start and takes the first suffix that fits. A string that fits costs one
+/// width measurement; one that does not costs a measurement per boundary
+/// skipped, quadratic in its length. No cheaper cutoff is safe: across
+/// grapheme boundaries a string can be narrower than its graphemes' widths
+/// summed (two regional-indicator pairs joined by a ZWJ are two graphemes of
+/// two columns each, yet two columns together), so summing graphemes from the
+/// end cannot tell where the scan may stop.
+pub(super) fn fit_suffix(s: &str, max: usize) -> &str {
+    s.grapheme_indices(true)
+        .map(|(i, _)| &s[i..])
+        .find(|suffix| suffix.width() <= max)
+        .unwrap_or(&s[s.len()..])
+}
+
 /// Right-pad `s` with spaces to `width` display columns (never truncates).
 fn pad(s: &str, width: usize) -> String {
     let w = s.width();
@@ -806,6 +826,44 @@ mod tests {
     #[test]
     fn fit_prefix_keeps_a_zwj_sequence_with_vs16_whole() {
         assert_eq!(fit_prefix("🏳\u{FE0F}\u{200D}🌈x", 1), "");
+    }
+
+    #[test]
+    fn fit_suffix_keeps_the_tail() {
+        assert_eq!(fit_suffix("abcdef", 4), "cdef");
+    }
+
+    #[test]
+    fn fit_suffix_returns_a_fitting_string_whole() {
+        assert_eq!(fit_suffix("abc", 3), "abc");
+    }
+
+    #[test]
+    fn fit_suffix_drops_a_wide_character_at_the_cut() {
+        assert_eq!(fit_suffix("日本語", 5), "本語");
+    }
+
+    #[test]
+    fn fit_suffix_keeps_a_flag_whole() {
+        // A character-boundary cut would keep the second regional indicator.
+        assert_eq!(fit_suffix("🇩🇪a", 2), "a");
+    }
+
+    #[test]
+    fn fit_suffix_keeps_a_keycap_whole() {
+        // A character-boundary cut would keep the VS16 without its `#`.
+        assert_eq!(fit_suffix("#\u{FE0F}a", 2), "a");
+    }
+
+    #[test]
+    fn fit_suffix_keeps_a_zwj_sequence_that_fits() {
+        let people = "🧑\u{200D}🤝\u{200D}🧑";
+        assert_eq!(fit_suffix(&format!("x{people}"), 2), people);
+    }
+
+    #[test]
+    fn fit_suffix_to_zero_columns_is_empty() {
+        assert_eq!(fit_suffix("abc", 0), "");
     }
 
     #[test]
