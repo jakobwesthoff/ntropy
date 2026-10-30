@@ -2,11 +2,14 @@
 name = "ntropy"
 version = "2.2.0"
 edition = "2024"
+rust-version = "1.92"
 authors = ["Jakob Westhoff <jakob@westhoffswelt.de>"]
 description = "An opinionated Markdown note-taking and management CLI."
-homepage = "http://westhoffswelt.de"
+homepage = "https://ntropy.westhoffswelt.de"
 repository = "https://github.com/jakobwesthoff/ntropy"
 license = "MPL-2.0"
+keywords = ["notes", "markdown", "zettelkasten", "cli", "knowledge-base"]
+categories = ["command-line-utilities", "text-processing"]
 # Docs, todos, the agent skill, shell extras and repository tooling are not
 # needed to build ntropy. Of the site frontend sources only grammars.json
 # stays, which a unit test embeds; the built frontend lives in src/site/.

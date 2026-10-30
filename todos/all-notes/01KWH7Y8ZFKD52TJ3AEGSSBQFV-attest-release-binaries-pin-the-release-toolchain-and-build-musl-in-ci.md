@@ -17,7 +17,7 @@ It needs `id-token: write` and `attestations: write`. Grant them on the `upload-
 
 ## Toolchain pin
 
-No Rust toolchain is pinned: the repository has no `rust-toolchain.toml` and `Cargo.toml` has no `rust-version`. `upload-assets` builds through `taiki-e/upload-rust-binary-action`, which uses the `rustc` and `cargo` on the runner's path. A pin (a `rust-toolchain.toml`, or a `dtolnay/rust-toolchain` step with an explicit version in `upload-assets`) makes the release build reproducible. This is about reproducibility more than security.
+No Rust toolchain is pinned: the repository has no `rust-toolchain.toml`. `Cargo.toml` declares `rust-version = "1.92"`, but that is only the oldest toolchain ntropy builds with, not the one a release uses. `upload-assets` builds through `taiki-e/upload-rust-binary-action`, which uses the `rustc` and `cargo` on the runner's path. A pin (a `rust-toolchain.toml`, or a `dtolnay/rust-toolchain` step with an explicit version in `upload-assets`) makes the release build reproducible. This is about reproducibility more than security.
 
 ## Musl build in the CI check
 
