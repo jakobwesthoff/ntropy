@@ -10,6 +10,9 @@ and this project adheres to
 
 ### Added
 
+- `$NTROPY_CONFIG_DIR` names the directory that holds the global
+  `config.toml`, in place of the OS config directory. An empty value counts
+  as unset.
 - The library re-exports `FsError`, the payload of `Error::Fs`, as
   `ntropy::FsError`, so code using the library can name it.
 

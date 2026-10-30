@@ -172,6 +172,68 @@ fn init_rejects_path_and_vault_together() {
     assert!(!dir.path().join("from-arg").exists());
 }
 
+/// Point the OS config directory of `cmd` into `home`, as `directories`
+/// derives it: from `HOME` on macOS, from `XDG_CONFIG_HOME` on Linux. A test
+/// that writes the global config does this so that, whatever ntropy makes of
+/// `$NTROPY_CONFIG_DIR`, the developer's own config is never touched.
+fn isolate_os_config_dir(cmd: &mut Command, home: &Path) {
+    cmd.env("HOME", home);
+    cmd.env("XDG_CONFIG_HOME", home.join(".config"));
+}
+
+#[test]
+fn config_dir_override_hides_the_os_config() {
+    // A broken config in the OS location would fail every command that
+    // resolves a vault; with `$NTROPY_CONFIG_DIR` set it is never read.
+    let vault = setup_vault();
+    let home = tempfile::tempdir().expect("home dir");
+    for os_dir in [
+        home.path().join("Library/Application Support/ntropy"),
+        home.path().join(".config/ntropy"),
+    ] {
+        fs::create_dir_all(&os_dir).expect("os config dir");
+        fs::write(os_dir.join("config.toml"), "not = [valid toml").expect("corrupt config");
+    }
+    let config_dir = tempfile::tempdir().expect("config dir");
+
+    let mut cmd = ntropy(vault.path());
+    isolate_os_config_dir(&mut cmd, home.path());
+    cmd.env("NTROPY_CONFIG_DIR", config_dir.path());
+    cmd.args(["info", "--print"]);
+    let output = cmd.output().expect("run ntropy");
+
+    assert!(
+        output.status.success(),
+        "the OS config was read: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[test]
+fn init_set_default_writes_the_overridden_config() {
+    let dir = tempfile::tempdir().expect("temp dir");
+
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
+    cmd.current_dir(dir.path());
+    cmd.env_remove("NTROPY_VAULT");
+    isolate_os_config_dir(&mut cmd, &dir.path().join("home"));
+    // Relative, so it lands next to the vault in the working directory.
+    cmd.env("NTROPY_CONFIG_DIR", "config");
+    cmd.args(["init", "vault", "--set-default"]);
+    let output = cmd.output().expect("run ntropy");
+
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Set as default vault."));
+    let config = ntropy::config::global::load_at(&dir.path().join("config/config.toml"))
+        .expect("load the written config");
+    let vault = fs::canonicalize(dir.path().join("vault")).expect("canonical vault");
+    assert_eq!(config.default_vault, Some(vault));
+}
+
 #[test]
 fn new_print_prints_path() {
     let dir = setup_vault();

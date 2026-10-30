@@ -16,6 +16,9 @@ and the query DSL in [query-and-search.md](query-and-search.md).
   (nearest ancestor with either a `.ntropy-vault` pointer file or a `.ntropy/`
   dir; the pointer wins in the same dir) > global config default vault. See
   [ADR 0026](../adr/0026-project-local-vault-pointer-file.md).
+- **Global config:** in the OS-native config directory, or in
+  `$NTROPY_CONFIG_DIR` when that is set and not empty
+  ([ADR 0061](../adr/0061-global-config-directory-override.md)).
 - **Interactivity:** interactive whenever a controlling terminal (`/dev/tty`)
   is available; `--non-interactive` / `-n` forces non-interactive, and
   environments without a controlling terminal (cron, CI) are non-interactive

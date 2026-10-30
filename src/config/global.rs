@@ -6,13 +6,16 @@
 //!
 //! Located in the OS-native config directory via the `directories` crate
 //! (`~/.config/ntropy/config.toml` on Linux, `~/Library/Application
-//! Support/ntropy/config.toml` on macOS). The only v1 field is `default_vault`,
-//! used when no `--vault`, `$NTROPY_VAULT` or cwd walk-up resolves a vault.
+//! Support/ntropy/config.toml` on macOS), or in the directory
+//! `$NTROPY_CONFIG_DIR` names (ADR 0061). The only v1 field is
+//! `default_vault`, used when no `--vault`, `$NTROPY_VAULT` or cwd walk-up
+//! resolves a vault.
 //!
 //! The path-resolving helpers and the IO helpers are kept separate: `*_at`
 //! functions take an explicit path so they are testable against a temp file,
-//! while the no-suffix functions resolve the real OS location.
+//! while the no-suffix functions resolve the real location.
 
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use directories::ProjectDirs;
@@ -32,9 +35,27 @@ pub struct GlobalConfig {
     pub default_vault: Option<PathBuf>,
 }
 
-/// The OS-native path to the global config file, if a config dir is known.
+/// The environment variable naming the directory that holds the global config
+/// in place of the OS-native one (ADR 0061).
+pub const CONFIG_DIR_ENV: &str = "NTROPY_CONFIG_DIR";
+
+/// The path to the global config file, if a config dir is known:
+/// `$NTROPY_CONFIG_DIR/config.toml` when that is set, the OS-native location
+/// otherwise.
 pub fn config_path() -> Option<PathBuf> {
-    ProjectDirs::from("", "", "ntropy").map(|dirs| dirs.config_dir().join(CONFIG_FILE))
+    config_path_with(std::env::var_os(CONFIG_DIR_ENV))
+}
+
+/// [`config_path`] with the override passed in, so the rule is testable
+/// without touching the process environment.
+///
+/// An empty override counts as unset: it would otherwise put `config.toml`
+/// into whatever directory a command runs in.
+fn config_path_with(override_dir: Option<OsString>) -> Option<PathBuf> {
+    match override_dir {
+        Some(dir) if !dir.is_empty() => Some(PathBuf::from(dir).join(CONFIG_FILE)),
+        _ => ProjectDirs::from("", "", "ntropy").map(|dirs| dirs.config_dir().join(CONFIG_FILE)),
+    }
 }
 
 /// Load the global config from `path`, treating a missing file as default.
@@ -104,7 +125,7 @@ fn follow_symlinks(path: &Path) -> std::io::Result<PathBuf> {
     )))
 }
 
-/// Load the global config from its OS-native location.
+/// Load the global config from [`config_path`].
 ///
 /// Returns the default config when no config directory is known or the file is
 /// absent, so callers always get a usable value.
@@ -253,8 +274,33 @@ mod tests {
     fn config_path_is_under_ntropy_dir() {
         // The exact root is OS-dependent, but the file always sits under an
         // `ntropy` directory and is named `config.toml`.
-        if let Some(path) = config_path() {
+        if let Some(path) = config_path_with(None) {
             assert!(path.ends_with("ntropy/config.toml"));
         }
+    }
+
+    #[test]
+    fn config_path_prefers_the_override_dir() {
+        assert_eq!(
+            config_path_with(Some(OsString::from("/srv/ntropy-test"))),
+            Some(PathBuf::from("/srv/ntropy-test/config.toml"))
+        );
+    }
+
+    #[test]
+    fn a_relative_override_stays_relative() {
+        // Resolved against the working directory when it is used.
+        assert_eq!(
+            config_path_with(Some(OsString::from("config"))),
+            Some(PathBuf::from("config/config.toml"))
+        );
+    }
+
+    #[test]
+    fn an_empty_override_falls_back_to_the_os_dir() {
+        assert_eq!(
+            config_path_with(Some(OsString::new())),
+            config_path_with(None)
+        );
     }
 }

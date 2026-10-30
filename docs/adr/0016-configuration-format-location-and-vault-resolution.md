@@ -6,6 +6,11 @@ Date: 2026-06-24
 
 Accepted
 
+Amended 2026-10-30 by
+[ADR 0061](0061-global-config-directory-override.md):
+`$NTROPY_CONFIG_DIR`, when set and not empty, names the directory that holds
+the global `config.toml`.
+
 ## Context
 
 Some configuration is global (default vault path, user preferences) and some is

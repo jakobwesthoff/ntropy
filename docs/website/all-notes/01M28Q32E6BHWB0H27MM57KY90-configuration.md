@@ -20,6 +20,8 @@ default_vault = "/Users/you/notes"
 
 You'll rarely touch it by hand; `--set-default` writes it for you. Without that flag, `init` never touches the global config.
 
+Set `$NTROPY_CONFIG_DIR` to keep the file somewhere else: ntropy then reads and writes `$NTROPY_CONFIG_DIR/config.toml` instead. An empty value counts as unset, and a relative path is relative to the directory you run ntropy in.
+
 ## Per-vault config
 
 Each vault has its own `<vault>/.ntropy/config.toml`, so settings travel with the vault rather than your machine. Views are the main thing in it, one `[[view]]` table per view:

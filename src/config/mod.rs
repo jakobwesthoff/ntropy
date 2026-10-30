@@ -4,8 +4,8 @@
 
 //! Configuration in two tiers (ADR 0016, `docs/design/configuration.md`).
 //!
-//! Global config (the default vault) lives in the OS-native config directory;
-//! per-vault config (the view definitions) lives under the vault's `.ntropy/`
+//! Global config (the default vault) lives in the OS-native config directory,
+//! or in the one `$NTROPY_CONFIG_DIR` names (ADR 0061); per-vault config (the view definitions) lives under the vault's `.ntropy/`
 //! so it travels with the vault. Both are TOML and share one [`ConfigError`].
 
 pub mod global;

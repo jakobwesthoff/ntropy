@@ -13,7 +13,7 @@ ntropy resolves the vault in this order and stops at the first rule that matches
 1. `--vault <path>`
 2. `$NTROPY_VAULT`
 3. A walk up from the current directory to the nearest ancestor holding a `.ntropy-vault` pointer file or a `.ntropy/` directory. The nearest ancestor wins. A pointer beats a `.ntropy/` in the same directory, since it is an explicit redirect.
-4. The global default vault, set with `ntropy init --set-default`.
+4. The global default vault, set with `ntropy init --set-default` and kept in the global config, which `$NTROPY_CONFIG_DIR` can move (see [Configuration](01M28Q32E6BHWB0H27MM57KY90-configuration.md)).
 
 A path given by `--vault` or `$NTROPY_VAULT` has to be a vault already, meaning a directory holding `.ntropy/`. If it is not, the command fails instead of trying the next rule. When no rule matches, ntropy fails with a message listing the four ways to name a vault.
 

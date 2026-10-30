@@ -76,7 +76,8 @@ ntropy init ~/notes --set-default
 (`~/.config/ntropy/config.toml` on Linux,
 `~/Library/Application Support/ntropy/config.toml` on macOS), a single
 `default_vault = "..."` line. Without the flag, `init` never touches global
-config.
+config. `$NTROPY_CONFIG_DIR`, when set and not empty, replaces that directory:
+the file is then `$NTROPY_CONFIG_DIR/config.toml`, for reading and writing.
 
 ### Project-local vault
 

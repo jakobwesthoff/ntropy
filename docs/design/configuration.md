@@ -12,6 +12,11 @@ Config is TOML, in two tiers.
 Location: the OS-native config directory (via `directories`): `~/.config/ntropy/config.toml`
 on Linux, `~/Library/Application Support/ntropy/config.toml` on macOS.
 
+`$NTROPY_CONFIG_DIR` replaces that directory for reading and writing: when it
+is set and not empty, the global config is `$NTROPY_CONFIG_DIR/config.toml`. An
+empty value counts as unset, and a relative path is relative to the working
+directory ([ADR 0061](../adr/0061-global-config-directory-override.md)).
+
 v1 holds a single field:
 
 ```toml
