@@ -20,7 +20,8 @@ use crate::gitignore;
 use crate::reconcile;
 use crate::scan;
 use crate::session::VaultSession;
-use crate::vault::{InvalidViewName, Vault, ViewName, escape_controls};
+use crate::text::escape_controls;
+use crate::vault::{InvalidViewName, Vault, ViewName};
 use crate::view::{self, SkippedView, ViewDef, ViewDirError};
 
 /// Why a view administration command was rejected.

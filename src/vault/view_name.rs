@@ -46,24 +46,6 @@ pub enum InvalidViewName {
     NotNormalized(String),
 }
 
-/// `raw` with its control characters escaped, for quoting a name that has
-/// not been validated in a message.
-///
-/// Only control characters are escaped, so the quoted name stays as written
-/// otherwise, and an escape sequence in a hostile name never reaches the
-/// terminal.
-pub fn escape_controls(raw: &str) -> String {
-    raw.chars()
-        .map(|ch| {
-            if ch.is_control() {
-                ch.escape_debug().to_string()
-            } else {
-                ch.to_string()
-            }
-        })
-        .collect()
-}
-
 impl ViewName {
     /// Validate `name` as a view name.
     ///
@@ -305,11 +287,5 @@ mod tests {
             rejected("it's").to_string(),
             "the segment `it's` may only hold lowercase letters, digits and single dashes, at most 72 characters"
         );
-    }
-
-    #[test]
-    fn escape_controls_escapes_only_control_characters() {
-        assert_eq!(escape_controls("by\ntag\x1b[2J"), "by\\ntag\\u{1b}[2J");
-        assert_eq!(escape_controls("it's a\\b"), "it's a\\b");
     }
 }

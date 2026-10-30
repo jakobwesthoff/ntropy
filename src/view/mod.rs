@@ -19,7 +19,8 @@ use std::path::PathBuf;
 
 use crate::error::{Error, Result};
 use crate::note::Note;
-use crate::vault::{InvalidViewName, Layout, Vault, ViewName, escape_controls};
+use crate::text::escape_controls;
+use crate::vault::{InvalidViewName, Layout, Vault, ViewName};
 
 pub use materialize::{group_values, sync_view};
 

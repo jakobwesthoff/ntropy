@@ -18,7 +18,8 @@ use ntropy::crypto::age_io;
 use ntropy::keys;
 use ntropy::migrate::{self, Marker, Migration, NoHooks, Operation};
 use ntropy::session::VaultSession;
-use ntropy::vault::{Vault, escape_controls, layout};
+use ntropy::text::escape_controls;
+use ntropy::vault::{Vault, layout};
 use ntropy::view::{SkipReason, SkippedView};
 
 use crate::cli::{GlobalArgs, VaultCommand};
