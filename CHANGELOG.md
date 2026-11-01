@@ -24,9 +24,16 @@ change in any release
   leave it out; `title` and `href` stay as they were.
   [ADR 0089](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0089-previous-and-next-run-through-the-whole-sidebar.md)
   records the rule.
+- patine is updated to 2.2.3.
 
 ### Fixed
 
+- `show` and `render --to ansi` draw a line ending in a link target as `%0D`
+  or `%0A`. A character reference such as `&#13;` or `&#10;` in the target
+  of a link or image showed as `\r` or `\n` in the dimmed `(target)`. A link
+  or autolink whose text repeats such a target, such as `[a&#10;b](a&#10;b)`,
+  drew no target at all, as its text draws the line ending as a space. It now
+  always draws the target, here `a b (a%0Ab)`. patine 2.2.3 does this.
 - `vault encrypt` removes the empty parent of a nested view. With the view
   `area/work` it removed `area/work` and left an empty `area/` in the vault
   root. It now removes every directory above the view that is empty once the

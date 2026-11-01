@@ -28,8 +28,8 @@ What patine draws for each construct:
 | :--- | :--- |
 | Frontmatter | the block between its fences, indented and highlighted as YAML |
 | Headings | without `#` markers; level one bold, italic and double-underlined, level two bold and underlined |
-| Links | the text underlined, the target dimmed after it in parentheses; a note link is a link like any other, so its target is the note's file name |
-| Bare URLs and email addresses | underlined; a `www.` host has its `http://` target dimmed after it |
+| Links | the text underlined, the target dimmed after it in parentheses; a note link is a link like any other, so its target is the note's file name; a link whose text is its target shows no target, unless the target holds a line ending, which shows as `%0D` or `%0A` and always brings the target |
+| Bare URLs and email addresses | underlined; a `www.` host has its `http://` target dimmed after it, and so has an autolink whose target holds a line ending |
 | Images | `[image: alt]` with the source dimmed after it |
 | Inline code, code blocks | in the palette's code colour; a code block indented by two columns, a fence with a known language highlighted |
 | Block quotes | behind `│ ` bars |

@@ -89,7 +89,8 @@ both.
   shows it. A link, a link to another note included, shows its target
   dimmed after the text; an image shows as `[image: alt] (url)`. Raw HTML
   is left out without a warning. Control characters in the note are
-  shown escaped, as `\u{1b}`. It needs no tool and takes no theme:
+  shown escaped, as `\u{1b}`, except a line ending in a link or image
+  target, which shows as `%0D` or `%0A`. It needs no tool and takes no theme:
   `--theme` with `--to ansi` is an error. `ntropy show` prints the same
   drawing straight to the terminal, at its width.
 

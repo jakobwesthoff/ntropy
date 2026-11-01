@@ -385,8 +385,8 @@ mod tests {
                 "\\u{202e}txt",
                 "\\u{1b}[31m",
                 "\\u{1b}]52;c;x",
-                "(x\\ry)",
-                "(x\\ny)",
+                "(x%0Dy)",
+                "(x%0Ay)",
                 "(x\\u{1b}y)",
             ] {
                 assert!(drawn.contains(escaped), "{form:?}: {escaped} in {drawn:?}");
@@ -407,6 +407,68 @@ mod tests {
         let drawn = draw_note(note, 80, Form::Plain).text;
         assert!(drawn.contains("T\\u{1b}[2J"), "{drawn:?}");
         assert!(!drawn.contains('\x1b'), "{drawn:?}");
+    }
+
+    // =========================================================
+    // Link targets with a line ending
+    // =========================================================
+
+    /// Assert that `body`, drawn in every form with its SGR sequences
+    /// removed, holds a line that is `expected` once its indent is trimmed.
+    fn assert_draws_line(body: &str, expected: &str) {
+        for form in [Form::Plain, Form::Styled, Form::Colored] {
+            let drawn = draw_source("title: T\n", body, &options(200, form)).text;
+            let plain = without_sgr(&drawn);
+            assert!(
+                plain.lines().any(|line| line.trim() == expected),
+                "{form:?}: {expected:?} in {plain:?}"
+            );
+        }
+    }
+
+    // A character reference decodes to the line ending it names. patine
+    // writes it into the target's suffix as `%0D` or `%0A`, and a link whose
+    // text repeats such a target still gets the suffix.
+
+    #[test]
+    fn a_carriage_return_in_a_link_target_is_drawn_as_percent_0d() {
+        assert_draws_line("[a](x&#13;y)\n", "a (x%0Dy)");
+    }
+
+    #[test]
+    fn a_line_feed_in_a_link_target_is_drawn_as_percent_0a() {
+        assert_draws_line("[a](x&#10;y)\n", "a (x%0Ay)");
+    }
+
+    #[test]
+    fn a_carriage_return_in_an_image_source_is_drawn_as_percent_0d() {
+        assert_draws_line("![img](x&#13;y)\n", "[image: img] (x%0Dy)");
+    }
+
+    #[test]
+    fn a_link_whose_text_repeats_a_target_with_a_line_ending_shows_the_target() {
+        assert_draws_line("[a&#10;b](a&#10;b)\n", "a b (a%0Ab)");
+    }
+
+    #[test]
+    fn an_autolink_with_a_line_ending_shows_the_target() {
+        assert_draws_line("<http://x/a&#10;b>\n", "http://x/a b (http://x/a%0Ab)");
+    }
+
+    // The target is only added for a line ending: a link that repeats its
+    // target and an autolink without one stay bare.
+
+    #[test]
+    fn a_link_whose_text_repeats_its_target_shows_no_suffix() {
+        assert_draws_line(
+            "[https://example.com](https://example.com)\n",
+            "https://example.com",
+        );
+    }
+
+    #[test]
+    fn an_autolink_without_a_line_ending_shows_no_suffix() {
+        assert_draws_line("<https://example.com>\n", "https://example.com");
     }
 
     #[test]
