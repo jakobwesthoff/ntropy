@@ -38,6 +38,10 @@ another section (chapter) is marked as such, so the reader sees that the
 chapter changes. How the mark looks is shown to the user with shots
 before it is final.
 
+And: the template context tells a theme whether a previous or next link
+crosses into another section, so a template can decide how to show it on
+that basis, or leave such a link out entirely.
+
 ## Suggested fix
 
 Build one pager order over the whole sidebar in its reading order, with
