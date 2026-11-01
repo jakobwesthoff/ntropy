@@ -33,6 +33,11 @@ section boundaries and through the section landing pages, so a reader
 can click through the docs like a book. This holds for every site, with
 or without `[site] root`.
 
+The user added the same day: a previous or next link that crosses into
+another section (chapter) is marked as such, so the reader sees that the
+chapter changes. How the mark looks is shown to the user with shots
+before it is final.
+
 ## Suggested fix
 
 Build one pager order over the whole sidebar in its reading order, with
