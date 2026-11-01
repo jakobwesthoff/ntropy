@@ -20,7 +20,7 @@ change in any release
   callout. Under `NO_COLOR` the bars are dim and the title is bold; into a
   pipe the text stays without styles. These were quotes with the marker shown
   as text ([ADR 0084](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0084-ansi-drawing-follows-patine-2-2.md)).
-- patine is updated to 2.2.0.
+- patine is updated to 2.2.1.
 
 ## v2.5.0 - 2026-11-01
 
