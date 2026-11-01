@@ -35,7 +35,7 @@ engine's:
 | Raw HTML in the body | passed through verbatim (the Typst engine drops it with a warning) |
 | Math, `mermaid` fences | as the Typst engine: literal text, an ordinary code block |
 | Heading | an `id` by GitHub's rule: lowercase, punctuation dropped except hyphens and underscores, spaces to hyphens, Unicode letters kept, duplicates suffixed `-1`, `-2`. A level-one heading that opens the body and reads exactly the note's title is skipped by the walk, before an id is spent on it: the page shows the title in its header already |
-| Note link, resolved | `<a class="note-link">` showing the target's current title, its `href` decided by the caller: `<slug>.html` beside a single-note artifact, the collision-safe page name in the site |
+| Note link, resolved | `<a class="note-link">` showing the target's current title, its `href` decided by the caller: `<slug>.html` beside a single-note artifact, the collision-safe page name in the site. A link with a heading anchor (`<ulid>-<slug>.md#<heading-id>`, [ADR 0086](../adr/0086-note-links-may-carry-a-heading-anchor.md)) shows the text its author wrote, or the title when that text is blank, and its `href` is the same target followed by `#` and the anchor as written |
 | Note link, unresolved | the display text, as in the Typst engine |
 | Local image or link to a vault file | `<img>` or `<a>` whose `src`/`href` the caller decides; the path as written is recorded so the export copies the file. Local means no URI scheme, not protocol-relative, not a fragment |
 | Remote image | `<img>` with the URL as written; the browser fetches it, so nothing degrades and nothing warns |

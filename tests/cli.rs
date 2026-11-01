@@ -2571,6 +2571,55 @@ fn site_exports_the_vault_into_the_output_directory() {
     assert!(index.contains("2 notes"), "{index}");
 }
 
+/// A vault whose first note links to a heading of the second, `anchor` being
+/// what follows the `#` in the link.
+fn anchor_vault(anchor: &str) -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "rust-tips",
+        &format!("---\ntitle: Rust Tips\n---\nSee [the setup part]({ULID_B}-guide.md#{anchor}).\n"),
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "guide",
+        "---\ntitle: The Guide\n---\n## Setup steps\n\nPlain body.\n",
+    );
+    dir
+}
+
+#[test]
+fn site_strict_accepts_a_link_to_a_heading_of_another_note() {
+    let dir = anchor_vault("setup-steps");
+    let output = site(dir.path(), &["-o", "out", "--strict"]);
+    assert!(
+        output.status.success(),
+        "site failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let page = fs::read_to_string(dir.path().join("out/notes/rust-tips.html")).expect("page");
+    assert!(
+        page.contains(
+            "<a class=\"note-link\" href=\"../notes/the-guide.html#setup-steps\">the setup part</a>"
+        ),
+        "{page}"
+    );
+}
+
+#[test]
+fn site_strict_fails_on_an_anchor_that_matches_no_heading() {
+    let dir = anchor_vault("no-such-heading");
+    let output = site(dir.path(), &["-o", "out", "--strict"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("#no-such-heading, but that note has no heading with this id"),
+        "{stderr}"
+    );
+}
+
 #[test]
 fn site_print_flag_prints_the_index_path() {
     let dir = site_vault();

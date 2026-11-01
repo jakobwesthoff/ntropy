@@ -31,7 +31,8 @@ Warnings go to stderr, and the site is written anyway; `--strict` makes
 them fail the exit code, which is what a build script wants. An export
 warns about a referenced file that is missing or lies outside the vault,
 a code fence whose language has no highlighting grammar, a link to a note
-outside the exported set, a configured index note that is not exported,
+outside the exported set, a link whose `#heading-id` matches no heading on
+the target's page, a configured index note that is not exported,
 a `site` table that is no mapping or holds a key of the wrong type, a
 `root` that names no page, a nav item the site cannot resolve, a
 `template` the theme does not have, and a link to a file the export never

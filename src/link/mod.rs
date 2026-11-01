@@ -5,10 +5,12 @@
 //! Inter-note links: extraction and resolution (ADR 0028).
 //!
 //! A note-to-note link is a standard Markdown inline link whose target is the
-//! current filename of the target note, `[display](<ulid>-<slug>.md)`. Identity
-//! is carried by the leading 26-character ULID of the target; the slug and the
-//! `.md` make it a real, clickable path. This module finds such links in a note
-//! body and resolves a link's ULID to a scanned note.
+//! current filename of the target note, `[display](<ulid>-<slug>.md)`, which
+//! may be followed by a heading anchor, `<ulid>-<slug>.md#<heading-id>`
+//! (ADR 0086). Identity is carried by the leading 26-character ULID of the
+//! target; the slug and the `.md` make it a real, clickable path. This module
+//! finds such links in a note body and resolves a link's ULID to a scanned
+//! note.
 //!
 //! The surface is intentionally infallible: extraction yields the links it can
 //! validate and resolution yields an `Option`, so callers (the language server
@@ -41,6 +43,13 @@ pub struct Link<'a> {
     pub display: &'a str,
     /// The raw target between the parentheses.
     pub target: &'a str,
+    /// The byte length of the file-name part at the start of `target`; what
+    /// follows it is the `#<anchor>` suffix, which a rewrite leaves alone.
+    pub name_len: usize,
+    /// Whether the target continues with `#` after the file name. A target
+    /// that only reaches the file-name rule as a whole, such as
+    /// `<ulid>-a#b.md`, is not anchored: its `#` belongs to the file name.
+    pub anchored: bool,
     /// The note identity parsed from the target's 26-character prefix.
     pub id: Id,
 }
@@ -72,7 +81,7 @@ pub fn extract(body: &str) -> Vec<Link<'_>> {
         if code::is_masked(&masked, whole.start()) || code::is_masked(&masked, target.start()) {
             continue;
         }
-        let Some(id) = parse_target(target.as_str()) else {
+        let Some((id, name_len, anchored)) = parse_target(target.as_str()) else {
             continue;
         };
         links.push(Link {
@@ -80,6 +89,8 @@ pub fn extract(body: &str) -> Vec<Link<'_>> {
             target_range: target.start()..target.end(),
             display: display.as_str(),
             target: target.as_str(),
+            name_len,
+            anchored,
             id,
         });
     }
@@ -153,15 +164,16 @@ pub fn rewrite_body(body: &str, notes: &NoteIndex<'_>) -> Option<BodyRewrite> {
         // would strip every link of the slug that makes it clickable once the
         // vault is decrypted again (ADR 0041).
         let desired = note.link_target();
-        if link.target == desired {
+        let (name, anchor) = link.target.split_at(link.name_len);
+        if name == desired {
             continue;
         }
         out.push_str(&body[cursor..link.target_range.start]);
         out.push_str(&desired);
-        cursor = link.target_range.end;
+        cursor = link.target_range.start + link.name_len;
         rewrites.push(TargetRewrite {
             from: link.target.to_owned(),
-            to: desired,
+            to: format!("{desired}{anchor}"),
         });
     }
     if rewrites.is_empty() {
@@ -174,9 +186,52 @@ pub fn rewrite_body(body: &str, notes: &NoteIndex<'_>) -> Option<BodyRewrite> {
     })
 }
 
-/// Parse a link target into a note identity, accepting only
-/// `<26-char ULID>` optionally followed by `-<slug>`, ending in `.md`.
-fn parse_target(target: &str) -> Option<Id> {
+/// Parse a link target into a note identity, the byte length of its file-name
+/// part, and whether an anchor follows that name.
+///
+/// The target is split at its first `#`. When the part before it is a valid
+/// file name, the rest is the anchor. Otherwise the whole target is tried as a
+/// file name, so a hand-written `<ulid>-a#b.md` stays the note link it always
+/// was.
+fn parse_target(target: &str) -> Option<(Id, usize, bool)> {
+    if let Some(hash) = target.find('#')
+        && let Some(id) = parse_name(&target[..hash])
+    {
+        return Some((id, hash, true));
+    }
+    parse_name(target).map(|id| (id, target.len(), false))
+}
+
+/// The percent-decoded form of a link anchor, the way a browser reads a URL
+/// fragment before it looks for an element with that id. An anchor whose
+/// decoded bytes are not UTF-8 stays as written.
+pub fn decode_fragment(fragment: &str) -> String {
+    let bytes = fragment.as_bytes();
+    let mut decoded = Vec::with_capacity(bytes.len());
+    let mut at = 0;
+    while at < bytes.len() {
+        let escaped = (bytes[at] == b'%')
+            .then(|| bytes.get(at + 1..at + 3))
+            .flatten()
+            .and_then(|pair| std::str::from_utf8(pair).ok())
+            .and_then(|pair| u8::from_str_radix(pair, 16).ok());
+        match escaped {
+            Some(byte) => {
+                decoded.push(byte);
+                at += 3;
+            }
+            None => {
+                decoded.push(bytes[at]);
+                at += 1;
+            }
+        }
+    }
+    String::from_utf8(decoded).unwrap_or_else(|_| fragment.to_owned())
+}
+
+/// A note file name: `<26-char ULID>` optionally followed by `-<slug>`,
+/// ending in `.md`.
+fn parse_name(target: &str) -> Option<Id> {
     if !target.is_char_boundary(ULID_LEN) {
         return None;
     }
@@ -519,6 +574,108 @@ mod tests {
             rewrite.body,
             format!("[a]({ULID}-t.md) [b]({dangling}-x.md) [c](https://e.com)")
         );
+    }
+
+    #[test]
+    fn a_target_with_a_heading_anchor_is_a_note_link() {
+        let body = format!("[s]({ULID}-x.md#a-heading)");
+        let link = only(&body);
+        assert_eq!(link.id, ULID.parse::<Id>().unwrap());
+        assert_eq!(link.target, format!("{ULID}-x.md#a-heading"));
+    }
+
+    #[test]
+    fn rewrite_keeps_the_anchor_while_refreshing_the_slug() {
+        let notes = vec![note(ULID)];
+        let body = format!("[s]({ULID}-stale.md#a-heading)");
+        let rewrite = rewrite_body(&body, &index(&notes)).expect("a rewrite happens");
+        assert_eq!(rewrite.body, format!("[s]({ULID}-t.md#a-heading)"));
+        assert_eq!(
+            rewrite.rewrites[0].from,
+            format!("{ULID}-stale.md#a-heading")
+        );
+        assert_eq!(rewrite.rewrites[0].to, format!("{ULID}-t.md#a-heading"));
+    }
+
+    #[test]
+    fn the_anchor_split_follows_the_first_hash() {
+        // (target after the ULID, name length after the ULID, anchored)
+        let cases = [
+            ("-x.md#a", "-x.md", true),
+            // An empty anchor keeps its `#` as a suffix a rewrite leaves alone.
+            ("-x.md#", "-x.md", true),
+            ("-x.md#a#b", "-x.md", true),
+            // `.md` inside the anchor does not make the whole target the name.
+            ("-x.md#a.md", "-x.md", true),
+            (".md#a", ".md", true),
+            // A `#` in the file name leaves nothing valid before it, so the
+            // whole target is the name.
+            ("-a#b.md", "-a#b.md", false),
+        ];
+        for (after, name, anchored) in cases {
+            let body = format!("[s]({ULID}{after})");
+            let link = only(&body);
+            assert_eq!(
+                &link.target[..link.name_len],
+                format!("{ULID}{name}"),
+                "{after}"
+            );
+            assert_eq!(link.anchored, anchored, "{after}");
+        }
+    }
+
+    #[test]
+    fn a_query_string_does_not_make_a_note_link() {
+        assert!(extract(&format!("[s]({ULID}-x.md?q=1)")).is_empty());
+        assert!(extract(&format!("[s]({ULID}-x.md?q=1#a)")).is_empty());
+    }
+
+    #[test]
+    fn rewrite_keeps_an_empty_anchor_and_a_dotted_one() {
+        let notes = vec![note(ULID)];
+        let body = format!("[a]({ULID}-stale.md#) [b]({ULID}-stale.md#a.md)");
+        let rewrite = rewrite_body(&body, &index(&notes)).expect("a rewrite happens");
+        assert_eq!(
+            rewrite.body,
+            format!("[a]({ULID}-t.md#) [b]({ULID}-t.md#a.md)")
+        );
+    }
+
+    #[test]
+    fn an_aligned_anchored_link_produces_no_rewrite() {
+        let notes = vec![note(ULID)];
+        let body = format!("[x]({ULID}-t.md#a-heading)");
+        assert!(rewrite_body(&body, &index(&notes)).is_none());
+    }
+
+    #[test]
+    fn a_hash_in_the_file_name_is_still_rewritten_to_the_canonical_name() {
+        let notes = vec![note(ULID)];
+        let body = format!("[x]({ULID}-a#b.md)");
+        let rewrite = rewrite_body(&body, &index(&notes)).expect("a rewrite happens");
+        assert_eq!(rewrite.body, format!("[x]({ULID}-t.md)"));
+    }
+
+    #[test]
+    fn an_anchored_link_to_an_encrypted_note_keeps_its_anchor_on_rewrite() {
+        let notes = vec![encrypted_note(ULID, "Quarterly Review")];
+        let body = format!("[x]({ULID}-stale.md#q3)");
+        let rewrite = rewrite_body(&body, &index(&notes)).expect("a rewrite happens");
+        assert_eq!(rewrite.body, format!("[x]({ULID}-quarterly-review.md#q3)"));
+    }
+
+    #[test]
+    fn decode_fragment_reads_percent_escapes_like_a_browser() {
+        assert_eq!(decode_fragment("a-heading"), "a-heading");
+        assert_eq!(decode_fragment("%C3%BCber-gr%C3%B6%C3%9Fe"), "über-größe");
+        // Escapes are case-insensitive hex.
+        assert_eq!(decode_fragment("a%2db"), "a-b");
+        // Bytes that are not UTF-8 leave the text as written.
+        assert_eq!(decode_fragment("a%FFb"), "a%FFb");
+        // A `%` that does not start an escape is kept.
+        assert_eq!(decode_fragment("100%"), "100%");
+        assert_eq!(decode_fragment("a%zzb"), "a%zzb");
+        assert_eq!(decode_fragment("a%2"), "a%2");
     }
 
     #[test]

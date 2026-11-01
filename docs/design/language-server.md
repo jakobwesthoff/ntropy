@@ -97,7 +97,9 @@ hand.
   (ADR 0028) and jump to the note.
 - **`textDocument/documentLink`**: hand the editor each link's resolved target
   URI, so links are click-to-open and rendered as links independent of
-  `definition`. Both reuse the link-extraction regex of ADR 0028.
+  `definition`. Both reuse the link-extraction regex of ADR 0028. A link
+  with a heading anchor (ADR 0086) resolves to the note's file; the anchor is
+  not carried.
 - **`workspace/symbol`**: every note as a symbol named by its title, escaped
   (ADR 0071), and located at its file. With `nucleo` ranking the query, this is a command-palette jump to
   any note by title across the vault.

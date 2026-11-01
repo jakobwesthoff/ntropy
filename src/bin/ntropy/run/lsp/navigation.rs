@@ -162,6 +162,19 @@ mod tests {
     }
 
     #[test]
+    fn a_link_with_a_heading_anchor_resolves_to_its_note() {
+        let text = format!("see [Part]({ULID_A}-quarterly.md#q3-plan) here");
+        let offset = text.find("Part]").expect("inside the link");
+        let (id, path) = definition(&text, offset, &entries()).expect("definition");
+        assert_eq!(id.to_string(), ULID_A);
+        assert!(path.ends_with(format!("{ULID_A}-quarterly.md")));
+
+        let links = document_links(&text, Encoding::Utf8, &entries());
+        assert_eq!(links.len(), 1);
+        assert_eq!(links[0].1.to_string(), ULID_A);
+    }
+
+    #[test]
     fn definition_on_a_dangling_link_is_none() {
         let other = "01CX5ZZKBKACTAV9WEVGEMMVRZ";
         let text = format!("[gone]({other}-x.md)");

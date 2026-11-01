@@ -209,6 +209,11 @@ pub struct ResolvedLink {
     pub display: String,
     /// The target note's identity.
     pub id: Id,
+    /// Whether the link's target continues with `#<anchor>` after the note's
+    /// file name (ADR 0086). The anchor text itself is read from the
+    /// destination the Markdown parser hands the walk, so escapes and
+    /// entities are resolved as for every other link.
+    pub anchored: bool,
     /// What the vault knows about the target, or `None` when the id resolves
     /// against no note (a dangling link).
     pub target: Option<LinkTarget>,

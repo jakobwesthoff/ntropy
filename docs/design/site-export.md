@@ -45,7 +45,8 @@ relative, there is no client-side routing.
   vault, a referenced path the export never copies, a linked directory
   that left out a `.ntropy` entry or has nothing to copy, a fence
   language without a grammar, a link to a note outside
-  the exported set, a configured index note that is not exported, a
+  the exported set, a link whose heading anchor matches no heading id on
+  the target's page, a configured index note that is not exported, a
   note's `site` table that is no mapping or holds a key of the wrong
   type, a `root` that names no page, and a nav item the site cannot
   resolve. Hidden entries and other metadata left out of a linked
@@ -117,6 +118,14 @@ so its pages stay below `views/`; a configured view with an invalid name
 gets no pages and a warning. Every link in a page is relative to
 that page, climbing to the site root with `../` per directory level, so
 the site works from `file://` and from any path on a host.
+
+A note link may name a heading of its target (`<ulid>-<slug>.md#<heading-id>`,
+[ADR 0086](../adr/0086-note-links-may-carry-a-heading-anchor.md)). Its href
+is the target's page followed by the anchor as written, and the export
+compares the anchor with the heading ids the target's page carries: after
+percent-decoding, exactly and case-sensitively, with `top` always valid. An
+anchor that matches none is a warning. Only heading ids count; an `id` set by
+raw HTML in the target is not seen, so a link to it warns.
 
 **Front page.** The configured index note, or the generated overview:
 site title, the note count with the span from the oldest to the newest

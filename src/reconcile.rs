@@ -1081,6 +1081,26 @@ mod tests {
     }
 
     #[test]
+    fn reconcile_keeps_the_heading_anchor_of_a_stale_link() {
+        let (_guard, session) = vault_with_view();
+        write_note(
+            &session,
+            &format!("{ULID}-target.md"),
+            "---\ntitle: Target\n---\nbody\n",
+        );
+        let source = write_note(
+            &session,
+            &format!("{ULID_B}-source.md"),
+            &format!("---\ntitle: Source\n---\nsee [Part]({ULID}-old.md#a-heading)\n"),
+        );
+
+        let report = reconcile(&session).expect("reconcile");
+        assert_eq!(report.links_rewritten.len(), 1);
+        let content = std::fs::read_to_string(&source).expect("read source");
+        assert!(content.contains(&format!("[Part]({ULID}-target.md#a-heading)")));
+    }
+
+    #[test]
     fn reconcile_leaves_links_in_code_alone() {
         let (_guard, session) = vault_with_view();
         write_note(

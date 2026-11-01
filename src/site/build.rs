@@ -173,6 +173,12 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     // Every referenced vault file, root-absolute, each once.
     let mut referenced: Vec<String> = Vec::new();
 
+    // The heading ids of every exported note and the anchors its links name,
+    // checked once all pages exist (ADR 0086).
+    // A note rendered on several pages (a landing note) records its first.
+    let mut heading_ids: HashMap<Id, HashSet<String>> = HashMap::new();
+    let mut anchors: HashMap<Id, Vec<(Id, String)>> = HashMap::new();
+
     // A landing note (ADR 0056) has no page of its own: it is rendered as
     // the page of every group it lands, above that group's listing.
     let landings = model.landings();
@@ -229,6 +235,10 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
                 contents: rendered.page.into_bytes(),
             });
             used_grammars.extend(rendered.grammars);
+            heading_ids
+                .entry(note.id)
+                .or_insert_with(|| rendered.heading_ids.into_iter().collect());
+            anchors.entry(note.id).or_insert(rendered.note_anchors);
             rendered_assets = rendered.assets;
         }
         for dest in rendered_assets {
@@ -266,6 +276,8 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             });
         }
     }
+
+    warnings.extend(anchor_warnings(&ordered, &anchors, &heading_ids));
 
     files.push(OutputFile {
         path: format!("{ASSETS_DIR}/{}", frontend::APP_SCRIPT),
@@ -524,6 +536,37 @@ pub fn write(built: &Built, dir: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
+/// A warning for every link whose heading anchor matches no heading id on the
+/// target's page. The anchor is compared the way a browser looks it up: after
+/// percent-decoding, exactly, with `top` always valid (ADR 0086).
+fn anchor_warnings(
+    notes: &[&Note],
+    anchors: &HashMap<Id, Vec<(Id, String)>>,
+    heading_ids: &HashMap<Id, HashSet<String>>,
+) -> Vec<String> {
+    notes
+        .iter()
+        .flat_map(|source| {
+            anchors
+                .get(&source.id)
+                .into_iter()
+                .flatten()
+                .map(move |(target, anchor)| (*source, target, anchor))
+        })
+        .filter_map(|(source, target, anchor)| {
+            let ids = heading_ids.get(target)?;
+            let wanted = link::decode_fragment(anchor);
+            let found = ids.contains(&wanted) || wanted.eq_ignore_ascii_case("top");
+            (!found).then(|| {
+                format!(
+                    "{}: links to {target}#{anchor}, but that note has no heading with this id",
+                    source.path.display()
+                )
+            })
+        })
+        .collect()
+}
+
 /// A note's links resolved against the exported set. A target that exists in
 /// the vault but is not exported is a warning and stays unresolved.
 fn resolve_links(
@@ -550,6 +593,7 @@ fn resolve_links(
                 range: found.range,
                 display: found.display.to_string(),
                 id: found.id,
+                anchored: found.anchored,
                 target,
             }
         })
@@ -601,6 +645,11 @@ struct RenderedNote {
     /// The grammars the page's code blocks need, their embedded grammars
     /// included, by name.
     grammars: Vec<String>,
+    /// The ids of the headings the walk recorded, for the anchor check.
+    heading_ids: Vec<String>,
+    /// The heading anchors of the note's links to other notes, as written
+    /// into the hrefs.
+    note_anchors: Vec<(Id, String)>,
 }
 
 /// What a group's page carries besides a heading or a landing note: the
@@ -762,6 +811,12 @@ fn render_note(
         page: page.render(export.templates)?,
         assets: emitted.assets,
         grammars: needed,
+        heading_ids: emitted
+            .headings
+            .into_iter()
+            .map(|heading| heading.id)
+            .collect(),
+        note_anchors: emitted.note_anchors,
     })
 }
 
@@ -1991,6 +2046,111 @@ mod tests {
             output_dir: None,
         })
         .expect("the site builds")
+    }
+
+    /// The site of the notes `Linker` (body `body`) and `Target` (body
+    /// `target_body`), exporting only the notes whose ids are in `exported`.
+    fn site_of_two(vault: &Path, body: &str, target_body: &str, exported: &[&str]) -> Built {
+        let notes = vec![
+            note(vault, A, "Linker", "", body),
+            note(vault, B, "Target", "", target_body),
+        ];
+        let vault_ids = ids(&notes);
+        let query_notes: Vec<Note> = notes
+            .into_iter()
+            .filter(|n| exported.contains(&n.id.to_string().as_str()))
+            .collect();
+        build(&Input {
+            notes: &query_notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &SiteOptions::default(),
+            query: None,
+            fallback_title: "Vault",
+            vault_root: vault,
+            theme: None,
+            output_dir: None,
+        })
+        .expect("the site builds")
+    }
+
+    fn anchor_site(link: &str, target_body: &str) -> Built {
+        let vault = vault();
+        site_of_two(
+            vault.path(),
+            &format!("[the part]({B}-target.md{link})\n"),
+            target_body,
+            &[A, B],
+        )
+    }
+
+    #[test]
+    fn a_link_to_a_heading_of_another_note_points_at_its_page_with_the_anchor() {
+        let built = anchor_site("#a-heading", "## A heading\n\ntext\n");
+        assert!(built.warnings.is_empty(), "{:?}", built.warnings);
+        let page = text(&built, "notes/linker.html");
+        assert!(
+            page.contains(
+                "<a class=\"note-link\" href=\"../notes/target.html#a-heading\">the part</a>"
+            ),
+            "{page}"
+        );
+        assert!(targets(&built).is_empty(), "{:?}", targets(&built));
+    }
+
+    #[test]
+    fn an_anchor_that_matches_no_heading_warns() {
+        let built = anchor_site("#no-such-heading", "## A heading\n");
+        let warnings = built.warnings.join("\n");
+        assert!(
+            warnings.contains(&format!(
+                "links to {B}#no-such-heading, but that note has no heading with this id"
+            )),
+            "{warnings}"
+        );
+        assert_eq!(built.warnings.len(), 1, "{warnings}");
+    }
+
+    #[test]
+    fn anchors_follow_the_heading_ids_of_the_page() {
+        // `## A` twice gives `a` and `a-1`; the title heading is dropped from
+        // the page, so it has no id; a percent-encoded anchor is read the way
+        // a browser reads it; `top` always works; case matters.
+        let target = "# Target\n\n## A\n\n## A\n\n## Über Größe\n";
+        for (anchor, ok) in [
+            ("#a", true),
+            ("#a-1", true),
+            ("#a-2", false),
+            ("#target", false),
+            ("#%C3%BCber-gr%C3%B6%C3%9Fe", true),
+            ("#top", true),
+            ("#TOP", true),
+            ("#A", false),
+        ] {
+            let built = anchor_site(anchor, target);
+            assert_eq!(
+                built.warnings.is_empty(),
+                ok,
+                "{anchor}: {:?}",
+                built.warnings
+            );
+        }
+    }
+
+    #[test]
+    fn an_anchored_link_to_a_note_outside_the_export_keeps_its_text() {
+        let vault = vault();
+        let built = site_of_two(
+            vault.path(),
+            &format!("[the part]({B}-target.md#a-heading)\n"),
+            "## A heading\n",
+            &[A],
+        );
+        let page = text(&built, "notes/linker.html");
+        assert!(page.contains("<p>the part</p>"), "{page}");
+        let warnings = built.warnings.join("\n");
+        assert!(warnings.contains(&format!("links to {B}")), "{warnings}");
+        assert_eq!(built.warnings.len(), 1, "{warnings}");
     }
 
     /// The copy targets of `built`, sorted, each with empty components

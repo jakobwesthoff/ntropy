@@ -23,7 +23,7 @@ supported syntax and the few places where the output formats differ.
 | Callouts | `> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]` |
 | Footnotes | `[^label]` references with `[^label]: text` definitions, in any order |
 | Links | `[text](url)`, bare URLs and `www.` hosts autolink, `<mail@example.org>` |
-| Note links | ordinary links targeting a note's filename, described under [Note format](01M28Q32ACTNYR0FBYG9CAZMKG-note-format.md) |
+| Note links | ordinary links targeting a note's filename, optionally followed by `#heading-id`, described under [Note format](01M28Q32ACTNYR0FBYG9CAZMKG-note-format.md) |
 | Images | `![alt](path)` relative to the note |
 | Horizontal rules | `---` on its own line |
 

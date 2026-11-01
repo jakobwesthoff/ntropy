@@ -6,6 +6,8 @@ Date: 2026-06-25
 
 Accepted
 
+Amended 2026-11-01 by [ADR 0086](0086-note-links-may-carry-a-heading-anchor.md).
+
 ## Context
 
 ADR 0004 fixed note identity as the filename ULID and stated that links resolve

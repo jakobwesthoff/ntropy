@@ -42,7 +42,8 @@ use super::writer::{self, TypstWriter};
 use crate::id::Id;
 use crate::render::ResolvedLink;
 use crate::render::markdown::{
-    self, Alignment, BlockQuoteKind, Heading, InlineStyle, List, Output, Table, Warning,
+    self, Alignment, BlockQuoteKind, Heading, InlineStyle, List, NoteLabel, Output, Table, Warning,
+    note_label,
 };
 
 /// The extension a resolved note link targets: the artifact a default
@@ -124,7 +125,9 @@ impl Output for TypstOutput<'_> {
     }
 
     /// `#link("<slug>.pdf")[#notelink[Title]]`, with `slug` string-literal
-    /// escaped and `title` escaped as markup text.
+    /// escaped and `title` escaped as markup text. A link with a heading
+    /// anchor shows the author's text instead of the title and drops the
+    /// anchor, since a PDF has no heading ids to address (ADR 0086).
     ///
     /// The target is the artifact a default `ntropy render` of the target note
     /// produces in the same directory, so a set of notes rendered together
@@ -133,12 +136,22 @@ impl Output for TypstOutput<'_> {
     /// source of a PDF, and both formats emit identical bytes by design.
     /// `notelink` is defined by the prelude, so a theme can style note links
     /// distinctly from ordinary emphasis.
-    fn note_link(&mut self, _id: Id, title: &str, slug: &str) -> String {
+    fn note_link(
+        &mut self,
+        _id: Id,
+        title: &str,
+        slug: &str,
+        fragment: Option<&str>,
+        inner: &str,
+    ) -> String {
         let mut writer = TypstWriter::new();
         writer.syntax("#link(\"");
         writer.string_literal(&format!("{slug}.{NOTE_LINK_EXTENSION}"));
         writer.syntax("\")[#notelink[");
-        writer.markup_text(title);
+        match note_label(title, fragment, inner) {
+            NoteLabel::Title(title) => writer.markup_text(title),
+            NoteLabel::Inner(inner) => writer.raw(inner),
+        }
         writer.syntax("]]");
         writer.finish()
     }
@@ -468,6 +481,7 @@ mod tests {
             range,
             display: String::new(),
             id: crate::id::Id::from_timestamp_ms(0),
+            anchored: false,
             target: target.map(|(title, slug)| LinkTarget {
                 title: title.to_string(),
                 slug: slug.to_string(),
@@ -894,6 +908,44 @@ mod tests {
         assert_eq!(
             emit(input, &links, ASSET_BASE).0,
             "#link(\"old-slug.pdf\")[#notelink[A Renamed Note]]\n"
+        );
+    }
+
+    /// The link table `prepare` builds for `body`, every note link resolving
+    /// to a note titled `Target Title`.
+    fn resolved_links(body: &str) -> Vec<ResolvedLink> {
+        crate::link::extract(body)
+            .into_iter()
+            .map(|link| ResolvedLink {
+                range: link.range,
+                display: link.display.to_string(),
+                id: link.id,
+                anchored: link.anchored,
+                target: Some(LinkTarget {
+                    title: "Target Title".to_string(),
+                    slug: "target-title".to_string(),
+                }),
+            })
+            .collect()
+    }
+
+    #[test]
+    fn an_anchored_note_link_keeps_the_authors_text_and_drops_the_anchor() {
+        // A PDF has no heading ids to address, so the link opens the target's
+        // artifact; the author's text still says what the link is about.
+        let input = "[the **tmux** part](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#inside-tmux)";
+        assert_eq!(
+            emit(input, &resolved_links(input), ASSET_BASE).0,
+            "#link(\"target-title.pdf\")[#notelink[the #strong[tmux] part]]\n"
+        );
+    }
+
+    #[test]
+    fn an_anchored_note_link_without_text_shows_the_title() {
+        let input = "[ ](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#inside-tmux)";
+        assert_eq!(
+            emit(input, &resolved_links(input), ASSET_BASE).0,
+            "#link(\"target-title.pdf\")[#notelink[Target Title]]\n"
         );
     }
 

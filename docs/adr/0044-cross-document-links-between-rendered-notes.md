@@ -6,6 +6,8 @@ Date: 2026-09-07
 
 Accepted
 
+Amended 2026-11-01 by [ADR 0086](0086-note-links-may-carry-a-heading-anchor.md).
+
 Extends [ADR 0028](0028-note-to-note-links-as-standard-markdown-links.md) into
 the rendered artifact, changing the emission the typst engine of
 [ADR 0040](0040-custom-typst-engine-with-own-markdown-emitter.md) performs for a

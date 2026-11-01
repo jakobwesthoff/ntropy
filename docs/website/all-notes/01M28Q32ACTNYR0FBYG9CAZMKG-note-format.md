@@ -103,9 +103,22 @@ existing links so the readable part stays accurate and the link stays
 clickable in a plain viewer. They are ordinary Markdown links, so GitHub,
 your editor's preview, and any other Markdown tool follow them for free.
 
+A link to a heading of another note adds the heading's id after a `#`:
+
+```markdown
+See [Inside tmux](01j8za2…-notifications.md#inside-tmux).
+```
+
+`ntropy reconcile` refreshes the file name and keeps the `#inside-tmux`. In
+a site or HTML export the link points at the note's page and keeps the
+anchor, and it shows the text you wrote instead of the note's title. A PDF
+cannot address a heading, so there the link opens the other note's PDF.
+`ntropy site` warns about an anchor that matches no heading of the target.
+
 A link counts as a note link only when its target starts with a valid ULID
-and ends in `.md`. Anything else, such as external URLs, in-page anchors, or
-a ULID that matches no note, is left alone. Image links (`![..](..)`) and
+and ends in `.md`, optionally followed by `#` and a heading id. Anything
+else, such as external URLs, in-page anchors, or a ULID that matches no
+note, is left alone. Image links (`![..](..)`) and
 links inside code are never treated as note links, and `reconcile` does not
 rewrite them. Code means inline code spans (which may continue over a line
 break), fenced code blocks and indented code blocks.

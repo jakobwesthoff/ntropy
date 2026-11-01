@@ -43,6 +43,7 @@ pub fn prepare(
             range: link.range,
             display: link.display.to_string(),
             id: link.id,
+            anchored: link.anchored,
             target: index.get(&link.id).map(|target| LinkTarget {
                 title: target.title.clone(),
                 slug: target.slug.clone(),
@@ -220,6 +221,23 @@ mod tests {
         let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
         let target = doc.links[0].target.as_ref().expect("the link resolves");
         assert_eq!(target.slug, "stale-slug");
+    }
+
+    #[test]
+    fn a_link_with_an_anchor_is_prepared_as_anchored() {
+        let target = note(ULID_B, "target", "---\ntitle: Target\n---\nx\n");
+        let source = note(
+            ULID_A,
+            "source",
+            &format!(
+                "---\ntitle: Source\n---\n[a]({ULID_B}-target.md#part) [b]({ULID_B}-target.md)\n"
+            ),
+        );
+        let notes = vec![source.clone(), target];
+        let index = link::index(&notes);
+        let doc = prepare(&source, &index, Path::new("/vault")).expect("prepare");
+        let anchored: Vec<bool> = doc.links.iter().map(|link| link.anchored).collect();
+        assert_eq!(anchored, [true, false]);
     }
 
     #[test]

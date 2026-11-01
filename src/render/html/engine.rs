@@ -344,6 +344,7 @@ mod tests {
             range,
             display: String::new(),
             id: Id::from_str(ULID).expect("ulid parses"),
+            anchored: false,
             target: Some(LinkTarget {
                 title: title.to_string(),
                 slug: slug.to_string(),
@@ -826,6 +827,27 @@ mod tests {
             "{}",
             ctx.warnings[0]
         );
+    }
+
+    #[test]
+    fn an_anchored_note_link_targets_the_sibling_artifact_with_the_anchor() {
+        let link = "[the part](01ARZ3NDEKTSV4RRFFQ69G5FAV-other.md#a-heading)";
+        let body = format!("See {link} now.\n");
+        let start = body.find('[').expect("the link is in the body");
+        let mut resolved = resolved_link(start..start + link.len(), "The Other", "other");
+        resolved.anchored = true;
+        let document = doc("Linker", "{}", &body, vec![resolved]);
+        let mut ctx = FakeContext::new();
+        Html::new(DocumentSettings::default())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert!(
+            ctx.page()
+                .contains("<a class=\"note-link\" href=\"other.html#a-heading\">the part</a>"),
+            "{}",
+            ctx.page()
+        );
+        assert!(ctx.warnings.is_empty(), "{:?}", ctx.warnings);
     }
 
     #[test]

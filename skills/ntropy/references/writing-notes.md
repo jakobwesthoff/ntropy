@@ -190,6 +190,12 @@ custom:
 See [the Q3 plan](01j8za2abcdefghjkmnpqrstvw-q3-planning.md) for the numbers.
 ```
 
+To link a heading of the other note, add its id after a `#`:
+`[Inside tmux](01j8za2abcdefghjkmnpqrstvw-q3-planning.md#inside-tmux)`. The id
+is the heading in lowercase with spaces as hyphens and punctuation dropped; a
+repeated heading gets `-1`, `-2`. `reconcile` keeps the `#...` part, and
+`ntropy site` warns when no heading has that id.
+
 Get the filename from a search (`ntropy search -n tag:planning`, PATH column)
 and use its basename. A link is recognized by its leading 26-character ULID, so
 it survives retitles: `ntropy reconcile` rewrites the slug portion of stale

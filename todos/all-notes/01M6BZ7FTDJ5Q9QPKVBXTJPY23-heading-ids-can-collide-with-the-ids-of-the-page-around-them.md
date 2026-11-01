@@ -9,8 +9,7 @@ origin: review
 On pages exported by `ntropy site` and `render --to html`, a heading's id
 can equal an id the page itself uses, so a link to that heading lands on
 the wrong element. Found on 2026-11-01 in the adversarial review of the
-plan for resolving links to headings in other notes (todo
-01M6BYDV22NHD4JG806FQARY2G); not reproduced on its own yet.
+plan for resolving links to headings in other notes; not reproduced on its own yet.
 
 ## Problem
 

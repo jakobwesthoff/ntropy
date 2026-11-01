@@ -262,6 +262,7 @@ mod tests {
             range,
             display: display.to_string(),
             id: Id::from_str(TARGET_ULID).expect("target ulid parses"),
+            anchored: false,
             target: target.map(|(title, slug)| LinkTarget {
                 title: title.to_string(),
                 slug: slug.to_string(),

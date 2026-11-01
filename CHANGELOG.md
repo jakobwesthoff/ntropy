@@ -9,6 +9,24 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Fixed
+
+- A link to a heading of another note, `[text](<ulid>-<slug>.md#<heading-id>)`,
+  is a note link. `ntropy site` and `render --to html` point it at the
+  target's page followed by `#<heading-id>` instead of warning that a file
+  named `...md#<heading-id>` is missing. It shows the text you wrote, where a
+  link without an anchor shows the target's title; a blank text shows the
+  title. `render --to pdf` links to the target's PDF and drops the anchor.
+  `reconcile` refreshes the slug of such a link and keeps the anchor.
+  `ntropy site` warns about an anchor that matches no heading id on the
+  target's page, so `--strict` fails on it. `#top` is always valid, an
+  anchor is compared after percent-decoding, and an `id` set by raw HTML in
+  the target is not seen.
+- `reconcile` keeps what follows a `#` in a link target that already read as
+  a note link, such as `<ulid>-<slug>.md#a.md`; it used to cut it off.
+
 ## v2.7.1 - 2026-11-01
 
 ### Fixed

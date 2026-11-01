@@ -11,9 +11,8 @@ A link to a file in the vault with a fragment, such as
 `render --to html`: the fragment is taken as part of the file name, the
 export warns that the referenced file is not in the vault, and
 `--strict` fails. Found on 2026-11-01 in the review of the plan for
-resolving links to headings in other notes (todo
-01M6BYDV22NHD4JG806FQARY2G), which has the same cause for note links;
-not reproduced on its own yet.
+resolving links to headings in other notes, which had the same cause for
+note links; not reproduced on its own yet.
 
 ## Expected
 

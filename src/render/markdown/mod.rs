@@ -154,10 +154,21 @@ pub trait Output {
     }
 
     /// A note link whose target resolves: the target's id, its current title,
-    /// and the slug its default artifact is named after (ADR 0044). The
-    /// link's own display text is not offered, since the artifact shows the
-    /// title.
-    fn note_link(&mut self, id: Id, title: &str, slug: &str) -> String;
+    /// and the slug its default artifact is named after (ADR 0044).
+    ///
+    /// `fragment` is the heading anchor the link carries (ADR 0086), if any.
+    /// `inner` is the link's own text, already rendered. A link without an
+    /// anchor shows the target's title; a link with one shows `inner`, since
+    /// the title would hide which section the author points at. Blank `inner`
+    /// falls back to the title in both cases, so the link is never empty.
+    fn note_link(
+        &mut self,
+        id: Id,
+        title: &str,
+        slug: &str,
+        fragment: Option<&str>,
+        inner: &str,
+    ) -> String;
 
     /// An image. `alt` is the flattened plain text of the alt subtree. An
     /// output that cannot carry the image records why in `warnings`.
@@ -319,9 +330,14 @@ enum FrameKind {
 enum LinkEmit {
     /// Not a note link.
     Ordinary { dest: String },
-    /// A note link whose target resolves; the inner events are dropped because
-    /// the output shows the target's title.
-    ResolvedNote { id: Id, title: String, slug: String },
+    /// A note link whose target resolves. The output decides between the
+    /// target's title and the inner events (see [`Output::note_link`]).
+    ResolvedNote {
+        id: Id,
+        title: String,
+        slug: String,
+        fragment: Option<String>,
+    },
     /// A note link whose target is dangling: the wrapper is dropped and the
     /// inner content re-emitted, so formatting in the display text survives.
     UnresolvedNote,
@@ -821,6 +837,7 @@ impl<'a, O: Output> Walker<'a, O> {
                     id: link.id,
                     title: target.title.clone(),
                     slug: target.slug.clone(),
+                    fragment: anchor_of(dest, link.anchored),
                 },
                 None => LinkEmit::UnresolvedNote,
             },
@@ -972,9 +989,14 @@ impl<'a, O: Output> Walker<'a, O> {
                 let inner = frame.body;
                 let rendered = match emit {
                     LinkEmit::Ordinary { dest } => self.output.link(&dest, &inner),
-                    LinkEmit::ResolvedNote { id, title, slug } => {
-                        self.output.note_link(id, &title, &slug)
-                    }
+                    LinkEmit::ResolvedNote {
+                        id,
+                        title,
+                        slug,
+                        fragment,
+                    } => self
+                        .output
+                        .note_link(id, &title, &slug, fragment.as_deref(), &inner),
                     LinkEmit::UnresolvedNote => inner,
                 };
                 self.append_inline(&rendered);
@@ -1042,6 +1064,40 @@ fn slug(text: &str) -> String {
     out
 }
 
+/// What a resolved note link shows.
+pub enum NoteLabel<'a> {
+    /// The target note's current title, which the output escapes as text.
+    Title(&'a str),
+    /// The author's own text, already rendered by the walk.
+    Inner(&'a str),
+}
+
+/// The label of a resolved note link: the author's text when the link carries
+/// an anchor and the text is not blank, otherwise the target's title
+/// (see [`Output::note_link`]).
+pub fn note_label<'a>(title: &'a str, fragment: Option<&str>, inner: &'a str) -> NoteLabel<'a> {
+    if fragment.is_some() && !inner.trim().is_empty() {
+        NoteLabel::Inner(inner)
+    } else {
+        NoteLabel::Title(title)
+    }
+}
+
+/// The heading anchor of a note link's destination: the text after its first
+/// `#`, or `None` when the grammar found no anchor or the anchor is empty.
+///
+/// `dest` is the destination as the Markdown parser resolved it, so escapes
+/// and entities are already processed. An entity that spells `#` inside the
+/// file name (`&num;`) would move the first `#`; ntropy never writes one
+/// (ADR 0077).
+fn anchor_of(dest: &str, anchored: bool) -> Option<String> {
+    if !anchored {
+        return None;
+    }
+    let (_, anchor) = dest.split_once('#')?;
+    (!anchor.is_empty()).then(|| anchor.to_owned())
+}
+
 /// Case-insensitive ASCII prefix test, for the `www.` autolink rule. Compares
 /// bytes so an IRI match whose fourth byte falls inside a multi-byte character
 /// cannot panic a string slice.
@@ -1101,8 +1157,18 @@ mod tests {
         fn link(&mut self, dest: &str, inner: &str) -> String {
             format!("(link {dest} {inner})")
         }
-        fn note_link(&mut self, id: Id, title: &str, slug: &str) -> String {
-            format!("(note {id} {slug} {title})")
+        fn note_link(
+            &mut self,
+            id: Id,
+            title: &str,
+            slug: &str,
+            fragment: Option<&str>,
+            inner: &str,
+        ) -> String {
+            match fragment {
+                Some(fragment) => format!("(note {id} {slug} {title} #{fragment} {inner})"),
+                None => format!("(note {id} {slug} {title})"),
+            }
         }
         fn image(&mut self, dest: &str, alt: &str, warnings: &mut Vec<Warning>) -> String {
             if dest.contains("drop") {
@@ -1179,6 +1245,7 @@ mod tests {
             range,
             display: String::new(),
             id: Id::from_timestamp_ms(id),
+            anchored: false,
             target: target.map(|(title, slug)| LinkTarget {
                 title: title.to_string(),
                 slug: slug.to_string(),
@@ -1297,6 +1364,58 @@ mod tests {
             out,
             "(p (note 00000000000000000000000000 slug Title) u (link https://e.org o))\n"
         );
+    }
+
+    /// A link table entry for the whole of `input`, anchored as given.
+    fn anchored_link(input: &str, anchored: bool) -> [ResolvedLink; 1] {
+        let mut link = note_link(0..input.len(), 0, Some(("Title", "slug")));
+        link.anchored = anchored;
+        [link]
+    }
+
+    #[test]
+    fn an_anchored_note_link_hands_over_the_anchor_and_its_text() {
+        let input = "[the part](x.md#a_b)";
+        let (out, _) = walk(input, &anchored_link(input, true), &mut Trace::default());
+        assert_eq!(
+            out,
+            "(p (note 00000000000000000000000000 slug Title #a_b the part))\n"
+        );
+    }
+
+    #[test]
+    fn the_anchor_is_read_from_the_resolved_destination() {
+        let input = "[s](x.md#a\\_b)";
+        let (out, _) = walk(input, &anchored_link(input, true), &mut Trace::default());
+        assert_eq!(
+            out,
+            "(p (note 00000000000000000000000000 slug Title #a_b s))\n"
+        );
+    }
+
+    #[test]
+    fn an_empty_anchor_is_no_anchor() {
+        let input = "[s](x.md#)";
+        let (out, _) = walk(input, &anchored_link(input, true), &mut Trace::default());
+        assert_eq!(out, "(p (note 00000000000000000000000000 slug Title))\n");
+    }
+
+    #[test]
+    fn a_hash_that_belongs_to_the_file_name_is_no_anchor() {
+        let input = "[s](x#y.md)";
+        let (out, _) = walk(input, &anchored_link(input, false), &mut Trace::default());
+        assert_eq!(out, "(p (note 00000000000000000000000000 slug Title))\n");
+    }
+
+    #[test]
+    fn the_label_is_the_authors_text_only_with_an_anchor_and_some_text() {
+        let label = |fragment, inner| match note_label("Title", fragment, inner) {
+            NoteLabel::Title(text) => format!("title {text}"),
+            NoteLabel::Inner(text) => format!("inner {text}"),
+        };
+        assert_eq!(label(Some("a"), "Part"), "inner Part");
+        assert_eq!(label(Some("a"), " \n"), "title Title");
+        assert_eq!(label(None, "Part"), "title Title");
     }
 
     #[test]

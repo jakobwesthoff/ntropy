@@ -45,6 +45,8 @@ ntropy site theme init mine                   # copy the built-in theme to .ntro
   wants. The warnings an export raises:
   - a referenced image or file that is missing, or lies outside the vault;
   - a link to a note outside the exported set;
+  - a link `<ulid>-<slug>.md#<id>` whose `<id>` matches no heading of the
+    target's page;
   - a code fence whose language has no highlighting grammar (the block
     stays plain);
   - a `[site] index` note that is not among the exported notes (the front

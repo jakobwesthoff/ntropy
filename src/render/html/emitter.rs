@@ -41,7 +41,8 @@ use super::writer::HtmlWriter;
 use crate::id::Id;
 use crate::render::ResolvedLink;
 use crate::render::markdown::{
-    self, Alignment, BlockQuoteKind, Heading, InlineStyle, List, Output, Table, Warning,
+    self, Alignment, BlockQuoteKind, Heading, InlineStyle, List, NoteLabel, Output, Table, Warning,
+    note_label,
 };
 
 // =========================================================
@@ -89,6 +90,10 @@ pub struct Emitted {
     /// The body's headings in document order, with the ids the fragment
     /// carries, for an outline.
     pub headings: Vec<Heading>,
+    /// The heading anchors of the resolved note links, as written into the
+    /// hrefs: the target note and the anchor text, in order of appearance. The
+    /// site checks each against the target's headings (ADR 0086).
+    pub note_anchors: Vec<(Id, String)>,
 }
 
 /// Convert a note body to an HTML body fragment, resolving note links against
@@ -109,6 +114,7 @@ pub fn emit(
         assets: Vec::new(),
         languages: Vec::new(),
         headings: Vec::new(),
+        note_anchors: Vec::new(),
         footnotes: Vec::new(),
     };
     let (html, warnings) = markdown::walk(body, links, &mut output);
@@ -118,6 +124,7 @@ pub fn emit(
         assets: output.assets,
         languages: output.languages,
         headings: output.headings,
+        note_anchors: output.note_anchors,
     }
 }
 
@@ -132,6 +139,7 @@ struct HtmlOutput<'a> {
     assets: Vec<String>,
     languages: Vec<String>,
     headings: Vec<Heading>,
+    note_anchors: Vec<(Id, String)>,
     /// The rendered content of every footnote the walk handed over, in
     /// first-reference order; the position is the footnote's number.
     footnotes: Vec<String>,
@@ -214,13 +222,28 @@ impl Output for HtmlOutput<'_> {
         writer.finish()
     }
 
-    fn note_link(&mut self, id: Id, title: &str, slug: &str) -> String {
-        let href = self.targets.note_href(id, slug);
+    fn note_link(
+        &mut self,
+        id: Id,
+        title: &str,
+        slug: &str,
+        fragment: Option<&str>,
+        inner: &str,
+    ) -> String {
+        let mut href = self.targets.note_href(id, slug);
+        if let Some(fragment) = fragment {
+            href.push('#');
+            href.push_str(fragment);
+            self.note_anchors.push((id, fragment.to_string()));
+        }
         let mut writer = HtmlWriter::new();
         writer.syntax("<a class=\"note-link\" href=\"");
         writer.attribute(&href);
         writer.syntax("\">");
-        writer.text(title);
+        match note_label(title, fragment, inner) {
+            NoteLabel::Title(title) => writer.text(title),
+            NoteLabel::Inner(inner) => writer.raw(inner),
+        }
         writer.syntax("</a>");
         writer.finish()
     }
@@ -452,6 +475,7 @@ mod tests {
             range,
             display: String::new(),
             id: Id::from_timestamp_ms(0),
+            anchored: false,
             target: target.map(|(title, slug)| LinkTarget {
                 title: title.to_string(),
                 slug: slug.to_string(),
@@ -807,6 +831,84 @@ mod tests {
         );
     }
 
+    /// The link table `prepare` builds for `body`: every note link in it
+    /// resolves to a note titled `Target Title`.
+    fn resolved_links(body: &str) -> Vec<ResolvedLink> {
+        crate::link::extract(body)
+            .into_iter()
+            .map(|link| ResolvedLink {
+                range: link.range,
+                display: link.display.to_string(),
+                id: link.id,
+                anchored: link.anchored,
+                target: Some(LinkTarget {
+                    title: "Target Title".to_string(),
+                    slug: "target-title".to_string(),
+                }),
+            })
+            .collect()
+    }
+
+    fn linked_html(body: &str) -> String {
+        emit(body, &resolved_links(body), &SiblingArtifacts, None).html
+    }
+
+    #[test]
+    fn an_anchored_note_link_keeps_its_anchor_and_the_authors_text() {
+        assert_eq!(
+            linked_html("[the **tmux** part](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#inside-tmux)"),
+            "<p><a class=\"note-link\" href=\"target-title.html#inside-tmux\">the <strong>tmux</strong> part</a></p>\n"
+        );
+    }
+
+    #[test]
+    fn an_anchored_note_link_without_text_shows_the_title() {
+        assert_eq!(
+            linked_html("[ ](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#inside-tmux)"),
+            "<p><a class=\"note-link\" href=\"target-title.html#inside-tmux\">Target Title</a></p>\n"
+        );
+    }
+
+    #[test]
+    fn a_plain_note_link_still_shows_the_title() {
+        assert_eq!(
+            linked_html("[whatever](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md)"),
+            "<p><a class=\"note-link\" href=\"target-title.html\">Target Title</a></p>\n"
+        );
+    }
+
+    #[test]
+    fn an_empty_anchor_adds_nothing_to_the_href() {
+        assert_eq!(
+            linked_html("[text](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#)"),
+            "<p><a class=\"note-link\" href=\"target-title.html\">Target Title</a></p>\n"
+        );
+    }
+
+    #[test]
+    fn the_anchor_is_read_after_the_markdown_escapes_are_resolved() {
+        assert_eq!(
+            linked_html("[s](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#a\\_b)"),
+            "<p><a class=\"note-link\" href=\"target-title.html#a_b\">s</a></p>\n"
+        );
+    }
+
+    #[test]
+    fn the_anchor_is_escaped_as_an_attribute() {
+        assert_eq!(
+            linked_html("[s](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#a\"b&c)"),
+            "<p><a class=\"note-link\" href=\"target-title.html#a&quot;b&amp;c\">s</a></p>\n"
+        );
+    }
+
+    #[test]
+    fn a_hash_in_the_file_name_is_no_anchor() {
+        assert_eq!(
+            linked_html("[s](01ARZ3NDEKTSV4RRFFQ69G5FAV-a#b.md)"),
+            "<p><a class=\"note-link\" href=\"target-title.html\">Target Title</a></p>\n"
+        );
+    }
+
     #[test]
     fn a_dangling_note_link_keeps_its_display_markup() {
         let input = "[**bold** ghost](01ARZ3NDEKTSV4RRFFQ69G5FAV-gone.md)";
@@ -951,6 +1053,7 @@ mod tests {
                 range: link.range.clone(),
                 display: link.display.to_string(),
                 id: link.id,
+                anchored: link.anchored,
                 target: (link.target.starts_with("01BRZ")).then(|| LinkTarget {
                     title: "Current Linked Title".to_string(),
                     slug: "linked".to_string(),
