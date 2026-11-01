@@ -1650,9 +1650,31 @@ body.palette-open {
   }
 }
 
+/* Docs, GitHub, the search and the color switch need about 380px beside the
+ * menu link and the whole site name; below that the GitHub mark goes, and
+ * below 24rem the links with it. */
+@media (max-width: 26rem) {
+  .site-links .site-github {
+    display: none;
+  }
+}
+
 @media (max-width: 24rem) {
   .site-links {
     display: none;
+  }
+}
+
+/* At 320px the menu link, the whole name, the search and the switch fill
+ * the row only with tighter gaps and narrower switch buttons. */
+@media (max-width: 22rem) {
+  .site-header,
+  .header-tools {
+    gap: 0.4rem;
+  }
+
+  .theme-choice {
+    padding: 0.3rem 0.4rem;
   }
 }
 

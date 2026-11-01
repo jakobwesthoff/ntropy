@@ -42,6 +42,8 @@ change in any release
   wide at a viewport of 390 px.
 - The documentation site's footer wraps at its separators on a narrow screen
   instead of widening the page.
+- The documentation site's header shows the whole site name on a phone: below
+  26rem the GitHub mark leaves the header row.
 
 ### Changed
 
