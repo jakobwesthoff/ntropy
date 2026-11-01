@@ -76,7 +76,7 @@ New notes are stamped out from
 `today` has its own daily template; and `search` speaks a small
 [query language](https://ntropy.westhoffswelt.de/notes/query-language.html),
 opening an
-[interactive picker](https://ntropy.westhoffswelt.de/notes/the-interactive-picker.html)
+[interactive picker](https://ntropy.westhoffswelt.de/tags/docs/find/index.html#the-picker)
 when more than one note matches.
 
 You never have to tell ntropy which vault you mean from inside one; it

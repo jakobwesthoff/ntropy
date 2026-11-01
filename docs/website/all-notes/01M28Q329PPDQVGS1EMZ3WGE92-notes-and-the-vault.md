@@ -6,9 +6,10 @@ site:
   label: Notes and the vault
   order: 2
 ---
-This section covers what a note is, where it lives, and what ntropy keeps
-around it: the vault directory, the note file format, the Markdown it
-understands, templates, materialized views, encryption, and configuration.
+A note is a Markdown file, and a vault is the directory that holds your
+notes. This section covers how notes start out from templates, which
+vault a command works on, encrypted vaults, the note format, and the
+Markdown ntropy understands.
 
 ## The notes are the database
 
@@ -35,43 +36,20 @@ A vault is an ordinary directory with a few well-known children:
 └── .ntropy/          # config, templates, and themes
 ```
 
-Only top-level `*.md` files in `all-notes/` are notes, with the extension in
-lowercase. ntropy leaves subdirectories and all other files alone, including a
-`.MD` file, so images and attachments can sit right next to your notes without
-being adopted as notes.
+Only top-level `*.md` files in `all-notes/` are notes, with the extension
+in lowercase. ntropy leaves subdirectories and all other files alone, a
+`.MD` file included, so images and attachments can sit right next to
+your notes without being taken for notes.
 
-A vault can also store its notes [encrypted at
-rest](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md), in which case
-`all-notes/` holds `<ulid>.age` files instead and there are no view
-directories.
+An encrypted vault stores `<ulid>.age` files in `all-notes/` instead, and
+has no view directories; see
+[Encrypted vaults](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md).
 
-Because all of this is just files, the whole vault is yours to version: `git
-init` in it and commit your notes like any other text. The derived `by-*/`
-view directories do not belong in git, and ntropy keeps them out for you. It
-maintains a root `.gitignore` whose managed entries always match your
-configured views, adding one when you add a view and pruning it when you
-remove one. Each managed entry carries a marker comment above it, so ntropy
-only ever prunes its own entries. Your own lines in that file are never
-touched.
+## The vault in git
 
-ntropy never deletes a directory. When a view is removed its directory is
-left behind, and, no longer ignored, it shows up in `git status`. The command
-tells you so you can delete the stale tree yourself.
-
-## In this section
-
-- [Note format](01M28Q32ACTNYR0FBYG9CAZMKG-note-format.md): the frontmatter
-  fields, what the filename means, and how notes link to each other.
-- [Markdown flavor](01M28Q32B13V8F4Z4CHE258TC5-markdown-flavor.md): the
-  GitHub-flavored Markdown ntropy understands, and what it leaves alone.
-- [Templates and daily
-  notes](01M28Q32BNT6XKW8DFW56GH06T-templates-and-daily-notes.md): how
-  `new` stamps out a note, the placeholders, and `today`.
-- [Finding the vault](01M28Q32CAAZA2PWAP4RR44GMA-finding-the-vault.md): how
-  a command decides which vault it works on.
-- [Materialized views](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md):
-  symlink trees grouped by a frontmatter field.
-- [Encrypted vaults](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md): notes
-  encrypted at rest with age.
-- [Configuration](01M28Q32E6BHWB0H27MM57KY90-configuration.md): the
-  `.ntropy/config.toml` file.
+Because all of this is just files, the whole vault is yours to version:
+`git init` in it and commit your notes like any other text. The view
+directories are derived and do not belong in git. ntropy keeps them out
+through the vault's `.gitignore`, as
+[Materialized views](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md)
+describes.

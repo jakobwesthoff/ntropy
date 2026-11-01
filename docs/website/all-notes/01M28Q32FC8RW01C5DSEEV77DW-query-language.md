@@ -2,7 +2,7 @@
 title: Query language
 tags: [docs/find]
 site:
-  order: 1
+  order: 2
 ---
 `search` (and `delete`) accept a small query language for narrowing which
 notes to work with. The fastest way to learn it is by example:
