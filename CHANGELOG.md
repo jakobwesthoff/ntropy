@@ -9,7 +9,7 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
-## Unreleased
+## v2.9.0 - 2026-11-01
 
 ### Fixed
 
@@ -33,9 +33,9 @@ change in any release
   at the edge that has more to show, instead of widening the page. In a note
   column narrower than 32rem, each row of a two-column table is a card of its
   own, the first cell a tinted strip over the second, and the header row is
-  not shown. Every table is
-  emitted inside `<div class="table-wrap" data-columns="<n>">`, and a table of
-  two columns carries explicit ARIA roles. A custom theme that styles `table`
+  not shown. Every table is emitted inside
+  `<div class="table-wrap" data-columns="<n>">`, and a table of two columns
+  carries explicit ARIA roles. A custom theme that styles `table`
   with a border or a radius now draws it inside that wrapper; style
   `.table-wrap` instead.
 - A page from `render --to html` is one column on a narrow screen. It kept the
