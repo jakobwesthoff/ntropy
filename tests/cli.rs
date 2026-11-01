@@ -1863,6 +1863,30 @@ fn render_to_typst_shows_the_title_through_the_template_and_not_as_a_heading() {
 }
 
 #[test]
+fn render_to_typst_draws_a_self_referencing_footnote_once_without_a_placeholder() {
+    // The footnote's content references the footnote itself; the repeat
+    // points back at the label instead of inlining the content again.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nA[^a] and again[^a].\n\n[^a]: B[^a]\n",
+    );
+    let artifact = render_to_typst(dir.path(), ULID_A, &[]);
+    assert!(
+        !artifact.contains("ntropy-footnote-") && !artifact.contains('\0'),
+        "a placeholder reached the artifact: {artifact:?}"
+    );
+    assert!(
+        artifact.contains(
+            "A#[#footnote[B#footnote(<ntropy-fn-1>);]<ntropy-fn-1>]; and again#footnote(<ntropy-fn-1>);"
+        ),
+        "the footnote is not drawn once and referenced by label: {artifact}"
+    );
+}
+
+#[test]
 fn a_resolved_note_link_targets_the_targets_default_artifact_name() {
     // The cross-document link contract of ADR 0044, pinned from both ends: the
     // emitted document links to `<target-slug>.pdf`, and a default render of

@@ -221,10 +221,10 @@ Important stands out\.
 ]
 
 #callout(kind: "warning")[
-Careful#footnote[A footnote with #raw("code") inside and a list\:
+Careful#[#footnote[A footnote with #raw("code") inside and a list\:
 
 - one
-- two] with content\.
+- two]<ntropy-fn-1>]; with content\.
 ]
 
 #callout(kind: "caution")[
@@ -237,10 +237,7 @@ A plain block quote with a second paragraph\.
 The second paragraph\.
 ]
 
-Another reference to the same footnote#footnote[A footnote with #raw("code") inside and a list\:
-
-- one
-- two], one used before its definition#footnote[Defined after use\.], and an undefined one\[^ghost\]\.
+Another reference to the same footnote#footnote(<ntropy-fn-1>);, one used before its definition#[#footnote[Defined after use\.]<ntropy-fn-2>];, and an undefined one\[^ghost\]\.
 
 == Table
 

@@ -23,9 +23,11 @@
 //! - image alt flattening: every construct inside an image collapses to its
 //!   plain text,
 //! - footnotes in two passes: definitions are collected wherever they appear,
-//!   each reference leaves a placeholder that is patched once the walk is
-//!   done; an undefined reference renders as its literal source text (GFM), an
-//!   unreferenced definition produces nothing.
+//!   each reference leaves a placeholder that is expanded once the walk is
+//!   done, the first one in the text through [`Output::footnote`] and every
+//!   later one through [`Output::footnote_again`]; an undefined reference
+//!   renders as its literal source text (GFM), an unreferenced definition
+//!   produces nothing.
 //!
 //! An [`Output`] owns the markup and the escaping. It receives user text and
 //! already-rendered children and returns rendered strings; it never sees a
@@ -174,11 +176,24 @@ pub trait Output {
     /// output that cannot carry the image records why in `warnings`.
     fn image(&mut self, dest: &str, alt: &str, warnings: &mut Vec<Warning>) -> String;
 
-    /// A footnote reference, given the definition's rendered block content.
-    /// Called once per label, in the order of the first reference the page
-    /// shows; the result replaces every reference to that label. An output either inlines the content
-    /// here or keeps it for the section it appends in [`Output::finish`].
-    fn footnote(&mut self, content: &str) -> String;
+    /// A footnote, given the definition's rendered block content. Called
+    /// once per defined label, in the order of the first reference the page
+    /// shows; `number` is the 1-based count of these calls. The result
+    /// replaces the first reference to the label in the emitted text, which
+    /// is where an output draws the footnote. An output either draws the
+    /// content here or keeps it for the section it appends in
+    /// [`Output::finish`].
+    ///
+    /// `content` may itself hold references to other footnotes, which the
+    /// walk expands after this call returns.
+    fn footnote(&mut self, number: usize, content: &str) -> String;
+
+    /// A further reference to footnote `number`, the one an earlier
+    /// [`Output::footnote`] call drew. It replaces every reference after the
+    /// first in the emitted text, including one inside the content of the
+    /// footnote itself or of another. The result must not hold footnote
+    /// content, since the walk expands each footnote only once.
+    fn footnote_again(&mut self, number: usize) -> String;
 
     /// A raw HTML fragment inside running content. `None` drops it; an output
     /// that drops records why in `warnings`.
@@ -229,7 +244,7 @@ pub trait Output {
     fn html_block(&mut self, html: &str, warnings: &mut Vec<Warning>) -> Option<String>;
 
     /// The output's last word over the rendered document body, called once
-    /// after the last event and before footnote placeholders are patched.
+    /// after the last event and before footnote placeholders are expanded.
     /// Content appended here may therefore itself contain footnote
     /// references (a footnote section built from definitions, say) and still
     /// gets its markers.
@@ -446,6 +461,16 @@ struct FootnoteReference {
     within: Option<usize>,
 }
 
+/// What a footnote label expands to in the emitted text.
+enum FootnoteEntry {
+    /// A defined footnote: `first` draws it at its first place in the text,
+    /// `again` stands for every later reference.
+    Defined { first: String, again: String },
+    /// A reference nothing defines, rendered as its literal source at every
+    /// site.
+    Undefined(String),
+}
+
 /// A heading inside a footnote definition: its rendered inline content and
 /// its plain text, with the id still to come.
 struct DeferredHeading {
@@ -573,9 +598,9 @@ impl<'a, O: Output> Walker<'a, O> {
         drawn
     }
 
-    /// The placeholder emitted at a footnote reference and patched at the end
-    /// of the walk. Identical for repeated references to one label, so a
-    /// single substitution rule inlines the definition at every site.
+    /// The placeholder emitted at a footnote reference and expanded at the
+    /// end of the walk. Identical for repeated references to one label, so
+    /// one table entry decides every site.
     fn footnote_placeholder(&self, label: &str) -> String {
         format!("{n}{label}{n}", n = self.nonce)
     }
@@ -637,54 +662,89 @@ impl<'a, O: Output> Walker<'a, O> {
             .iter()
             .filter_map(|label| self.definition_serials.get(label).copied())
             .collect();
-        // Patch every footnote reference the page shows. A defined reference
-        // renders through the output's footnote construct, once per label in
-        // the order of its first shown reference, so an output that numbers
-        // footnotes numbers them in reading order; an undefined one renders
-        // as its literal source text (GFM). The substitutions are applied
-        // repeatedly because a definition may itself contain references,
-        // whose placeholders only appear once the enclosing definition is
-        // inlined; the pass count bounds any self-referential cycle.
-        let mut substitutions: Vec<(String, String)> = Vec::new();
-        let mut seen: Vec<String> = Vec::new();
+        // The footnote reference table: one entry per label the page shows.
+        // A defined label draws its footnote through the output's footnote
+        // construct, numbered in the order of its first shown reference, so
+        // an output that numbers footnotes numbers them in reading order; an
+        // undefined one renders as its literal source text (GFM).
+        let mut table: HashMap<String, FootnoteEntry> = HashMap::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        let mut defined = 0;
         for reference in std::mem::take(&mut self.footnote_references) {
             let shown = reference
                 .within
                 .is_none_or(|serial| drawn.contains(&serial));
-            if !shown || seen.contains(&reference.label) {
+            if !shown || !seen.insert(reference.label.clone()) {
                 continue;
             }
-            seen.push(reference.label.clone());
-            let label = &reference.label;
-            let placeholder = self.footnote_placeholder(label);
-            let replacement = match self.footnote_definitions.get(label).cloned() {
+            let entry = match self.footnote_definitions.get(&reference.label).cloned() {
                 Some(content) => {
+                    defined += 1;
                     let content = self.draw_deferred_headings(&content);
-                    self.output.footnote(&content)
+                    FootnoteEntry::Defined {
+                        first: self.output.footnote(defined, &content),
+                        again: self.output.footnote_again(defined),
+                    }
                 }
-                None => self.output.text(&format!("[^{label}]")),
+                None => {
+                    FootnoteEntry::Undefined(self.output.text(&format!("[^{}]", reference.label)))
+                }
             };
-            substitutions.push((placeholder, replacement));
+            table.insert(reference.label, entry);
         }
 
-        // The output sees the body before the placeholders are patched, so
-        // whatever it appends is patched too.
-        let mut body = self.output.finish(document.body);
-
-        for _ in 0..=substitutions.len() {
-            let mut changed = false;
-            for (placeholder, replacement) in &substitutions {
-                if body.contains(placeholder.as_str()) {
-                    body = body.replace(placeholder, replacement);
-                    changed = true;
-                }
-            }
-            if !changed {
-                break;
-            }
-        }
+        // The output sees the body before the placeholders are expanded, so
+        // whatever it appends is expanded too.
+        let body = self.output.finish(document.body);
+        let mut expanded = HashSet::new();
+        let body = self.expand_footnotes(&body, &table, &mut expanded);
+        debug_assert!(
+            !body.contains(self.nonce.as_str()) && !body.contains(self.heading_nonce.as_str()),
+            "a placeholder reached the output: {body:?}"
+        );
 
         (body, self.warnings)
+    }
+
+    /// Replace the footnote placeholders of `text` by what `table` says,
+    /// left to right. The first placeholder of a defined label in the text
+    /// draws the footnote, and its content is expanded in turn; any later one,
+    /// including one inside that content, takes the repeat form. Each label
+    /// is drawn at most once, so a footnote that references itself, or two
+    /// that reference each other, end at the repeat form instead of looping.
+    fn expand_footnotes(
+        &self,
+        text: &str,
+        table: &HashMap<String, FootnoteEntry>,
+        drawn: &mut HashSet<String>,
+    ) -> String {
+        let mut out = String::with_capacity(text.len());
+        // Splitting on the nonce leaves text at the even positions and a
+        // label at the odd ones.
+        for (index, part) in text.split(self.nonce.as_str()).enumerate() {
+            if index % 2 == 0 {
+                out.push_str(part);
+                continue;
+            }
+            match table.get(part) {
+                Some(FootnoteEntry::Defined { first, again }) => {
+                    if drawn.insert(part.to_string()) {
+                        out.push_str(&self.expand_footnotes(first, table, drawn));
+                    } else {
+                        out.push_str(again);
+                    }
+                }
+                Some(FootnoteEntry::Undefined(literal)) => out.push_str(literal),
+                // Every shown reference has an entry, so a label without one
+                // is a bug; the literal source keeps the nonce out of the
+                // output all the same.
+                None => {
+                    debug_assert!(false, "footnote placeholder {part:?} outside the table");
+                    out.push_str(&format!("[^{part}]"));
+                }
+            }
+        }
+        out
     }
 
     /// The innermost open container, the sink for the current event.
@@ -858,7 +918,7 @@ impl<'a, O: Output> Walker<'a, O> {
         }
     }
 
-    /// Record a footnote reference and drop a placeholder that `finish` patches
+    /// Record a footnote reference and drop a placeholder that `finish` expands
     /// once every definition is known. Inside an image alt a reference is
     /// meaningless and is dropped.
     fn footnote_reference(&mut self, label: &str) {
@@ -1369,9 +1429,12 @@ mod tests {
             }
             format!("(img {dest} {alt})")
         }
-        fn footnote(&mut self, content: &str) -> String {
+        fn footnote(&mut self, _number: usize, content: &str) -> String {
             self.footnotes.push(content.to_string());
             format!("(fn {})", content.trim_end())
+        }
+        fn footnote_again(&mut self, number: usize) -> String {
+            format!("(fn#{number})")
         }
         fn inline_html(&mut self, html: &str, warnings: &mut Vec<Warning>) -> Option<String> {
             if html.contains("drop") {
@@ -1664,7 +1727,7 @@ mod tests {
         let mut output = Trace::default();
         let (out, _) = walk("a[^y] b[^x] c[^y]\n\n[^x]: X\n\n[^y]: Y", &[], &mut output);
         assert_eq!(output.footnotes, vec!["(p Y)\n", "(p X)\n"]);
-        assert_eq!(out, "(p a(fn (p Y)) b(fn (p X)) c(fn (p Y)))\n");
+        assert_eq!(out, "(p a(fn (p Y)) b(fn (p X)) c(fn#1))\n");
     }
 
     #[test]
@@ -1678,9 +1741,9 @@ mod tests {
     }
 
     #[test]
-    fn a_definition_referencing_another_footnote_is_patched_recursively() {
+    fn a_definition_referencing_another_footnote_is_expanded_in_place() {
         // The nested reference's placeholder only enters the body once the
-        // outer definition is inlined; the repeated passes patch it too.
+        // outer footnote is drawn; the expansion reaches it there.
         let (out, _) = walk(
             "x[^a]\n\n[^a]: sees[^b]\n\n[^b]: B",
             &[],
@@ -1796,19 +1859,32 @@ mod tests {
     }
 
     #[test]
-    fn a_self_referencing_definition_terminates() {
+    fn a_self_referencing_definition_ends_at_the_repeat_form() {
         let (out, _) = walk("x[^a]\n\n[^a]: me[^a]", &[], &mut Trace::default());
-        // The pass count bounds the expansion; what remains after the last
-        // pass is one unpatched placeholder, which is the accepted outcome
-        // for a cycle no output could render anyway.
-        assert!(out.starts_with("(p x(fn (p me(fn (p me"));
+        assert_eq!(out, "(p x(fn (p me(fn#1))))\n");
     }
 
     #[test]
-    fn finish_runs_before_placeholders_are_patched() {
+    fn two_definitions_referencing_each_other_end_at_the_repeat_form() {
+        let (out, _) = walk(
+            "x[^a]\n\n[^a]: A[^b]\n\n[^b]: B[^a]",
+            &[],
+            &mut Trace::default(),
+        );
+        assert_eq!(out, "(p x(fn (p A(fn (p B(fn#1))))))\n");
+    }
+
+    #[test]
+    fn two_references_to_an_undefined_label_render_its_source_twice() {
+        assert_eq!(trace("a[^g] b[^g]"), "(p a[^g] b[^g])\n");
+    }
+
+    #[test]
+    fn finish_runs_before_placeholders_are_expanded() {
         // The section `finish` appends is built from stored definition
         // contents, which still hold the raw placeholder of the nested
-        // reference; it is patched only because `finish` runs first.
+        // reference. It is expanded because `finish` runs first, and `[^b]`,
+        // drawn earlier inside the content of `[^a]`, takes the repeat form.
         let mut output = Trace {
             footnotes: Vec::new(),
             section: true,
@@ -1816,8 +1892,8 @@ mod tests {
         };
         let (out, _) = walk("x[^a]\n\n[^a]: sees[^b]\n\n[^b]: B", &[], &mut output);
         assert!(
-            out.ends_with("\n(section (p sees(fn (p B)))\n (p B)\n)"),
-            "finish output missing or unpatched: {out:?}"
+            out.ends_with("\n(section (p sees(fn#2))\n (p B)\n)"),
+            "finish output missing or unexpanded: {out:?}"
         );
         assert!(!out.contains('\u{0}'), "placeholder leaked: {out:?}");
     }

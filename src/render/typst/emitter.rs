@@ -30,7 +30,10 @@
 //!   path under the note's directory (ADR 0045); a remote `http(s)` image
 //!   cannot be embedded by the offline compiler, so it degrades to
 //!   `#link("url")[alt-or-url]` and raises a [`Warning`].
-//! - A footnote is inlined at its reference site as `#footnote[…]`.
+//! - A footnote is drawn at its first reference in the text as
+//!   `#[#footnote[…]<ntropy-fn-N>];`, and every later reference, inside a
+//!   footnote's content included, is `#footnote(<ntropy-fn-N>);`, which shows
+//!   the same number.
 //! - Raw HTML, blocks and inline fragments alike, is dropped and raises a
 //!   [`Warning`] naming the dropped fragment.
 //!
@@ -79,6 +82,12 @@ pub fn emit(
         title: title.map(|title| title.trim().to_string()),
     };
     markdown::walk(body, links, &mut output)
+}
+
+/// The label of footnote `number`. The `ntropy-fn-` prefix belongs to ntropy,
+/// so a theme's own labels never collide with it.
+fn footnote_label(number: usize) -> String {
+    format!("ntropy-fn-{number}")
 }
 
 // =========================================================
@@ -204,8 +213,24 @@ impl Output for TypstOutput<'_> {
         writer.finish()
     }
 
-    fn footnote(&mut self, content: &str) -> String {
-        format!("#footnote[{}]", content.trim_end_matches('\n'))
+    /// The footnote, drawn at its first place in the text and labelled so
+    /// that later references can point at it. The `#[...]` wrapper keeps the
+    /// label on the footnote when the reference sits in a heading, where a
+    /// bare label after the call would attach to the heading. The closing
+    /// `;` ends the expression, so a `(` that follows in the note's text is
+    /// text and not a call on the footnote.
+    fn footnote(&mut self, number: usize, content: &str) -> String {
+        format!(
+            "#[#footnote[{}]<{}>];",
+            content.trim_end_matches('\n'),
+            footnote_label(number)
+        )
+    }
+
+    /// Typst shows the number of the labelled footnote and draws nothing
+    /// else, so the reference may sit inside the footnote's own content.
+    fn footnote_again(&mut self, number: usize) -> String {
+        format!("#footnote(<{}>);", footnote_label(number))
     }
 
     fn inline_html(&mut self, html: &str, warnings: &mut Vec<Warning>) -> Option<String> {
@@ -1189,9 +1214,81 @@ mod tests {
         insta::assert_snapshot!(body("[^1]: The source.\n\nA claim.[^1]"));
     }
 
+    /// Footnote labels are `<ntropy-fn-N>` with N the footnote's position in
+    /// the walk's first-reference order; the tests spell them out.
     #[test]
-    fn footnote_referenced_twice_inlines_the_content_each_time() {
-        insta::assert_snapshot!(body("First.[^n] Second.[^n]\n\n[^n]: Shared."));
+    fn a_footnote_referenced_twice_is_drawn_at_the_first_reference_only() {
+        assert_eq!(
+            body("x[^n] y[^n]\n\n[^n]: Shared."),
+            "x#[#footnote[Shared\\.]<ntropy-fn-1>]; y#footnote(<ntropy-fn-1>);\n"
+        );
+    }
+
+    #[test]
+    fn a_footnote_referencing_itself_refers_back_to_its_own_label() {
+        assert_eq!(
+            body("A[^a] and again[^a].\n\n[^a]: B[^a]"),
+            "A#[#footnote[B#footnote(<ntropy-fn-1>);]<ntropy-fn-1>]; and again#footnote(<ntropy-fn-1>);\\.\n"
+        );
+    }
+
+    #[test]
+    fn two_footnotes_referencing_each_other_end_in_a_label_reference() {
+        assert_eq!(
+            body("x[^a]\n\n[^a]: A[^b]\n\n[^b]: B[^a]"),
+            "x#[#footnote[A#[#footnote[B#footnote(<ntropy-fn-1>);]<ntropy-fn-2>];]<ntropy-fn-1>];\n"
+        );
+    }
+
+    #[test]
+    fn a_chain_of_footnotes_nests_each_one_once() {
+        assert_eq!(
+            body("x[^a]\n\n[^a]: A[^b]\n\n[^b]: B[^c]\n\n[^c]: C"),
+            "x#[#footnote[A#[#footnote[B#[#footnote[C]<ntropy-fn-3>];]<ntropy-fn-2>];]<ntropy-fn-1>];\n"
+        );
+    }
+
+    #[test]
+    fn the_first_reference_in_the_text_draws_the_footnote_whatever_its_number() {
+        // `[^b]` is numbered after `[^a]` by the walk, yet its first place in
+        // the emitted text is inside the content of `[^a]`.
+        assert_eq!(
+            body("x[^a] y[^b]\n\n[^a]: A[^b]\n\n[^b]: B"),
+            "x#[#footnote[A#[#footnote[B]<ntropy-fn-2>];]<ntropy-fn-1>]; y#footnote(<ntropy-fn-2>);\n"
+        );
+    }
+
+    #[test]
+    fn a_footnote_first_referenced_in_a_heading_keeps_its_label_on_the_footnote() {
+        // A bare label after the call would attach to the heading, and a later
+        // `#footnote(<label>)` could not find a footnote.
+        assert_eq!(
+            body("# Head[^a]\n\nlater[^a]\n\n[^a]: A"),
+            "= Head#[#footnote[A]<ntropy-fn-1>];\n\nlater#footnote(<ntropy-fn-1>);\n"
+        );
+    }
+
+    #[test]
+    fn a_heading_inside_a_footnote_keeps_the_label_of_a_footnote_in_it() {
+        assert_eq!(
+            body("x[^a] y[^b]\n\n[^a]:\n    # H[^b]\n\n[^b]: B"),
+            "x#[#footnote[= H#[#footnote[B]<ntropy-fn-2>];]<ntropy-fn-1>]; y#footnote(<ntropy-fn-2>);\n"
+        );
+    }
+
+    #[test]
+    fn a_parenthesis_after_a_footnote_reference_stays_text() {
+        // `#footnote(<label>)(x)` would read as a call on the footnote, so the
+        // forms end in `;`.
+        assert_eq!(
+            body("a[^n](see p. 3) b[^n](see p. 4)\n\n[^n]: N"),
+            "a#[#footnote[N]<ntropy-fn-1>];(see p\\. 3) b#footnote(<ntropy-fn-1>);(see p\\. 4)\n"
+        );
+    }
+
+    #[test]
+    fn two_references_to_an_undefined_footnote_render_its_literal_twice() {
+        assert_eq!(body("a[^g] b[^g]"), "a\\[^g\\] b\\[^g\\]\n");
     }
 
     #[test]
@@ -1570,7 +1667,7 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
     fn a_footnote_referenced_in_the_dropped_title_and_the_body_is_drawn_once() {
         assert_eq!(
             body_titled("# T[^a]\n\nx[^a]\n\n[^a]: A", "T"),
-            "x#footnote[A]\n"
+            "x#[#footnote[A]<ntropy-fn-1>];\n"
         );
     }
 }

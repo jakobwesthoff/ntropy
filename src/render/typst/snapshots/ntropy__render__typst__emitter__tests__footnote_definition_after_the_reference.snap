@@ -2,4 +2,4 @@
 source: src/render/typst/emitter.rs
 expression: "body(\"A claim.[^1]\\n\\n[^1]: The source.\")"
 ---
-A claim\.#footnote[The source\.]
+A claim\.#[#footnote[The source\.]<ntropy-fn-1>];

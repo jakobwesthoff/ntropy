@@ -278,15 +278,20 @@ impl Output for HtmlOutput<'_> {
     }
 
     /// The reference marker; the content is kept for the section `finish`
-    /// appends. Every reference to one footnote shares the marker, the
-    /// walk substituting it at each site, so the back-link from the section
-    /// returns to the first reference.
-    fn footnote(&mut self, content: &str) -> String {
+    /// appends. Every reference to one footnote shares the marker, so the
+    /// back-link from the section returns to the first reference.
+    fn footnote(&mut self, number: usize, content: &str) -> String {
         self.footnotes.push(content.to_string());
-        let number = self.footnotes.len();
-        format!(
-            "<sup class=\"footnote-ref\"><a href=\"#fn-{number}\" id=\"fnref-{number}\">{number}</a></sup>"
-        )
+        debug_assert_eq!(
+            number,
+            self.footnotes.len(),
+            "the walk numbers footnotes as they are handed over"
+        );
+        footnote_marker(number)
+    }
+
+    fn footnote_again(&mut self, number: usize) -> String {
+        footnote_marker(number)
     }
 
     fn inline_html(&mut self, html: &str, _warnings: &mut Vec<Warning>) -> Option<String> {
@@ -465,6 +470,13 @@ impl Output for HtmlOutput<'_> {
         out.push_str("</ol>\n</section>\n");
         out
     }
+}
+
+/// The superscript link every reference to footnote `number` shows.
+fn footnote_marker(number: usize) -> String {
+    format!(
+        "<sup class=\"footnote-ref\"><a href=\"#fn-{number}\" id=\"fnref-{number}\">{number}</a></sup>"
+    )
 }
 
 /// The class suffix, the visible title, and the sprite icon of a GFM

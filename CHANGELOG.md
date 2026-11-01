@@ -13,6 +13,18 @@ change in any release
 
 ### Fixed
 
+- A footnote that references itself, or two footnotes that reference each
+  other, no longer leak ntropy's internal placeholder into the PDF. `render
+  --to pdf` and `render --to typst` printed text such as
+  `ntropy-footnote-01M6...` and still exited 0. A PDF now draws each footnote
+  once, at its first reference, and every further reference shows the same
+  number, where it used to print the footnote again with a new number at each
+  reference. Typst numbers the footnotes in the order they appear on the page.
+  A custom Typst theme must not draw the body, or a heading that holds a
+  footnote referenced again, twice (an outline of headings, say): the footnote
+  carries a label, and Typst rejects a duplicated one. A `show footnote` rule
+  now runs for the repeated references too, where `it.body` is a label. The
+  labels start with `ntropy-fn-`, which a theme should not use.
 - `render --to pdf` and `render --to typst` no longer print the note's title
   twice. The built-in look draws the title above the body, and a body that
   opened with a level-one heading reading exactly the title, as every note

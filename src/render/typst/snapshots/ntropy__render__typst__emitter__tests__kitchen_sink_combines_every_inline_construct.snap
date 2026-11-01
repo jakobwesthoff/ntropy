@@ -6,7 +6,7 @@ expression: out
 
 Prose with #strong[strong], #emph[emph], #strike[strike], an autolink #link("https://example.com")[https\:\/\/example\.com], an email #link("mailto:a@b.org")[a\@b\.org], and a #link("resolved-title.pdf")[#notelink[Resolved Title]] plus an #link("https://ext")[external]\.
 
-A footnote reference\.#footnote[Footnote body with #emph[emphasis] and a second line\.] And a dangling display #emph[text]\.
+A footnote reference\.#[#footnote[Footnote body with #emph[emphasis] and a second line\.]<ntropy-fn-1>]; And a dangling display #emph[text]\.
 
 #image("/all-notes/pic.png") then #link("https://host/img.png")[remote]\.
 
