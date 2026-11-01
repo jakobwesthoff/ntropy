@@ -8,7 +8,9 @@ A vault can render its PDFs in its own livery. A document theme is one
 Typst file under `.ntropy/themes/typst/` that redefines what it wants and
 inherits the rest. This page covers how to set one up, what a theme may
 override, what it receives, what the note's body is made of, fonts, how it
-reaches assets in the vault, and the paper size. The `html` format reads
+reaches assets in the vault, and the paper size.
+[Writing a document theme](01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md)
+builds one step by step and is the place to start. The `html` format reads
 none of this; its look comes from a
 [site theme](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md).
 
@@ -104,7 +106,9 @@ The built-in `note` is more than the title block: it also holds the rules
 that style headings, code, quotes, tables, links and rules. A `note`
 written from scratch, like the one above, drops all of them, and the body
 comes out in typst's plain defaults. Starting from a copy of the built-in
-`note` keeps them.
+`note` keeps them;
+[Writing a document theme](01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md#step-1-copy-the-default-and-switch-it-on)
+shows how.
 
 A theme needs no `note` of its own for a smaller change. `set` and `show`
 rules at the top of the theme file apply to the whole document and keep

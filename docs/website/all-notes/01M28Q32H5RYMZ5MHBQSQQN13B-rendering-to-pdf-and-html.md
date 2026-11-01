@@ -9,7 +9,8 @@ Typst source behind it, a standalone web page, or the note drawn for a
 terminal. This page covers the command, its four formats, and how rendered
 notes link to each other. The
 look of a PDF is the subject of
-[Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md); the look
+[Writing a document theme](01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md)
+and [Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md); the look
 of the web page comes from a
 [site theme](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md).
 
