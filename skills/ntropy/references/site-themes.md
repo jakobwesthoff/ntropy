@@ -62,7 +62,10 @@ not an SVG fails the export naming it.
    typeface, and size below is one of them, so a palette or a wider reading
    column is a few lines.
 3. Export to a scratch directory and open it: `ntropy site -n -o /tmp/site
-   --force`. Compare against the built-in look with `--theme default`.
+   --force`. Compare against the built-in look with `--theme default`. A
+   vault made to show a theme every kind of page:
+   `curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-vault.tar.gz | tar xz`
+   unpacks it as `theme-test/`.
 4. Replace or add fonts under `fonts/` and declare them with `@font-face` as
    the built-in stylesheet does; the `url()`s resolve relative to the
    stylesheet.

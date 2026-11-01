@@ -145,3 +145,18 @@ typst compile --root "$(ntropy info -p)" - /tmp/check.pdf < /tmp/check.typ
 An error cited as `<stdin>:<line>` is a line of that emitted document, not
 of the theme file: the theme starts below the prelude. An error in an
 imported file names that file and its own line.
+
+A test note holding what a note can contain that a PDF draws comes as a
+download with the note it links to and its two images, unpacked into the
+vault root:
+
+```bash
+curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-note.tar.gz | tar xz -C "$(ntropy info -p)"
+ntropy render -n --force -o /tmp/theme-test-note.pdf 'title:"Theme test note"'
+```
+
+It adds two notes tagged `theme-test` and the folder `assets/theme-test/`;
+in an encrypted vault, `ntropy reconcile` afterwards encrypts the notes.
+Remove them with `ntropy delete -n -f 01M6CCEVBP701HH0VPBT6ZNAYZ`,
+`ntropy delete -n -f 01M6CCEVCDRQ5504MDH503KQT2` and
+`rm -r assets/theme-test`.

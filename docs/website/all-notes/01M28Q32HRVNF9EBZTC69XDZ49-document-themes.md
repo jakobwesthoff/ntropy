@@ -246,6 +246,13 @@ line.
 ntropy does not pass on typst's warnings. Compiling the `--to typst`
 artifact by hand, as in the note above, prints them.
 
+To see a theme draw the parts of a note in one document, render the theme
+test note, a download that comes with the note it links to and its two
+images.
+[Writing a document theme](01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md#before-you-start)
+gives the command that puts it into a vault, and its last section what to
+look at.
+
 ## Paper size
 
 Rendering defaults to a4. A `[render]` section in the vault's

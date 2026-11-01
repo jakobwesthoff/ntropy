@@ -81,6 +81,27 @@ On Linux, use `xdg-open` in place of `open`. The `&&` opens the PDF only
 when the render worked, so a failed render does not leave you looking at
 the previous one.
 
+The seven steps render this note. "Check your theme" at the end uses a
+longer one, the theme test note: every heading level, lists, quotes and
+callouts, tables, code, images, footnotes and long words, so one render
+shows how the theme draws each of them. It comes with the note it links
+to and the two images it shows, and this command puts them into your
+vault:
+
+```bash
+curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-note.tar.gz | tar xz -C "$(ntropy info -p)"
+```
+
+That adds two notes tagged `theme-test` to `all-notes/` and the folder
+`assets/theme-test/`. In an encrypted vault, run `ntropy reconcile` after
+it, which encrypts the two notes. To remove them again:
+
+```bash
+ntropy delete -n -f 01M6CCEVBP701HH0VPBT6ZNAYZ
+ntropy delete -n -f 01M6CCEVCDRQ5504MDH503KQT2
+rm -r assets/theme-test
+```
+
 ## Step 1: Copy the default and switch it on
 
 The whole layout of a PDF is one Typst function, `note`. Copy ntropy's own
@@ -424,9 +445,33 @@ lists the element each Markdown construct becomes.
 Render a few of your real notes with the theme, and one with
 `--theme default` next to it.
 
+Then render the theme test note from "Before you start":
+
+```bash
+ntropy render --force -o /tmp/theme-test-note.pdf 'title:"Theme test note"' && open /tmp/theme-test-note.pdf
+```
+
+Read it section by section:
+
+- the six heading levels, and a heading with code in it;
+- Links: the title of a linked note, a link with its own text, a link to
+  a file;
+- Lists: nesting three levels deep, the task boxes, and a code block and a
+  quote inside list items;
+- Quotes and callouts: the five kinds, a quote inside a quote, and a table
+  and a callout inside a quote;
+- Tables: the columns without an alignment row, and whether the ten
+  columns of the wide table fit the page;
+- Code: the block without a language and the long line;
+- Images: the wide image scaled to the column, and the small one at its
+  own size;
+- Footnotes and Wrapping: the footnote text, and the long word, URL and
+  line of code.
+
 ntropy does not show typst's warnings, such as the one for a font typst
 does not find. To see them, write the Typst document and compile it
-yourself:
+yourself; with `'title:"Theme test note"'` the same check covers the test
+note:
 
 ```bash
 ntropy render --to typst --force -o /tmp/check.typ 'title:"Release checklist"'
