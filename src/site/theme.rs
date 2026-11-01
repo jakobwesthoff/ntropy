@@ -946,4 +946,43 @@ mod tests {
         }
         assert!(failures.is_empty(), "{failures:#?}");
     }
+
+    // =====================================================================
+    // Motion
+    // =====================================================================
+
+    /// `--motion` is the length of every transition, so a theme that changes
+    /// it changes them all. A transition with a time of its own, such as
+    /// `0.2s`, would stay out of that. The test reads the stylesheets; it
+    /// does not time anything in a browser.
+    #[test]
+    fn every_transition_takes_its_length_from_the_motion_token_in_both_shipped_themes() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let website =
+            std::fs::read_to_string(root.join("docs/website/.ntropy/themes/site/ntropy/style.css"))
+                .expect("the documentation site's stylesheet exists");
+        let a_time = regex::Regex::new(r"^[0-9]*\.?[0-9]+m?s$").expect("pattern");
+        let mut failures = Vec::new();
+        for (name, css) in [
+            ("built-in", SiteTheme::builtin().stylesheet),
+            ("website", website),
+        ] {
+            let transitions = declarations(&css, "transition");
+            assert!(
+                !transitions.is_empty(),
+                "the {name} stylesheet declares transitions"
+            );
+            for (_, selector, value) in transitions {
+                if value
+                    .split_whitespace()
+                    .any(|token| a_time.is_match(token.trim_end_matches(',')))
+                {
+                    failures.push(format!(
+                        "{name}: {selector} has a transition with a time of its own: {value}"
+                    ));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
+    }
 }

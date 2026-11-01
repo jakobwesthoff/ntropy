@@ -1622,7 +1622,7 @@ body.palette-open {
     box-shadow: var(--shadow-panel);
     padding: 1rem 1.25rem 2rem;
     transform: translateX(-100%);
-    transition: transform 0.2s ease-out;
+    transition: transform var(--motion) ease-out;
     visibility: hidden;
   }
 

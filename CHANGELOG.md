@@ -148,6 +148,11 @@ change in any release
   first line. A theme copied with `site theme init` earlier keeps its old
   stylesheet; it needs the new `overflow-wrap` rules of the built-in
   `style.css`, which are described in the site themes documentation.
+- The navigation drawer of a phone slides for the length of the `--motion`
+  token like every other transition, instead of a fixed 0.2 seconds, so a
+  theme that changes `--motion` changes the drawer too. A theme copied with
+  `site theme init` earlier keeps `transition: transform 0.2s ease-out` on
+  `.sidebar-pane` until it is changed to `transform var(--motion) ease-out`.
 
 ## v2.9.0 - 2026-11-01
 
