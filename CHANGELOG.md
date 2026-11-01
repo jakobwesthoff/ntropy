@@ -9,7 +9,7 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
-## Unreleased
+## v2.10.0 - 2026-11-02
 
 ### Changed
 
@@ -41,11 +41,12 @@ change in any release
   directory that holds anything else, a user file or another directory, stays.
   A resumed `vault encrypt` also removes the empty parents of views whose
   tree was already gone.
-- An image in a PDF carries its Markdown alt text. `![A diagram of the flow](flow.svg)`
-  became `#image("flow.svg")` without it, so the PDF held no alternative text
-  and a screen reader announced nothing for the picture. The emitter now
-  writes `#image("flow.svg", alt: "A diagram of the flow")`, and nothing
-  looks different on the page. An empty or blank alt text writes no `alt:`
+- An image in a PDF carries its Markdown alt text.
+  `![A diagram of the flow](flow.svg)` became `#image("flow.svg")` without
+  it, so the PDF held no alternative text and a screen reader announced
+  nothing for the picture. The emitter now writes
+  `#image("flow.svg", alt: "A diagram of the flow")`, and nothing looks
+  different on the page. An empty or blank alt text writes no `alt:`
   argument.
 - A note link that points at a heading of its own note, such as
   `[back](<ulid>-self-link.md#lists)`, jumps to the heading in a PDF. It
