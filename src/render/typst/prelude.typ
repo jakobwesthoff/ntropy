@@ -155,6 +155,11 @@
     inset: 7pt,
   )
   show table.cell.where(y: 0): set text(weight: "bold")
+  // A column without a Markdown alignment reaches typst as `auto`, which takes
+  // the alignment around the table. The table block is centered below, so
+  // without this rule those cells would be centered too. A column with an
+  // alignment keeps its own.
+  show table.cell: set align(start)
   show table: it => align(center, it)
 
   // Links in classic muted blue; thematic breaks in light grey.

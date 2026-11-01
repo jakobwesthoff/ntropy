@@ -4393,6 +4393,91 @@ fn the_default_pdf_look_embeds_only_fonts_typst_bundles() {
     );
 }
 
+/// Every word of a PDF with its horizontal extent, as `pdftotext -bbox` reports
+/// them: the word, its left edge and its right edge, in points.
+///
+/// The check needs poppler's `pdftotext`, the tool that also lists the fonts
+/// of a PDF with `pdffonts`, and says so when it is missing.
+fn pdf_words(pdf: &Path) -> Vec<(String, f32, f32)> {
+    let output = Command::new("pdftotext")
+        .args(["-bbox"])
+        .arg(pdf)
+        .arg("-")
+        .output()
+        .expect("run pdftotext, which belongs to poppler and must be installed for this test");
+    assert!(output.status.success(), "pdftotext failed");
+    let text = String::from_utf8_lossy(&output.stdout);
+    let attribute = |line: &str, name: &str| -> f32 {
+        let start = line.find(&format!("{name}=\"")).expect("attribute") + name.len() + 2;
+        let rest = &line[start..];
+        rest[..rest.find('"').expect("closing quote")]
+            .parse()
+            .expect("a number")
+    };
+    text.lines()
+        .filter(|line| line.trim_start().starts_with("<word "))
+        .map(|line| {
+            let word = line[line.find('>').expect("tag end") + 1..]
+                .trim_end_matches("</word>")
+                .to_string();
+            (word, attribute(line, "xMin"), attribute(line, "xMax"))
+        })
+        .collect()
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_table_column_without_an_alignment_is_left_aligned_in_the_pdf() {
+    // `| --- |` sets no alignment. HTML left-aligns such a column, and the PDF
+    // has to as well, while a column that sets one keeps it. The built-in look
+    // centers the table block on the page, which a cell must not inherit.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "tables",
+        "---\ntitle: Tables\n---\n\
+         | Term | Meaning |\n| --- | --- |\n| Canary | The first five percent of traffic |\n| Everyone | All |\n\n\
+         | Item | Count |\n| --- | ---: |\n| apples | 7 |\n| pears | 12345 |\n",
+    );
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "tables.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let words = pdf_words(&dir.path().join("tables.pdf"));
+    let word = |text: &str| {
+        words
+            .iter()
+            .find(|(word, _, _)| word == text)
+            .unwrap_or_else(|| panic!("`{text}` is not in the pdf: {words:?}"))
+    };
+
+    // First column: both cells start at the same left edge.
+    assert_eq!(
+        word("Canary").1,
+        word("Everyone").1,
+        "the cells of a column without an alignment are not left aligned"
+    );
+    // Second column: "All" starts where "The first five percent of traffic" does.
+    assert_eq!(
+        word("All").1,
+        word("The").1,
+        "the cells of a column without an alignment are not left aligned"
+    );
+    // A `---:` column keeps its right alignment.
+    assert_eq!(
+        word("7").2,
+        word("12345").2,
+        "a column with an alignment lost it"
+    );
+}
+
 #[test]
 #[ignore = "runs the real typst binary; execute via `just verify-render`"]
 fn a_theme_reaches_an_asset_outside_all_notes_with_real_typst() {

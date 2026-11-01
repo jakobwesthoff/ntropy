@@ -170,11 +170,12 @@ on these elements:
 | `---` | `line(length: 100%)` |
 | a hard line break | `linebreak()` |
 
-Because every table passes `align` for each column, `set table(align: ...)`
-and `show table.cell: set align(...)` do not change the alignment of a
-column; it comes from the Markdown. A quote with any other marker, such as
-`> [!FOO]`, stays a `quote`, so `callout` only ever sees the five kinds.
-Raw HTML is dropped, with a warning naming it.
+A column with a Markdown alignment keeps it: `align` is always passed, so
+`set table(align: ...)` changes nothing. A column without one follows
+`show table.cell: set align(...)`; the built-in look sets it to `start`. A
+quote with any other marker, such as `> [!FOO]`, stays a `quote`, so
+`callout` only ever sees the five kinds. Raw HTML is dropped, with a warning
+naming it.
 
 Every footnote is drawn once, at its first reference in the text, and
 every later reference shows the same number. Headings carry labels that

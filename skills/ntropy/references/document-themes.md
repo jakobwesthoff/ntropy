@@ -92,7 +92,7 @@ Show and set rules inside `note` style these:
 | `- [ ] task` | `list` item starting with `task(done: ...)` and a space; the bullet stays unless `list` is changed |
 | `> quote` | `quote(block: true)` |
 | `> [!NOTE]` and the other four kinds | `callout(kind: ...)`; any other `[!X]` stays a `quote` |
-| pipe table | `table(columns:, align:, table.header(...), ...)`; `align` is always passed (`auto` where the Markdown has none), so `set table(align:)` and `show table.cell: set align(..)` do not change column alignment |
+| pipe table | `table(columns:, align:, table.header(...), ...)`; `align` is always passed (`auto` where the Markdown has none), so `set table(align:)` changes nothing; a column without a Markdown alignment follows `show table.cell: set align(..)`, which the built-in look sets to `start` |
 | code block / `` `code` `` | `raw` block (fence language) / `raw` inline |
 | emphasis, strong, strikethrough | `emph`, `strong`, `strike` |
 | links, bare URLs, `<mail@host>` | `link` |
