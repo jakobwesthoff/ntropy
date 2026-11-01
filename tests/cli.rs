@@ -1887,6 +1887,29 @@ fn render_to_typst_draws_a_self_referencing_footnote_once_without_a_placeholder(
 }
 
 #[test]
+fn render_to_typst_links_a_note_link_with_an_anchor_to_its_own_heading() {
+    // The note links to itself in the form ADR 0086 gives a heading anchor.
+    // The engine hands the emitter the note's own id, so the link names the
+    // heading's label instead of opening the note's own artifact at page 1.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "self-link",
+        &format!("---\ntitle: Self link\n---\n## Lists\n\n[back]({ULID_A}-self-link.md#lists)\n"),
+    );
+    let artifact = render_to_typst(dir.path(), ULID_A, &["--strict"]);
+    assert!(
+        artifact.contains("#link(<ntropy-h-1>)[#notelink[back]];"),
+        "the self link is not an internal one: {artifact}"
+    );
+    assert!(
+        !artifact.contains("self-link.pdf"),
+        "the self link still targets the artifact: {artifact}"
+    );
+}
+
+#[test]
 fn render_to_typst_strict_fails_on_a_link_to_a_heading_that_does_not_exist() {
     let dir = setup_vault();
     write_note(
@@ -4025,9 +4048,12 @@ fn a_link_to_a_heading_reaches_the_real_pdf_as_an_internal_destination() {
     // The headings cover a footnote, a character Typst rejects in a label
     // (`²`), and a non-ASCII letter.
     let dir = setup_vault();
-    let body = "## Lists\n\nText[^a].\n\n## Area m\u{b2}\n\n## Gr\u{f6}\u{df}e\n\n\
+    let body = format!(
+        "## Lists\n\nText[^a].\n\n## Area m\u{b2}\n\n## Gr\u{f6}\u{df}e\n\n\
 [back](#lists) [area](#area-m\u{b2}) [big](#gr%C3%B6%C3%9Fe) [inner](#inner) [top](#top).\n\n\
-[^a]:\n    ### Inner\n";
+A note link to this note: [self]({ULID_A}-headings.md#lists).\n\n\
+[^a]:\n    ### Inner\n"
+    );
     write_note(
         dir.path(),
         ULID_A,
@@ -4058,8 +4084,8 @@ fn a_link_to_a_heading_reaches_the_real_pdf_as_an_internal_destination() {
         );
     }
     assert!(
-        !contains(b"/URI(#"),
-        "a link to a heading is still a dead URL"
+        !contains(b"/URI(#") && !contains(b"/URI(headings.pdf)"),
+        "a link to a heading is still a dead URL or a link to the note's own file"
     );
 }
 

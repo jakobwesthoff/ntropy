@@ -149,23 +149,37 @@ pub trait Output {
     /// note (see [`Output::anchor_link`]). `dest` already carries its scheme.
     fn link(&mut self, dest: &str, inner: &str) -> String;
 
-    /// A link whose destination is only a fragment, `[back](#lists)`.
-    /// `fragment` is the text after the `#` as written. `heading` is the id
-    /// of the heading of the note it names: the ids handed to
-    /// [`Output::heading`], matched exactly and then percent-decoded, so
-    /// `#gr%C3%B6%C3%9Fe` names `größe`. It is `None` when no heading has
-    /// that id. The default is the plain link, which suits an output whose
-    /// pages resolve a fragment themselves, such as HTML where it may also
-    /// name an `id` the note's raw HTML defines.
+    /// A link to a heading of the note itself: a destination that is only a
+    /// fragment, `[back](#lists)`, or, for an output that names its note in
+    /// [`Output::own_note`], a note link to that note with a heading anchor
+    /// (ADR 0086), which sets `note`. `fragment` is the text after the `#` as
+    /// written. `heading` is the id of the heading of the note it names: the
+    /// ids handed to [`Output::heading`], percent-decoded and compared
+    /// exactly, so `#gr%C3%B6%C3%9Fe` names `größe`. It is `None` when no
+    /// heading has that id. `inner` is the label, already the target's title
+    /// for a note link whose text is blank.
+    ///
+    /// The default is the plain link, which suits an output whose pages
+    /// resolve a fragment themselves, such as HTML where it may also name an
+    /// `id` the note's raw HTML defines.
     fn anchor_link(
         &mut self,
         fragment: &str,
         heading: Option<&str>,
         inner: &str,
+        note: bool,
         warnings: &mut Vec<Warning>,
     ) -> String {
-        let _ = (heading, &warnings);
+        let _ = (heading, note, &warnings);
         self.link(&format!("#{fragment}"), inner)
+    }
+
+    /// The id of the note being rendered, for an output that links a note
+    /// link to that note with a heading anchor inside its own document
+    /// instead of to its artifact. Such a link reaches
+    /// [`Output::anchor_link`] with `note` set, not [`Output::note_link`].
+    fn own_note(&self) -> Option<Id> {
+        None
     }
 
     /// A URL or email the walk detected in running text. `target` carries the
@@ -178,7 +192,9 @@ pub trait Output {
     /// A note link whose target resolves: the target's id, its current title,
     /// and the slug its default artifact is named after (ADR 0044).
     ///
-    /// `fragment` is the heading anchor the link carries (ADR 0086), if any.
+    /// `fragment` is the heading anchor the link carries (ADR 0086), if any. An
+    /// output that names its note in [`Output::own_note`] does not see a link
+    /// to that note with an anchor here: it reaches [`Output::anchor_link`].
     /// `inner` is the link's own text, already rendered. A link without an
     /// anchor shows the target's title; a link with one shows `inner`, since
     /// the title would hide which section the author points at. Blank `inner`
@@ -398,7 +414,8 @@ enum LinkEmit {
     /// inner content re-emitted, so formatting in the display text survives.
     UnresolvedNote,
     /// A link to a fragment of the note itself, resolved against the heading
-    /// ids once the walk is done. `fragment` is the text after the `#`.
+    /// ids once the walk is done. `fragment` is the text after the `#`. A note
+    /// link to the note itself with an anchor takes the same route.
     Anchor { fragment: String },
 }
 
@@ -473,7 +490,7 @@ struct Walker<'a, O: Output> {
     /// The fragments of the links to a heading of the note, in the order the
     /// walk met them. A link leaves `anchor_open index anchor_sep text
     /// anchor_close` in the text, resolved in [`Walker::finish`].
-    anchor_fragments: Vec<String>,
+    anchor_fragments: Vec<(String, bool)>,
     /// The three tokens of that marker, random per run like the nonces.
     anchor_open: String,
     anchor_sep: String,
@@ -788,6 +805,21 @@ impl<'a, O: Output> Walker<'a, O> {
         out
     }
 
+    /// The marker a link to a heading of the note leaves in the text: the
+    /// heading ids are only final when the walk is done, so the output is
+    /// asked in `finish`. Only the index of the fragment travels in the text.
+    /// `note` tells whether the author wrote a note link.
+    fn anchor_marker(&mut self, fragment: String, note: bool, label: &str) -> String {
+        let index = self.anchor_fragments.len();
+        self.anchor_fragments.push((fragment, note));
+        format!(
+            "{open}{index}{sep}{label}{close}",
+            open = self.anchor_open,
+            sep = self.anchor_sep,
+            close = self.anchor_close
+        )
+    }
+
     /// Replace every link to a heading of the note by what the output makes
     /// of it. Runs once on the finished text, after every heading, those of
     /// drawn footnotes included, has its id. A link does not nest, and a
@@ -804,7 +836,7 @@ impl<'a, O: Output> Walker<'a, O> {
             let (inner, after) = after_index
                 .split_once(self.anchor_close.as_str())
                 .expect("an anchor marker holds its closing token");
-            let fragment = self.anchor_fragments[index
+            let (fragment, note) = self.anchor_fragments[index
                 .parse::<usize>()
                 .expect("an anchor marker holds the index of its fragment")]
             .clone();
@@ -814,6 +846,7 @@ impl<'a, O: Output> Walker<'a, O> {
                 &fragment,
                 heading.as_deref(),
                 inner,
+                note,
                 &mut warnings,
             ));
             self.warnings = warnings;
@@ -1336,23 +1369,21 @@ impl<'a, O: Output> Walker<'a, O> {
                         title,
                         slug,
                         fragment,
-                    } => self
-                        .output
-                        .note_link(id, &title, &slug, fragment.as_deref(), &inner),
+                    } => match fragment {
+                        Some(fragment) if self.output.own_note() == Some(id) => {
+                            let label = match note_label(&title, Some(&fragment), &inner) {
+                                NoteLabel::Title(title) => self.output.text(title),
+                                NoteLabel::Inner(inner) => inner.to_string(),
+                            };
+                            self.anchor_marker(fragment, true, &label)
+                        }
+                        fragment => {
+                            self.output
+                                .note_link(id, &title, &slug, fragment.as_deref(), &inner)
+                        }
+                    },
                     LinkEmit::UnresolvedNote => inner,
-                    LinkEmit::Anchor { fragment } => {
-                        // The heading ids are only final when the walk is
-                        // done, so the output is asked in `finish`. Only the
-                        // index of the fragment travels in the text.
-                        let index = self.anchor_fragments.len();
-                        self.anchor_fragments.push(fragment);
-                        format!(
-                            "{open}{index}{sep}{inner}{close}",
-                            open = self.anchor_open,
-                            sep = self.anchor_sep,
-                            close = self.anchor_close
-                        )
-                    }
+                    LinkEmit::Anchor { fragment } => self.anchor_marker(fragment, false, &inner),
                 };
                 self.append_inline(&rendered);
             }

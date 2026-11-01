@@ -30,7 +30,8 @@
 //! - Soft breaks map to a space and hard breaks to `#linebreak()`.
 //! - A resolved note link renders as `#link("<target-slug>.pdf")[#notelink[Title]]`,
 //!   so the artifact carries a clickable target next to itself (ADR 0044).
-//!   A link to a fragment of the note itself renders as
+//!   A link to a fragment of the note itself, or a note link to the note itself
+//!   that carries a heading anchor (ADR 0088), renders as
 //!   `#link(<ntropy-h-N>)[label]`, naming the label of the heading with that
 //!   id, and as plain text with a warning when no heading has it. Every other
 //!   link, autolinks included, renders as `#link("target")[label]`.
@@ -87,9 +88,22 @@ pub fn emit(
     asset_base: &str,
     title: Option<&str>,
 ) -> (String, Vec<Warning>) {
+    emit_for_note(body, links, asset_base, title, None)
+}
+
+/// [`emit`] for the note with id `own_id`: a note link to that note with a
+/// heading anchor links to the heading inside the document.
+pub fn emit_for_note(
+    body: &str,
+    links: &[ResolvedLink],
+    asset_base: &str,
+    title: Option<&str>,
+    own_id: Option<Id>,
+) -> (String, Vec<Warning>) {
     let mut output = TypstOutput {
         asset_base,
         title: title.map(|title| title.trim().to_string()),
+        own_id,
         heading_labels: HashMap::new(),
     };
     markdown::walk(body, links, &mut output)
@@ -119,6 +133,8 @@ struct TypstOutput<'a> {
     asset_base: &'a str,
     /// The title a leading level-one heading must equal to be dropped.
     title: Option<String>,
+    /// The id of the note being emitted, `None` when it is not known.
+    own_id: Option<Id>,
     /// The label number of each heading drawn so far, by heading id, in the
     /// order the headings were handed over. A link to a heading names the
     /// label by this number: the id itself can hold characters, `²` or `½`
@@ -284,26 +300,38 @@ impl Output for TypstOutput<'_> {
     }
 
     /// A link to a heading of the note: `#link(<ntropy-h-N>)[...];`. A
-    /// fragment that names no heading is plain text and a warning, since a
-    /// label that does not exist fails the compile. `#` and `#top` name the
-    /// top of the page when no heading has that id, as in a browser.
+    /// fragment that names no heading is the label alone and a warning, since
+    /// a label that does not exist fails the compile. `#` and `#top` name the
+    /// top of the page when no heading has that id, as in a browser. A note
+    /// link to the note itself keeps `notelink` around its label, so a theme
+    /// styles it like every other note link.
     fn anchor_link(
         &mut self,
         fragment: &str,
         heading: Option<&str>,
         inner: &str,
+        note: bool,
         warnings: &mut Vec<Warning>,
     ) -> String {
+        let label = if note {
+            format!("#notelink[{inner}]")
+        } else {
+            inner.to_string()
+        };
         if let Some(number) = heading.and_then(|id| self.heading_labels.get(id)) {
-            return format!("#link(<{}>)[{inner}];", heading_label(*number));
+            return format!("#link(<{}>)[{label}];", heading_label(*number));
         }
         if fragment.is_empty() || fragment.eq_ignore_ascii_case("top") {
-            return format!("#link((page: 1, x: 0pt, y: 0pt))[{inner}];");
+            return format!("#link((page: 1, x: 0pt, y: 0pt))[{label}];");
         }
         warnings.push(Warning::new(format!(
             "link to `#{fragment}` names no heading of the note; shown as text"
         )));
-        inner.to_string()
+        if note { format!("{label};") } else { label }
+    }
+
+    fn own_note(&self) -> Option<Id> {
+        self.own_id
     }
 
     /// The ids `fn-N` and `fnref-N` stay free of headings so that a heading
@@ -1042,6 +1070,11 @@ mod tests {
             .collect()
     }
 
+    /// Emit `input` with every note link resolving and no note id known.
+    fn body_with_links(input: &str) -> String {
+        emit(input, &resolved_links(input), ASSET_BASE, None).0
+    }
+
     #[test]
     fn an_anchored_note_link_keeps_the_authors_text_and_drops_the_anchor() {
         // The heading lives in the target's own PDF, which a link cannot
@@ -1626,6 +1659,135 @@ mod tests {
         assert_eq!(
             body("## Top\n\n[up](#top)"),
             "== Top <ntropy-h-1>\n\n#link(<ntropy-h-1>)[up];\n"
+        );
+    }
+
+    // The note links to the note itself (ADR 0086 form) with an anchor.
+
+    /// Emit `input` as the note whose own id every link of it names, the
+    /// links' target title being the note's own `title`.
+    fn emit_self_linking(input: &str, title: &str) -> (String, Vec<Warning>) {
+        let mut links = resolved_links(input);
+        for link in &mut links {
+            if let Some(target) = &mut link.target {
+                target.title = title.to_string();
+            }
+        }
+        let own = links.first().map(|link| link.id);
+        emit_for_note(input, &links, ASSET_BASE, Some(title), own)
+    }
+
+    const SELF_LINK: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV-self-link.md";
+
+    #[test]
+    fn a_note_link_to_a_heading_of_its_own_note_points_at_the_headings_label() {
+        let input = format!("## Lists\n\n[back to the *lists*]({SELF_LINK}#lists)");
+        assert_eq!(
+            emit_self_linking(&input, "Self link").0,
+            "== Lists <ntropy-h-1>\n\n#link(<ntropy-h-1>)[#notelink[back to the #emph[lists];]];\n"
+        );
+    }
+
+    #[test]
+    fn a_note_link_to_its_own_note_with_no_such_heading_is_styled_text_and_a_warning() {
+        let input = format!("## Lists\n\n[back]({SELF_LINK}#nope)");
+        let (out, warnings) = emit_self_linking(&input, "Self link");
+        assert_eq!(out, "== Lists <ntropy-h-1>\n\n#notelink[back];\n");
+        assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn a_note_link_to_its_own_note_with_blank_text_shows_the_notes_title() {
+        let input = format!("## Lists\n\n[]({SELF_LINK}#lists)");
+        assert_eq!(
+            emit_self_linking(&input, "Self link").0,
+            "== Lists <ntropy-h-1>\n\n#link(<ntropy-h-1>)[#notelink[Self link]];\n"
+        );
+    }
+
+    #[test]
+    fn a_note_link_to_the_top_of_its_own_note_goes_to_the_first_page() {
+        let input = format!("[up]({SELF_LINK}#top)");
+        let (out, warnings) = emit_self_linking(&input, "Self link");
+        assert_eq!(out, "#link((page: 1, x: 0pt, y: 0pt))[#notelink[up]];\n");
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn a_percent_encoded_anchor_of_a_note_link_to_its_own_note_names_the_heading() {
+        let input = format!("## Größe\n\n[g]({SELF_LINK}#gr%C3%B6%C3%9Fe)");
+        assert_eq!(
+            emit_self_linking(&input, "Self link").0,
+            "== Größe <ntropy-h-1>\n\n#link(<ntropy-h-1>)[#notelink[g]];\n"
+        );
+    }
+
+    #[test]
+    fn the_anchor_of_a_note_link_to_its_own_note_is_case_sensitive() {
+        let input = format!("## Lists\n\n[x]({SELF_LINK}#Lists)");
+        let (out, warnings) = emit_self_linking(&input, "Self link");
+        assert_eq!(out, "== Lists <ntropy-h-1>\n\n#notelink[x];\n");
+        assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn a_note_link_to_the_skipped_title_heading_of_its_own_note_warns() {
+        let input = format!("# Self link\n\n[t]({SELF_LINK}#self-link)");
+        let links = resolved_links(&input);
+        let own = links.first().map(|link| link.id);
+        let (out, warnings) = emit_for_note(&input, &links, ASSET_BASE, Some("Self link"), own);
+        assert_eq!(out, "#notelink[t];\n");
+        assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn a_note_link_to_its_own_note_inside_a_heading_and_a_footnote_points_at_a_label() {
+        let input = format!(
+            "## Lists\n\n## See [back]({SELF_LINK}#lists)\n\ntext[^a]\n\n[^a]: [again]({SELF_LINK}#lists)"
+        );
+        assert_eq!(
+            emit_self_linking(&input, "Self link").0,
+            "== Lists <ntropy-h-1>\n\n== See #link(<ntropy-h-1>)[#notelink[back]]; <ntropy-h-2>\n\ntext#[#footnote[#link(<ntropy-h-1>)[#notelink[again]];]<ntropy-fn-1>];\n"
+        );
+    }
+
+    #[test]
+    fn a_note_link_to_its_own_note_without_an_anchor_stays_a_link_to_the_artifact() {
+        let input = format!("[me]({SELF_LINK})");
+        assert_eq!(
+            emit_self_linking(&input, "Self link").0,
+            "#link(\"target-title.pdf\")[#notelink[Self link]];\n"
+        );
+    }
+
+    #[test]
+    fn a_note_link_to_its_own_note_with_an_empty_anchor_stays_a_link_to_the_artifact() {
+        // An empty anchor names nothing; the artifact opens at its first
+        // page, which is the top of the note.
+        let input = format!("[me]({SELF_LINK}#)");
+        assert_eq!(
+            emit_self_linking(&input, "Self link").0,
+            "#link(\"target-title.pdf\")[#notelink[Self link]];\n"
+        );
+    }
+
+    #[test]
+    fn a_note_link_with_an_anchor_to_another_note_still_drops_the_anchor() {
+        let input = format!("## Lists\n\n[there]({SELF_LINK}#lists)");
+        let links = resolved_links(&input);
+        let elsewhere = Some(crate::id::Id::from_timestamp_ms(0));
+        assert_eq!(
+            emit_for_note(&input, &links, ASSET_BASE, None, elsewhere).0,
+            "== Lists <ntropy-h-1>\n\n#link(\"target-title.pdf\")[#notelink[there]];\n"
+        );
+    }
+
+    #[test]
+    fn without_an_own_id_an_anchored_note_link_keeps_dropping_the_anchor() {
+        let input = format!("## Lists\n\n[back]({SELF_LINK}#lists)");
+        assert_eq!(
+            body_with_links(&input),
+            "== Lists <ntropy-h-1>\n\n#link(\"target-title.pdf\")[#notelink[back]];\n"
         );
     }
 

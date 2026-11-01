@@ -6,6 +6,8 @@ Date: 2026-11-01
 
 Accepted
 
+Amended 2026-11-01 by [ADR 0088](0088-links-to-a-notes-own-headings-resolve-in-its-pdf.md).
+
 Extends [ADR 0028](0028-note-to-note-links-as-standard-markdown-links.md),
 whose link target ends in `.md`, and changes the label that
 [ADR 0044](0044-cross-document-links-between-rendered-notes.md) gives a

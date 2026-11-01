@@ -13,6 +13,14 @@ change in any release
 
 ### Fixed
 
+- A note link that points at a heading of its own note, such as
+  `[back](<ulid>-self-link.md#lists)`, jumps to the heading in a PDF. It
+  opened the note's own file at page 1 and gave no warning. It follows the
+  rules of a link to a fragment: an unknown heading shows the text only and
+  raises a warning, and `#top` goes to the top of the first page. A link to
+  the note without an anchor, or with an empty one, still opens the file.
+  [ADR 0088](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0088-links-to-a-notes-own-headings-resolve-in-its-pdf.md)
+  records the rule.
 - A link to a heading of the same note, such as `[back](#lists)`, works in a
   PDF. It was a dead URL link, and a fragment that names no heading drew no
   warning. The link now jumps to the heading, using the ids the HTML output
