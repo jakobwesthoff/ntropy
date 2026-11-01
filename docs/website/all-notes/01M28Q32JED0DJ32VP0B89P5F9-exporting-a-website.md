@@ -2,7 +2,7 @@
 title: Exporting a website
 tags: [docs/publish]
 site:
-  order: 3
+  order: 4
 ---
 `ntropy site` turns the vault into a static website: a set of files any
 web host serves, and that a browser opens straight from disk, no server
