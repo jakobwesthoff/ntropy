@@ -459,12 +459,18 @@ blockquote .heading-anchor::after,
 }
 
 @media print {
+  .table-wrap {
+    background: none;
+    max-width: none;
+    overflow: visible;
+  }
+
   .heading-anchor {
     display: none;
   }
 }
 
-p, ul, ol, dl, table, pre, blockquote {
+p, ul, ol, dl, .table-wrap, pre, blockquote {
   margin: 0 0 var(--block-gap);
 }
 
@@ -510,17 +516,52 @@ blockquote > :last-child {
   margin-bottom: 0;
 }
 
-/* Tables: rules between rows only, inside a rounded card. Separate
- * borders keep the corners round, which collapsed borders drop. */
+/* Tables sit in a card, the .table-wrap the emitter puts around each of
+ * them: rules between rows only, inside rounded corners. The card is never
+ * wider than its column; a wider table scrolls inside it, and a shadow at
+ * the edge shows that there is more. The shadows are the local-attachment
+ * kind: the covers scroll with the content and hide the fixed shadows
+ * behind them once an edge is reached, so a table that fits shows none. */
+
+.table-wrap {
+  --table-shadow: color-mix(in srgb, var(--fg) 28%, transparent);
+  background:
+    linear-gradient(to right, var(--table-cover, var(--bg)) 30%, transparent)
+      left / 2.5rem 100% no-repeat local,
+    linear-gradient(to left, var(--table-cover, var(--bg)) 30%, transparent)
+      right / 2.5rem 100% no-repeat local,
+    linear-gradient(to right, var(--table-shadow), transparent)
+      left / 0.9rem 100% no-repeat scroll,
+    linear-gradient(to left, var(--table-shadow), transparent)
+      right / 0.9rem 100% no-repeat scroll;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-block);
+  max-width: 100%;
+  overflow-x: auto;
+  width: fit-content;
+}
+
+/* The covers must match the background of whatever holds the table, or
+ * they show as bands at both edges even when the table fits. The callout
+ * tint repeats the one of .callout below. */
+
+blockquote {
+  --table-cover: var(--surface);
+}
+
+.callout {
+  --table-cover: color-mix(in srgb, var(--callout) 7%, var(--bg));
+}
+
+blockquote .callout {
+  --table-cover: color-mix(in srgb, var(--callout) 7%, var(--surface));
+}
 
 table {
-  border: 1px solid var(--border);
   border-collapse: separate;
-  border-radius: var(--radius-block);
   border-spacing: 0;
   font-family: var(--sans);
   font-size: 0.9375rem;
-  overflow: hidden;
 }
 
 th, td {
@@ -534,9 +575,54 @@ tr:last-child > td {
 }
 
 th {
-  background: var(--surface);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
   color: var(--fg-bright);
   font-weight: 600;
+}
+
+/* A table of exactly two columns stacks in a column narrower than 32rem:
+ * each row becomes the first cell as a heading line over the second. The header row stays in the document
+ * for assistive technology but is not shown. The emitter writes table roles
+ * on these tables, since display: block on table parts can drop their
+ * native semantics. */
+
+@media screen {
+  @container (max-width: 32rem) {
+    .table-wrap[data-columns="2"] {
+      position: relative;
+    }
+
+    .table-wrap[data-columns="2"] thead {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+    }
+
+    .table-wrap[data-columns="2"] :is(table, tbody, tr, td) {
+      display: block;
+    }
+
+    .table-wrap[data-columns="2"] td {
+      text-align: left !important;
+    }
+
+    .table-wrap[data-columns="2"] td:first-child {
+      border-bottom: 0;
+      font-weight: 600;
+      padding-bottom: 0;
+    }
+
+    .table-wrap[data-columns="2"] td:first-child code {
+      font-weight: normal;
+    }
+
+    .table-wrap[data-columns="2"] td:last-child {
+      padding-top: 0.15rem;
+    }
+  }
 }
 
 hr {
@@ -1139,6 +1225,7 @@ body.palette-open {
 /* Content column, outline column. */
 
 .layout > main {
+  container-type: inline-size;
   grid-area: main;
   max-width: var(--measure);
   min-width: 0;

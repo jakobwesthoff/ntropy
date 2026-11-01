@@ -2,6 +2,7 @@
 source: src/render/html/emitter.rs
 expression: "html(\"| L | C | R | D |\\n| :-- | :-: | --: | --- |\\n| a | *b* | c | d |\")"
 ---
+<div class="table-wrap" data-columns="4">
 <table>
 <thead>
 <tr>
@@ -20,3 +21,4 @@ expression: "html(\"| L | C | R | D |\\n| :-- | :-: | --: | --- |\\n| a | *b* | 
 </tr>
 </tbody>
 </table>
+</div>

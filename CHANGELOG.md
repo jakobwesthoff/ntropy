@@ -28,6 +28,17 @@ change in any release
   only an unreferenced footnote definition mentions, for example
   `[^z]: sees[^b]` with `[^b]` defined and nothing in the body referring to
   `[^z]`. The crash came from patine and is fixed in patine 2.2.2.
+- Pages of `site` and `render --to html` no longer scroll sideways on a phone.
+  A table wider than its column scrolls inside its rounded card, with a shadow
+  at the edge that has more to show, instead of widening the page. In a note
+  column narrower than 32rem, the rows of a two-column table stack, the first
+  cell over the second, and the header row is not shown. Every table is
+  emitted inside `<div class="table-wrap" data-columns="<n>">`, and a table of
+  two columns carries explicit ARIA roles. A custom theme that styles `table`
+  with a border or a radius now draws it inside that wrapper; style
+  `.table-wrap` instead.
+- The documentation site's footer wraps at its separators on a narrow screen
+  instead of widening the page.
 
 ### Changed
 

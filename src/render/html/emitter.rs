@@ -14,8 +14,8 @@
 //! `<ol start="n">`, `<blockquote>`, GFM callouts as
 //! `<div class="callout callout-<kind>">` with a `<p class="callout-title">`
 //! opening on a `<use>` of the kind's icon from the page's sprite,
-//! `<table>` with `<thead>` and `<tbody>` and per-column `text-align` styles,
-//! `<hr>`.
+//! `<table>` with `<thead>` and `<tbody>` and per-column `text-align` styles
+//! inside a `<div class="table-wrap" data-columns="n">`, `<hr>`.
 //!
 //! Inline constructs: `<em>`, `<strong>`, `<del>`, `<code>`, `<br>`, a soft
 //! break as a newline in the text, `<a href>` for ordinary links and
@@ -394,19 +394,45 @@ impl Output for HtmlOutput<'_> {
     }
 
     fn table(&mut self, table: &Table) -> String {
-        let mut out = String::from("<table>\n<thead>\n<tr>\n");
+        let columns = table.header.len();
+        // A theme stacks two-column tables into cards on narrow screens by
+        // giving their parts `display: block`, which makes some engines drop
+        // the table semantics. Explicit roles survive any `display`, so
+        // those tables carry them; other tables keep their native semantics.
+        let roles = columns == 2;
+        let role = |name: &'static str| if roles { name } else { "" };
+
+        let mut out = format!(
+            "<div class=\"table-wrap\" data-columns=\"{columns}\">\n<table{}>\n<thead{}>\n<tr{}>\n",
+            role(" role=\"table\""),
+            role(" role=\"rowgroup\""),
+            role(" role=\"row\""),
+        );
         for (column, cell) in table.header.iter().enumerate() {
-            out.push_str(&cell_tag("th", table.alignments.get(column), cell));
+            out.push_str(&cell_tag(
+                "th",
+                role(" role=\"columnheader\""),
+                table.alignments.get(column),
+                cell,
+            ));
         }
-        out.push_str("</tr>\n</thead>\n<tbody>\n");
+        out.push_str(&format!(
+            "</tr>\n</thead>\n<tbody{}>\n",
+            role(" role=\"rowgroup\"")
+        ));
         for row in &table.rows {
-            out.push_str("<tr>\n");
+            out.push_str(&format!("<tr{}>\n", role(" role=\"row\"")));
             for (column, cell) in row.iter().enumerate() {
-                out.push_str(&cell_tag("td", table.alignments.get(column), cell));
+                out.push_str(&cell_tag(
+                    "td",
+                    role(" role=\"cell\""),
+                    table.alignments.get(column),
+                    cell,
+                ));
             }
             out.push_str("</tr>\n");
         }
-        out.push_str("</tbody>\n</table>\n");
+        out.push_str("</tbody>\n</table>\n</div>\n");
         out
     }
 
@@ -455,14 +481,14 @@ fn callout(kind: BlockQuoteKind) -> (&'static str, &'static str, &'static str) {
 
 /// One table cell with its column's alignment as an inline style; a column
 /// without an explicit alignment gets no style.
-fn cell_tag(tag: &str, alignment: Option<&Alignment>, content: &str) -> String {
+fn cell_tag(tag: &str, role: &str, alignment: Option<&Alignment>, content: &str) -> String {
     let style = match alignment {
         Some(Alignment::Left) => " style=\"text-align: left\"",
         Some(Alignment::Center) => " style=\"text-align: center\"",
         Some(Alignment::Right) => " style=\"text-align: right\"",
         _ => "",
     };
-    format!("<{tag}{style}>{content}</{tag}>\n")
+    format!("<{tag}{role}{style}>{content}</{tag}>\n")
 }
 
 /// Whether a destination names a file rather than a URL or an in-page
@@ -852,8 +878,8 @@ mod tests {
 
     #[test]
     fn a_short_body_row_is_padded_with_empty_cells() {
-        let out = html("| a | b |\n| --- | --- |\n| 1 |");
-        assert!(out.contains("<td>1</td>\n<td></td>\n"), "{out}");
+        let out = html("| a | b | c |\n| --- | --- | --- |\n| 1 |");
+        assert!(out.contains("<td>1</td>\n<td></td>\n<td></td>\n"), "{out}");
     }
 
     #[test]
@@ -861,6 +887,54 @@ mod tests {
         let out = html("| a<b |\n| --- |\n| c&d |");
         assert!(out.contains("<th>a&lt;b</th>"), "{out}");
         assert!(out.contains("<td>c&amp;d</td>"), "{out}");
+    }
+
+    #[test]
+    fn every_table_sits_in_a_wrapper_that_names_its_column_count() {
+        let two = html("| a | b |\n| --- | --- |\n| 1 | 2 |");
+        assert!(
+            two.starts_with("<div class=\"table-wrap\" data-columns=\"2\">\n<table"),
+            "{two}"
+        );
+        assert!(two.ends_with("</table>\n</div>\n"), "{two}");
+
+        let three = html("| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |");
+        assert!(
+            three.contains("<div class=\"table-wrap\" data-columns=\"3\">"),
+            "{three}"
+        );
+    }
+
+    #[test]
+    fn a_body_row_longer_than_the_header_does_not_change_the_column_count() {
+        let out = html("| a | b |\n| --- | --- |\n| 1 | 2 | 3 |");
+        assert!(out.contains("data-columns=\"2\""), "{out}");
+    }
+
+    #[test]
+    fn a_two_column_table_carries_table_roles_that_survive_a_changed_display() {
+        let out = html("| a | b |\n| :-- | --- |\n| 1 | 2 |");
+        for role in [
+            "<table role=\"table\">",
+            "<thead role=\"rowgroup\">",
+            "<tbody role=\"rowgroup\">",
+            "<tr role=\"row\">",
+            "<th role=\"columnheader\" style=\"text-align: left\">a</th>",
+            "<td role=\"cell\">2</td>",
+        ] {
+            assert!(out.contains(role), "{role} missing from {out}");
+        }
+    }
+
+    #[test]
+    fn tables_of_other_widths_carry_no_roles() {
+        for source in [
+            "| a |\n| --- |\n| 1 |",
+            "| a | b | c |\n| --- | --- | --- |\n| 1 | 2 | 3 |",
+        ] {
+            let out = html(source);
+            assert!(!out.contains("role="), "{out}");
+        }
     }
 
     // =====================================================================
