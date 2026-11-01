@@ -1963,6 +1963,10 @@ fn a_table_that_does_not_fit_the_page_warns_and_still_renders() {
         stderr.contains("a table with 16 columns needs the text at 50% of its size"),
         "no warning about the table:\n{stderr}"
     );
+    assert!(
+        stderr.contains("runs past the right edge of the page, so columns are cut off"),
+        "the warning does not say what happens to the table:\n{stderr}"
+    );
 }
 
 #[test]
@@ -4670,6 +4674,10 @@ fn a_table_that_cannot_fit_the_page_warns_with_real_typst() {
     assert!(
         stderr.contains("a table with 16 columns needs the text at"),
         "no warning about the table:\n{stderr}"
+    );
+    assert!(
+        stderr.contains("runs past the right edge of the page, so columns are cut off"),
+        "the warning does not say what happens to the table:\n{stderr}"
     );
     assert!(
         !stderr.contains("deprecated"),

@@ -48,11 +48,13 @@ change in any release
   word in a table cell breaks only at a space or a hyphen it has, never by
   hyphenation. When the widest words of the columns do not fit the page, the
   table is set in smaller text, down to 60 percent of the size. A table that
-  needs less than that stays at 60 percent and the render warns with the column count and the
-  size it needed, which `--strict` turns into a failure. The widths come from
-  the text of the cells, so an image in a cell counts as no width. `--to typst`
-  gives no warning, and the check needs `typst query`; if it cannot run, the
-  render warns that it could not check the tables and finishes.
+  needs less than that stays at 60 percent, runs past the right edge of the
+  page and loses the columns beyond it. The render warns with the column count
+  and the size it needed, which `--strict` turns into a failure. The widths
+  come from the text of the cells, so an image in a cell counts as no width.
+  `--to typst` gives no warning, and the check needs `typst query`; if it
+  cannot run, the render warns that it could not check the tables and
+  finishes.
 - A table column without an alignment (`| --- |`) is left-aligned in a PDF,
   as in HTML. The built-in look centered every header and body cell of such a
   column. Columns with `:---`, `:---:` or `---:` keep their alignment. A

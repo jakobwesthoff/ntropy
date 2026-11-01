@@ -213,7 +213,7 @@ fn warn_about_tables_that_do_not_fit(
     for table in clamped {
         ctx.warn(&format!(
             "a table with {} columns needs the text at {}% of its size to fit the page; \
-             it is set at 60% and its cells may run into each other",
+             it is set at 60% and runs past the right edge of the page, so columns are cut off",
             table.columns,
             (table.scale * 100.0).round()
         ));
@@ -653,9 +653,9 @@ mod tests {
             ctx.warnings,
             vec![
                 "a table with 16 columns needs the text at 51% of its size to fit the page; \
-                 it is set at 60% and its cells may run into each other",
+                 it is set at 60% and runs past the right edge of the page, so columns are cut off",
                 "a table with 12 columns needs the text at 40% of its size to fit the page; \
-                 it is set at 60% and its cells may run into each other",
+                 it is set at 60% and runs past the right edge of the page, so columns are cut off",
             ],
             "the deprecation text on stderr is not a warning of ours"
         );

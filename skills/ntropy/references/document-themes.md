@@ -106,8 +106,9 @@ Show and set rules inside `note` style these:
 
 The built-in look measures the columns of a table and sets their widths. When
 the widest words do not fit the page it sets the table in smaller text, down
-to 60 percent; a table that needs less than that stays at 60 percent and a PDF
-render warns (`--strict` fails on it). Images in cells count as no width.
+to 60 percent; a table that needs less than that stays at 60 percent, runs past the right
+edge of the page and loses the columns beyond it, and a PDF render warns
+(`--strict` fails on it). Images in cells count as no width.
 
 ## Assets and imports
 
