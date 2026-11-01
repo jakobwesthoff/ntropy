@@ -2,14 +2,14 @@
 source: src/render/typst/emitter.rs
 expression: body(input)
 ---
-= Heading #emph[one]; level
+= Heading #emph[one]; level <ntropy-h-1>
 
-== Heading #emph[two]; level
+== Heading #emph[two]; level <ntropy-h-2>
 
-=== Heading #raw("three"); level
+=== Heading #raw("three"); level <ntropy-h-3>
 
-==== Heading \[four\] level
+==== Heading \[four\] level <ntropy-h-4>
 
-===== Heading \~five \= plus \+ level
+===== Heading \~five \= plus \+ level <ntropy-h-5>
 
-====== Heading \#six level
+====== Heading \#six level <ntropy-h-6>

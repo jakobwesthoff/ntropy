@@ -209,7 +209,7 @@ Text right after inline markup stays text\: #strong[bold];(x), #raw("code");(y),
 
 A resolved note link to #link("linked.pdf")[#notelink[Current Linked Title]]; and a dangling one to #strong[bold]; ghost\.
 
-An #link("https://example.org/docs")[external link];, a #link("notes/other.md")[relative file];, an #link("#table")[anchor];, and a #link("mailto:jaw@ekko.io")[mail link];\.
+An #link("https://example.org/docs")[external link];, a #link("notes/other.md")[relative file];, an #link(<ntropy-h-1>)[anchor];, and a #link("mailto:jaw@ekko.io")[mail link];\.
 
 #callout(kind: "note")[
 A note callout with a #raw("code chip"); inside\.
@@ -242,7 +242,7 @@ The second paragraph\.
 
 Another reference to the same footnote#footnote(<ntropy-fn-1>);, one used before its definition#[#footnote[Defined after use\.]<ntropy-fn-2>];, and an undefined one\[^ghost\]\.
 
-== Table
+== Table <ntropy-h-1>
 
 #table(
 columns: 3,
@@ -252,7 +252,7 @@ table.header([Left], [Center], [Right],),
 [short row], [], [],
 )
 
-== Lists
+== Lists <ntropy-h-2>
 
 - bullet
 - nested parent
@@ -273,7 +273,7 @@ A loose list\:
 
 - second item
 
-== Code
+== Code <ntropy-h-3>
 
 ````rust
 fn demo() {
@@ -285,7 +285,7 @@ fn demo() {
 indented code block
 ```
 
-== Media and HTML
+== Media and HTML <ntropy-h-4>
 
 #image("/all-notes/diagram.png");
 

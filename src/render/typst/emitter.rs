@@ -11,7 +11,7 @@
 //! # Element mapping
 //!
 //! Block constructs: paragraphs as blank-line separated text, headings as
-//! `=` markers, fenced and indented code blocks as content-sized raw fences,
+//! `=` markers ending in a `<ntropy-h-N>` label, fenced and indented code blocks as content-sized raw fences,
 //! bullet and ordered lists as `- `/`n. ` markers with continuation lines
 //! indented under the marker, block quotes as `#quote`, GFM callouts as
 //! `#callout(kind:)`, tables as `#table`, thematic breaks as `#line`.
@@ -30,7 +30,10 @@
 //! - Soft breaks map to a space and hard breaks to `#linebreak()`.
 //! - A resolved note link renders as `#link("<target-slug>.pdf")[#notelink[Title]]`,
 //!   so the artifact carries a clickable target next to itself (ADR 0044).
-//!   Every other link, autolinks included, renders as `#link("target")[label]`.
+//!   A link to a fragment of the note itself renders as
+//!   `#link(<ntropy-h-N>)[label]`, naming the label of the heading with that
+//!   id, and as plain text with a warning when no heading has it. Every other
+//!   link, autolinks included, renders as `#link("target")[label]`.
 //! - A local image becomes `#image("path")`, rewritten to a root-absolute
 //!   path under the note's directory (ADR 0045); a remote `http(s)` image
 //!   cannot be embedded by the offline compiler, so it degrades to
@@ -45,6 +48,8 @@
 //! Every character of user text passes through one of the [`TypstWriter`]'s
 //! escaped channels; already-rendered children are spliced back through the
 //! unescaped `syntax` channel.
+
+use std::collections::HashMap;
 
 use super::writer::{self, TypstWriter};
 use crate::id::Id;
@@ -85,8 +90,15 @@ pub fn emit(
     let mut output = TypstOutput {
         asset_base,
         title: title.map(|title| title.trim().to_string()),
+        heading_labels: HashMap::new(),
     };
     markdown::walk(body, links, &mut output)
+}
+
+/// The label of the `number`th heading drawn. Like the footnote labels, the
+/// `ntropy-h-` prefix belongs to ntropy.
+fn heading_label(number: usize) -> String {
+    format!("ntropy-h-{number}")
 }
 
 /// The label of footnote `number`. The `ntropy-fn-` prefix belongs to ntropy,
@@ -107,6 +119,11 @@ struct TypstOutput<'a> {
     asset_base: &'a str,
     /// The title a leading level-one heading must equal to be dropped.
     title: Option<String>,
+    /// The label number of each heading drawn so far, by heading id, in the
+    /// order the headings were handed over. A link to a heading names the
+    /// label by this number: the id itself can hold characters, `²` or `½`
+    /// among them, that Typst rejects in a label.
+    heading_labels: HashMap<String, usize>,
 }
 
 impl Output for TypstOutput<'_> {
@@ -159,7 +176,8 @@ impl Output for TypstOutput<'_> {
     /// `#link("<slug>.pdf")[#notelink[Title]]`, with `slug` string-literal
     /// escaped and `title` escaped as markup text. A link with a heading
     /// anchor shows the author's text instead of the title and drops the
-    /// anchor, since a PDF has no heading ids to address (ADR 0086).
+    /// anchor, since the heading lives in the target's own PDF, which this
+    /// link cannot address (ADR 0086).
     ///
     /// The target is the artifact a default `ntropy render` of the target note
     /// produces in the same directory, so a set of notes rendered together
@@ -254,11 +272,44 @@ impl Output for TypstOutput<'_> {
         self.title.as_deref()
     }
 
-    /// The id is not carried into the document: nothing in the Typst output
-    /// links to a heading.
+    /// The heading ends in a label (`<ntropy-h-N>`), so a link to it, from a
+    /// note link to its fragment, has something to name. The label follows
+    /// the text after a space, which attaches it to the heading whatever
+    /// call the text ends in.
     fn heading(&mut self, heading: &Heading, body: &str) -> String {
         let marker = "=".repeat(heading.level as usize);
-        format!("{marker} {body}\n")
+        let number = self.heading_labels.len() + 1;
+        self.heading_labels.insert(heading.id.clone(), number);
+        format!("{marker} {body} <{}>\n", heading_label(number))
+    }
+
+    /// A link to a heading of the note: `#link(<ntropy-h-N>)[...];`. A
+    /// fragment that names no heading is plain text and a warning, since a
+    /// label that does not exist fails the compile. `#` and `#top` name the
+    /// top of the page when no heading has that id, as in a browser.
+    fn anchor_link(
+        &mut self,
+        fragment: &str,
+        heading: Option<&str>,
+        inner: &str,
+        warnings: &mut Vec<Warning>,
+    ) -> String {
+        if let Some(number) = heading.and_then(|id| self.heading_labels.get(id)) {
+            return format!("#link(<{}>)[{inner}];", heading_label(*number));
+        }
+        if fragment.is_empty() || fragment.eq_ignore_ascii_case("top") {
+            return format!("#link((page: 1, x: 0pt, y: 0pt))[{inner}];");
+        }
+        warnings.push(Warning::new(format!(
+            "link to `#{fragment}` names no heading of the note; shown as text"
+        )));
+        inner.to_string()
+    }
+
+    /// The ids `fn-N` and `fnref-N` stay free of headings so that a heading
+    /// id is the same here as in the HTML output of the same note.
+    fn reserves_id(&self, id: &str, footnotes: usize) -> bool {
+        markdown::is_numbered_footnote_id(id, footnotes)
     }
 
     fn quote(&mut self, kind: Option<BlockQuoteKind>, body: &str) -> String {
@@ -894,9 +945,8 @@ mod tests {
     }
 
     #[test]
-    fn relative_and_anchor_and_mailto_links_pass_the_target_verbatim() {
+    fn relative_and_mailto_links_pass_the_target_verbatim() {
         assert_eq!(body("[a](./notes/b.md)"), "#link(\"./notes/b.md\")[a];\n");
-        assert_eq!(body("[a](#section)"), "#link(\"#section\")[a];\n");
         assert_eq!(
             body("[a](mailto:x@example.org)"),
             "#link(\"mailto:x@example.org\")[a];\n"
@@ -994,8 +1044,9 @@ mod tests {
 
     #[test]
     fn an_anchored_note_link_keeps_the_authors_text_and_drops_the_anchor() {
-        // A PDF has no heading ids to address, so the link opens the target's
-        // artifact; the author's text still says what the link is about.
+        // The heading lives in the target's own PDF, which a link cannot
+        // address, so the link opens the target's artifact; the author's text
+        // still says what the link is about.
         let input = "[the **tmux** part](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#inside-tmux)";
         assert_eq!(
             emit(input, &resolved_links(input), ASSET_BASE, None).0,
@@ -1272,7 +1323,7 @@ mod tests {
         // `#footnote(<label>)` could not find a footnote.
         assert_eq!(
             body("# Head[^a]\n\nlater[^a]\n\n[^a]: A"),
-            "= Head#[#footnote[A]<ntropy-fn-1>];\n\nlater#footnote(<ntropy-fn-1>);\n"
+            "= Head#[#footnote[A]<ntropy-fn-1>]; <ntropy-h-1>\n\nlater#footnote(<ntropy-fn-1>);\n"
         );
     }
 
@@ -1280,7 +1331,7 @@ mod tests {
     fn a_heading_inside_a_footnote_keeps_the_label_of_a_footnote_in_it() {
         assert_eq!(
             body("x[^a] y[^b]\n\n[^a]:\n    # H[^b]\n\n[^b]: B"),
-            "x#[#footnote[= H#[#footnote[B]<ntropy-fn-2>];]<ntropy-fn-1>]; y#footnote(<ntropy-fn-2>);\n"
+            "x#[#footnote[= H#[#footnote[B]<ntropy-fn-2>]; <ntropy-h-1>]<ntropy-fn-1>]; y#footnote(<ntropy-fn-2>);\n"
         );
     }
 
@@ -1411,6 +1462,179 @@ mod tests {
         // The call's own `;` is consumed by the parser; the one in the note's
         // text is a second character and stays.
         assert_eq!(body("**b**;x"), "#strong[b];;x\n");
+    }
+
+    // =====================================================================
+    // Links to a heading of the same note
+    // =====================================================================
+    //
+    // A heading ends in `<ntropy-h-N>`, N the number of the heading in the
+    // order the output draws them; a link to its fragment names that label.
+
+    /// The warnings an emit raised, for the cases whose contract is the
+    /// warning.
+    fn warning_messages(input: &str) -> Vec<String> {
+        emit(input, &[], ASSET_BASE, None)
+            .1
+            .into_iter()
+            .map(|warning| warning.message)
+            .collect()
+    }
+
+    #[test]
+    fn a_link_to_a_heading_points_at_the_headings_label() {
+        assert_eq!(
+            body("## Lists\n\nText.\n\n## Other\n\n[back](#lists)"),
+            "== Lists <ntropy-h-1>\n\nText\\.\n\n== Other <ntropy-h-2>\n\n#link(<ntropy-h-1>)[back];\n"
+        );
+    }
+
+    #[test]
+    fn a_link_to_a_heading_further_down_points_forward() {
+        assert_eq!(
+            body("[down](#later)\n\n## Later"),
+            "#link(<ntropy-h-1>)[down];\n\n== Later <ntropy-h-1>\n"
+        );
+    }
+
+    #[test]
+    fn a_link_to_an_unknown_fragment_is_plain_text() {
+        assert_eq!(body("[missing](#nope)"), "missing\n");
+    }
+
+    #[test]
+    fn a_link_to_an_unknown_fragment_raises_a_warning() {
+        assert_eq!(
+            warning_messages("[missing](#nope)"),
+            ["link to `#nope` names no heading of the note; shown as text"]
+        );
+    }
+
+    #[test]
+    fn an_unknown_fragment_with_a_known_heading_elsewhere_still_warns() {
+        assert_eq!(
+            body("## Section\n\n[a](#section) [b](#section-2)"),
+            "== Section <ntropy-h-1>\n\n#link(<ntropy-h-1>)[a]; b\n"
+        );
+        assert_eq!(
+            warning_messages("## Section\n\n[a](#section) [b](#section-2)").len(),
+            1
+        );
+    }
+
+    #[test]
+    fn a_link_to_a_heading_inside_a_footnote_points_at_the_headings_label() {
+        assert_eq!(
+            body("x[^a] see [h](#inner)\n\n[^a]:\n    # Inner\n"),
+            "x#[#footnote[= Inner <ntropy-h-1>]<ntropy-fn-1>]; see #link(<ntropy-h-1>)[h];\n"
+        );
+    }
+
+    #[test]
+    fn a_link_to_a_heading_of_an_undrawn_footnote_is_plain_text_with_a_warning() {
+        let input = "see [h](#inner)\n\n[^a]:\n    # Inner\n";
+        assert_eq!(body(input), "see h\n");
+        assert_eq!(warning_messages(input).len(), 1);
+    }
+
+    #[test]
+    fn repeated_heading_text_gets_suffixed_ids_that_links_can_name() {
+        assert_eq!(
+            body("## Same\n\n## Same\n\n[a](#same) [b](#same-1)"),
+            "== Same <ntropy-h-1>\n\n== Same <ntropy-h-2>\n\n#link(<ntropy-h-1>)[a]; #link(<ntropy-h-2>)[b];\n"
+        );
+    }
+
+    #[test]
+    fn a_heading_with_markup_is_labelled_by_its_plain_text() {
+        assert_eq!(
+            body("## The *big* `code`\n\n[x](#the-big-code)"),
+            "== The #emph[big]; #raw(\"code\"); <ntropy-h-1>\n\n#link(<ntropy-h-1>)[x];\n"
+        );
+    }
+
+    #[test]
+    fn a_link_inside_a_heading_points_at_another_heading() {
+        assert_eq!(
+            body("## See [target](#target)\n\n## Target"),
+            "== See #link(<ntropy-h-2>)[target]; <ntropy-h-1>\n\n== Target <ntropy-h-2>\n"
+        );
+    }
+
+    #[test]
+    fn a_percent_encoded_fragment_names_the_heading_it_decodes_to() {
+        assert_eq!(
+            body("## Größe\n\n[g](#gr%C3%B6%C3%9Fe)"),
+            "== Größe <ntropy-h-1>\n\n#link(<ntropy-h-1>)[g];\n"
+        );
+    }
+
+    #[test]
+    fn a_heading_with_a_character_typst_rejects_in_a_label_still_gets_a_valid_label() {
+        // `²` and `½` are alphanumeric, so they stay in the id, yet
+        // `<ntropy-h-area-m²>` would fail the whole compile.
+        assert_eq!(
+            body("## Area m²\n\n## CO₂ and ½\n\n[a](#area-m²) [b](#co₂-and-½)"),
+            "== Area m² <ntropy-h-1>\n\n== CO₂ and ½ <ntropy-h-2>\n\n#link(<ntropy-h-1>)[a]; #link(<ntropy-h-2>)[b];\n"
+        );
+    }
+
+    #[test]
+    fn a_fragment_matches_the_heading_id_case_sensitively() {
+        let input = "## Lists\n\n[x](#Lists)";
+        assert_eq!(body(input), "== Lists <ntropy-h-1>\n\nx\n");
+        assert_eq!(warning_messages(input).len(), 1);
+    }
+
+    #[test]
+    fn a_fragment_with_a_space_names_no_heading() {
+        let input = "## My heading\n\n[x](<#my heading>)";
+        assert_eq!(body(input), "== My heading <ntropy-h-1>\n\nx\n");
+        assert_eq!(warning_messages(input).len(), 1);
+    }
+
+    #[test]
+    fn a_link_to_the_dropped_title_heading_is_plain_text_with_a_warning() {
+        let input = "# Rust Tips\n\n[t](#rust-tips)";
+        assert_eq!(emit(input, &[], ASSET_BASE, Some("Rust Tips")).0, "t\n");
+        assert_eq!(emit(input, &[], ASSET_BASE, Some("Rust Tips")).1.len(), 1);
+    }
+
+    #[test]
+    fn a_fragment_that_a_footnote_id_reserves_names_no_heading() {
+        // The heading takes `fn-1-1`, as in the HTML output of the note, so
+        // `#fn-1` names no heading.
+        let input = "# Fn 1\n\ntext[^1]\n\n[^1]: n\n\n[x](#fn-1-1) [y](#fn-1)";
+        assert_eq!(
+            body(input),
+            "= Fn 1 <ntropy-h-1>\n\ntext#[#footnote[n]<ntropy-fn-1>];\n\n#link(<ntropy-h-1>)[x]; y\n"
+        );
+        assert_eq!(warning_messages(input).len(), 1);
+    }
+
+    #[test]
+    fn a_link_to_the_top_without_such_a_heading_goes_to_the_first_page() {
+        assert_eq!(
+            body("[up](#top) [there](#TOP) [start](#)"),
+            "#link((page: 1, x: 0pt, y: 0pt))[up]; #link((page: 1, x: 0pt, y: 0pt))[there]; #link((page: 1, x: 0pt, y: 0pt))[start];\n"
+        );
+        assert!(warning_messages("[up](#top)").is_empty());
+    }
+
+    #[test]
+    fn a_heading_named_top_wins_over_the_top_of_the_page() {
+        assert_eq!(
+            body("## Top\n\n[up](#top)"),
+            "== Top <ntropy-h-1>\n\n#link(<ntropy-h-1>)[up];\n"
+        );
+    }
+
+    #[test]
+    fn a_link_to_a_heading_keeps_the_markup_of_its_label() {
+        assert_eq!(
+            body("## Head\n\n[see *this*](#head)"),
+            "== Head <ntropy-h-1>\n\n#link(<ntropy-h-1>)[see #emph[this];];\n"
+        );
     }
 
     // =====================================================================
@@ -1685,23 +1909,26 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
         // is spent on the heading, and a later repeat of the title is kept.
         assert_eq!(
             body_titled("# Rust Tips\n\nBody.\n\n# Rust Tips\n", "Rust Tips"),
-            "Body\\.\n\n= Rust Tips\n"
+            "Body\\.\n\n= Rust Tips <ntropy-h-1>\n"
         );
     }
 
     #[test]
     fn a_title_heading_stays_when_it_differs_or_is_not_first() {
         let kept = |input: &str| body_titled(input, "Rust Tips");
-        assert_eq!(kept("# Rust tips\n"), "= Rust tips\n");
-        assert_eq!(kept("## Rust Tips\n"), "== Rust Tips\n");
-        assert_eq!(kept("Intro.\n\n# Rust Tips\n"), "Intro\\.\n\n= Rust Tips\n");
+        assert_eq!(kept("# Rust tips\n"), "= Rust tips <ntropy-h-1>\n");
+        assert_eq!(kept("## Rust Tips\n"), "== Rust Tips <ntropy-h-1>\n");
+        assert_eq!(
+            kept("Intro.\n\n# Rust Tips\n"),
+            "Intro\\.\n\n= Rust Tips <ntropy-h-1>\n"
+        );
     }
 
     #[test]
     fn a_title_heading_stays_in_a_note_without_a_title() {
         // `ntropy render` always has a title, since frontmatter requires one;
         // this guards the emitter's own contract.
-        assert_eq!(body("# Rust Tips\n"), "= Rust Tips\n");
+        assert_eq!(body("# Rust Tips\n"), "= Rust Tips <ntropy-h-1>\n");
     }
 
     #[test]
@@ -1721,7 +1948,7 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
         // A title is plain text, so one that holds markup never matches.
         assert_eq!(
             body_titled("# Rust *Tips*\n", "Rust *Tips*"),
-            "= Rust #emph[Tips];\n"
+            "= Rust #emph[Tips]; <ntropy-h-1>\n"
         );
     }
 

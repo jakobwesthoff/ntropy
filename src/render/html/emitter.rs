@@ -309,16 +309,7 @@ impl Output for HtmlOutput<'_> {
     /// The ids of the footnotes the emitter numbers, `fn-1` to `fn-N` and
     /// `fnref-1` to `fnref-N`, and whatever the page around the body uses.
     fn reserves_id(&self, id: &str, footnotes: usize) -> bool {
-        let numbered = |prefix: &str| {
-            id.strip_prefix(prefix)
-                .and_then(|digits| digits.parse::<usize>().ok())
-                .is_some_and(|number| (1..=footnotes).contains(&number))
-                && id
-                    .bytes()
-                    .skip(prefix.len())
-                    .all(|byte| byte.is_ascii_digit())
-        };
-        numbered("fn-") || numbered("fnref-") || self.targets.reserved_id(id)
+        markdown::is_numbered_footnote_id(id, footnotes) || self.targets.reserved_id(id)
     }
 
     fn heading(&mut self, heading: &Heading, body: &str) -> String {
@@ -1337,6 +1328,20 @@ mod tests {
         let out = emit("# T[^a]\n\nx\n\n[^a]: A", &[], &SiblingArtifacts, Some("T")).html;
         assert_every_backref_has_its_reference(&out);
         assert!(!out.contains("footnote-backref"), "{out}");
+    }
+
+    #[test]
+    fn a_link_to_a_fragment_stays_a_plain_link_with_no_warning() {
+        // A fragment may name an `id` the note's own HTML defines, so the
+        // HTML output neither rewrites nor checks it.
+        let out = emitted("## Lists\n\n[a](#lists) [b](#nope)");
+        assert!(
+            out.html
+                .contains("<a href=\"#lists\">a</a> <a href=\"#nope\">b</a>"),
+            "{}",
+            out.html
+        );
+        assert!(out.warnings.is_empty());
     }
 
     #[test]

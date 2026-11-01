@@ -145,8 +145,28 @@ pub trait Output {
 
     fn styled(&mut self, style: InlineStyle, inner: &str) -> String;
 
-    /// A link that is not a note link. `dest` already carries its scheme.
+    /// A link that is not a note link and not a link to a heading of the
+    /// note (see [`Output::anchor_link`]). `dest` already carries its scheme.
     fn link(&mut self, dest: &str, inner: &str) -> String;
+
+    /// A link whose destination is only a fragment, `[back](#lists)`.
+    /// `fragment` is the text after the `#` as written. `heading` is the id
+    /// of the heading of the note it names: the ids handed to
+    /// [`Output::heading`], matched exactly and then percent-decoded, so
+    /// `#gr%C3%B6%C3%9Fe` names `größe`. It is `None` when no heading has
+    /// that id. The default is the plain link, which suits an output whose
+    /// pages resolve a fragment themselves, such as HTML where it may also
+    /// name an `id` the note's raw HTML defines.
+    fn anchor_link(
+        &mut self,
+        fragment: &str,
+        heading: Option<&str>,
+        inner: &str,
+        warnings: &mut Vec<Warning>,
+    ) -> String {
+        let _ = (heading, &warnings);
+        self.link(&format!("#{fragment}"), inner)
+    }
 
     /// A URL or email the walk detected in running text. `target` carries the
     /// scheme GFM adds; `label` is the text as written.
@@ -210,7 +230,8 @@ pub trait Output {
     }
 
     /// A heading. `body` is the rendered inline content; `heading` carries
-    /// the level, the id, and the plain text.
+    /// the level, the id, and the plain text. A link to the heading names the
+    /// id (see [`Output::anchor_link`]).
     fn heading(&mut self, heading: &Heading, body: &str) -> String;
 
     /// Whether the page the output builds already uses `id` for something
@@ -376,6 +397,9 @@ enum LinkEmit {
     /// A note link whose target is dangling: the wrapper is dropped and the
     /// inner content re-emitted, so formatting in the display text survives.
     UnresolvedNote,
+    /// A link to a fragment of the note itself, resolved against the heading
+    /// ids once the walk is done. `fragment` is the text after the `#`.
+    Anchor { fragment: String },
 }
 
 /// A list under construction. Item bodies are collected as finished strings
@@ -446,6 +470,14 @@ struct Walker<'a, O: Output> {
     /// `nonce` wraps a footnote reference; a separate token, since a label
     /// could spell any footnote placeholder.
     heading_nonce: String,
+    /// The fragments of the links to a heading of the note, in the order the
+    /// walk met them. A link leaves `anchor_open index anchor_sep text
+    /// anchor_close` in the text, resolved in [`Walker::finish`].
+    anchor_fragments: Vec<String>,
+    /// The three tokens of that marker, random per run like the nonces.
+    anchor_open: String,
+    anchor_sep: String,
+    anchor_close: String,
     /// The headings inside footnote definitions, waiting for their
     /// definition to be drawn. A heading takes its id only then, so a
     /// definition nobody draws, or one a later definition of the same label
@@ -523,6 +555,10 @@ impl<'a, O: Output> Walker<'a, O> {
             definitions,
             heading_nonce: format!("\u{0}ntropy-heading-{}\u{0}", ulid::Ulid::generate()),
             deferred_headings: Vec::new(),
+            anchor_fragments: Vec::new(),
+            anchor_open: format!("\u{0}ntropy-anchor-open-{}\u{0}", ulid::Ulid::generate()),
+            anchor_sep: format!("\u{0}ntropy-anchor-sep-{}\u{0}", ulid::Ulid::generate()),
+            anchor_close: format!("\u{0}ntropy-anchor-close-{}\u{0}", ulid::Ulid::generate()),
         }
     }
 
@@ -698,8 +734,13 @@ impl<'a, O: Output> Walker<'a, O> {
         let body = self.output.finish(document.body);
         let mut expanded = HashSet::new();
         let body = self.expand_footnotes(&body, &table, &mut expanded);
+        let body = self.resolve_anchors(&body);
         debug_assert!(
-            !body.contains(self.nonce.as_str()) && !body.contains(self.heading_nonce.as_str()),
+            !body.contains(self.nonce.as_str())
+                && !body.contains(self.heading_nonce.as_str())
+                && !body.contains(self.anchor_open.as_str())
+                && !body.contains(self.anchor_sep.as_str())
+                && !body.contains(self.anchor_close.as_str()),
             "a placeholder reached the output: {body:?}"
         );
 
@@ -745,6 +786,49 @@ impl<'a, O: Output> Walker<'a, O> {
             }
         }
         out
+    }
+
+    /// Replace every link to a heading of the note by what the output makes
+    /// of it. Runs once on the finished text, after every heading, those of
+    /// drawn footnotes included, has its id. A link does not nest, and a
+    /// footnote reference cannot sit inside link text, so a marker holds no
+    /// other placeholder.
+    fn resolve_anchors(&mut self, text: &str) -> String {
+        let mut out = String::with_capacity(text.len());
+        let mut rest = text;
+        while let Some((before, after_open)) = rest.split_once(self.anchor_open.as_str()) {
+            out.push_str(before);
+            let (index, after_index) = after_open
+                .split_once(self.anchor_sep.as_str())
+                .expect("an anchor marker holds its separator");
+            let (inner, after) = after_index
+                .split_once(self.anchor_close.as_str())
+                .expect("an anchor marker holds its closing token");
+            let fragment = self.anchor_fragments[index
+                .parse::<usize>()
+                .expect("an anchor marker holds the index of its fragment")]
+            .clone();
+            let heading = self.heading_for_fragment(&fragment);
+            let mut warnings = std::mem::take(&mut self.warnings);
+            out.push_str(&self.output.anchor_link(
+                &fragment,
+                heading.as_deref(),
+                inner,
+                &mut warnings,
+            ));
+            self.warnings = warnings;
+            rest = after;
+        }
+        out.push_str(rest);
+        out
+    }
+
+    /// The heading id a link fragment names: what it percent-decodes to,
+    /// compared exactly, the way a browser looks it up (ADR 0086). No id
+    /// holds a `%`, so decoding first loses nothing.
+    fn heading_for_fragment(&self, fragment: &str) -> Option<String> {
+        let wanted = crate::link::decode_fragment(fragment);
+        self.heading_ids.iter().find(|id| **id == wanted).cloned()
     }
 
     /// The innermost open container, the sink for the current event.
@@ -1081,8 +1165,13 @@ impl<'a, O: Output> Walker<'a, O> {
                 },
                 None => LinkEmit::UnresolvedNote,
             },
-            None => LinkEmit::Ordinary {
-                dest: dest.to_string(),
+            None => match dest.strip_prefix('#') {
+                Some(fragment) => LinkEmit::Anchor {
+                    fragment: fragment.to_string(),
+                },
+                None => LinkEmit::Ordinary {
+                    dest: dest.to_string(),
+                },
             },
         }
     }
@@ -1251,6 +1340,19 @@ impl<'a, O: Output> Walker<'a, O> {
                         .output
                         .note_link(id, &title, &slug, fragment.as_deref(), &inner),
                     LinkEmit::UnresolvedNote => inner,
+                    LinkEmit::Anchor { fragment } => {
+                        // The heading ids are only final when the walk is
+                        // done, so the output is asked in `finish`. Only the
+                        // index of the fragment travels in the text.
+                        let index = self.anchor_fragments.len();
+                        self.anchor_fragments.push(fragment);
+                        format!(
+                            "{open}{index}{sep}{inner}{close}",
+                            open = self.anchor_open,
+                            sep = self.anchor_sep,
+                            close = self.anchor_close
+                        )
+                    }
                 };
                 self.append_inline(&rendered);
             }
@@ -1349,6 +1451,22 @@ fn anchor_of(dest: &str, anchored: bool) -> Option<String> {
     }
     let (_, anchor) = dest.split_once('#')?;
     (!anchor.is_empty()).then(|| anchor.to_owned())
+}
+
+/// The ids `fn-1` to `fn-N` and `fnref-1` to `fnref-N` of `footnotes`
+/// numbered footnotes, which an output that numbers its footnotes that way
+/// reserves in [`Output::reserves_id`] so no heading takes them.
+pub(crate) fn is_numbered_footnote_id(id: &str, footnotes: usize) -> bool {
+    let numbered = |prefix: &str| {
+        id.strip_prefix(prefix)
+            .and_then(|digits| digits.parse::<usize>().ok())
+            .is_some_and(|number| (1..=footnotes).contains(&number))
+            && id
+                .bytes()
+                .skip(prefix.len())
+                .all(|byte| byte.is_ascii_digit())
+    };
+    numbered("fn-") || numbered("fnref-")
 }
 
 /// Case-insensitive ASCII prefix test, for the `www.` autolink rule. Compares
@@ -1728,6 +1846,16 @@ mod tests {
         let (out, _) = walk("a[^y] b[^x] c[^y]\n\n[^x]: X\n\n[^y]: Y", &[], &mut output);
         assert_eq!(output.footnotes, vec!["(p Y)\n", "(p X)\n"]);
         assert_eq!(out, "(p a(fn (p Y)) b(fn (p X)) c(fn#1))\n");
+    }
+
+    #[test]
+    fn a_link_to_a_fragment_reaches_a_plain_output_as_the_plain_link() {
+        // The default `anchor_link` is the plain link, so an output that does
+        // not care sees `#fragment` whether or not a heading has that id.
+        assert_eq!(
+            trace("## Lists\n\n[a](#lists) [b](#nope)"),
+            "(h2 #lists \"Lists\" Lists)\n\n(p (link #lists a) (link #nope b))\n"
+        );
     }
 
     #[test]

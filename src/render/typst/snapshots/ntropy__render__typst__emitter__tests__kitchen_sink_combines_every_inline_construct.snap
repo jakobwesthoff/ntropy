@@ -2,7 +2,7 @@
 source: src/render/typst/emitter.rs
 expression: out
 ---
-= A #emph[heading]; with #raw("code");
+= A #emph[heading]; with #raw("code"); <ntropy-h-1>
 
 Prose with #strong[strong];, #emph[emph];, #strike[strike];, an autolink #link("https://example.com")[https\:\/\/example\.com];, an email #link("mailto:a@b.org")[a\@b\.org];, and a #link("resolved-title.pdf")[#notelink[Resolved Title]]; plus an #link("https://ext")[external];\.
 

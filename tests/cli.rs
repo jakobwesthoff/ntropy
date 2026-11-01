@@ -1857,7 +1857,7 @@ fn render_to_typst_shows_the_title_through_the_template_and_not_as_a_heading() {
         "the title heading is repeated: {artifact}"
     );
     assert!(
-        artifact.contains("= Other\n"),
+        artifact.contains("= Other <ntropy-h-1>\n"),
         "a differing heading was dropped: {artifact}"
     );
 }
@@ -1883,6 +1883,41 @@ fn render_to_typst_draws_a_self_referencing_footnote_once_without_a_placeholder(
             "A#[#footnote[B#footnote(<ntropy-fn-1>);]<ntropy-fn-1>]; and again#footnote(<ntropy-fn-1>);"
         ),
         "the footnote is not drawn once and referenced by label: {artifact}"
+    );
+}
+
+#[test]
+fn render_to_typst_strict_fails_on_a_link_to_a_heading_that_does_not_exist() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\n## Lists\n\n[ok](#lists) and [missing](#nope).\n",
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "--strict", "-n"]);
+    cmd.current_dir(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success(), "strict did not fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("link to `#nope` names no heading of the note"),
+        "warning missing: {stderr}"
+    );
+
+    // Without the unknown fragment the same note renders under strict.
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\n## Lists\n\n[ok](#lists).\n",
+    );
+    let artifact = render_to_typst(dir.path(), ULID_A, &["--strict"]);
+    assert!(
+        artifact.contains("#link(<ntropy-h-1>)[ok];"),
+        "the link is not an internal one: {artifact}"
     );
 }
 
@@ -3979,6 +4014,53 @@ fn render_kitchen_sink_compiles_with_real_typst() {
     println!("  {}", out_dir.join("kitchen-sink.pdf").display());
     println!("  {}", out_dir.join("kitchen-sink.typ").display());
     println!("  {}", out_dir.join("kitchen-sink-1.png").display());
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_link_to_a_heading_reaches_the_real_pdf_as_an_internal_destination() {
+    // Both the dead `#link("#lists")` and the label link compile and print the
+    // same text, so the annotations in the raw bytes are what tell them apart:
+    // an internal `/Dest(ntropy-h-N)` where the dead form has `/URI(#lists)`.
+    // The headings cover a footnote, a character Typst rejects in a label
+    // (`²`), and a non-ASCII letter.
+    let dir = setup_vault();
+    let body = "## Lists\n\nText[^a].\n\n## Area m\u{b2}\n\n## Gr\u{f6}\u{df}e\n\n\
+[back](#lists) [area](#area-m\u{b2}) [big](#gr%C3%B6%C3%9Fe) [inner](#inner) [top](#top).\n\n\
+[^a]:\n    ### Inner\n";
+    write_note(
+        dir.path(),
+        ULID_A,
+        "headings",
+        &format!("---\ntitle: Headings\n---\n{body}"),
+    );
+
+    let mut pdf = ntropy(dir.path());
+    pdf.args(["render", ULID_A, "-o", "headings.pdf", "-n", "--strict"]);
+    pdf.current_dir(dir.path());
+    let output = pdf.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bytes = fs::read(dir.path().join("headings.pdf")).expect("read the pdf");
+    let contains = |needle: &[u8]| bytes.windows(needle.len()).any(|window| window == needle);
+    for destination in [
+        "/Dest(ntropy-h-1)",
+        "/Dest(ntropy-h-2)",
+        "/Dest(ntropy-h-3)",
+    ] {
+        assert!(
+            contains(destination.as_bytes()),
+            "{destination} missing from the pdf"
+        );
+    }
+    assert!(
+        !contains(b"/URI(#"),
+        "a link to a heading is still a dead URL"
+    );
 }
 
 #[test]

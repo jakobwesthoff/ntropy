@@ -13,6 +13,16 @@ change in any release
 
 ### Fixed
 
+- A link to a heading of the same note, such as `[back](#lists)`, works in a
+  PDF. It was a dead URL link, and a fragment that names no heading drew no
+  warning. The link now jumps to the heading, using the ids the HTML output
+  gives its headings, the percent-encoded form included. A fragment that
+  names no heading shows its text only and raises a warning, so `--strict`
+  fails; `#` and `#top` go to the top of the first page. In `render --to
+  typst` every heading now ends in a label `<ntropy-h-N>`, and a theme must
+  not define labels with that prefix or draw the body, or a block that holds
+  a heading, twice: Typst rejects the duplicated label as soon as a link
+  names that heading.
 - `render --to pdf` no longer fails when a parenthesis directly follows bold,
   italic, strikethrough, inline code, a link, an image or a hard break, as in
   `**Note**(s)` or `[docs](https://example.org)(see below)`. Typst read the

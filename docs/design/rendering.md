@@ -237,6 +237,10 @@ tools installed:
   the pdf compiles, and drops pdf/png/typ artifacts under
   `target/verify-render/` for optical inspection. It is not part of
   `just check`.
+- Two more `#[ignore]`d tests run the real `typst` binary for what only a
+  compile shows: the text after inline markup (`(`, `;`) reaches the pdf,
+  and a link to a heading is an internal destination
+  (`/Dest(ntropy-h-N)`) and not a dead `/URI(#...)`.
 
 ## Module layout
 
