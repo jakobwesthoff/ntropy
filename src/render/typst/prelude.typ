@@ -8,9 +8,12 @@
 // identical. Inlining (rather than importing) keeps the emitted `typst`
 // artifact a single self-contained file that compiles next to the note.
 //
-// The default theme builds only on the fonts the typst binary bundles
-// (Libertinus Serif, New Computer Modern, DejaVu Sans Mono), so a rendered
-// note looks the same on every machine.
+// The default theme names only the fonts the typst binary bundles (Libertinus
+// Serif, New Computer Modern, DejaVu Sans Mono). Libertinus Serif covers
+// Latin, Greek, Cyrillic and Hebrew, and typst takes Arabic from DejaVu Sans
+// Mono. A script none of them covers, such as Japanese, is drawn from a font
+// on the machine when there is one, so the note looks different from machine
+// to machine, and as empty boxes when there is none.
 
 // Render a frontmatter value as legible inline text. Strings pass through as
 // themselves; arrays and dictionaries recurse so nested metadata stays

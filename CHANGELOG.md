@@ -31,6 +31,12 @@ change in any release
   not define labels with that prefix or draw the body, or a block that holds
   a heading, twice: Typst rejects the duplicated label as soon as a link
   names that heading.
+- The docs no longer promise that a PDF of the built-in look is the same on
+  every machine for every script. Latin, Greek, Cyrillic and Hebrew come from
+  the fonts typst brings along and Arabic from DejaVu Sans Mono. A script none
+  of them covers, such as Japanese, comes from a font on the machine, or is
+  drawn as empty boxes when there is none. Document themes shows how a theme
+  names a font for such a script.
 - The cells of a wide table no longer run into each other in a PDF. The
   built-in look now measures the columns and sets their widths itself. When
   the widest words of the columns do not fit the page, the table is set in

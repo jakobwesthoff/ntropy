@@ -64,7 +64,10 @@ warnings do.
 
 `--to` picks the format:
 
-- `pdf` is the default.
+- `pdf` is the default. The built-in look sets Latin, Greek, Cyrillic and
+  Hebrew text in the fonts typst brings along; other scripts use the fonts of
+  the machine, see Fonts in
+  [Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md).
 - `typst` writes the emitted Typst document, a `.typ` file, and needs no
   external tool at all.
 - `html` writes the note as a web page, the same page the

@@ -123,8 +123,12 @@ file is a module of its own and sees neither the prelude's names
 ## Fonts
 
 The built-in look uses typst's bundled fonts (Libertinus Serif, New
-Computer Modern, DejaVu Sans Mono); a glyph a font lacks (the built-in
-checkbox mark) comes from another font typst finds. ntropy passes no
+Computer Modern, DejaVu Sans Mono). Libertinus Serif covers Latin, Greek,
+Cyrillic and Hebrew, and typst takes Arabic from DejaVu Sans Mono. A script
+none of them covers (Japanese, say) comes from a font on the machine, so the
+PDF differs per machine, and is empty boxes without one, with no warning. A
+theme names a font for it: `set text(font: ("Libertinus Serif", "<family>"))`.
+ntropy passes no
 `--font-path`, so a theme can use system fonts and fonts in the
 directories of `TYPST_FONT_PATHS`. Font files in the vault are found only
 through that variable; a relative value resolves against the directory
