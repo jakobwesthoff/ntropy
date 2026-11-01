@@ -86,6 +86,8 @@ warnings do.
   `[image: alt] (url)`. Raw HTML is left out without a warning. Control
   characters in the note are shown escaped, as `\u{1b}`. It needs no tool
   and takes no theme: `--theme` with `--to ansi` is an error.
+  [`ntropy show`](01M28Q32ESBVS3H2KJMRS99K87-finding-notes.md) prints the
+  same drawing straight to the terminal, at its width.
 
 Whatever the format, `render` refuses to overwrite an existing artifact,
 or for `html` a non-empty files directory, unless you pass `--force`,

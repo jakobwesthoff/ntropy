@@ -1,0 +1,21 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - show
+    - "tag:work"
+    - "-n"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: `tag:work` is ambiguous (2 matches):
+  [DATE....]  Beta  [work]  ([ULID....................])
+  [DATE....]  Alpha  [work]  ([ULID....................])
+refine the query or pass a full ULID

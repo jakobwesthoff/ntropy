@@ -22,6 +22,8 @@ mod picker;
 mod prompt;
 mod render;
 mod securetemp;
+mod show;
+mod signals;
 mod site;
 #[cfg(feature = "encryption")]
 mod vault_cmd;
@@ -140,6 +142,13 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             theme,
             force,
             print,
+            interactive,
+        ),
+        Command::Show { selector, width } => show::cmd_show(
+            &cli.global,
+            &session,
+            ntropy::query::from_arguments(&selector),
+            width,
             interactive,
         ),
         Command::Site {

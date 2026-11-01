@@ -5,7 +5,7 @@
 //! Narrowing a selector to the one note a command works on (ADR 0025,
 //! ADR 0037).
 //!
-//! `render` acts on exactly one note. A blank selector browses the
+//! `render` and `show` act on exactly one note. A blank selector browses the
 //! whole vault as `search` does; anything else resolves as a full ULID or a
 //! DSL query. Several matches open the picker interactively and are an error
 //! under `-n`.

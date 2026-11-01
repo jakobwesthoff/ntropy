@@ -9,6 +9,7 @@ The command surface and its behavior. Consolidates
 [ADR 0036](../adr/0036-interactivity-keyed-to-the-controlling-terminal.md),
 [ADR 0037](../adr/0037-render-command-surface.md),
 [ADR 0082](../adr/0082-ansi-render-format-drawn-by-patine.md),
+[ADR 0083](../adr/0083-show-prints-a-note-drawn-for-the-terminal.md),
 and the query DSL in [query-and-search.md](query-and-search.md).
 
 ## Global behavior
@@ -56,11 +57,12 @@ and the query DSL in [query-and-search.md](query-and-search.md).
   (ADR 0066).
 - **Bare `ntropy`:** with no subcommand, prints help.
 - **Free-text args:** `new` joins its trailing arguments into the title with
-  spaces. `search`, `delete`, `render` and `site` read each trailing argument
-  of the query on its own (ADR 0076): an argument with several words and no
-  query syntax is a phrase, so `ntropy search "borrow checker"` finds those
-  words in order, and an argument that is a query stays one, so a whole query
-  in one quoted argument works. Arguments side by side are an `and`.
+  spaces. `search`, `delete`, `render`, `show` and `site` read each trailing
+  argument of the query on its own (ADR 0076): an argument with several
+  words and no query syntax is a phrase, so `ntropy search "borrow checker"`
+  finds those words in order, and an argument that is a query stays one, so
+  a whole query in one quoted argument works. Arguments side by side are an
+  `and`.
 - **Encryption:** `--identity <path>` / `-i` (or `$NTROPY_IDENTITY`) names an
   age identity file to use instead of the OS credential store, and
   `--passphrase-file <path>` supplies a vault passphrase from a file's first
@@ -278,6 +280,46 @@ Examples:
     ntropy render tag:work -n                        # error on an ambiguous selector
     open "$(ntropy render -p 'text:"quarterly"')"    # render, then open the PDF
     ntropy render 01ARZ3NDEKTSV4RRFFQ69G5FAV -o report.pdf
+
+### `show [id|query]`
+
+Print one note drawn for the terminal by the ansi engine
+([ansi-engine.md](ansi-engine.md), ADR 0083): its frontmatter block, then
+its Markdown as written, with headings, emphasis, lists, tables, quotes and
+highlighted code styled. The selector and the exactly-one rule are
+`render`'s: omitted, every note feeds the picker; several matches open the
+picker interactively and are an error under `-n`; no match, or an empty
+vault, exits non-zero; a cancelled picker is a successful no-op.
+
+- The width is `--width <columns>`, else the columns of the terminal stdout
+  is, else 80.
+- Styles follow stdout: none when it is not a terminal; every style but the
+  colours when `NO_COLOR` is set and not empty; every style otherwise.
+- When ntropy is interactive, stdout is a terminal and the drawing takes at
+  least as many rows as the terminal has, it goes to `$PAGER`, run through
+  `/bin/sh` as the editor value is (a blank value counts as unset), or else
+  to `less -R` from `PATH`. The pager gets `LESS=R` when `LESS` is unset; a
+  `LESS` of the user's own is kept. When `less` cannot be started, the
+  drawing is printed instead. A pager quitting before it read everything is
+  no error; a `$PAGER` the shell could not run (status 126 or 127) is one,
+  and any other status of the pager is ignored. Ctrl-C while the pager runs
+  leaves ntropy waiting for it.
+- `-n` never pages.
+- In an encrypted vault the note is drawn from memory and nothing is written
+  to disk; the pager gets `LESSSECURE=1`, which keeps less from saving,
+  editing or piping the note. Another pager gets the plaintext as any pager
+  would.
+- Scan warnings print to stderr; under `--strict` the note is still shown
+  and the exit code fails.
+
+`show` is read-only.
+
+Examples:
+
+    ntropy show                               # pick any note fuzzily
+    ntropy show 01ARZ3NDEKTSV4RRFFQ69G5FAV    # show one note by id
+    ntropy show -n 'text:"quarterly"' | head  # the drawing as plain text
+    NO_COLOR=1 ntropy show tag:plan           # styles without colours
 
 ### `site -o <dir> [query]`
 

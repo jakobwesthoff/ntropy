@@ -17,6 +17,13 @@ for the `tag:`, `field:`, and `text:` terms `search` accepts, and
 [the interactive picker](01M28Q32FZCNHV2PZ5FSG8E360-the-interactive-picker.md)
 for how it filters and how to move around in it.
 
+To read a note without opening the editor, `ntropy show` takes the same
+selector and prints the note formatted for the terminal: the frontmatter,
+then the Markdown with its headings, emphasis, lists, tables and code
+styled, at the terminal's width. A note longer than the screen opens in
+your `$PAGER`, or in `less -R` when `PAGER` is unset. Set `NO_COLOR` to keep
+the styles and lose the colours.
+
 For scripts, `-p` prints the matched note's path instead of opening it,
 `-P` prints the note's content, and `-n` turns off the picker and the
 editor entirely so nothing waits on a terminal. See

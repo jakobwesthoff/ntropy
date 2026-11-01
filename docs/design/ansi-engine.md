@@ -1,10 +1,12 @@
 # The ANSI engine
 
-The engine behind the `ansi` format of `render`: a note drawn for a
-terminal by the [patine](https://crates.io/crates/patine) library. The
-decision is [ADR 0082](../adr/0082-ansi-render-format-drawn-by-patine.md);
-the shared command surface and preparation are in
-[rendering.md](rendering.md).
+The engine behind the `ansi` format of `render` and behind `show`: a note
+drawn for a terminal by the [patine](https://crates.io/crates/patine)
+library. The decisions are
+[ADR 0082](../adr/0082-ansi-render-format-drawn-by-patine.md) and
+[ADR 0083](../adr/0083-show-prints-a-note-drawn-for-the-terminal.md); the
+shared command surface and preparation are in [rendering.md](rendering.md),
+`show` in [cli.md](cli.md).
 
 ## Shape
 
@@ -69,14 +71,24 @@ underline, `9` strikethrough, `38;5;<n>` the colour, then `39`, `29`, `24`,
 
 A drawing has one of three forms:
 
-- `Colored`: every style. The artifact uses it.
+- `Colored`: every style. The artifact uses it, and `show` on a terminal.
 - `Styled`: every style but the colours, with patine's dim quote bars
-  instead of cyan ones.
-- `Plain`: the text alone.
+  instead of cyan ones. `show` uses it on a terminal under `NO_COLOR`.
+- `Plain`: the text alone, which `show` writes when stdout is not a
+  terminal.
 
 Beside the text the engine returns each line's width as patine measures it,
 grapheme by grapheme, after escaping. `Drawn::rows` counts each line as the
-rows it wraps into at a given terminal width.
+rows it wraps into at a given terminal width; `show` compares that with the
+terminal's rows to decide on the pager.
+
+## Two entry points
+
+`draw` takes a `PreparedDocument`, as every engine does. `draw_source`
+takes the frontmatter block and the body alone, which is all the drawing
+reads. `show` calls it with the selected note's own fields, so it needs
+neither the link index nor the second scan of the vault that preparing a
+document takes.
 
 ## Testing
 

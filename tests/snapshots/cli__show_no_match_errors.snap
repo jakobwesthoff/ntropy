@@ -1,0 +1,18 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - show
+    - "-n"
+    - "tag:no-such-tag"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: no note matches `tag:no-such-tag`

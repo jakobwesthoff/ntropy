@@ -27,6 +27,7 @@ use ntropy::text::escape_controls;
 use crate::cli::GlobalArgs;
 
 use super::one_note::Selection;
+use super::signals::SigpipeIgnoredScope;
 use super::{exit_for_warnings, output};
 
 /// Render the note named by `selector` to a document artifact.
@@ -273,38 +274,6 @@ fn dir_has_entries(dir: &Path) -> bool {
     std::fs::read_dir(dir)
         .map(|mut entries| entries.next().is_some())
         .unwrap_or(false)
-}
-
-/// Ignore `SIGPIPE` process-wide for the lifetime of the value, restoring the
-/// previous disposition on drop.
-///
-/// A pipe write to a closed read end raises `SIGPIPE`; with the signal
-/// ignored, the write fails with `EPIPE` instead, which the caller handles as
-/// an ordinary error. The disposition is process-wide state (a thread-local
-/// mask does not contain it on macOS, where the signal is delivered
-/// process-wide), so the scope is kept to the piped tool exchange and the
-/// previous disposition — the fatal default that gives ntropy its quiet exit
-/// when its own stdout pipe closes — comes back the moment the scope ends.
-struct SigpipeIgnoredScope {
-    previous: libc::sighandler_t,
-}
-
-impl SigpipeIgnoredScope {
-    fn new() -> Self {
-        // SAFETY: `SIGPIPE` and `SIG_IGN` are valid signal/handler constants,
-        // and `signal` returns the previous handler for the restore.
-        let previous = unsafe { libc::signal(libc::SIGPIPE, libc::SIG_IGN) };
-        SigpipeIgnoredScope { previous }
-    }
-}
-
-impl Drop for SigpipeIgnoredScope {
-    fn drop(&mut self) {
-        // SAFETY: `self.previous` came from the paired `signal` call above.
-        unsafe {
-            libc::signal(libc::SIGPIPE, self.previous);
-        }
-    }
 }
 
 /// Whether `output` would be written inside `vault_root`.

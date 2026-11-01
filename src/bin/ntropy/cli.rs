@@ -6,10 +6,11 @@
 //!
 //! Global flags (`--vault`, `-n/--non-interactive`, `--strict`) are available
 //! on every subcommand. `new` takes its title as repeated positional arguments
-//! which the `run` layer joins with spaces. `search`, `delete`, `render` and
-//! `site` take a query or selector as repeated positional arguments, each read
-//! on its own by `ntropy::query::from_arguments` (ADR 0076). `edit` is a hidden
-//! alias of `search` (ADR 0031). A bare `ntropy` prints help.
+//! which the `run` layer joins with spaces. `search`, `delete`, `render`,
+//! `show` and `site` take a query or selector as repeated positional
+//! arguments, each read on its own by `ntropy::query::from_arguments`
+//! (ADR 0076). `edit` is a hidden alias of `search` (ADR 0031). A bare
+//! `ntropy` prints help.
 
 use std::path::PathBuf;
 
@@ -210,6 +211,26 @@ pub enum Command {
         /// directory beside it; without it either is refused.
         #[arg(long)]
         force: bool,
+    },
+
+    /// Show a note drawn for the terminal.
+    ///
+    /// The note's frontmatter, then its Markdown with headings, emphasis,
+    /// lists, tables, quotes and highlighted code styled, laid out at the
+    /// terminal's width. A note taller than the screen goes through `$PAGER`,
+    /// or `less -R` when it is unset; `-n` never pages. Without a terminal on
+    /// stdout the text comes without escape sequences, and `NO_COLOR` leaves
+    /// out the colours. Must resolve to exactly one note, like `render`.
+    Show {
+        /// A full ULID or a query DSL expression, as trailing arguments that are
+        /// each read on their own; words in one argument form a phrase
+        /// (omitted = choose from all notes).
+        #[arg(value_name = "ID|QUERY")]
+        selector: Vec<String>,
+        /// Lay the note out at this many columns instead of the terminal's
+        /// width (80 without a terminal).
+        #[arg(long, value_name = "COLUMNS", value_parser = clap::value_parser!(u16).range(1..))]
+        width: Option<u16>,
     },
 
     /// Export the vault as a static website.

@@ -425,6 +425,30 @@ fn render_escapes_an_engine_warning() {
 }
 
 #[test]
+fn show_escapes_control_characters_in_the_body_raw_or_decoded() {
+    // A numeric character reference decodes to the character it names, so
+    // `&#x1b;` reaches the drawing as an escape character unless the drawn
+    // text is escaped.
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-hostile.md"),
+        &format!("---\ntitle: Hostile\n---\nraw {RETITLE} and decoded &#x1b;]0;pwned&#7;\n"),
+    );
+
+    let output = run(ntropy(&vault).env_remove("PAGER").args(["show", ULID_A]));
+    assert!(output.status.success(), "{}", stderr(&output));
+    assert_no_raw_controls(&output);
+    assert_eq!(
+        stdout(&output).matches(RETITLE_SHOWN).count(),
+        2,
+        "{}",
+        stdout(&output)
+    );
+}
+
+#[test]
 fn render_names_a_hostile_output_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");

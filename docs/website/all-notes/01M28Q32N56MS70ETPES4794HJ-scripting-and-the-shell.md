@@ -33,6 +33,11 @@ for id in $(ntropy search -n tag:work | tail -n +2 | awk '{print $1}'); do
 done
 ```
 
+`show -n` is not the way to a note's text: it prints the note laid out for
+reading, as plain text when stdout is a pipe, wrapped at 80 columns or at
+`--width`, with the Markdown markers gone. Use it to display a note, and
+`-P` to process one.
+
 ## Encrypted vaults
 
 Against an [encrypted vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md), `--identity <path>` or `$NTROPY_IDENTITY` supplies the key without the OS credential store, and `--passphrase-file <path>` supplies a passphrase without a prompt. That is what makes an encrypted vault usable from cron or CI. Note that `-p` there prints the ciphertext file's path: fine for `stat` or `xargs rm`, not for handing to an editor.

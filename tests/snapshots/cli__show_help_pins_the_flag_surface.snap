@@ -1,0 +1,51 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - show
+    - "--help"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+Show a note drawn for the terminal.
+
+The note's frontmatter, then its Markdown with headings, emphasis, lists, tables, quotes and highlighted code styled, laid out at the terminal's width. A note taller than the screen goes through `$PAGER`, or `less -R` when it is unset; `-n` never pages. Without a terminal on stdout the text comes without escape sequences, and `NO_COLOR` leaves out the colours. Must resolve to exactly one note, like `render`.
+
+Usage: ntropy show [OPTIONS] [ID|QUERY]...
+
+Arguments:
+  [ID|QUERY]...
+          A full ULID or a query DSL expression, as trailing arguments that are each read on their own; words in one argument form a phrase (omitted = choose from all notes)
+
+Options:
+      --vault <PATH>
+          Operate on the vault at this path (overrides all other resolution)
+
+      --width <COLUMNS>
+          Lay the note out at this many columns instead of the terminal's width (80 without a terminal)
+
+  -n, --non-interactive
+          Force non-interactive (plain) behavior even on a TTY
+
+      --strict
+          Treat malformed/badly-named notes and skipped views as errors instead of warnings
+
+  -i, --identity <PATH>
+          Use this age identity file instead of the OS credential store.
+          
+          `$NTROPY_IDENTITY` is consulted when the flag is absent.
+
+      --passphrase-file <PATH>
+          Read the vault passphrase from the first line of this file.
+          
+          Supplies the passphrase wherever one would otherwise be typed: creating an encrypted vault, unlocking one, or converting one. On `vault passphrase` it is the *current* passphrase.
+
+  -h, --help
+          Print help (see a summary with '-h')
+
+----- stderr -----

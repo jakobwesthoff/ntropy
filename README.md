@@ -66,6 +66,9 @@ ntropy today
 
 # Find and open notes: full query language, fuzzy picker when several match
 ntropy search tag:work and not status:done
+
+# Read a note formatted in the terminal, through a pager when it is long
+ntropy show 'quarterly review'
 ```
 
 New notes are stamped out from

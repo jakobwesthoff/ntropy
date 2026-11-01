@@ -247,7 +247,9 @@ tools installed:
 - `src/bin/ntropy/run/render.rs` (binary): `cmd_render` (output-path
   defaulting, the vault-containment warning) and the production
   `RenderContext`. The selector resolution with the picker on ambiguity is
-  `src/bin/ntropy/run/one_note.rs`.
+  `src/bin/ntropy/run/one_note.rs`, shared with `show`
+  (`src/bin/ntropy/run/show.rs`), which draws a note with the ansi engine
+  and writes it to stdout or a pager.
 
 The selector plumbing is reused as-is: `ops::resolve_selection` and the
 generic picker already serve `search` and `delete` unchanged.

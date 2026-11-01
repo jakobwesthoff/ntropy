@@ -298,6 +298,16 @@ never stage plaintext inside the vault. Two encrypted-vault specifics:
   be the vault root, where the default `./<name>.pdf` would land the
   plaintext inside the synced directory.
 
+## Showing
+
+`show` draws the note from the scan's decrypted copy in memory and writes
+nothing to disk ([ADR 0083](../adr/0083-show-prints-a-note-drawn-for-the-terminal.md)).
+A note taller than the terminal reaches the pager over a pipe. The pager is
+the user's program: ntropy hands it `LESSSECURE=1`, which keeps less from
+saving the note, editing it or piping it to a command. Another pager gets
+the plaintext as any pager would, and what it does with it is outside
+ntropy.
+
 ## Views
 
 Materialized views are disabled in encrypted vaults: a symlink tree like

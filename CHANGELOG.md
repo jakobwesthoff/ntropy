@@ -24,6 +24,14 @@ change in any release
   [patine](https://crates.io/crates/patine) library, which makes the release
   binary about 2 MB larger
   ([ADR 0082](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0082-ansi-render-format-drawn-by-patine.md)).
+- `ntropy show [id|query]` prints a note drawn that way to the terminal, at
+  its width or at `--width <columns>`. A note taller than the screen goes
+  through `$PAGER`, or `less -R`; `LESS=R` is set when `LESS` is unset, and
+  `LESSSECURE=1` for a note of an encrypted vault. `-n` never pages. Into a
+  pipe the note comes as plain text, and `NO_COLOR` leaves out the colours
+  but keeps bold, italic and underline. The note is selected as `render`
+  selects it
+  ([ADR 0083](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0083-show-prints-a-note-drawn-for-the-terminal.md)).
 
 ## v2.4.1 - 2026-10-30
 

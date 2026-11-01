@@ -2167,6 +2167,174 @@ fn render_to_ansi_refuses_a_theme() {
     assert!(!dir.path().join("plain.ansi").exists());
 }
 
+// =============================================================================
+// show, with stdout a pipe
+// =============================================================================
+
+/// A `ntropy` command in `vault` with no pager and no colour preference from
+/// the host's environment.
+fn ntropy_show(vault: &Path) -> Command {
+    let mut cmd = ntropy(vault);
+    for var in ["PAGER", "LESS", "LESSSECURE", "NO_COLOR"] {
+        cmd.env_remove(var);
+    }
+    cmd
+}
+
+/// The display width of each line of `text`.
+fn widths_of(text: &str) -> Vec<usize> {
+    text.lines()
+        .map(unicode_width::UnicodeWidthStr::width)
+        .collect()
+}
+
+#[test]
+fn show_prints_the_note_drawn_as_plain_text_into_a_pipe() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "shown",
+        &format!(
+            "---\ntitle: Shown\ntags: [work]\n---\n# Shown\n\nSome **bold** text and a \
+             [link]({ULID_B}-other.md).\n\n- one\n- two\n"
+        ),
+    );
+    redacted(dir.path()).bind(|| {
+        assert_cmd_snapshot!(ntropy_show(dir.path()).args(["show", "-n", ULID_A]));
+    });
+}
+
+#[test]
+fn show_bare_with_a_single_note_shows_it() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "only",
+        "---\ntitle: Only\n---\nThe only body.\n",
+    );
+    let output = ntropy_show(dir.path())
+        .args(["show", "-n"])
+        .output()
+        .expect("run show");
+    assert!(output.status.success(), "{}", rendered(&output));
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("The only body."),
+        "{}",
+        rendered(&output)
+    );
+}
+
+#[test]
+fn show_bare_with_several_notes_needs_a_selector_under_n() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "a", "---\ntitle: A\n---\n");
+    write_note(dir.path(), ULID_B, "b", "---\ntitle: B\n---\n");
+    redacted(dir.path()).bind(|| {
+        assert_cmd_snapshot!(ntropy_show(dir.path()).args(["show", "-n"]));
+    });
+}
+
+#[test]
+fn show_ambiguous_selector_errors_under_n() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "alpha",
+        "---\ntitle: Alpha\ntags: [work]\n---\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "beta",
+        "---\ntitle: Beta\ntags: [work]\n---\n",
+    );
+    redacted(dir.path()).bind(|| {
+        assert_cmd_snapshot!(ntropy_show(dir.path()).args(["show", "tag:work", "-n"]));
+    });
+}
+
+#[test]
+fn show_no_match_errors() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "a", "---\ntitle: A\n---\n");
+    redacted(dir.path()).bind(|| {
+        assert_cmd_snapshot!(ntropy_show(dir.path()).args(["show", "-n", "tag:no-such-tag"]));
+    });
+}
+
+#[test]
+fn show_bare_empty_vault_errors() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        assert_cmd_snapshot!(ntropy_show(dir.path()).args(["show", "-n"]));
+    });
+}
+
+#[test]
+fn show_width_flag_sets_the_layout_width() {
+    let dir = setup_vault();
+    let words = "word ".repeat(40);
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wide",
+        &format!("---\ntitle: Wide\n---\n{words}\n"),
+    );
+    let output = ntropy_show(dir.path())
+        .args(["show", "-n", "--width", "30", ULID_A])
+        .output()
+        .expect("run show");
+    assert!(output.status.success(), "{}", rendered(&output));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let widths = widths_of(&stdout);
+    assert!(widths.iter().all(|&w| w <= 30), "{stdout}");
+    assert!(widths.iter().any(|&w| w > 20), "{stdout}");
+}
+
+#[test]
+fn show_prints_the_note_and_strict_fails_on_scan_warnings() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "good",
+        "---\ntitle: Good\n---\nGood body.\n",
+    );
+    write_note(dir.path(), ULID_B, "bad", "---\ntags: [x]\n---\n");
+    for (strict, code) in [(false, 0), (true, 1)] {
+        let mut cmd = ntropy_show(dir.path());
+        cmd.args(["show", "-n", ULID_A]);
+        if strict {
+            cmd.arg("--strict");
+        }
+        let output = cmd.output().expect("run show");
+        assert_eq!(output.status.code(), Some(code), "{}", rendered(&output));
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("Good body."),
+            "{}",
+            rendered(&output)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("warning:"),
+            "{}",
+            rendered(&output)
+        );
+    }
+}
+
+#[test]
+fn show_help_pins_the_flag_surface() {
+    let dir = setup_vault();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["show", "--help"]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
 #[test]
 fn render_to_html_takes_the_site_theme_from_config_and_the_flag() {
     let dir = setup_vault();
@@ -5149,6 +5317,436 @@ done
     }
 }
 
+/// `show` with stdout on a pseudo-terminal of a given size, the way a person
+/// runs it: styles, the terminal's width, and the pager.
+#[cfg(unix)]
+mod show_on_a_terminal {
+    use super::*;
+
+    use std::io;
+    use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+    use std::os::unix::process::CommandExt;
+    use std::path::PathBuf;
+    use std::process::{Child, Output, Stdio};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    /// How long a gate waits before the test gives up on it.
+    const GATE: Duration = Duration::from_secs(60);
+
+    /// A pseudo-terminal of `rows` by `columns`: its master and slave ends.
+    fn open_terminal(rows: u16, columns: u16) -> (OwnedFd, OwnedFd) {
+        let mut master = -1;
+        let mut slave = -1;
+        let mut size = libc::winsize {
+            ws_row: rows,
+            ws_col: columns,
+            ws_xpixel: 0,
+            ws_ypixel: 0,
+        };
+        // SAFETY: `master` and `slave` are valid pointers to `c_int`s, `size`
+        // outlives the call, and the name and termios arguments may be null.
+        // macOS declares the pointers `*mut`, Linux `*const`; `&mut` fits both.
+        let rc = unsafe {
+            libc::openpty(
+                &mut master,
+                &mut slave,
+                std::ptr::null_mut(),
+                std::ptr::null_mut(),
+                &mut size,
+            )
+        };
+        assert_eq!(rc, 0, "openpty failed: {}", io::Error::last_os_error());
+        // SAFETY: both descriptors were just returned by `openpty`, are open,
+        // and nothing else in this process owns them.
+        let (master, slave) =
+            unsafe { (OwnedFd::from_raw_fd(master), OwnedFd::from_raw_fd(slave)) };
+        // `openpty` has no close-on-exec variant; without it a child another
+        // test thread forks could hold the terminal open.
+        for fd in [&master, &slave] {
+            // SAFETY: `fd` is an open descriptor owned by this function.
+            let rc = unsafe { libc::fcntl(fd.as_raw_fd(), libc::F_SETFD, libc::FD_CLOEXEC) };
+            assert_ne!(rc, -1, "fcntl failed: {}", io::Error::last_os_error());
+        }
+        (master, slave)
+    }
+
+    /// Start `cmd` with the slave as its stdin, its stdout and its
+    /// controlling terminal; stderr stays a pipe.
+    fn spawn_on(cmd: &mut Command, slave: OwnedFd) -> Child {
+        let stdout = slave.try_clone().expect("clone the terminal for stdout");
+        cmd.stdin(Stdio::from(slave))
+            .stdout(Stdio::from(stdout))
+            .stderr(Stdio::piped());
+        // SAFETY: the closure runs in the forked child before `exec` and calls
+        // only `setsid` and `ioctl`, which are async-signal-safe and allocate
+        // nothing. std has already moved the slave onto fd 0.
+        unsafe {
+            cmd.pre_exec(|| {
+                if libc::setsid() == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+                if libc::ioctl(0, libc::TIOCSCTTY as _, 0) == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+                Ok(())
+            });
+        }
+        let child = cmd.spawn().expect("run ntropy on its own terminal");
+        // Leave the child and what it starts as the only holders of the
+        // slave, so the terminal's output ends when they are gone.
+        cmd.stdin(Stdio::null()).stdout(Stdio::null());
+        child
+    }
+
+    /// Read the terminal until its last slave descriptor closes, on a thread
+    /// of its own: a session leader's exit waits for its output to drain.
+    fn read_terminal(master: OwnedFd) -> std::thread::JoinHandle<String> {
+        std::thread::spawn(move || {
+            let mut terminal = fs::File::from(master);
+            let mut seen = Vec::new();
+            let _ = io::Read::read_to_end(&mut terminal, &mut seen);
+            // The terminal turns each `\n` into `\r\n`.
+            String::from_utf8_lossy(&seen).replace('\r', "")
+        })
+    }
+
+    /// What a run on the terminal produced.
+    struct TerminalRun {
+        output: Output,
+        terminal: String,
+    }
+
+    fn run_on_terminal(cmd: &mut Command, rows: u16, columns: u16) -> TerminalRun {
+        let (master, slave) = open_terminal(rows, columns);
+        let child = spawn_on(cmd, slave);
+        let reader = read_terminal(master);
+        let output = child.wait_with_output().expect("wait for ntropy");
+        let terminal = reader.join().expect("the terminal reader does not panic");
+        TerminalRun { output, terminal }
+    }
+
+    /// `show <ULID_A>` in `vault`, without a pager, colour preference or
+    /// `LESS` from the host.
+    fn show(vault: &Path) -> Command {
+        let mut cmd = ntropy(vault);
+        for var in ["PAGER", "LESS", "LESSSECURE", "NO_COLOR"] {
+            cmd.env_remove(var);
+        }
+        cmd.args(["show", ULID_A]);
+        cmd
+    }
+
+    /// Write a stub pager at `<vault>/stub-bin/<name>` that records its stdin,
+    /// its arguments and the `LESS` variables beside itself, then runs
+    /// `then`, and return its path.
+    fn write_stub_pager(vault: &Path, name: &str, then: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+
+        let bin = vault.join(STUB_BIN);
+        fs::create_dir_all(&bin).expect("stub-bin dir");
+        let script = format!(
+            r#"#!/bin/sh
+dir="${{0%/*}}"
+cat > "$dir/pager-stdin"
+printf '%s\n' "$@" > "$dir/pager-args"
+printf 'LESS=%s\nLESSSECURE=%s\n' "${{LESS-unset}}" "${{LESSSECURE-unset}}" > "$dir/pager-env"
+{then}
+"#
+        );
+        let stub = bin.join(name);
+        fs::write(&stub, script).expect("write stub pager");
+        fs::set_permissions(&stub, fs::Permissions::from_mode(0o755)).expect("chmod stub");
+        stub
+    }
+
+    fn recorded(vault: &Path, what: &str) -> Option<String> {
+        fs::read_to_string(vault.join(STUB_BIN).join(what)).ok()
+    }
+
+    /// `text` with every well-formed SGR sequence taken out.
+    fn without_sgr(text: &str) -> String {
+        regex::Regex::new(r"\x1b\[[0-9;:]*m")
+            .expect("the pattern is valid")
+            .replace_all(text, "")
+            .into_owned()
+    }
+
+    fn short_note(vault: &Path) {
+        write_note(
+            vault,
+            ULID_A,
+            "short",
+            "---\ntitle: Short\n---\n# Short\n\nA **bold** word and `code`.\n",
+        );
+    }
+
+    /// A note of 40 paragraphs, taller than any terminal these tests open.
+    fn tall_note(vault: &Path) -> String {
+        let body: String = (1..=40).map(|n| format!("Paragraph {n}.\n\n")).collect();
+        write_note(
+            vault,
+            ULID_A,
+            "tall",
+            &format!("---\ntitle: Tall\n---\n{body}"),
+        );
+        body
+    }
+
+    #[test]
+    fn a_short_note_is_drawn_in_colour_on_the_terminal() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        short_note(vault);
+        let stub = write_stub_pager(vault, "pager", "");
+        let run = run_on_terminal(show(vault).env("PAGER", &stub), 24, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        assert!(
+            run.terminal.contains("\x1b[1mbold\x1b[22m"),
+            "{:?}",
+            run.terminal
+        );
+        assert!(run.terminal.contains("\x1b[38;5;"), "{:?}", run.terminal);
+        assert_eq!(recorded(vault, "pager-stdin"), None);
+    }
+
+    #[test]
+    fn no_color_keeps_the_styles_and_drops_the_colours() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        short_note(vault);
+        let run = run_on_terminal(show(vault).env("NO_COLOR", "1"), 24, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        assert!(run.terminal.contains("\x1b[4:2m"), "{:?}", run.terminal);
+        assert!(!run.terminal.contains("\x1b[38;5;"), "{:?}", run.terminal);
+    }
+
+    #[test]
+    fn the_note_is_laid_out_at_the_terminals_width() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        let words = "word ".repeat(40);
+        write_note(
+            vault,
+            ULID_A,
+            "wide",
+            &format!("---\ntitle: Wide\n---\n{words}\n"),
+        );
+        let run = run_on_terminal(&mut show(vault), 24, 40);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        let widths: Vec<usize> = without_sgr(&run.terminal)
+            .lines()
+            .map(unicode_width::UnicodeWidthStr::width)
+            .collect();
+        assert!(widths.iter().all(|&w| w <= 40), "{:?}", run.terminal);
+        assert!(widths.iter().any(|&w| w > 30), "{:?}", run.terminal);
+    }
+
+    #[test]
+    fn a_tall_note_goes_to_the_pager() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        tall_note(vault);
+        let stub = write_stub_pager(vault, "pager", "");
+        let run = run_on_terminal(show(vault).env("PAGER", &stub), 5, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        let paged = recorded(vault, "pager-stdin").expect("the pager ran");
+        assert!(paged.contains("Paragraph 40."), "{paged:?}");
+        assert!(paged.contains("\x1b[38;5;"), "{paged:?}");
+        assert!(!run.terminal.contains("Paragraph"), "{:?}", run.terminal);
+        assert_eq!(
+            recorded(vault, "pager-env").as_deref(),
+            Some("LESS=R\nLESSSECURE=unset\n")
+        );
+    }
+
+    #[test]
+    fn without_pager_less_runs_with_raw_control_characters() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        tall_note(vault);
+        write_stub_pager(vault, "less", "");
+        let path = format!("{}:/bin:/usr/bin", vault.join(STUB_BIN).display());
+        let run = run_on_terminal(show(vault).env("PATH", &path), 5, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        assert_eq!(recorded(vault, "pager-args").as_deref(), Some("-R\n"));
+        assert_eq!(
+            recorded(vault, "pager-env").as_deref(),
+            Some("LESS=R\nLESSSECURE=unset\n")
+        );
+    }
+
+    #[test]
+    fn a_less_variable_of_the_users_own_is_kept() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        tall_note(vault);
+        write_stub_pager(vault, "less", "");
+        let path = format!("{}:/bin:/usr/bin", vault.join(STUB_BIN).display());
+        let run = run_on_terminal(show(vault).env("PATH", &path).env("LESS", "X"), 5, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        assert_eq!(
+            recorded(vault, "pager-env").as_deref(),
+            Some("LESS=X\nLESSSECURE=unset\n")
+        );
+    }
+
+    #[test]
+    fn without_a_pager_to_start_the_note_is_printed() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        tall_note(vault);
+        let empty = tempfile::tempdir().expect("an empty PATH directory");
+        let run = run_on_terminal(show(vault).env("PATH", empty.path()), 5, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        assert!(run.terminal.contains("Paragraph 40."), "{:?}", run.terminal);
+    }
+
+    #[test]
+    fn n_never_pages() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        tall_note(vault);
+        let stub = write_stub_pager(vault, "pager", "");
+        let run = run_on_terminal(show(vault).arg("-n").env("PAGER", &stub), 5, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        assert!(run.terminal.contains("Paragraph 40."), "{:?}", run.terminal);
+        assert_eq!(recorded(vault, "pager-stdin"), None);
+    }
+
+    #[test]
+    fn a_pager_the_shell_cannot_run_fails_the_command() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        tall_note(vault);
+        let run = run_on_terminal(show(vault).env("PAGER", "no-such-pager --flag"), 5, 80);
+        assert_eq!(
+            run.output.status.code(),
+            Some(1),
+            "{}",
+            rendered(&run.output)
+        );
+        assert!(
+            String::from_utf8_lossy(&run.output.stderr)
+                .contains("error: pager `no-such-pager --flag` could not be run"),
+            "{}",
+            rendered(&run.output)
+        );
+    }
+
+    #[test]
+    fn a_pagers_own_failing_status_is_ignored() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        tall_note(vault);
+        let stub = write_stub_pager(vault, "pager", "exit 2");
+        let run = run_on_terminal(show(vault).env("PAGER", &stub), 5, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        assert!(run.output.stderr.is_empty(), "{}", rendered(&run.output));
+    }
+
+    #[test]
+    fn a_pager_quitting_before_reading_everything_is_no_error() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        // Far more than a pipe holds, so the write is still going when the
+        // pager is gone.
+        let body: String = (1..=4000).map(|n| format!("Paragraph {n}.\n\n")).collect();
+        write_note(
+            vault,
+            ULID_A,
+            "huge",
+            &format!("---\ntitle: Huge\n---\n{body}"),
+        );
+        let run = run_on_terminal(show(vault).env("PAGER", "exit 0"), 5, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        assert!(run.output.stderr.is_empty(), "{}", rendered(&run.output));
+    }
+
+    /// A FIFO at `path`.
+    fn fifo(path: &Path) {
+        let name = std::ffi::CString::new(path.as_os_str().as_encoded_bytes())
+            .expect("temp paths hold no NUL");
+        // SAFETY: `name` is a NUL-terminated path that outlives the call.
+        let rc = unsafe { libc::mkfifo(name.as_ptr(), 0o600) };
+        assert_eq!(rc, 0, "mkfifo failed: {}", io::Error::last_os_error());
+    }
+
+    /// Run `step` on a thread and wait for it at most [`GATE`]; on a timeout,
+    /// kill `child` and fail with what the terminal showed.
+    fn gate(child: &mut Child, what: &str, step: impl FnOnce() + Send + 'static) {
+        let (done, finished) = mpsc::channel();
+        std::thread::spawn(move || {
+            step();
+            let _ = done.send(());
+        });
+        if finished.recv_timeout(GATE).is_err() {
+            let _ = child.kill();
+            panic!("timed out waiting until {what}");
+        }
+    }
+
+    #[test]
+    fn an_interrupt_while_the_pager_runs_leaves_ntropy_waiting_for_it() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        tall_note(vault);
+        let bin = vault.join(STUB_BIN);
+        fs::create_dir_all(&bin).expect("stub-bin dir");
+        let ready = bin.join("ready.fifo");
+        let release = bin.join("release.fifo");
+        fifo(&ready);
+        fifo(&release);
+        // The stub reports once it has read all of its input, which ntropy
+        // writes only after it caught the interrupt, then waits for release.
+        let stub = write_stub_pager(
+            vault,
+            "pager",
+            r#"echo ready > "$dir/ready.fifo"; read _ < "$dir/release.fifo""#,
+        );
+
+        let (master, slave) = open_terminal(5, 80);
+        let mut child = spawn_on(show(vault).env("PAGER", &stub), slave);
+        let reader = read_terminal(master);
+
+        gate(&mut child, "the pager has read the note", move || {
+            let mut line = String::new();
+            let mut fifo = io::BufReader::new(fs::File::open(&ready).expect("open ready"));
+            io::BufRead::read_line(&mut fifo, &mut line).expect("read ready");
+        });
+        let pid = libc::pid_t::try_from(child.id()).expect("a pid fits pid_t");
+        // SAFETY: `pid` names the child this test started and still waits for.
+        let rc = unsafe { libc::kill(pid, libc::SIGINT) };
+        assert_eq!(rc, 0, "kill failed: {}", io::Error::last_os_error());
+        gate(&mut child, "the pager was released", move || {
+            fs::write(&release, "go\n").expect("write release");
+        });
+
+        let output = child.wait_with_output().expect("wait for ntropy");
+        let _ = reader.join();
+        assert!(output.status.success(), "{}", rendered(&output));
+        assert!(
+            recorded(vault, "pager-stdin")
+                .expect("the pager ran")
+                .contains("Paragraph 40.")
+        );
+    }
+
+    /// Exposed for the encrypted-vault test of the pager's environment.
+    pub(super) fn run_show_on_terminal(cmd: &mut Command, rows: u16) -> (Output, String) {
+        let run = run_on_terminal(cmd, rows, 80);
+        (run.output, run.terminal)
+    }
+
+    pub(super) fn stub_pager(vault: &Path) -> PathBuf {
+        write_stub_pager(vault, "pager", "")
+    }
+
+    pub(super) fn pager_env(vault: &Path) -> Option<String> {
+        recorded(vault, "pager-env")
+    }
+}
+
 /// Encrypted-vault behaviour, compiled only where encryption exists.
 #[cfg(feature = "encryption")]
 mod encrypted {
@@ -5486,6 +6084,67 @@ mod encrypted {
         assert_eq!(
             fs::read(&artifact).expect("encrypted artifact"),
             fs::read(&expected).expect("plaintext artifact")
+        );
+    }
+
+    #[test]
+    fn show_draws_an_encrypted_note_as_a_plaintext_one() {
+        let note = "---\ntitle: Shared\ntags: [work]\n---\n# Shared\n\nbody **line**\n";
+        let encrypted = encrypted_vault_holding(note);
+        let shown = ntropy_encrypted(encrypted.path())
+            .args(["show", ULID_A])
+            .output()
+            .expect("run show");
+        assert!(shown.status.success(), "{}", rendered(&shown));
+
+        let plain = setup_vault();
+        write_note(plain.path(), ULID_A, "shared", note);
+        let expected = ntropy(plain.path())
+            .args(["-n", "show", ULID_A])
+            .output()
+            .expect("run show");
+        assert!(expected.status.success(), "{}", rendered(&expected));
+
+        assert!(
+            String::from_utf8_lossy(&shown.stdout).contains("body line"),
+            "{}",
+            rendered(&shown)
+        );
+        assert_eq!(shown.stdout, expected.stdout);
+    }
+
+    #[test]
+    fn show_puts_less_in_its_secure_mode_for_an_encrypted_note() {
+        let body: String = (1..=40).map(|n| format!("Paragraph {n}.\n\n")).collect();
+        let encrypted = encrypted_vault_holding(&format!("---\ntitle: Tall\n---\n{body}"));
+        let vault = encrypted.path();
+        let stub = super::show_on_a_terminal::stub_pager(vault);
+        let mut cmd = ntropy(vault);
+        cmd.env("NTROPY_IDENTITY", TEST_IDENTITY_FILE);
+        for var in ["LESS", "LESSSECURE", "NO_COLOR"] {
+            cmd.env_remove(var);
+        }
+        cmd.env("PAGER", &stub).args(["show", ULID_A]);
+        let (output, _terminal) = super::show_on_a_terminal::run_show_on_terminal(&mut cmd, 5);
+        assert!(output.status.success(), "{}", rendered(&output));
+        assert_eq!(
+            super::show_on_a_terminal::pager_env(vault).as_deref(),
+            Some("LESS=R\nLESSSECURE=1\n")
+        );
+    }
+
+    #[test]
+    fn show_on_a_locked_vault_errors_naming_unlock() {
+        let encrypted = encrypted_vault_holding("---\ntitle: Shared\n---\nbody\n");
+        let mut cmd = ntropy(encrypted.path());
+        cmd.env_remove("NTROPY_IDENTITY");
+        cmd.args(["show", "-n", ULID_A]);
+        let output = cmd.output().expect("run show");
+        assert_eq!(output.status.code(), Some(1), "{}", rendered(&output));
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("ntropy unlock"),
+            "{}",
+            rendered(&output)
         );
     }
 
