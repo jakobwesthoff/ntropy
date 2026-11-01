@@ -317,7 +317,9 @@ template resolves outside the theme and the vault.
 Every page links `style.css` and `render --to html` copies it beside the
 artifact; a directory without it is not a theme. A theme provides the
 palettes for both light and dark mode; the page follows the system
-preference by default and remembers a manual choice in the browser.
+preference by default and remembers a manual choice in the browser. The
+shipped themes limit the dark palette to the screen, so a printed page
+takes the light one whatever the scheme on screen.
 
 The pages are rendered by minijinja from the theme's templates
 ([ADR 0058](../adr/0058-theme-templates-overriding-the-built-in-ones-by-name.md)).

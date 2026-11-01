@@ -5,9 +5,12 @@
 /* The theme of ntropy's own website: the built-in theme with the palette
  * and faces of the terminal recording on the front page, dark first, plus
  * the front page's own layout, the header links, and the footer. Every
- * color and face is a custom property on :root; the light palette applies
- * to a system preference and to an explicit data-theme="light" on the root
- * element, and data-theme="dark" wins over the system preference.
+ * color and face is a custom property on :root. On screen, the dark
+ * palette applies to a dark system preference and to an explicit
+ * data-theme="dark" on the root element, and data-theme="light" wins over
+ * the system preference. A printed page keeps the light palette: the
+ * browser leaves out backgrounds when it prints, and the dark palette's
+ * light text would be pale on white paper.
  *
  * The fonts ship beside this file under fonts/ (all under the SIL Open
  * Font License, see fonts/LICENSE): DM Sans for everything read, DM Mono
@@ -53,35 +56,35 @@
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
 }
 
-/* Tokens. The palette is the one the demo recording uses: brand teal in
- * the cyan slot over a near-black ground, so the page and the video read
- * as one surface. Dark is the home mode; the light palette below keeps the
- * same teal, deepened for paper, for reading in daylight. The faces are
- * DM Mono for the wordmark, titles, and code and DM Sans for everything
- * read; there is no serif on these pages. */
+/* Tokens. The dark palette is the one the demo recording uses: brand teal
+ * in the cyan slot over a near-black ground, so the page and the video read
+ * as one surface. The light palette on :root keeps the same teal, deepened
+ * for paper, for reading in daylight and for print. The faces are DM Mono
+ * for the wordmark, titles, and code and DM Sans for everything read; there
+ * is no serif on these pages. */
 
 :root {
   color-scheme: dark light;
-  --bg: #0f0f12;
-  --surface: #16161c;
-  --raised: #1c1c22;
-  --border: #2a2a32;
-  --fg-bright: #f4f3ef;
-  --fg: #e8e7e3;
-  --muted: #9b9a94;
-  --faint: #5f5e5a;
-  --accent: #2dd4bf;
-  --accent-soft: rgba(45, 212, 191, 0.12);
-  --on-accent: #0b1513;
-  --link: #5eead4;
-  --note-link: #5eead4;
-  --callout-note: #2dd4bf;
-  --callout-tip: #3fb950;
-  --callout-important: #a78bfa;
-  --callout-warning: #fdd877;
-  --callout-caution: #ef6487;
-  --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.55);
-  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --bg: #f6f7f5;
+  --surface: #eceeea;
+  --raised: #ffffff;
+  --border: #d5d9d5;
+  --fg-bright: #101312;
+  --fg: #1f2422;
+  --muted: #5f6763;
+  --faint: #9aa19d;
+  --accent: #0f766e;
+  --accent-soft: rgba(15, 118, 110, 0.11);
+  --on-accent: #ffffff;
+  --link: #0f766e;
+  --note-link: #0f766e;
+  --callout-note: #0f766e;
+  --callout-tip: #2f7a3a;
+  --callout-important: #6e40c9;
+  --callout-warning: #b5541a;
+  --callout-caution: #c0392b;
+  --shadow-panel: 0 12px 32px rgba(16, 19, 18, 0.16);
+  --shadow-raised: 0 1px 2px rgba(16, 19, 18, 0.14);
   --display: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --serif: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --sans: "DM Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -109,52 +112,54 @@
   --accent-bar: 3px;
 }
 
-@media (prefers-color-scheme: light) {
-  :root:not([data-theme="dark"]) {
-    --bg: #f6f7f5;
-    --surface: #eceeea;
-    --raised: #ffffff;
-    --border: #d5d9d5;
-    --fg-bright: #101312;
-    --fg: #1f2422;
-    --muted: #5f6763;
-    --faint: #9aa19d;
-    --accent: #0f766e;
-    --accent-soft: rgba(15, 118, 110, 0.11);
-    --on-accent: #ffffff;
-    --link: #0f766e;
-    --note-link: #0f766e;
-    --callout-note: #0f766e;
-    --callout-tip: #2f7a3a;
-    --callout-important: #6e40c9;
-    --callout-warning: #b5541a;
-    --callout-caution: #c0392b;
-    --shadow-panel: 0 12px 32px rgba(16, 19, 18, 0.16);
-    --shadow-raised: 0 1px 2px rgba(16, 19, 18, 0.14);
+@media screen and (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f0f12;
+    --surface: #16161c;
+    --raised: #1c1c22;
+    --border: #2a2a32;
+    --fg-bright: #f4f3ef;
+    --fg: #e8e7e3;
+    --muted: #9b9a94;
+    --faint: #5f5e5a;
+    --accent: #2dd4bf;
+    --accent-soft: rgba(45, 212, 191, 0.12);
+    --on-accent: #0b1513;
+    --link: #5eead4;
+    --note-link: #5eead4;
+    --callout-note: #2dd4bf;
+    --callout-tip: #3fb950;
+    --callout-important: #a78bfa;
+    --callout-warning: #fdd877;
+    --callout-caution: #ef6487;
+    --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.55);
+    --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.35);
   }
 }
 
-:root[data-theme="light"] {
-  --bg: #f6f7f5;
-  --surface: #eceeea;
-  --raised: #ffffff;
-  --border: #d5d9d5;
-  --fg-bright: #101312;
-  --fg: #1f2422;
-  --muted: #5f6763;
-  --faint: #9aa19d;
-  --accent: #0f766e;
-  --accent-soft: rgba(15, 118, 110, 0.11);
-  --on-accent: #ffffff;
-  --link: #0f766e;
-  --note-link: #0f766e;
-  --callout-note: #0f766e;
-  --callout-tip: #2f7a3a;
-  --callout-important: #6e40c9;
-  --callout-warning: #b5541a;
-  --callout-caution: #c0392b;
-  --shadow-panel: 0 12px 32px rgba(16, 19, 18, 0.16);
-  --shadow-raised: 0 1px 2px rgba(16, 19, 18, 0.14);
+@media screen {
+  :root[data-theme="dark"] {
+    --bg: #0f0f12;
+    --surface: #16161c;
+    --raised: #1c1c22;
+    --border: #2a2a32;
+    --fg-bright: #f4f3ef;
+    --fg: #e8e7e3;
+    --muted: #9b9a94;
+    --faint: #5f5e5a;
+    --accent: #2dd4bf;
+    --accent-soft: rgba(45, 212, 191, 0.12);
+    --on-accent: #0b1513;
+    --link: #5eead4;
+    --note-link: #5eead4;
+    --callout-note: #2dd4bf;
+    --callout-tip: #3fb950;
+    --callout-important: #a78bfa;
+    --callout-warning: #fdd877;
+    --callout-caution: #ef6487;
+    --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.55);
+    --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.35);
+  }
 }
 
 /* Base. */
@@ -698,16 +703,18 @@ input[type="checkbox"] {
   color: var(--shiki-light);
 }
 
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .shiki,
   :root:not([data-theme="light"]) .shiki span {
     color: var(--shiki-dark);
   }
 }
 
-:root[data-theme="dark"] .shiki,
-:root[data-theme="dark"] .shiki span {
-  color: var(--shiki-dark);
+@media screen {
+  :root[data-theme="dark"] .shiki,
+  :root[data-theme="dark"] .shiki span {
+    color: var(--shiki-dark);
+  }
 }
 
 /* The site layout: header, navigation, content, and the outline beside it.

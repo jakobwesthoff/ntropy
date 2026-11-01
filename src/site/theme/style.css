@@ -5,9 +5,11 @@
 /* The built-in site theme, which `ntropy site theme init` copies into a
  * vault as the start of a theme of its own. Every color and face is a
  * custom property on :root, so a new palette is a change to those
- * properties alone. The dark palette applies to a system preference and to
- * an explicit data-theme="dark" on the root element; data-theme="light"
- * wins over the system preference.
+ * properties alone. On screen, the dark palette applies to a system
+ * preference and to an explicit data-theme="dark" on the root element;
+ * data-theme="light" wins over the system preference. A printed page keeps
+ * the light palette: the browser leaves out backgrounds when it prints, and
+ * the dark palette's light text would be pale on white paper.
  *
  * The fonts ship beside this file under fonts/ (all under the SIL Open
  * Font License, see fonts/LICENSE): Fraunces for the titles, Literata for
@@ -139,7 +141,7 @@
   --accent-bar: 3px;
 }
 
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --bg: #1a1510;
     --surface: #241d16;
@@ -163,26 +165,28 @@
   }
 }
 
-:root[data-theme="dark"] {
-  --bg: #1a1510;
-  --surface: #241d16;
-  --raised: #2d251b;
-  --border: #3f3428;
-  --fg-bright: #f8f2e4;
-  --fg: #e7dfcd;
-  --muted: #a69a88;
-  --faint: #6d6151;
-  --accent: #e4b45a;
-  --accent-soft: rgba(228, 180, 90, 0.12);
-  --link: #edc670;
-  --note-link: #edc670;
-  --callout-note: #e4b45a;
-  --callout-tip: #7fcb7a;
-  --callout-important: #c39cf5;
-  --callout-warning: #f0a05a;
-  --callout-caution: #f28b7d;
-  --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.5);
-  --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3);
+@media screen {
+  :root[data-theme="dark"] {
+    --bg: #1a1510;
+    --surface: #241d16;
+    --raised: #2d251b;
+    --border: #3f3428;
+    --fg-bright: #f8f2e4;
+    --fg: #e7dfcd;
+    --muted: #a69a88;
+    --faint: #6d6151;
+    --accent: #e4b45a;
+    --accent-soft: rgba(228, 180, 90, 0.12);
+    --link: #edc670;
+    --note-link: #edc670;
+    --callout-note: #e4b45a;
+    --callout-tip: #7fcb7a;
+    --callout-important: #c39cf5;
+    --callout-warning: #f0a05a;
+    --callout-caution: #f28b7d;
+    --shadow-panel: 0 12px 32px rgba(0, 0, 0, 0.5);
+    --shadow-raised: 0 1px 2px rgba(0, 0, 0, 0.3);
+  }
 }
 
 /* Base. */
@@ -721,16 +725,18 @@ input[type="checkbox"] {
   color: var(--shiki-light);
 }
 
-@media (prefers-color-scheme: dark) {
+@media screen and (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .shiki,
   :root:not([data-theme="light"]) .shiki span {
     color: var(--shiki-dark);
   }
 }
 
-:root[data-theme="dark"] .shiki,
-:root[data-theme="dark"] .shiki span {
-  color: var(--shiki-dark);
+@media screen {
+  :root[data-theme="dark"] .shiki,
+  :root[data-theme="dark"] .shiki span {
+    color: var(--shiki-dark);
+  }
 }
 
 /* The site layout: header, navigation, content, and the outline beside it.

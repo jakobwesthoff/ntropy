@@ -55,7 +55,8 @@ does not exist fails the export.
 
 Every color and typeface of the built-in theme is a custom property on
 `:root`. The dark palette redefines them under
-`prefers-color-scheme: dark` and under `:root[data-theme="dark"]`;
+`prefers-color-scheme: dark` and under `:root[data-theme="dark"]`, both
+inside `@media screen`, so a printed page keeps the light palette;
 `data-theme="light"` wins over the system preference. A theme that only
 wants different colors redefines these and keeps the rest:
 

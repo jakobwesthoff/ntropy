@@ -732,4 +732,111 @@ mod tests {
             );
         }
     }
+
+    // =====================================================================
+    // Printing
+    // =====================================================================
+
+    /// Every declaration of `property` in `css`, with the preludes of the
+    /// at-rules around it. Enough of CSS for the stylesheets this crate
+    /// ships: comments are dropped, and a declaration ends at `;` or at the
+    /// `}` that closes its rule.
+    fn declarations(css: &str, property: &str) -> Vec<(Vec<String>, String)> {
+        let without_comments = regex::Regex::new(r"(?s)/\*.*?\*/")
+            .expect("pattern")
+            .replace_all(css, "");
+        let mut found = Vec::new();
+        let mut preludes: Vec<String> = Vec::new();
+        let mut text = String::new();
+        let mut record = |preludes: &[String], text: &str| {
+            if let Some((name, value)) = text.split_once(':')
+                && name.trim() == property
+            {
+                let at_rules = preludes
+                    .iter()
+                    .filter(|prelude| prelude.starts_with('@'))
+                    .cloned()
+                    .collect();
+                found.push((at_rules, value.trim().to_string()));
+            }
+        };
+        for character in without_comments.chars() {
+            match character {
+                '{' => {
+                    preludes.push(text.trim().to_string());
+                    text.clear();
+                }
+                '}' => {
+                    record(&preludes, &text);
+                    preludes.pop();
+                    text.clear();
+                }
+                ';' => {
+                    record(&preludes, &text);
+                    text.clear();
+                }
+                other => text.push(other),
+            }
+        }
+        found
+    }
+
+    /// Whether a `#rrggbb` color is closer to white than to black.
+    fn is_light(color: &str) -> bool {
+        let hex = color.trim_start_matches('#');
+        let channel =
+            |at: usize| u32::from_str_radix(&hex[at..at + 2], 16).expect("a #rrggbb color");
+        channel(0) + channel(2) + channel(4) > 3 * 128
+    }
+
+    /// A printed page takes its palette from the rules that are not limited
+    /// to the screen, whatever scheme the reader picked on screen. Those
+    /// rules have to agree on one ground, and that ground has to be light,
+    /// or a page printed in dark mode comes out with pale text (the
+    /// browser drops the dark background). Highlighted code follows the
+    /// same rule with its dark token colors.
+    #[test]
+    fn a_printed_page_takes_the_light_palette_in_both_shipped_themes() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let website =
+            std::fs::read_to_string(root.join("docs/website/.ntropy/themes/site/ntropy/style.css"))
+                .expect("the documentation site's stylesheet exists");
+        for (name, css) in [
+            ("built-in", SiteTheme::builtin().stylesheet),
+            ("website", website),
+        ] {
+            let on_screen_only =
+                |at_rules: &[String]| at_rules.iter().any(|rule| rule.contains("screen"));
+
+            let printed_grounds: Vec<String> = declarations(&css, "--bg")
+                .into_iter()
+                .filter(|(at_rules, _)| !on_screen_only(at_rules))
+                .map(|(_, value)| value)
+                .collect();
+            assert!(
+                !printed_grounds.is_empty(),
+                "the {name} stylesheet declares --bg"
+            );
+            assert!(
+                printed_grounds
+                    .iter()
+                    .all(|ground| ground == &printed_grounds[0]),
+                "the {name} stylesheet prints with one of several grounds: {printed_grounds:?}"
+            );
+            assert!(
+                is_light(&printed_grounds[0]),
+                "the {name} stylesheet prints on the dark ground {}",
+                printed_grounds[0]
+            );
+
+            for (at_rules, value) in declarations(&css, "color") {
+                if value == "var(--shiki-dark)" {
+                    assert!(
+                        on_screen_only(&at_rules),
+                        "the {name} stylesheet prints code in its dark token colors"
+                    );
+                }
+            }
+        }
+    }
 }

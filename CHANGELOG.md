@@ -35,6 +35,12 @@ change in any release
   sections of such a note from `0.1`, since the level-one heading it counted
   under is gone. The PDF outline has no entry for the title, and a note whose
   only heading was the title has no outline.
+- A page of `site` or `render --to html` printed while the dark palette is
+  on screen prints in the light palette, in the built-in theme and the
+  documentation site's theme, and its highlighted code in the light token
+  colours. It kept the dark palette, light text on a dark ground. A theme
+  copied with `site theme init` before this release prints dark until its
+  dark rules are limited to `@media screen` the same way.
 
 ## v2.9.0 - 2026-11-01
 

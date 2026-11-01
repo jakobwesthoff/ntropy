@@ -67,8 +67,9 @@ be copied.
 
 Every color and typeface is a custom property on `:root`. The dark palette
 redefines them under `prefers-color-scheme: dark` (guarded so an explicit
-light choice wins) and under `:root[data-theme="dark"]`; the page's switch
-sets `data-theme` and remembers it in the browser.
+light choice wins) and under `:root[data-theme="dark"]`, both inside
+`@media screen`, so a printed page keeps the light palette; the page's
+switch sets `data-theme` and remembers it in the browser.
 
 | Property | Role |
 |----------|------|
