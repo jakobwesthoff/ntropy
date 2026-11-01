@@ -82,8 +82,8 @@ resulting path. The two together author a note without ever reading one
 back, and without an editor, in a plaintext and an encrypted vault alike:
 
 ```bash
-path=$(ntropy new --empty -p Quarterly review)
-ntropy write "$path" <<'EOF'
+note=$(ntropy new --empty -p Quarterly review)
+ntropy write "$note" <<'EOF'
 ---
 title: Quarterly review
 tags: [work, planning]

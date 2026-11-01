@@ -109,7 +109,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | DON'T | DO |
 |-------|----|
 | `ntropy new My note` — blocks in an editor | `ntropy new --print My note` |
-| Write a new file into `all-notes/` yourself | `path=$(ntropy new --empty -p …)`, then `ntropy write "$path"` |
+| Write a new file into `all-notes/` yourself | `note=$(ntropy new --empty -p …)`, then `ntropy write "$note"` |
 | `ntropy new --empty -p …` and move on | `write` it in the same step; an unwritten note is malformed |
 | Feed `write` a body with no frontmatter | feed it the whole note, frontmatter block first |
 | `--empty --template meeting` — contradictory, refused | pick one: a template stamps content, `--empty` writes none |
@@ -190,8 +190,8 @@ recipes for global, project-local, and custom vaults:
 plaintext and an encrypted vault:
 
 ```bash
-path=$(ntropy new --empty -p Quarterly review)
-ntropy write "$path" <<'EOF'
+note=$(ntropy new --empty -p Quarterly review)
+ntropy write "$note" <<'EOF'
 ---
 title: Quarterly review
 tags: [work, planning]
@@ -225,8 +225,8 @@ ntropy write 01KWVBW61WHJY7K27WNETSF641 < /tmp/note.md
 example a meeting note whose shape the user defined:
 
 ```bash
-path=$(ntropy new --print -t meeting Standup)
-# edit "$path" directly, then:
+note=$(ntropy new --print -t meeting Standup)
+# edit "$note" directly, then:
 ntropy reconcile
 ```
 
@@ -238,7 +238,7 @@ Frontmatter rules in full, plus tags, inter-note links, and template authoring:
 ```bash
 ntropy search -n 'tag:work and not status:done'    # table: ID DATE TITLE TAGS PATH
 ntropy search -n 01KWVBW61WHJY7K27WNETSF641        # one note by ULID
-path=$(ntropy search -n -p 01KWVBW61WHJY7K27WNETSF641)   # just the file path
+note=$(ntropy search -n -p 01KWVBW61WHJY7K27WNETSF641)   # just the file path
 ```
 
 Full query language (`tag:`, `field:`, `text:`, `and`/`or`/`not`), output
@@ -265,8 +265,8 @@ give each section a landing note, order the pages through their `site`
 table, root the sidebar at the tree, and export:
 
 ```bash
-path=$(ntropy new --empty -p Welcome)
-ntropy write "$path" <<'EOF'
+note=$(ntropy new --empty -p Welcome)
+ntropy write "$note" <<'EOF'
 ---
 title: Welcome
 tags: [handbook/start]

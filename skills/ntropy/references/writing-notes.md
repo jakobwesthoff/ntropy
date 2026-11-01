@@ -22,8 +22,8 @@ filename. You own the content. `new` hands you the first, and `write` takes the
 second:
 
 ```bash
-path=$(ntropy new --empty -p Refactor the parser)   # trailing args join into the title
-ntropy write "$path" <<'EOF'
+note=$(ntropy new --empty -p Refactor the parser)   # trailing args join into the title
+ntropy write "$note" <<'EOF'
 ---
 title: Refactor the parser
 tags: [engineering, refactor]
@@ -100,8 +100,8 @@ When you want the vault's own skeleton — a meeting note whose shape the user
 defined — create from the template and edit the file directly:
 
 ```bash
-path=$(ntropy new --print -t meeting Standup)
-# edit "$path" with your file tools
+note=$(ntropy new --print -t meeting Standup)
+# edit "$note" with your file tools
 ntropy reconcile
 ```
 

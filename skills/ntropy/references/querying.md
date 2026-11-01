@@ -102,7 +102,7 @@ line and nothing else, so no parsing is needed:
 
 ```bash
 # The file path of one note by ULID:
-path=$(ntropy search -n -p 01KWVBW61WHJY7K27WNETSF641)
+note=$(ntropy search -n -p 01KWVBW61WHJY7K27WNETSF641)
 
 # Every matching path, newest first:
 ntropy search -n -p tag:work

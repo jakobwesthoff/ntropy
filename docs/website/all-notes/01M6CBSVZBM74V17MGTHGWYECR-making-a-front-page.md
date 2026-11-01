@@ -20,8 +20,8 @@ prints its path, and `ntropy write` puts the whole note into it,
 frontmatter first:
 
 ```bash
-path=$(ntropy new --empty -p "Welcome")
-ntropy write "$path" <<'NOTE'
+note=$(ntropy new --empty -p "Welcome")
+ntropy write "$note" <<'NOTE'
 ---
 title: Welcome
 tags: [harbor]

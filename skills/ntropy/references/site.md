@@ -193,8 +193,8 @@ tag hierarchy is the directory tree the site shows.
 
 ```bash
 # A section landing note and one page inside it.
-path=$(ntropy new --empty -p Welcome)
-ntropy write "$path" <<'NOTE'
+note=$(ntropy new --empty -p Welcome)
+ntropy write "$note" <<'NOTE'
 ---
 title: Welcome
 tags: [handbook/start]
@@ -205,8 +205,8 @@ site: { index: true, label: Getting Started, order: 1 }
 What the handbook covers and where to begin.
 NOTE
 
-path=$(ntropy new --empty -p Installation)
-ntropy write "$path" <<'NOTE'
+note=$(ntropy new --empty -p Installation)
+ntropy write "$note" <<'NOTE'
 ---
 title: Installation
 tags: [handbook/start]

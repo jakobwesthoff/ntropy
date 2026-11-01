@@ -394,8 +394,8 @@ its old name, which is the path printed, and a `warning: did not rename ...`
 line goes to stderr. The content is written either way; the warning fails the
 command only under `--strict`.
 
-    path=$(ntropy new --empty -p Quarterly review)
-    ntropy write "$path" < note.md
+    note=$(ntropy new --empty -p Quarterly review)
+    ntropy write "$note" < note.md
     ntropy search -n -P <ulid> | rewrite | ntropy write <ulid>
 
 ### `reconcile`
