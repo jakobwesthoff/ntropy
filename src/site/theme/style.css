@@ -2,9 +2,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at https://mozilla.org/MPL/2.0/. */
 
-/* The built-in site theme. Every color and face is a custom property on
- * :root so a theme that wants only a palette redefines the properties and
- * keeps the rest. The dark palette applies to a system preference and to
+/* The built-in site theme, which `ntropy site theme init` copies into a
+ * vault as the start of a theme of its own. Every color and face is a
+ * custom property on :root, so a new palette is a change to those
+ * properties alone. The dark palette applies to a system preference and to
  * an explicit data-theme="dark" on the root element; data-theme="light"
  * wins over the system preference.
  *
