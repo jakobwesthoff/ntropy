@@ -31,8 +31,9 @@ change in any release
 - Pages of `site` and `render --to html` no longer scroll sideways on a phone.
   A table wider than its column scrolls inside its rounded card, with a shadow
   at the edge that has more to show, instead of widening the page. In a note
-  column narrower than 32rem, the rows of a two-column table stack, the first
-  cell over the second, and the header row is not shown. Every table is
+  column narrower than 32rem, each row of a two-column table is a card of its
+  own, the first cell a tinted strip over the second, and the header row is
+  not shown. Every table is
   emitted inside `<div class="table-wrap" data-columns="<n>">`, and a table of
   two columns carries explicit ARIA roles. A custom theme that styles `table`
   with a border or a radius now draws it inside that wrapper; style

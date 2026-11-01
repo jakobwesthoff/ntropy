@@ -559,15 +559,23 @@ th {
 }
 
 /* A table of exactly two columns stacks in a column narrower than 32rem:
- * each row becomes the first cell as a heading line over the second. The header row stays in the document
- * for assistive technology but is not shown. The emitter writes table roles
- * on these tables, since display: block on table parts can drop their
- * native semantics. */
+ * each row becomes a card of its own, the first cell a tinted strip over
+ * the second. The header row stays in the document for assistive
+ * technology but is not shown. The emitter writes table roles on these
+ * tables, since display: block on table parts can drop their native
+ * semantics. A card scrolls sideways when a word without a break point is
+ * wider than it, and the grid column grows to that word so the strip spans it. The
+ * table's own card, with its edge shadows, gives way to the row cards. */
 
 @media screen {
   @container (max-width: 32rem) {
     .table-wrap[data-columns="2"] {
+      background: none;
+      border: 0;
+      border-radius: 0;
+      overflow: visible;
       position: relative;
+      width: auto;
     }
 
     .table-wrap[data-columns="2"] thead {
@@ -583,14 +591,29 @@ th {
       display: block;
     }
 
+    .table-wrap[data-columns="2"] tr {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-block);
+      display: grid;
+      grid-template-columns: minmax(min-content, 1fr);
+      margin-bottom: 0.75rem;
+      overflow-x: auto;
+    }
+
+    .table-wrap[data-columns="2"] tr:last-child {
+      margin-bottom: 0;
+    }
+
     .table-wrap[data-columns="2"] td {
+      border: 0;
       text-align: left !important;
     }
 
     .table-wrap[data-columns="2"] td:first-child {
-      border-bottom: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
       font-weight: 600;
-      padding-bottom: 0;
+      padding: 0.55rem 0.85rem;
     }
 
     .table-wrap[data-columns="2"] td:first-child code {
@@ -598,7 +621,7 @@ th {
     }
 
     .table-wrap[data-columns="2"] td:last-child {
-      padding-top: 0.15rem;
+      padding: 0.65rem 0.85rem 0.8rem;
     }
   }
 }

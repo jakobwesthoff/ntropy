@@ -146,8 +146,9 @@ are `ol.note-rows` of `li.note-row` with a `time`, the `.note-row-title`
 link, and `.note-row-tags`; groups are `ul.group-chips` of `.chip` links.
 Every table sits in a `div.table-wrap` with a `data-columns` attribute holding
 its column count. The built-in themes scroll a table wider than its column
-inside the wrapper, with a shadow at the edge that has more to show, and stack
-the rows of a two-column table in a note column narrower than 32rem.
+inside the wrapper, with a shadow at the edge that has more to show, and draw
+the rows of a two-column table as cards, the first cell a tinted strip over the
+second, in a note column narrower than 32rem.
 Callouts are `.callout.callout-<kind>` with a `.callout-title`. Highlighted
 code carries Shiki's `--shiki-light` and `--shiki-dark` colors per token and
 the stylesheet picks one by scheme. The current sidebar entry and outline
