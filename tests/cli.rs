@@ -4570,6 +4570,30 @@ fn a_wide_table_keeps_its_cells_apart_in_the_pdf() {
 
 #[test]
 #[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_wide_table_breaks_a_word_only_at_a_space_or_a_hyphen_it_has() {
+    // The prelude measures the widest word of a column and grows the column to
+    // it. Typst's hyphenation would still break "eu-central" inside "central",
+    // so the cell would hold a word the measuring never saw.
+    let (_dir, pdf) = render_note_to_real_pdf(
+        "| ID | Pipeline | Region | Start | End | Owner | State | Runs | Failures | Notes |\n\
+         | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n\
+         | 1042 | Release pipeline | eu-central | 2026-10-01 | 2026-11-01 | platform-team | succeeded | 1234 | 12 | nightly |\n",
+    );
+    let words: Vec<String> = pdf_words(&pdf).into_iter().map(|word| word.text).collect();
+    assert!(
+        words.iter().any(|word| word.ends_with("central")),
+        "`central` is not one word: {words:?}"
+    );
+    assert!(
+        !words
+            .iter()
+            .any(|word| word == "tral" || word.ends_with("cen-")),
+        "`central` was hyphenated: {words:?}"
+    );
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
 fn a_table_that_cannot_fit_the_page_warns_with_real_typst() {
     // Sixteen columns of one long word each need far less than 60 percent of
     // the text size to fit an A4 page. The warning rides on the real

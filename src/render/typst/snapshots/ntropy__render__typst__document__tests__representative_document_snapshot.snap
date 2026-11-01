@@ -296,7 +296,10 @@ expression: document
       })
     }
 
-    set text(size: ratio * 1em)
+    // The columns are as wide as their widest word, so a word that only fits
+    // after typst hyphenated it would be a word the measuring never saw. A
+    // word still breaks at a space or at a hyphen it contains.
+    set text(size: ratio * 1em, hyphenate: false)
     align(center, table(columns: widths, align: it.align, ..it.children))
   })
 
