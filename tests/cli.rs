@@ -2913,6 +2913,40 @@ fn theme_templates_render_the_site_and_the_html_artifact_with_the_vars() {
     assert!(!dir.path().join("broken.html").exists());
 }
 
+/// minijinja 3 rejects an import of a name that starts with `_` when it
+/// parses the template. The export must stop before it writes any page, and
+/// name the template.
+#[test]
+fn a_theme_template_importing_a_private_name_fails_the_site_export_naming_it() {
+    let dir = site_vault();
+    write_site_theme(dir.path(), "private-import", "body{}");
+    let templates = dir
+        .path()
+        .join(".ntropy/themes/site/private-import/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(
+        templates.join("macros.html"),
+        "{% macro _helper() %}x{% endmacro %}",
+    )
+    .expect("macros template");
+    fs::write(
+        templates.join("page.html"),
+        "{% from \"macros.html\" import _helper %}{{ _helper() }}",
+    )
+    .expect("page template");
+    configure_site(dir.path(), "theme = \"private-import\"\n");
+
+    let output = site(dir.path(), &["-o", "out"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("page.html"), "{stderr}");
+    assert!(stderr.contains("underline"), "{stderr}");
+    assert!(
+        !dir.path().join("out/index.html").exists(),
+        "no page is written"
+    );
+}
+
 #[test]
 fn site_theme_init_copies_the_builtin_theme_and_refuses_to_overwrite() {
     let dir = site_vault();

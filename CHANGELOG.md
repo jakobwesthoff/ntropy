@@ -9,6 +9,49 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Changed
+
+- Site page templates are rendered with minijinja 3 (3.0.5). The built-in
+  theme and the project's own site export byte for byte as before. A custom
+  theme's templates
+  ([ADR 0058](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0058-theme-templates-overriding-the-built-in-ones-by-name.md))
+  render differently where minijinja 3 follows Jinja2 more closely:
+  - A list or map turned into text (with `{{ }}`, `|string`, `~` or `join`)
+    uses Python quoting: `['a', 'b']` instead of `["a", "b"]`.
+  - `//` and `%` round toward negative infinity like Python: `7 // -2` is
+    `-4`, `7 % -2` is `-1`, `-7.5 % 2` is `0.5`.
+  - `1 / 0`, and `//` or `%` by a float zero, fail the export instead of
+    printing `inf`, `-inf` or `NaN`.
+  - `round` rounds half to even, so `2.5|round` is `2.0`, and rounds integers
+    to a negative precision: `15|round(-1)` is `20`.
+  - `title` starts a word only after whitespace or one of `-({[<`:
+    `"don't"|title` is `Don't`.
+  - Booleans count as numbers in built-ins: `[true, true]|sum` is `2` and
+    `true is number` is true.
+  - `undefined is sequence` is true.
+  - The `upper` and `lower` tests ignore characters without case and need one
+    cased character: `"foo bar" is lower` is true and `"" is upper` is
+    false. A value that is not a string is false instead of an error.
+  - Unary minus applies to a whole lookup: `-note.frontmatter.order` negates
+    the value instead of failing.
+  - `min` and `max` compare strings without regard to case, and so does
+    `sort` with several attributes.
+  - `2 ** -1` is `0.5` instead of an error.
+  - `and` and `or` between two literals give an operand: `{{ '' and 'x' }}`
+    is empty instead of `False`.
+  - `"%s"|format(1234567.5)` is `1234567.5` instead of `1.23457e+06`.
+  - A name starting with `_` stays private to the template that defines it,
+    and `{% from "macros.html" import _helper %}` is a syntax error that fails
+    the export.
+
+  The rest is in minijinja's
+  [UPDATING.md](https://github.com/mitsuhiko/minijinja/blob/3.0.5/UPDATING.md)
+  and
+  [CHANGELOG.md](https://github.com/mitsuhiko/minijinja/blob/3.0.5/CHANGELOG.md)
+  ([ADR 0085](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0085-page-templates-render-with-minijinja-3.md)).
+
 ## v2.6.0 - 2026-11-01
 
 ### Changed

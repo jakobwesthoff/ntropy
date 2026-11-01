@@ -16,7 +16,7 @@
 //! inside a template.
 
 use minijinja::Environment;
-use minijinja::value::Value;
+use minijinja::value::{Serde, Value};
 use serde::Serialize;
 
 use super::theme::{self, SiteTheme};
@@ -141,11 +141,11 @@ impl NoteFragment {
 
 fn note_context(note: &NoteFragment) -> Value {
     minijinja::context! {
-        title => note.title,
-        created => note.created,
-        tags => note.tags,
+        title => &note.title,
+        created => &note.created,
+        tags => Serde(&note.tags),
         fields => note.fields.iter().map(|field| minijinja::context! {
-            key => field.key,
+            key => &field.key,
             html => Value::from_safe_string(field.html.clone()),
         }).collect::<Vec<_>>(),
         body => Value::from_safe_string(note.body.clone()),
@@ -258,26 +258,26 @@ impl Page {
         let link = |link: &Option<PageLink>| {
             link.as_ref().map(|link| {
                 minijinja::context! {
-                    title => link.label,
-                    href => link.href,
+                    title => &link.label,
+                    href => &link.href,
                 }
             })
         };
         let context = minijinja::context! {
-            lang => self.lang,
-            site_title => self.site_title,
-            title => self.title,
-            path => self.path,
-            prefix => self.prefix,
+            lang => &self.lang,
+            site_title => &self.site_title,
+            title => &self.title,
+            path => &self.path,
+            prefix => &self.prefix,
             kind => self.kind.name(),
-            note => self.note,
-            vars => self.vars,
-            nav => self.nav,
-            stylesheet => self.stylesheet,
-            scripts => self.scripts,
+            note => Serde(&self.note),
+            vars => Serde(&self.vars),
+            nav => Serde(&self.nav),
+            stylesheet => &self.stylesheet,
+            scripts => Serde(&self.scripts),
             icons => Value::from_safe_string(self.icons.clone()),
             sidebar => Value::from_safe_string(self.sidebar.clone()),
-            breadcrumbs => self.breadcrumbs,
+            breadcrumbs => Serde(&self.breadcrumbs),
             outline => Value::from_safe_string(self.outline.clone()),
             prev => link(&self.prev),
             next => link(&self.next),
@@ -299,7 +299,7 @@ pub fn template_name(name: &str) -> String {
 /// every relative `href` into entity soup. Values marked safe pass through.
 fn formatter(
     out: &mut minijinja::Output,
-    state: &minijinja::State,
+    state: &mut minijinja::State,
     value: &Value,
 ) -> Result<(), minijinja::Error> {
     if value.is_safe() || !matches!(state.auto_escape(), minijinja::AutoEscape::Html) {
@@ -693,6 +693,76 @@ mod tests {
             rendered,
             "1.5|2.0|42|True|True|3|3|True|3.5|b|earlier.html|True|True|True|4|False"
         );
+    }
+
+    /// Renders `source` as the `page.html` of a theme.
+    fn render_source(source: &str) -> Result<String, RenderError> {
+        let templates = Templates::new(&theme_with(&[("page.html", source)])).expect("parses");
+        page().render(&templates)
+    }
+
+    #[test]
+    fn a_list_or_map_turned_into_text_is_quoted_like_python() {
+        assert_eq!(
+            render_source(concat!(
+                "{{ scripts }}|{{ 't: ' ~ note.tags }}|{{ note.tags | string }}|",
+                "{{ note.frontmatter.site }}|{{ [note.tags, note.tags] | join('+') }}",
+            ))
+            .expect("renders"),
+            concat!(
+                "[&#39;../assets/grammars/rust.js&#39;, &#39;../assets/app.js&#39;]|",
+                "t: [&#39;programming/rust&#39;]|[&#39;programming/rust&#39;]|",
+                "{&#39;order&#39;: 2}|",
+                "[&#39;programming/rust&#39;]+[&#39;programming/rust&#39;]",
+            )
+        );
+    }
+
+    /// The behaviour a custom theme template can meet where minijinja
+    /// follows Jinja2, the CHANGELOG names each of them.
+    #[test]
+    fn a_template_follows_jinja2_arithmetic_filters_and_tests() {
+        assert_eq!(
+            render_source(concat!(
+                "{{ 7 // -2 }}|{{ 7 % -2 }}|{{ -7.5 % 2 }}|{{ 2.5 | round }}|{{ 15 | round(-1) }}|",
+                "{{ \"don't\" | title }}|{{ [true, true] | sum }}|{{ nothing_defined is sequence }}|",
+                "{{ 'foo bar' is lower }}|{{ '' is upper }}|{{ 5 is lower }}|",
+                "{{ -note.frontmatter.site.order }}|{{ ['b', 'P', 'n'] | max }}|{{ 2 ** -1 }}|",
+                "{{ '%s' | format(1234567.5) }}|",
+                "{{ [{'n': 'b', 's': 1}, {'n': 'A', 's': 2}, {'n': 'B', 's': 3}]",
+                " | sort(attribute='n, s') | map(attribute='s') | join(',') }}",
+            ))
+            .expect("renders"),
+            "-4|-1|0.5|2.0|20|Don&#39;t|2|True|True|False|False|-2|P|0.5|1234567.5|2,1,3"
+        );
+    }
+
+    #[test]
+    fn dividing_by_zero_fails_the_render_naming_the_template() {
+        for expression in ["1 / 0", "1.0 // 0", "1.0 % 0", "0.0 ** -1"] {
+            let err = render_source(&format!("{{{{ {expression} }}}}"))
+                .expect_err("a division by zero is an error");
+            match err {
+                RenderError::ThemeTemplate { name, .. } => assert_eq!(name, "page.html"),
+                other => panic!("expected ThemeTemplate for {expression}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn importing_a_private_name_fails_the_theme_load_naming_the_template() {
+        let err = Templates::new(&theme_with(&[
+            (
+                "page.html",
+                "{% from 'macros.html' import _helper %}{{ _helper() }}",
+            ),
+            ("macros.html", "{% macro _helper() %}x{% endmacro %}"),
+        ]))
+        .expect_err("a name starting with an underscore is not importable");
+        match err {
+            RenderError::ThemeTemplate { name, .. } => assert_eq!(name, "page.html"),
+            other => panic!("expected ThemeTemplate, got {other:?}"),
+        }
     }
 
     #[test]

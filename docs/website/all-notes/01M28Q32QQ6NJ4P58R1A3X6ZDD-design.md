@@ -110,3 +110,5 @@ made.
 - [0081. Numbers and booleans in titles and tags read as text](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0081-numbers-and-booleans-in-titles-and-tags-read-as-text.md)
 - [0082. ANSI render format drawn by patine](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0082-ansi-render-format-drawn-by-patine.md)
 - [0083. `show` prints a note drawn for the terminal](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0083-show-prints-a-note-drawn-for-the-terminal.md)
+- [0084. The ansi drawing follows patine 2.2](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0084-ansi-drawing-follows-patine-2-2.md)
+- [0085. Page templates render with minijinja 3](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0085-page-templates-render-with-minijinja-3.md)

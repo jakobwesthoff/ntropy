@@ -11,6 +11,11 @@ Amended 2026-09-11 by
 the embedded templates are the built-in theme's, a vault theme
 overrides them by name, and the context gains fields.
 
+Amended 2026-11-01 by
+[ADR 0085](0085-page-templates-render-with-minijinja-3.md): minijinja 3
+replaces 2.24.0, `serde` is an optional feature, `memo-map` is gone, and
+the context passes strings beside `Serde` values.
+
 Produces the page structure of
 [ADR 0046](0046-static-site-export-with-a-site-command-and-an-html-render-format.md)
 that themes of [ADR 0048](0048-site-themes-as-stylesheets-and-assets.md)
