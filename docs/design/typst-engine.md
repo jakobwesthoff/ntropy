@@ -156,7 +156,7 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Markdown | Typst |
 |---|---|
 | Paragraph | blank-line separation (see below) |
-| Heading level n | `=`×n, space, escaped text, newline (Markdown caps at 6; no clamping needed) |
+| Heading level n | `=`×n, space, escaped text, newline (Markdown caps at 6; no clamping needed). A level-one heading that opens the body, as the first block the page shows, and reads exactly the note's title is skipped: `note` draws the title already, as text rather than as a heading. The PDF therefore has no outline entry for it, and a note with no other heading has no outline. Raw HTML the output drops does not count as a shown block. A theme that numbers headings counts a note's sections from `0.1` when the body opened with its title |
 | Emphasis / strong / strikethrough | `#emph[...]` / `#strong[...]` / `#strike[...]` |
 | Inline code | `#raw("...")`, string-literal escaping — renders identically to backtick markup (visually verified, typst 0.15) |
 | Code block | content-sized fence, language tag, verbatim body. The language tag is the info string's first whitespace-delimited token, and only when it is identifier-shaped (alphanumeric, `-`, `_`); anything else yields no tag, since the tag is spliced after the opening fence unescaped |
@@ -171,7 +171,7 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Note link, resolved | `#link("<target-slug>.pdf")[#notelink[Title]]`, the target note's current title through a prelude-defined function, so a theme can style note links distinctly from ordinary emphasis, wrapped in a link to the target note's own artifact (see below). A link with a heading anchor shows its author's text in `notelink` instead (the title when that text is blank) and drops the anchor: a PDF has no heading ids to address ([ADR 0086](../adr/0086-note-links-may-carry-a-heading-anchor.md)) |
 | Note link, unresolved | the wrapper is dropped and the display text's inner inline events are re-emitted, so markup inside the display text survives |
 | Task list item | bullet item with a `#task(done: ...)` lead-in — the prelude-defined function draws one identical checkbox for both states, so checked and unchecked match optically regardless of font glyph coverage |
-| Footnote | `#footnote[...]` inlined at the reference site; definitions are buffered because pulldown-cmark delivers them separately from references |
+| Footnote | `#footnote[...]` inlined at the reference site; definitions are buffered because pulldown-cmark delivers them separately from references. A reference in the skipped title heading draws nothing and does not decide a footnote's place in the order |
 | Thematic break | `#line(length: 100%)` |
 | Soft / hard break | single space / `#linebreak()` |
 | Table | `#table(columns: n, align: (...), table.header(...), cells)` |
@@ -289,7 +289,9 @@ identical file.
 - **The template receives all frontmatter fields** and the default
   `note` displays all of them: the title prominently, every other field
   as key-value lines beneath, nested values included. Which fields to
-  feature or hide is a presentation decision and thus a theme's.
+  feature or hide is a presentation decision and thus a theme's. The body
+  does not repeat the title, so a theme whose `note` does not draw
+  `title` shows none.
 - **`#show: note.with(...)` is the single seam** between content and
   presentation. A theme redefines `note`, `callout`, `notelink`, or
   `task` after the prelude; the document part never changes. The prelude

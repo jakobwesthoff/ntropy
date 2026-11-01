@@ -60,8 +60,24 @@ const NOTE_LINK_EXTENSION: &str = "pdf";
 /// The returned string is the converted body alone; document assembly
 /// (prelude, template application) lives in the engine layer, which also
 /// forwards the returned warnings to the host.
-pub fn emit(body: &str, links: &[ResolvedLink], asset_base: &str) -> (String, Vec<Warning>) {
-    let mut output = TypstOutput { asset_base };
+///
+/// The document's `note` function receives `title`, and the built-in one
+/// draws it above the body. A body whose first block the page shows is a
+/// level-one heading with exactly that plain text, image alt text included,
+/// would repeat it, so the walk drops that heading. Raw HTML the output drops
+/// does not count as a shown block. A theme whose `note` does not draw
+/// `title` therefore shows no title. The HTML output applies the same rule
+/// ([`crate::render::html::emitter::emit`]).
+pub fn emit(
+    body: &str,
+    links: &[ResolvedLink],
+    asset_base: &str,
+    title: Option<&str>,
+) -> (String, Vec<Warning>) {
+    let mut output = TypstOutput {
+        asset_base,
+        title: title.map(|title| title.trim().to_string()),
+    };
     markdown::walk(body, links, &mut output)
 }
 
@@ -75,6 +91,8 @@ struct TypstOutput<'a> {
     /// survive a compile whose root is the vault rather than the note's
     /// directory (ADR 0045).
     asset_base: &'a str,
+    /// The title a leading level-one heading must equal to be dropped.
+    title: Option<String>,
 }
 
 impl Output for TypstOutput<'_> {
@@ -200,6 +218,10 @@ impl Output for TypstOutput<'_> {
 
     fn paragraph(&mut self, body: &str) -> String {
         format!("{body}\n")
+    }
+
+    fn dropped_title(&self) -> Option<&str> {
+        self.title.as_deref()
     }
 
     /// The id is not carried into the document: nothing in the Typst output
@@ -467,13 +489,18 @@ mod tests {
     const ASSET_BASE: &str = "/all-notes";
 
     fn body(input: &str) -> String {
-        emit(input, &[], ASSET_BASE).0
+        emit(input, &[], ASSET_BASE, None).0
+    }
+
+    /// Emit a body for a note with the given title.
+    fn body_titled(input: &str, title: &str) -> String {
+        emit(input, &[], ASSET_BASE, Some(title)).0
     }
 
     /// Emit and keep only the warnings, for the raw-HTML and remote-image
     /// cases whose contract is the warning rather than the body.
     fn warnings(input: &str) -> Vec<Warning> {
-        emit(input, &[], ASSET_BASE).1
+        emit(input, &[], ASSET_BASE, None).1
     }
 
     /// Build a note-link table entry from an optional `(title, slug)` target.
@@ -896,7 +923,7 @@ mod tests {
         let input = "See [my note](abc123) end.";
         let links = [note_link(4..21, Some(("Target Title", "target-title")))];
         assert_eq!(
-            emit(input, &links, ASSET_BASE).0,
+            emit(input, &links, ASSET_BASE, None).0,
             "See #link(\"target-title.pdf\")[#notelink[Target Title]] end\\.\n"
         );
     }
@@ -909,7 +936,7 @@ mod tests {
         let input = "[x](id)";
         let links = [note_link(0..7, Some(("A Renamed Note", "old-slug")))];
         assert_eq!(
-            emit(input, &links, ASSET_BASE).0,
+            emit(input, &links, ASSET_BASE, None).0,
             "#link(\"old-slug.pdf\")[#notelink[A Renamed Note]]\n"
         );
     }
@@ -938,7 +965,7 @@ mod tests {
         // artifact; the author's text still says what the link is about.
         let input = "[the **tmux** part](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#inside-tmux)";
         assert_eq!(
-            emit(input, &resolved_links(input), ASSET_BASE).0,
+            emit(input, &resolved_links(input), ASSET_BASE, None).0,
             "#link(\"target-title.pdf\")[#notelink[the #strong[tmux] part]]\n"
         );
     }
@@ -947,7 +974,7 @@ mod tests {
     fn an_anchored_note_link_without_text_shows_the_title() {
         let input = "[ ](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#inside-tmux)";
         assert_eq!(
-            emit(input, &resolved_links(input), ASSET_BASE).0,
+            emit(input, &resolved_links(input), ASSET_BASE, None).0,
             "#link(\"target-title.pdf\")[#notelink[Target Title]]\n"
         );
     }
@@ -959,7 +986,7 @@ mod tests {
         let input = "[**bold** display](id)";
         let links = [note_link(0..22, Some(("The Title", "the-title")))];
         assert_eq!(
-            emit(input, &links, ASSET_BASE).0,
+            emit(input, &links, ASSET_BASE, None).0,
             "#link(\"the-title.pdf\")[#notelink[The Title]]\n"
         );
     }
@@ -969,7 +996,7 @@ mod tests {
         let input = "[x](id)";
         let links = [note_link(0..7, Some(("a*b [c] #d", "a-b-c-d")))];
         assert_eq!(
-            emit(input, &links, ASSET_BASE).0,
+            emit(input, &links, ASSET_BASE, None).0,
             "#link(\"a-b-c-d.pdf\")[#notelink[a\\*b \\[c\\] \\#d]]\n"
         );
     }
@@ -979,7 +1006,10 @@ mod tests {
         // A dangling note link drops the wrapper and keeps the display markup.
         let input = "[*display* text](id)";
         let links = [note_link(0..20, None)];
-        assert_eq!(emit(input, &links, ASSET_BASE).0, "#emph[display] text\n");
+        assert_eq!(
+            emit(input, &links, ASSET_BASE, None).0,
+            "#emph[display] text\n"
+        );
     }
 
     #[test]
@@ -988,7 +1018,7 @@ mod tests {
         // matches no Link event changes nothing.
         let input = "just prose";
         let links = [note_link(0..4, Some(("Title", "title")))];
-        assert_eq!(emit(input, &links, ASSET_BASE).0, "just prose\n");
+        assert_eq!(emit(input, &links, ASSET_BASE, None).0, "just prose\n");
     }
 
     #[test]
@@ -1035,7 +1065,12 @@ mod tests {
     fn image_alt_with_markup_flattens_to_plain_text() {
         // Only the remote form emits the alt, and it emits the flattened text
         // with the emphasis markers gone.
-        let (out, warnings) = emit("![*bold* and `code`](https://h/x.png)", &[], ASSET_BASE);
+        let (out, warnings) = emit(
+            "![*bold* and `code`](https://h/x.png)",
+            &[],
+            ASSET_BASE,
+            None,
+        );
         assert_eq!(out, "#link(\"https://h/x.png\")[bold and code]\n");
         assert_eq!(warnings.len(), 1);
     }
@@ -1105,7 +1140,7 @@ mod tests {
     fn a_remote_image_url_is_never_rewritten_as_a_path() {
         // The remote arm runs before any path resolution, so the URL survives
         // intact into the degraded link.
-        let (out, _) = emit("![x](https://host/pic.png)", &[], ASSET_BASE);
+        let (out, _) = emit("![x](https://host/pic.png)", &[], ASSET_BASE, None);
         assert!(
             out.contains("https://host/pic.png") && !out.contains("/all-notes/https"),
             "a remote URL was treated as a path: {out}"
@@ -1114,7 +1149,7 @@ mod tests {
 
     #[test]
     fn remote_image_degrades_to_a_link_with_a_warning() {
-        let (out, warnings) = emit("![caption](http://host/pic.png)", &[], ASSET_BASE);
+        let (out, warnings) = emit("![caption](http://host/pic.png)", &[], ASSET_BASE, None);
         assert_eq!(out, "#link(\"http://host/pic.png\")[caption]\n");
         assert_eq!(
             warnings[0].message,
@@ -1124,7 +1159,7 @@ mod tests {
 
     #[test]
     fn remote_image_with_empty_alt_labels_with_the_url() {
-        let (out, _) = emit("![](https://host/pic.png)", &[], ASSET_BASE);
+        let (out, _) = emit("![](https://host/pic.png)", &[], ASSET_BASE, None);
         assert_eq!(
             out,
             "#link(\"https://host/pic.png\")[https\\:\\/\\/host\\/pic\\.png]\n"
@@ -1257,7 +1292,12 @@ mod tests {
 
     #[test]
     fn raw_html_block_is_dropped_with_a_warning() {
-        let (out, warnings) = emit("<div class=\"box\">\ncontent\n</div>", &[], ASSET_BASE);
+        let (out, warnings) = emit(
+            "<div class=\"box\">\ncontent\n</div>",
+            &[],
+            ASSET_BASE,
+            None,
+        );
         assert_eq!(out, "");
         assert_eq!(warnings.len(), 1);
         assert!(
@@ -1271,7 +1311,7 @@ mod tests {
 
     #[test]
     fn inline_raw_html_is_dropped_with_a_warning() {
-        let (out, warnings) = emit("text <span>x</span> more", &[], ASSET_BASE);
+        let (out, warnings) = emit("text <span>x</span> more", &[], ASSET_BASE, None);
         // The surrounding prose survives; only the tags are dropped.
         assert_eq!(out, "text x more\n");
         assert_eq!(warnings.len(), 2);
@@ -1327,7 +1367,7 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             note_link(note_span, Some(("Resolved Title", "resolved-title"))),
             note_link(dangling_span, None),
         ];
-        let (out, warnings) = emit(input, &links, ASSET_BASE);
+        let (out, warnings) = emit(input, &links, ASSET_BASE, None);
         insta::assert_snapshot!(out);
         insta::assert_debug_snapshot!(warnings);
     }
@@ -1364,7 +1404,7 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             note_link(note_span, Some(("Resolved Title", "resolved-title"))),
             note_link(dangling_span, None),
         ];
-        let (out, _) = emit(input, &links, ASSET_BASE);
+        let (out, _) = emit(input, &links, ASSET_BASE, None);
 
         let root = typst_syntax::parse(&out);
         let (errors, _warnings) = root.errors_and_warnings();
@@ -1441,6 +1481,96 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
         assert!(
             foreign.is_empty(),
             "unexpected constructs {foreign:?} in {emitted:?}"
+        );
+    }
+
+    // =====================================================================
+    // The title heading
+    // =====================================================================
+
+    #[test]
+    fn a_leading_h1_equal_to_the_title_is_dropped() {
+        // The block after the dropped heading starts the body: no separator
+        // is spent on the heading, and a later repeat of the title is kept.
+        assert_eq!(
+            body_titled("# Rust Tips\n\nBody.\n\n# Rust Tips\n", "Rust Tips"),
+            "Body\\.\n\n= Rust Tips\n"
+        );
+    }
+
+    #[test]
+    fn a_title_heading_stays_when_it_differs_or_is_not_first() {
+        let kept = |input: &str| body_titled(input, "Rust Tips");
+        assert_eq!(kept("# Rust tips\n"), "= Rust tips\n");
+        assert_eq!(kept("## Rust Tips\n"), "== Rust Tips\n");
+        assert_eq!(kept("Intro.\n\n# Rust Tips\n"), "Intro\\.\n\n= Rust Tips\n");
+    }
+
+    #[test]
+    fn a_title_heading_stays_in_a_note_without_a_title() {
+        // `ntropy render` always has a title, since frontmatter requires one;
+        // this guards the emitter's own contract.
+        assert_eq!(body("# Rust Tips\n"), "= Rust Tips\n");
+    }
+
+    #[test]
+    fn the_title_matches_the_heading_text_without_surrounding_spaces() {
+        assert_eq!(
+            body_titled("# Rust Tips\n\nBody.\n", "  Rust Tips "),
+            "Body\\.\n"
+        );
+    }
+
+    #[test]
+    fn the_title_matches_the_heading_text_not_its_markup() {
+        assert_eq!(
+            body_titled("# Rust *Tips*\n\nBody.\n", "Rust Tips"),
+            "Body\\.\n"
+        );
+        // A title is plain text, so one that holds markup never matches.
+        assert_eq!(
+            body_titled("# Rust *Tips*\n", "Rust *Tips*"),
+            "= Rust #emph[Tips]
+"
+        );
+    }
+
+    #[test]
+    fn a_heading_that_is_an_image_with_the_title_as_alt_is_dropped() {
+        assert_eq!(
+            body_titled("# ![Rust Tips](logo.png)\n\nBody.\n", "Rust Tips"),
+            "Body\\.\n"
+        );
+    }
+
+    #[test]
+    fn a_body_of_only_the_title_heading_is_empty() {
+        assert_eq!(body_titled("# Rust Tips\n", "Rust Tips"), "");
+    }
+
+    #[test]
+    fn raw_html_before_the_title_heading_does_not_keep_it() {
+        // The dropped HTML is not on the page, so the heading opens it.
+        let (out, warnings) = emit(
+            "<!-- draft -->\n\n# Rust Tips\n\nBody.\n",
+            &[],
+            ASSET_BASE,
+            Some("Rust Tips"),
+        );
+        assert_eq!(out, "Body\\.\n");
+        assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn a_reference_in_the_dropped_title_heading_draws_no_footnote() {
+        assert_eq!(body_titled("# T[^a]\n\nx\n\n[^a]: A", "T"), "x\n");
+    }
+
+    #[test]
+    fn a_footnote_referenced_in_the_dropped_title_and_the_body_is_drawn_once() {
+        assert_eq!(
+            body_titled("# T[^a]\n\nx[^a]\n\n[^a]: A", "T"),
+            "x#footnote[A]\n"
         );
     }
 }

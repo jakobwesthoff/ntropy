@@ -1836,6 +1836,33 @@ fn render_to_typst_writes_a_real_artifact_without_any_tool() {
 }
 
 #[test]
+fn render_to_typst_shows_the_title_through_the_template_and_not_as_a_heading() {
+    // A note made from the seed template opens with `# <title>`. The
+    // template's `note` function draws the title, so the body must not repeat
+    // it; a heading that reads differently stays.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\n# Wanted\n\nThe note body text.\n\n# Other\n",
+    );
+    let artifact = render_to_typst(dir.path(), ULID_A, &[]);
+    assert!(
+        artifact.contains(r#"#show: note.with(title: "Wanted""#),
+        "the template does not receive the title: {artifact}"
+    );
+    assert!(
+        !artifact.contains("= Wanted"),
+        "the title heading is repeated: {artifact}"
+    );
+    assert!(
+        artifact.contains("= Other\n"),
+        "a differing heading was dropped: {artifact}"
+    );
+}
+
+#[test]
 fn a_resolved_note_link_targets_the_targets_default_artifact_name() {
     // The cross-document link contract of ADR 0044, pinned from both ends: the
     // emitted document links to `<target-slug>.pdf`, and a default render of

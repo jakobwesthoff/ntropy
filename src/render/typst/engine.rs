@@ -75,7 +75,7 @@ impl Renderer for Typst {
         // The compiler's root is the vault, so the note's own directory is
         // where its relative asset paths must be anchored (ADR 0045).
         let asset_base = asset_base(doc);
-        let (body, warnings) = emitter::emit(&doc.body, &doc.links, &asset_base);
+        let (body, warnings) = emitter::emit(&doc.body, &doc.links, &asset_base, Some(&doc.title));
         let document = document::assemble(
             &doc.title,
             &doc.frontmatter,

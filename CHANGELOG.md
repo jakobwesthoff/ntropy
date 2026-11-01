@@ -9,6 +9,21 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Fixed
+
+- `render --to pdf` and `render --to typst` no longer print the note's title
+  twice. The built-in look draws the title above the body, and a body that
+  opened with a level-one heading reading exactly the title, as every note
+  made from the seed `default.md` template does, drew it again. That heading
+  is now skipped, as in `site` and `render --to html`. Three things follow for
+  a PDF. A custom Typst theme whose `note` does not draw `title` now shows no
+  title, so it has to draw it. A theme that numbers headings counts the
+  sections of such a note from `0.1`, since the level-one heading it counted
+  under is gone. The PDF outline has no entry for the title, and a note whose
+  only heading was the title has no outline.
+
 ## v2.9.0 - 2026-11-01
 
 ### Fixed
