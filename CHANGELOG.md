@@ -31,6 +31,12 @@ change in any release
   not define labels with that prefix or draw the body, or a block that holds
   a heading, twice: Typst rejects the duplicated label as soon as a link
   names that heading.
+- The tick in a done task box of a PDF no longer comes from a font on the
+  machine. None of the fonts typst brings along has the check mark glyph, so
+  typst took it from a system font without a word of warning (`.SFNS-Regular`
+  on macOS) and the box looked different from machine to machine. The tick is
+  now drawn as a shape. A custom Typst theme is not affected unless it copies
+  the built-in `task`.
 - `render --to pdf` no longer fails when a parenthesis directly follows bold,
   italic, strikethrough, inline code, a link, an image or a hard break, as in
   `**Note**(s)` or `[docs](https://example.org)(see below)`. Typst read the

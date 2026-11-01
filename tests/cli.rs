@@ -4143,6 +4143,83 @@ fn render_note_link_reaches_the_real_pdf_as_a_link_to_the_sibling_file() {
     );
 }
 
+/// The family names of the fonts a PDF embeds, subset tag stripped.
+///
+/// typst writes each embedded font's descriptor uncompressed, so the names are
+/// findable in the raw bytes as `/FontName/ABCDEF+LibertinusSerif-Regular`,
+/// and no PDF tool is needed to read them.
+fn embedded_font_names(pdf: &[u8]) -> std::collections::BTreeSet<String> {
+    let needle = b"/FontName/";
+    let mut names = std::collections::BTreeSet::new();
+    for (start, _) in pdf
+        .windows(needle.len())
+        .enumerate()
+        .filter(|(_, window)| *window == needle)
+    {
+        let rest = &pdf[start + needle.len()..];
+        let end = rest
+            .iter()
+            .position(|byte| !(byte.is_ascii_alphanumeric() || b"+-._".contains(byte)))
+            .unwrap_or(rest.len());
+        let name = String::from_utf8_lossy(&rest[..end]).into_owned();
+        // A subset tag is six capital letters and a plus: `ABCDEF+Name`.
+        let family = match name.split_once('+') {
+            Some((tag, family)) if tag.len() == 6 => family.to_string(),
+            _ => name,
+        };
+        names.insert(family);
+    }
+    names
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn the_default_pdf_look_embeds_only_fonts_typst_bundles() {
+    // The built-in look promises the same result on every machine because it
+    // draws on the fonts the typst binary bundles. A glyph those fonts lack is
+    // taken from a system font without a word of warning, so the check reads
+    // the fonts the finished PDF embeds. New Computer Modern Math is not on
+    // the list: typst falls back to it, and only it, on a machine without
+    // system fonts, so allowing it would hide the tick leak there.
+    //
+    // The note is plain Latin on purpose. A script the bundled fonts lack
+    // comes from the machine however the look is built.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "tasks",
+        "---\ntitle: Tasks\n---\n# Tasks\n\n- [x] done task\n- [ ] open task\n\nPlain text with `inline code`, **bold** and *emphasis*.\n",
+    );
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "tasks.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let pdf = fs::read(dir.path().join("tasks.pdf")).expect("read the pdf");
+    let names = embedded_font_names(&pdf);
+    const BUNDLED: [&str; 3] = ["LibertinusSerif", "NewCM", "DejaVuSansMono"];
+    let foreign: Vec<&String> = names
+        .iter()
+        .filter(|name| {
+            !BUNDLED.iter().any(|family| name.starts_with(family)) || name.starts_with("NewCMMath")
+        })
+        .collect();
+    assert!(
+        foreign.is_empty(),
+        "fonts other than the bundled text fonts are embedded: {foreign:?} (all: {names:?})"
+    );
+    assert!(
+        names.iter().any(|name| name.starts_with("DejaVuSansMono")),
+        "the code chip did not use the bundled monospace font: {names:?}"
+    );
+}
+
 #[test]
 #[ignore = "runs the real typst binary; execute via `just verify-render`"]
 fn a_theme_reaches_an_asset_outside_all_notes_with_real_typst() {

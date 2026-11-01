@@ -76,8 +76,9 @@
 }
 
 // A task-list checkbox, drawn rather than taken from a glyph: one identical
-// box for both states, so checked and unchecked always match optically
-// regardless of font coverage.
+// box for both states, so checked and unchecked always match optically. The
+// tick is a stroked path, as none of the bundled text fonts has a check mark
+// glyph and typst would take one from a font on the machine.
 #let task(done: false) = {
   box(
     width: 0.85em,
@@ -86,7 +87,12 @@
     radius: 1.5pt,
     baseline: 0.1em,
     if done {
-      align(center + horizon, text(size: 0.75em, fill: luma(40), sym.checkmark))
+      place(curve(
+        stroke: (paint: luma(40), thickness: 0.09em, cap: "round", join: "round"),
+        curve.move((0.2em, 0.45em)),
+        curve.line((0.37em, 0.63em)),
+        curve.line((0.66em, 0.22em)),
+      ))
     },
   )
   h(0.4em)

@@ -191,9 +191,9 @@ rule that prints the body must check `type(it.body) == label`.
 ## Fonts
 
 The built-in look sets its text in the fonts typst brings along:
-Libertinus Serif, New Computer Modern and DejaVu Sans Mono. A glyph a font
-lacks, such as the built-in checkbox mark, is taken from another font
-typst finds.
+Libertinus Serif, New Computer Modern and DejaVu Sans Mono. The tick in a
+done task box is drawn as a shape, so it needs no font. A glyph a font
+lacks is taken from another font typst finds.
 
 A theme can use every font typst finds: the fonts installed on the system,
 and the fonts in the directories named by the `TYPST_FONT_PATHS`
