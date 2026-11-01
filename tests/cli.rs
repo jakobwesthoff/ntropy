@@ -1958,6 +1958,34 @@ fn render_to_html(vault: &Path, id: &str, extra: &[&str]) -> std::process::Outpu
 }
 
 #[test]
+fn render_to_html_numbers_footnotes_by_the_first_reference_the_page_shows() {
+    let dir = setup_vault();
+    // `[^z]` is never referenced, so the `[^b]` inside it is not on the page
+    // and `[^c]` is the first footnote a reader meets.
+    write_note(
+        dir.path(),
+        ULID_A,
+        "report",
+        "---\ntitle: Report\n---\n[^z]: sees[^b]\n\nx[^c] y[^b]\n\n[^b]: B\n\n[^c]: C\n",
+    );
+
+    let output = render_to_html(dir.path(), ULID_A, &[]);
+    assert!(
+        output.status.success(),
+        "render failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let page = fs::read_to_string(dir.path().join("report.html")).expect("html artifact");
+    assert!(
+        page.contains("x<sup class=\"footnote-ref\"><a href=\"#fn-1\" id=\"fnref-1\">1</a></sup> y<sup class=\"footnote-ref\"><a href=\"#fn-2\" id=\"fnref-2\">2</a></sup>"),
+        "{page}"
+    );
+    assert!(page.contains("<li id=\"fn-1\">\n<p>C</p>"), "{page}");
+    assert!(page.contains("<li id=\"fn-2\">\n<p>B</p>"), "{page}");
+}
+
+#[test]
 fn render_to_html_writes_the_page_and_its_files_beside_it_without_any_tool() {
     let dir = setup_vault();
     write_note(

@@ -175,8 +175,8 @@ pub trait Output {
     fn image(&mut self, dest: &str, alt: &str, warnings: &mut Vec<Warning>) -> String;
 
     /// A footnote reference, given the definition's rendered block content.
-    /// Called once per label, in first-reference order; the result replaces
-    /// every reference to that label. An output either inlines the content
+    /// Called once per label, in the order of the first reference the page
+    /// shows; the result replaces every reference to that label. An output either inlines the content
     /// here or keeps it for the section it appends in [`Output::finish`].
     fn footnote(&mut self, content: &str) -> String;
 
@@ -334,6 +334,9 @@ enum FrameKind {
     /// document.
     FootnoteDefinition {
         label: String,
+        /// Tells this definition apart from another one of the same label,
+        /// which replaces it.
+        serial: usize,
     },
     /// A raw HTML block. Its verbatim text accumulates and is handed to the
     /// output at the close.
@@ -395,10 +398,18 @@ struct Walker<'a, O: Output> {
     /// Footnote definitions collected during the walk, keyed by label. Filled
     /// wherever a definition appears; consumed when references are patched.
     footnote_definitions: HashMap<String, String>,
-    /// The labels every footnote reference used, in the order the walk met
-    /// them. Patching visits the ones the body reaches (see
-    /// [`Walker::reached_labels`]), undefined labels included.
-    footnote_references: Vec<String>,
+    /// Every footnote reference in source order, with the definition it sits
+    /// in. Patching numbers the labels by the first reference the page shows
+    /// (see [`Walker::finish`]), undefined labels included.
+    footnote_references: Vec<FootnoteReference>,
+    /// The serial of the definition each label's content comes from. A later
+    /// definition of a label replaces an earlier one.
+    definition_serials: HashMap<String, usize>,
+    /// The serial the next footnote definition frame takes.
+    next_definition_serial: usize,
+    /// How many footnote references were recorded when the open heading
+    /// started, so a heading the page drops takes its references with it.
+    heading_references_mark: usize,
     /// A per-run random token wrapping footnote-reference placeholders. See
     /// [`Walker::footnote_placeholder`] for the collision argument.
     nonce: String,
@@ -425,6 +436,14 @@ struct Walker<'a, O: Output> {
     /// definition nobody draws, or one a later definition of the same label
     /// replaced, leaves no id behind.
     deferred_headings: Vec<DeferredHeading>,
+}
+
+/// One footnote reference as the walk met it.
+struct FootnoteReference {
+    label: String,
+    /// The serial of the footnote definition the reference sits in, `None`
+    /// for one in the body.
+    within: Option<usize>,
 }
 
 /// A heading inside a footnote definition: its rendered inline content and
@@ -459,6 +478,9 @@ impl<'a, O: Output> Walker<'a, O> {
             finder,
             footnote_definitions: HashMap::new(),
             footnote_references: Vec::new(),
+            definition_serials: HashMap::new(),
+            next_definition_serial: 0,
+            heading_references_mark: 0,
             // A fresh ULID carries 80 random bits. Wrapping the reference
             // placeholder token in this nonce makes the token unequal to any
             // substring the note can produce: the note author cannot embed a
@@ -505,6 +527,14 @@ impl<'a, O: Output> Walker<'a, O> {
         self.stack
             .iter()
             .any(|frame| matches!(frame.kind, FrameKind::FootnoteDefinition { .. }))
+    }
+
+    /// The serial of the innermost footnote definition the walk is inside.
+    fn current_definition_serial(&self) -> Option<usize> {
+        self.stack.iter().rev().find_map(|frame| match frame.kind {
+            FrameKind::FootnoteDefinition { serial, .. } => Some(serial),
+            _ => None,
+        })
     }
 
     /// The placeholder of the deferred heading `index`.
@@ -601,9 +631,15 @@ impl<'a, O: Output> Walker<'a, O> {
             .pop()
             .expect("the document frame is pushed at construction and never popped");
         let reached = self.reached_labels(&document.body);
+        // The definitions the page draws: the surviving one of each reached
+        // label. A reference inside any other definition is not on the page.
+        let drawn: HashSet<usize> = reached
+            .iter()
+            .filter_map(|label| self.definition_serials.get(label).copied())
+            .collect();
         // Patch every footnote reference the page shows. A defined reference
         // renders through the output's footnote construct, once per label in
-        // the order labels were first referenced, so an output that numbers
+        // the order of its first shown reference, so an output that numbers
         // footnotes numbers them in reading order; an undefined one renders
         // as its literal source text (GFM). The substitutions are applied
         // repeatedly because a definition may itself contain references,
@@ -611,12 +647,15 @@ impl<'a, O: Output> Walker<'a, O> {
         // inlined; the pass count bounds any self-referential cycle.
         let mut substitutions: Vec<(String, String)> = Vec::new();
         let mut seen: Vec<String> = Vec::new();
-        for label in self.footnote_references.clone() {
-            if seen.contains(&label) || !reached.contains(&label) {
+        for reference in std::mem::take(&mut self.footnote_references) {
+            let shown = reference
+                .within
+                .is_none_or(|serial| drawn.contains(&serial));
+            if !shown || seen.contains(&reference.label) {
                 continue;
             }
-            seen.push(label.clone());
-            let label = &label;
+            seen.push(reference.label.clone());
+            let label = &reference.label;
             let placeholder = self.footnote_placeholder(label);
             let replacement = match self.footnote_definitions.get(label).cloned() {
                 Some(content) => {
@@ -826,7 +865,11 @@ impl<'a, O: Output> Walker<'a, O> {
         if self.image_depth > 0 {
             return;
         }
-        self.footnote_references.push(label.to_string());
+        let within = self.current_definition_serial();
+        self.footnote_references.push(FootnoteReference {
+            label: label.to_string(),
+            within,
+        });
         let placeholder = self.footnote_placeholder(label);
         self.append_inline(&placeholder);
     }
@@ -878,6 +921,7 @@ impl<'a, O: Output> Walker<'a, O> {
                 self.push(FrameKind::Paragraph);
             }
             Tag::Heading { .. } => {
+                self.heading_references_mark = self.footnote_references.len();
                 self.heading_text = Some(String::new());
                 self.push(FrameKind::Heading);
             }
@@ -915,8 +959,11 @@ impl<'a, O: Output> Walker<'a, O> {
             // A definition's block content is diverted to the definitions map
             // at its `End`, never spliced into the surrounding document.
             Tag::FootnoteDefinition(label) => {
+                let serial = self.next_definition_serial;
+                self.next_definition_serial += 1;
                 self.push(FrameKind::FootnoteDefinition {
                     label: label.to_string(),
+                    serial,
                 });
             }
             Tag::HtmlBlock => self.push(FrameKind::HtmlBlock {
@@ -1013,6 +1060,10 @@ impl<'a, O: Output> Walker<'a, O> {
                     && level == HeadingLevel::H1
                     && self.output.dropped_title() == Some(text.trim())
                 {
+                    // The references in the dropped heading are not on the
+                    // page, so they must not decide a footnote's number.
+                    self.footnote_references
+                        .truncate(self.heading_references_mark);
                     return;
                 }
                 if self.in_footnote_definition() {
@@ -1097,11 +1148,12 @@ impl<'a, O: Output> Walker<'a, O> {
             }
             TagEnd::FootnoteDefinition => {
                 let frame = self.pop();
-                let FrameKind::FootnoteDefinition { label } = frame.kind else {
+                let FrameKind::FootnoteDefinition { label, serial } = frame.kind else {
                     unreachable!("a footnote-definition end closes its frame");
                 };
                 // Later definitions with a repeated label overwrite earlier
                 // ones, matching pulldown-cmark's own last-wins resolution.
+                self.definition_serials.insert(label.clone(), serial);
                 self.footnote_definitions.insert(label, frame.body);
             }
             TagEnd::HtmlBlock => {
@@ -1655,6 +1707,92 @@ mod tests {
         );
         assert!(!out.contains('\u{0}'), "placeholder leaked: {out:?}");
         assert!(out.contains("(fn (p B))"), "{out:?}");
+    }
+
+    /// The footnote contents the walk hands over for `input`, in number
+    /// order.
+    fn footnote_order(input: &str) -> Vec<String> {
+        let mut output = Trace::default();
+        walk(input, &[], &mut output);
+        output.footnotes
+    }
+
+    #[test]
+    fn footnotes_are_numbered_by_the_first_reference_the_page_shows() {
+        // `[^z]` is never referenced, so the `[^b]` inside it is not on the
+        // page and `[^c]` is the first footnote a reader meets.
+        assert_eq!(
+            footnote_order("[^z]: sees[^b]\n\nx[^c] y[^b]\n\n[^b]: B\n\n[^c]: C"),
+            ["(p C)\n", "(p B)\n"]
+        );
+    }
+
+    #[test]
+    fn a_reference_in_a_drawn_definition_numbers_ahead_of_one_in_an_undrawn_definition() {
+        let order = footnote_order("[^z]: sees[^b]\n\nx[^a]\n\n[^a]: A[^b]\n\n[^b]: B");
+        assert!(order[0].starts_with("(p A"), "{order:?}");
+        assert_eq!(order[1], "(p B)\n");
+    }
+
+    #[test]
+    fn a_reference_in_a_replaced_definition_does_not_number() {
+        // The first `[^a]` definition loses to the second, so its `[^b]` is
+        // not on the page.
+        assert_eq!(
+            footnote_order("[^a]: old[^b]\n\n[^a]: new\n\nx[^c] y[^a] z[^b]\n\n[^b]: B\n\n[^c]: C"),
+            ["(p C)\n", "(p new)\n", "(p B)\n"]
+        );
+    }
+
+    #[test]
+    fn a_reference_in_the_dropped_title_does_not_number() {
+        let mut output = Trace {
+            title: Some("T".to_string()),
+            ..Trace::default()
+        };
+        walk(
+            "# T[^b]\n\nx[^a] y[^b]\n\n[^a]: A\n\n[^b]: B",
+            &[],
+            &mut output,
+        );
+        assert_eq!(output.footnotes, ["(p A)\n", "(p B)\n"]);
+    }
+
+    #[test]
+    fn dropping_the_title_keeps_the_references_recorded_before_it() {
+        // `[^q]` is unreferenced, so its `[^r]` stays out of the numbering
+        // whatever the title heading that follows does.
+        let mut output = Trace {
+            title: Some("T".to_string()),
+            ..Trace::default()
+        };
+        walk(
+            "[^q]: Q[^r]\n\n# T[^c]\n\nx[^d] y[^r] z[^c]\n\n[^r]: R\n\n[^c]: C\n\n[^d]: D",
+            &[],
+            &mut output,
+        );
+        assert_eq!(output.footnotes, ["(p D)\n", "(p R)\n", "(p C)\n"]);
+    }
+
+    #[test]
+    fn a_reference_in_a_heading_of_a_drawn_definition_numbers_at_its_position() {
+        let order = footnote_order("x[^a] y[^c]\n\n[^a]:\n    # H[^b]\n\n[^b]: B\n\n[^c]: C");
+        assert!(order[0].starts_with("(h1 #h"), "{order:?}");
+        assert_eq!(order[1..], ["(p C)\n", "(p B)\n"]);
+    }
+
+    #[test]
+    fn headings_inside_footnotes_take_their_ids_in_footnote_order() {
+        // `[^c]` is footnote 1, so its heading is the first `n`.
+        assert_eq!(
+            footnote_order(
+                "[^z]: sees[^b]\n\nx[^c] y[^b]\n\n[^b]:\n    # N\n\n    bee\n\n[^c]:\n    # N\n\n    cee"
+            ),
+            [
+                "(h1 #n \"N\" N)\n\n(p cee)\n",
+                "(h1 #n-1 \"N\" N)\n\n(p bee)\n"
+            ]
+        );
     }
 
     #[test]

@@ -18,7 +18,12 @@ change in any release
   a "↩" link back to a reference that is not on the page, so the link did
   nothing, and the footnotes after it were numbered one too high. The same
   holds for a footnote whose only reference sits in text the page does not
-  show, such as the title heading it drops. Pages with such a footnote change.
+  show, such as the title heading it drops. Such a reference no longer decides
+  a footnote's number either: footnotes are numbered by their first reference
+  that the page shows, so a reference in a definition nobody draws, in a
+  definition a later one of the same label replaces, or in the dropped title
+  heading counts for nothing. Headings inside footnotes take their ids in the
+  new order. Pages with such a footnote change.
 - `show` and `render --to ansi` no longer crash on a note with a footnote that
   only an unreferenced footnote definition mentions, for example
   `[^z]: sees[^b]` with `[^b]` defined and nothing in the body referring to
