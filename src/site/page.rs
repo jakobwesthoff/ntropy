@@ -646,6 +646,55 @@ mod tests {
         );
     }
 
+    /// A theme template sees numbers, nulls and nested lists as the kinds
+    /// they were written as, not as text. A TOML datetime in `[site.vars]`
+    /// arrives as a map, the way the toml crate serializes it.
+    #[test]
+    fn a_template_reads_every_kind_of_value_the_context_carries() {
+        let templates = Templates::new(&theme_with(&[(
+            "page.html",
+            concat!(
+                "{{ vars.ratio }}|{{ vars.whole }}|{{ vars.count + 1 }}|{{ vars.when is mapping }}|",
+                "{{ vars.flag }}|{{ vars.list | length }}|{{ vars.nested[1][0] }}|",
+                "{{ note.frontmatter.nothing is none }}|{{ note.frontmatter.score + 1 }}|",
+                "{{ note.frontmatter.list[1] }}|",
+                "{% if prev %}{{ prev.href }}{% endif %}|{{ next is none }}|",
+                "{{ nav[0].items[0].current }}|{{ nav[0].items[0].count is none }}|",
+                "{{ nav[0].items[1].count + 1 }}|{{ nav[0].cloud }}",
+            ),
+        )]))
+        .expect("parses");
+        let mut nav = page().nav;
+        nav[0].items.push(super::super::nav::NavItemData {
+            kind: "group",
+            label: "projects".to_string(),
+            href: None,
+            current: false,
+            open: false,
+            count: Some(3),
+            items: Vec::new(),
+        });
+        let rendered = Page {
+            nav,
+            vars: toml::from_str(
+                "ratio = 1.5\nwhole = 2.0\ncount = 41\nwhen = 2026-11-01\nflag = true\nlist = [1, 2, 3]\nnested = [[1, 2], [3, 4]]\n",
+            )
+            .expect("the fixture vars parse"),
+            note: Some(NoteContext {
+                frontmatter: serde_yaml_ng::from_str("nothing: null\nscore: 2.5\nlist: [a, b]\n")
+                    .expect("the fixture frontmatter parses"),
+                ..page().note.expect("the fixture page has a note")
+            }),
+            ..page()
+        }
+        .render(&templates)
+        .expect("renders");
+        assert_eq!(
+            rendered,
+            "1.5|2.0|42|True|True|3|3|True|3.5|b|earlier.html|True|True|True|4|False"
+        );
+    }
+
     #[test]
     fn a_page_from_no_note_leaves_note_undefined() {
         let templates = Templates::new(&theme_with(&[(
