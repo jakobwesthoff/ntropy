@@ -93,32 +93,7 @@ seeds it again.
 
 ## Skipping the template
 
-`ntropy new --empty <title>` creates the file with no content in it. ntropy
-still picks the ULID, the location, and the filename; what goes inside is
-yours to write. `--template` is rejected alongside `--empty`. This mode is
-mainly for scripts and agents, which would otherwise have to parse and
-rewrite around a stamped skeleton. Until frontmatter lands in the file it is
-not a well-formed note, so ntropy skips it with a warning meanwhile.
-
-`ntropy write` is the other half of that. It takes a note's whole text on
-stdin, refuses it if it is not a well-formed note, and stores it, then
-realigns the filename and refreshes the views for you and prints the
-resulting path. The two together author a note without ever reading one
-back, and without an editor, in a plaintext and an encrypted vault alike:
-
-```bash
-note=$(ntropy new --empty -p Quarterly review)
-ntropy write "$note" <<'EOF'
----
-title: Quarterly review
-tags: [work, planning]
----
-# Quarterly review
-
-Numbers go here.
-EOF
-```
-
-`write` names its target (a full ULID, the note's filename, or its path in
-`all-notes/`) and never searches for it, so it opens no picker and asks no
-question.
+`ntropy new --empty <title>` creates the note's file with no content, for
+a script or an agent that writes the whole note itself with
+`ntropy write`. How the two work together is in
+[Scripting and the shell](01M28Q32N56MS70ETPES4794HJ-scripting-and-the-shell.md).
