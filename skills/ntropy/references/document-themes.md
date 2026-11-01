@@ -137,15 +137,18 @@ ntropy runs in, so set it absolute:
 `TYPST_FONT_PATHS="$(ntropy info -p)/assets/fonts"`. `typst fonts`
 (`--font-path <dir>` to add one) lists usable family names.
 
-An unknown font name falls back to the default font silently: the render
-succeeds, also under `--strict`. Check with `pdffonts <pdf>` or the
-compile below.
+An unknown font name falls back to the default font and typst's warning
+`unknown font family: <name>` reaches the user as a render warning, which
+`--strict` fails on. `pdffonts <pdf>` lists the fonts a PDF embeds.
 
 ## Warnings and errors
 
-ntropy shows typst's output only when the compile fails, so warnings never
-reach the user. To see them, compile the typst artifact by hand, on stdin
-(typst refuses a main file outside `--root`):
+A PDF render shows each warning of a compile that succeeds as one ntropy
+warning: typst's message, then the source line it points at in backticks,
+then its hints; `--strict` fails on it. A character no font covers is
+silent, as typst prints nothing for it. `--to typst` runs no compiler. To see
+typst's own output, compile the typst artifact by hand, on stdin (typst
+refuses a main file outside `--root`):
 
 ```bash
 ntropy render -n --to typst --force -o /tmp/check.typ <id>

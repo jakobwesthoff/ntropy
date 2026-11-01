@@ -237,9 +237,10 @@ export TYPST_FONT_PATHS="$(ntropy info -p)/assets/fonts"
 
 > [!WARNING]
 > A font name typst does not find falls back to the default font, and the
-> render succeeds without a message, also under `--strict`. `pdffonts`
-> from poppler lists the fonts a PDF embeds; the compile under
-> [Errors and warnings](#errors-and-warnings) shows typst's warning.
+> render succeeds. typst's warning `unknown font family: <name>` reaches you
+> as a warning of the render (see
+> [Errors and warnings](#errors-and-warnings)), and `--strict` fails on it.
+> `pdffonts` from poppler lists the fonts a PDF embeds.
 
 ## Assets and the vault root
 
@@ -271,8 +272,20 @@ ntropy's own definitions, so that line is further down than in the theme
 file. An error in a file the theme imports names that file and its own
 line.
 
-ntropy does not pass on typst's warnings. Compiling the `--to typst`
-artifact by hand, as in the note above, prints them.
+A compile that succeeds can still print warnings, such as an unknown font
+family. A PDF render shows each of them as one warning of ntropy, and
+`--strict` fails on it. The line holds typst's message, the source line it
+points at in backticks and typst's hints, if it has any:
+
+```
+warning: unknown font family: no-such-font (in `set text(font: "no-such-font")`)
+```
+
+The line number is left out as it counts lines of the emitted document.
+typst prints nothing for a character no font covers, so that
+case stays silent. The `--to typst` format runs no compiler and shows no
+typst warnings; compiling its artifact by hand, as in the note above,
+prints them.
 
 To see a theme draw the parts of a note in one document, render the theme
 test note, a download that comes with the note it links to and its two

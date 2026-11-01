@@ -52,9 +52,16 @@ change in any release
   page and loses the columns beyond it. The render warns with the column count
   and the size it needed, which `--strict` turns into a failure. The widths
   come from the text of the cells, so an image in a cell counts as no width.
-  `--to typst` gives no warning, and the check needs `typst query`; if it
+  `--to typst` gives no warning, and the check needs `typst eval`; if it
   cannot run, the render warns that it could not check the tables and
   finishes.
+- The warnings typst prints while it compiles a PDF successfully now reach
+  you as warnings of the render, and `--strict` fails on them. Before, ntropy
+  showed typst's output only when the compile failed, so a font a theme names
+  that the machine lacks fell back to another font without a word. Each
+  warning is one line: typst's message, the source line it points at in
+  backticks and its hints. A character that no font covers still draws as an
+  empty box without a warning, as typst prints none.
 - A table column without an alignment (`| --- |`) is left-aligned in a PDF,
   as in HTML. The built-in look centered every header and body cell of such a
   column. Columns with `:---`, `:---:` or `---:` keep their alignment. A

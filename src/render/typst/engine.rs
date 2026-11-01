@@ -139,6 +139,14 @@ impl Renderer for Typst {
                     });
                 }
 
+                // The warnings of the compile reach the user before the table
+                // check runs: that run compiles the same document again and
+                // prints the same warnings, which is why only the compile's
+                // stderr is read.
+                for warning in typst_warnings(&String::from_utf8_lossy(&out.stderr)) {
+                    ctx.warn(&warning);
+                }
+
                 // Only a table can be too wide, so a note without one pays for
                 // no second run of the compiler.
                 if body.contains("#table(") {
@@ -154,17 +162,108 @@ impl Renderer for Typst {
 /// smaller than it allows itself, see the table rule in `prelude.typ`.
 const TABLE_TOO_WIDE_LABEL: &str = "<ntropy-table-too-wide>";
 
+/// The warnings in the stderr of a `typst compile` that succeeded, each as
+/// one line for the host.
+///
+/// typst prints a warning as a block: a `warning: <message>` line, then
+/// optionally a snippet of the source with its location above it, then
+/// `= hint:` lines whose continuation lines are indented under them. A block
+/// ends at the next `warning:` or `error:` line at the start of a line, which
+/// also keeps the source lines of an error out of a warning. Anything else on
+/// stderr is not a warning and is dropped.
+///
+/// The location is left out. The document typst compiles is the one ntropy
+/// assembled from prelude, theme and note, so `<stdin>:10:16` points into a
+/// text the user never sees. The quoted source line identifies the spot
+/// instead.
+fn typst_warnings(stderr: &str) -> Vec<String> {
+    struct Block {
+        message: String,
+        source: Option<String>,
+        hints: Vec<String>,
+        in_hint: bool,
+    }
+
+    fn finish(block: Block, warnings: &mut Vec<String>) {
+        let mut line = block.message;
+        if let Some(source) = block.source {
+            line.push_str(&format!(" (in `{source}`)"));
+        }
+        if !block.hints.is_empty() {
+            line.push_str(&format!(" (hint: {})", block.hints.join("; ")));
+        }
+        warnings.push(line);
+    }
+
+    let mut warnings = Vec::new();
+    let mut current: Option<Block> = None;
+    for line in stderr.lines() {
+        if let Some(message) = line.strip_prefix("warning: ") {
+            if let Some(block) = current.take() {
+                finish(block, &mut warnings);
+            }
+            current = Some(Block {
+                message: message.trim().to_string(),
+                source: None,
+                hints: Vec::new(),
+                in_hint: false,
+            });
+            continue;
+        }
+        if line.starts_with("error: ") {
+            if let Some(block) = current.take() {
+                finish(block, &mut warnings);
+            }
+            continue;
+        }
+        let Some(block) = current.as_mut() else {
+            continue;
+        };
+
+        let text = line.trim();
+        if let Some(hint) = text.strip_prefix("= hint: ") {
+            block.hints.push(hint.trim().to_string());
+            block.in_hint = true;
+            continue;
+        }
+
+        // A source line is `<number> │ <code>`; the lines of the gutter around
+        // it carry no number.
+        let numbered_source = text
+            .split_once('│')
+            .filter(|(number, _)| {
+                !number.is_empty() && number.trim().chars().all(|c| c.is_ascii_digit())
+            })
+            .map(|(_, code)| code.trim().to_string());
+        if let Some(code) = numbered_source {
+            block.source.get_or_insert(code);
+            block.in_hint = false;
+        } else if text.is_empty()
+            || text.starts_with('│')
+            || text.starts_with('┌')
+            || text.starts_with("= ")
+        {
+            block.in_hint = false;
+        } else if block.in_hint {
+            let hint = block.hints.last_mut().expect("a hint is open");
+            hint.push(' ');
+            hint.push_str(text);
+        }
+    }
+    if let Some(block) = current {
+        finish(block, &mut warnings);
+    }
+    warnings
+}
+
 /// Ask the compiler which tables of `document` do not fit the page at the
 /// smallest text size the prelude allows, and warn about each one.
 ///
 /// The prelude decides this with the measured widths of the cells, which only
 /// the compiler can know, so the answer comes from a second run on the same
 /// document. A check that cannot run or cannot be read is a warning of its own
-/// and leaves the finished PDF alone.
-///
-/// `typst query` is deprecated since typst 0.15 in favour of
-/// `typst eval --in - 'query(<label>)...'`; its deprecation text on stderr is
-/// not a problem of the note and is not shown.
+/// and leaves the finished PDF alone. The run's stderr is not parsed for
+/// warnings: it repeats those of the compile.
 fn warn_about_tables_that_do_not_fit(
     ctx: &mut dyn RenderContext,
     vault_root: &std::path::Path,
@@ -173,13 +272,12 @@ fn warn_about_tables_that_do_not_fit(
     let invocation = Invocation {
         program: "typst".to_string(),
         args: vec![
-            "query".into(),
+            "eval".into(),
             "--root".into(),
             vault_root.as_os_str().to_os_string(),
-            "--field".into(),
-            "value".into(),
+            "--in".into(),
             "-".into(),
-            TABLE_TOO_WIDE_LABEL.into(),
+            format!("query({TABLE_TOO_WIDE_LABEL}).map(m => m.value)").into(),
         ],
         stdin: Some(document),
     };
@@ -194,7 +292,12 @@ fn warn_about_tables_that_do_not_fit(
         }
     };
     if !out.success {
-        ctx.warn(&cannot_check(String::from_utf8_lossy(&out.stderr).trim()));
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let cause = stderr
+            .lines()
+            .find_map(|line| line.strip_prefix("error: "))
+            .unwrap_or_else(|| stderr.trim());
+        ctx.warn(&cannot_check(cause));
         return;
     }
 
@@ -619,13 +722,12 @@ mod tests {
         assert_eq!(
             args,
             vec![
-                "query",
+                "eval",
                 "--root",
                 "/vault",
-                "--field",
-                "value",
+                "--in",
                 "-",
-                "<ntropy-table-too-wide>"
+                "query(<ntropy-table-too-wide>).map(m => m.value)"
             ],
             "the query reads the same document from stdin"
         );
@@ -643,7 +745,7 @@ mod tests {
             .script(tool_output(
                 true,
                 r#"[{"columns":16,"scale":0.5073},{"columns":12,"scale":0.4}]"#,
-                "warning: the `typst query` subcommand is deprecated\n",
+                "",
             ));
         Typst::for_pdf_format(RenderOptions::default(), None)
             .render(&table_document(), &mut ctx)
@@ -657,7 +759,7 @@ mod tests {
                 "a table with 12 columns needs the text at 40% of its size to fit the page; \
                  it is set at 60% and runs past the right edge of the page, so columns are cut off",
             ],
-            "the deprecation text on stderr is not a warning of ours"
+            "each clamped table is one warning"
         );
     }
 
@@ -665,7 +767,11 @@ mod tests {
     fn a_failed_query_warns_about_the_check_and_keeps_the_render() {
         let mut ctx = pdf_context()
             .script(tool_output(true, "", ""))
-            .script(tool_output(false, "", "error: unknown subcommand\n"));
+            .script(tool_output(
+                false,
+                "",
+                "warning: unknown font family: nope\nerror: unknown subcommand\n  ┌─ <stdin>:1:1\n",
+            ));
         Typst::for_pdf_format(RenderOptions::default(), None)
             .render(&table_document(), &mut ctx)
             .expect("a failed check does not fail the render");
@@ -717,6 +823,147 @@ mod tests {
             .render(&table_document(), &mut ctx)
             .expect_err("the compile failed");
         assert_eq!(ctx.invocations.len(), 1);
+    }
+
+    // Verbatim `typst compile` stderr (typst 0.15.1) of documents that compile.
+    const UNKNOWN_FONT: &str = "warning: unknown font family: nope
+  ┌─ <stdin>:1:16
+  │
+1 │ #set text(font: \"Nope\")
+  │                 ^^^^^^
+
+";
+    const UNKNOWN_FONT_LINE_TEN: &str = "warning: unknown font family: nope
+   ┌─ <stdin>:10:16
+   │
+10 │ #set text(font: \"Nope\")
+   │                 ^^^^^^
+
+";
+    const NOT_CONVERGED: &str = "warning: document did not converge within five attempts
+ = hint: see 2 additional warnings for more details
+ = hint: see https://typst.app/help/convergence for help
+
+warning: value of `state(\"x\")` did not converge
+  ┌─ conv.typ:3:33
+  │
+3 │ #context [#s.update(x => x + 1) #s.final()]
+  │                                  ^^^^^^^^^
+  │
+  = hint: the following values were observed:
+    - run 1: `0`
+    - run 2: `1`
+    - final: `5`
+  = hint: see https://typst.app/help/state-convergence for help
+
+";
+
+    fn warnings_of_a_compile(stderr: &str) -> Vec<String> {
+        let mut ctx = pdf_context().script(tool_output(true, "", stderr));
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&doc("Plain", "{}", "Some text.\n", Vec::new()), &mut ctx)
+            .expect("a warning does not fail the render");
+        ctx.warnings
+    }
+
+    #[test]
+    fn a_compile_warning_reaches_the_host_with_its_source_line() {
+        assert_eq!(
+            warnings_of_a_compile(UNKNOWN_FONT),
+            vec![r#"unknown font family: nope (in `#set text(font: "Nope")`)"#]
+        );
+    }
+
+    #[test]
+    fn a_compile_that_prints_nothing_warns_nothing() {
+        assert!(warnings_of_a_compile("").is_empty());
+    }
+
+    #[test]
+    fn several_compile_warnings_become_one_warning_each_with_their_hints() {
+        assert_eq!(
+            warnings_of_a_compile(NOT_CONVERGED),
+            vec![
+                "document did not converge within five attempts (hint: see 2 additional \
+                 warnings for more details; see https://typst.app/help/convergence for help)",
+                "value of `state(\"x\")` did not converge \
+                 (in `#context [#s.update(x => x + 1) #s.final()]`) \
+                 (hint: the following values were observed: - run 1: `0` - run 2: `1` \
+                 - final: `5`; see https://typst.app/help/state-convergence for help)",
+            ]
+        );
+    }
+
+    #[test]
+    fn a_source_line_with_a_wider_gutter_is_still_found() {
+        assert_eq!(
+            warnings_of_a_compile(UNKNOWN_FONT_LINE_TEN),
+            vec![r#"unknown font family: nope (in `#set text(font: "Nope")`)"#]
+        );
+    }
+
+    #[test]
+    fn stderr_outside_a_warning_is_dropped() {
+        let stderr = format!("compiling...\nnote: something\n{UNKNOWN_FONT}done\n");
+        assert_eq!(
+            warnings_of_a_compile(&stderr),
+            vec![r#"unknown font family: nope (in `#set text(font: "Nope")`)"#]
+        );
+    }
+
+    #[test]
+    fn a_warning_block_ends_at_an_error_line() {
+        let stderr = format!(
+            "error: broken\n  ┌─ <stdin>:2:1\n  │\n2 │ #oops\n  │ ^^^^^\n\n{UNKNOWN_FONT}\
+             error: late\n  ┌─ <stdin>:3:1\n  │\n3 │ #late\n  │ ^^^^^\n"
+        );
+        assert_eq!(
+            warnings_of_a_compile(&stderr),
+            vec![r#"unknown font family: nope (in `#set text(font: "Nope")`)"#],
+            "the source lines of the errors do not leak into the warning"
+        );
+    }
+
+    #[test]
+    fn the_table_warning_follows_the_compile_warnings_and_the_query_stderr_is_ignored() {
+        let mut ctx = pdf_context()
+            .script(tool_output(true, "", UNKNOWN_FONT))
+            .script(tool_output(
+                true,
+                r#"[{"columns":16,"scale":0.5}]"#,
+                UNKNOWN_FONT,
+            ));
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&table_document(), &mut ctx)
+            .expect("warnings do not fail the render");
+        assert_eq!(
+            ctx.warnings,
+            vec![
+                r#"unknown font family: nope (in `#set text(font: "Nope")`)"#.to_string(),
+                "a table with 16 columns needs the text at 50% of its size to fit the page; \
+                 it is set at 60% and runs past the right edge of the page, so columns are cut off"
+                    .to_string(),
+            ],
+            "the font warning is reported once although the query compiles the document again"
+        );
+    }
+
+    #[test]
+    fn a_failed_table_check_names_the_first_error_line_as_its_cause() {
+        let mut ctx = pdf_context()
+            .script(tool_output(true, "", ""))
+            .script(tool_output(
+                false,
+                "",
+                "warning: unknown font family: nope\nerror: file not found\n  ┌─ <stdin>:1:1\n",
+            ));
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&table_document(), &mut ctx)
+            .expect("a failed check does not fail the render");
+        assert_eq!(
+            ctx.warnings,
+            vec!["could not check whether the tables fit the page: file not found"]
+        );
     }
 
     #[test]

@@ -1299,13 +1299,13 @@ fn write_stub_typst(vault: &Path) {
 /// Draining stdin mirrors the real compiler consuming the document; the marker
 /// lands at the last argument of `typst compile - <path>`, the output path. A
 /// write that fails, such as one into a directory that does not exist, ends in
-/// exit status 1 as it does for the real compiler. A `query` for tables that
-/// do not fit the page finds none.
+/// exit status 1 as it does for the real compiler. An `eval` of the
+/// query for tables that do not fit the page finds none.
 /// `cat` is named by absolute path: the tests reduce `PATH` to the relative
 /// `stub-bin` entry, under which no `cat` exists.
 const STUB_TYPST_SCRIPT: &str = r#"#!/bin/sh
 /bin/cat > /dev/null
-if [ "$1" = "query" ]; then
+if [ "$1" = "eval" ]; then
   printf '[]\n'
   exit 0
 fi
@@ -1335,7 +1335,7 @@ fn write_typst_script(dir: &Path, script: &str, mode: u32) {
 fn write_arg_recording_typst(vault: &Path) {
     let script = r#"#!/bin/sh
 /bin/cat > /dev/null
-if [ "$1" = "query" ]; then
+if [ "$1" = "eval" ]; then
   printf '[]\n'
   exit 0
 fi
@@ -1921,10 +1921,10 @@ fn render_keeps_a_directory_that_was_already_there_when_the_render_fails() {
 }
 
 /// A fake `typst` that writes the PDF marker for `compile` and answers the
-/// `query` for clamped tables with one table that needs 50 percent.
+/// `eval` of the query for clamped tables with one table that needs 50 percent.
 const STUB_TYPST_CLAMPED_TABLE: &str = r#"#!/bin/sh
 /bin/cat > /dev/null
-if [ "$1" = "query" ]; then
+if [ "$1" = "eval" ]; then
   printf '[{"columns":16,"scale":0.5}]\n'
   exit 0
 fi
@@ -1976,6 +1976,80 @@ fn a_table_that_does_not_fit_the_page_fails_a_strict_render() {
         !output.status.success(),
         "--strict did not fail on the table warning"
     );
+}
+
+/// A fake `typst` that warns about an unknown font on every run that compiles
+/// the document, `compile` and `eval` alike as the real one does, and finds
+/// one table that does not fit the page.
+const STUB_TYPST_WARNING: &str = r#"#!/bin/sh
+/bin/cat > /dev/null
+printf 'warning: unknown font family: nope\n  ┌─ <stdin>:1:16\n  │\n1 │ #set text(font: "Nope")\n  │                 ^^^^^^\n\n' >&2
+if [ "$1" = "eval" ]; then
+  printf '[{"columns":16,"scale":0.5}]\n'
+  exit 0
+fi
+out=""
+for arg in "$@"; do
+  out="$arg"
+done
+printf 'stub pdf via typst\n' > "$out" || exit 1
+exit 0
+"#;
+
+fn render_a_note_with_a_warning_stub(body: &str, strict: bool) -> std::process::Output {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "warned",
+        &format!("---\ntitle: Warned\n---\n{body}"),
+    );
+    write_typst_script(&dir.path().join(STUB_BIN), STUB_TYPST_WARNING, 0o755);
+    let mut cmd = ntropy(dir.path());
+    cmd.env("PATH", STUB_BIN);
+    if strict {
+        cmd.arg("--strict");
+    }
+    cmd.args(["render", ULID_A, "-n"]);
+    cmd.output().expect("run render")
+}
+
+#[test]
+fn a_warning_of_a_successful_typst_compile_reaches_the_user() {
+    let output = render_a_note_with_a_warning_stub("body\n", false);
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains(r#"warning: unknown font family: nope (in `#set text(font: "Nope")`)"#),
+        "typst's warning is missing:\n{stderr}"
+    );
+}
+
+#[test]
+fn a_warning_of_a_successful_typst_compile_fails_a_strict_render() {
+    let output = render_a_note_with_a_warning_stub("body\n", true);
+    assert!(
+        !output.status.success(),
+        "--strict did not fail on typst's warning"
+    );
+}
+
+#[test]
+fn a_typst_warning_and_a_table_that_does_not_fit_are_each_reported_once() {
+    let output = render_a_note_with_a_warning_stub("| a | b |\n| - | - |\n| 1 | 2 |\n", false);
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr.matches("unknown font family").count(),
+        1,
+        "the compile's warning is repeated by the table check:\n{stderr}"
+    );
+    let font = stderr.find("unknown font family").expect("font warning");
+    let table = stderr
+        .find("a table with 16 columns")
+        .expect("table warning");
+    assert!(font < table, "the table warning comes first:\n{stderr}");
+    assert!(!stderr.contains("deprecated"), "{stderr}");
 }
 
 #[test]
@@ -4252,15 +4326,22 @@ fn render_kitchen_sink_compiles_with_real_typst() {
     // `--root` at the vault, as ntropy itself compiles: the emitted document
     // addresses its assets from the vault root (ADR 0045), so a hand-compile
     // needs the same root to resolve them.
-    let png_status = Command::new("typst")
+    let png = Command::new("typst")
         .args(["compile", "--format", "png", "--root"])
         .arg(dir.path())
         .arg("kitchen-sink.typ")
         .arg(out_dir.join("kitchen-sink-{p}.png"))
         .current_dir(dir.path().join("all-notes"))
-        .status()
+        .output()
         .expect("run typst compile to png");
-    assert!(png_status.success(), "png compile failed");
+    assert!(png.status.success(), "png compile failed");
+    // ntropy shows every warning typst prints for a PDF, so the built-in look
+    // must compile a document without any.
+    assert_eq!(
+        String::from_utf8_lossy(&png.stderr),
+        "",
+        "typst warns about the built-in look"
+    );
 
     fs::copy(
         dir.path().join("kitchen-sink.pdf"),
@@ -4653,7 +4734,7 @@ fn a_wide_table_breaks_a_word_only_at_a_space_or_a_hyphen_it_has() {
 fn a_table_that_cannot_fit_the_page_warns_with_real_typst() {
     // Sixteen columns of one long word each need far less than 60 percent of
     // the text size to fit an A4 page. The warning rides on the real
-    // `typst query` of the label the prelude puts on such a table.
+    // `typst eval` of the label the prelude puts on such a table.
     let dir = setup_vault();
     let header: String = (0..16)
         .map(|column| format!("| Column{column}x "))
@@ -4675,6 +4756,11 @@ fn a_table_that_cannot_fit_the_page_warns_with_real_typst() {
         stderr.contains("a table with 16 columns needs the text at"),
         "no warning about the table:\n{stderr}"
     );
+    assert_eq!(
+        stderr.matches("warning:").count(),
+        1,
+        "typst warns about the clamped table itself:\n{stderr}"
+    );
     assert!(
         stderr.contains("runs past the right edge of the page, so columns are cut off"),
         "the warning does not say what happens to the table:\n{stderr}"
@@ -4683,6 +4769,52 @@ fn a_table_that_cannot_fit_the_page_warns_with_real_typst() {
         !stderr.contains("deprecated"),
         "typst's own deprecation text leaked:\n{stderr}"
     );
+}
+
+/// A vault with a theme whose `note` sets a font typst does not know, so the
+/// compile of any note warns.
+fn vault_with_a_theme_naming_an_unknown_font() -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "themed",
+        "---\ntitle: Themed\n---\nbody\n",
+    );
+    write_theme(
+        dir.path(),
+        "no-such-font",
+        "#let note(title: none, frontmatter: (:), paper: \"a4\", body) = {\n  \
+         set text(font: \"no-such-font\")\n  body\n}\n",
+    );
+    configure_theme(dir.path(), "no-such-font");
+    dir
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_font_a_theme_names_that_typst_does_not_know_is_a_warning_with_real_typst() {
+    let dir = vault_with_a_theme_naming_an_unknown_font();
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "themed.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(output.status.success());
+    assert!(dir.path().join("themed.pdf").exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("warning: unknown font family: no-such-font"),
+        "typst's warning is missing:\n{stderr}"
+    );
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_font_a_theme_names_that_typst_does_not_know_fails_a_strict_render_with_real_typst() {
+    let dir = vault_with_a_theme_naming_an_unknown_font();
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["--strict", "render", ULID_A, "-o", "themed.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(!output.status.success(), "--strict passed an unknown font");
 }
 
 #[test]

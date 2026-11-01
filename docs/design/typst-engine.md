@@ -254,14 +254,26 @@ with typst's "would escape the project root" error.
   that would still not fit is recorded as
   `metadata((columns:, scale:))` under the label `ntropy-table-too-wide`.
   After a successful compile the `pdf` arm runs
-  `typst query --root <vault> --field value - <ntropy-table-too-wide>` on the
-  same document, only when the emitted body holds `#table(`, and warns for
+  `typst eval --root <vault> --in - 'query(<ntropy-table-too-wide>).map(m => m.value)'`
+  on the same document, only when the emitted body holds `#table(`, and warns for
   each record. A query that fails, cannot start or answers something
   unreadable is a warning that the tables could not be checked and does not
   fail the render. The measuring sees text only, so an image in a cell counts
   as no width. The `typst` format gives no warning, as it runs no compiler.
-  `typst query` is deprecated in typst 0.15.1, which names
-  `typst eval` as the replacement.
+- **Compiler warnings.** A compile that succeeds can print warnings on
+  stderr, such as `unknown font family`. The `pdf` arm turns each warning
+  block into one ntropy warning, so `--strict` fails on it. A block starts
+  at a `warning:` line and ends at the next `warning:` or `error:` line.
+  The warning is typst's message, then ` (in `<source line>`)` with the
+  first numbered source line of the block, then ` (hint: <h1>; <h2>)` with
+  one entry per `= hint:` line, the continuation lines of a hint joined by
+  spaces. The `<stdin>:line:column` location is dropped: it points into the
+  assembled document, not into a file the user has. Stderr outside a block is
+  dropped. Only the stderr of the compile is read. The table check compiles
+  the same document again and would repeat every warning, so its stderr is
+  ignored, and its failure is reported through the first `error:` line.
+  Compile warnings come before table warnings. A character no font covers
+  produces no typst warning, so it stays silent.
 - **Paragraphs: blank-line separation**, not `#par()[...]`. Typst reads a
   blank line as a paragraph break natively. The escaping rules make the
   explicit wrapper's one advantage moot — soft breaks emit a space and

@@ -197,8 +197,8 @@ Testing).
 
 The context grows a primitive only when a real engine needs it: the typst
 engine emits its `typst`-format artifact through `write_output`, drives the
-external compiler for `pdf` through `run`, and reports degraded content
-through `warn`; `stage_file` serves engines whose external tool reads an
+external compiler for `pdf` through `run`, and reports degraded content and
+the warnings of a successful compile through `warn`; `stage_file` serves engines whose external tool reads an
 intermediate file from disk. A `warn` message prints to stderr and, under
 `--strict`, counts toward a failing exit like a scan warning.
 
