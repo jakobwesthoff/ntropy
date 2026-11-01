@@ -1,8 +1,8 @@
 ---
 title: Configuration
-tags: [docs/notes]
+tags: [docs/reference]
 site:
-  order: 7
+  order: 1
 ---
 There is not much to configure, on purpose. This page lists what there is: the editor, the global default vault, and the per-vault file that holds views, document settings and site settings.
 

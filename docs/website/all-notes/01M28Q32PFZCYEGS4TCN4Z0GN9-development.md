@@ -4,21 +4,11 @@ tags: [docs/develop]
 site:
   index: true
   label: Development
-  order: 6
+  order: 8
 ---
-This section is for people who build ntropy from source or want to know
-how it is put together. This page covers the build, the `just` recipes,
-the site frontend, and the snapshot tests. The pages under it are:
-
-- [Limitations](01M28Q32Q4M6KYH4YXJ3EPDHQT-limitations.md): what ntropy
-  does not do, and why.
-- [Design](01M28Q32QQ6NJ4P58R1A3X6ZDD-design.md): the design documents and
-  decision records, with a link to each.
-
-ntropy is licensed under the Mozilla Public License 2.0
-([`LICENSE`](https://github.com/jakobwesthoff/ntropy/blob/main/LICENSE)),
-and every source file starts with the MPL header comment, as the
-repository's `CLAUDE.md` requires.
+This section is for people who build ntropy from source or work on it:
+the build, the `just` recipes, the site frontend, and the snapshot tests.
+The design documents and decision records follow on their own page.
 
 The crate splits into a library with the business logic and the `ntropy`
 binary on top of it, so that other front ends can share that logic. The
@@ -64,8 +54,7 @@ for a look by eye.
 
 ## The site frontend
 
-The browser-side code of the
-[site export](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md) lives in
+The browser-side code of the site export lives in
 `site/` and is built with [Bun](https://bun.sh). `just site-build` writes
 the result to `src/site/dist/`, which is committed. `cargo build` never
 runs Bun: the build script embeds whatever is in `src/site/dist/` into the

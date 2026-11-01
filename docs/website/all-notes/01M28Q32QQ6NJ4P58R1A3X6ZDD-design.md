@@ -2,7 +2,7 @@
 title: Design
 tags: [docs/develop]
 site:
-  order: 2
+  order: 1
 ---
 The full design is recorded as decision records under
 [`docs/adr/`](https://github.com/jakobwesthoff/ntropy/tree/main/docs/adr)

@@ -1,33 +1,36 @@
 ---
 title: Commands
-tags: [docs/start]
+tags: [docs/reference]
 site:
-  order: 2
+  index: true
+  label: Reference
+  order: 7
 ---
-Every ntropy command in one table, with the flags that matter, followed by the
-flags every command accepts. `ntropy <command> --help` prints the full option
-list of a command; a bare `ntropy` prints the overview.
+The reference starts with every command on one page: what it does and
+the flags that matter, then the flags every command accepts.
+`ntropy <command> --help` lists all options of a command, and a bare
+`ntropy` prints the overview.
 
 ## Commands
 
 | Command | What it does |
 |---------|--------------|
-| `init [path]` | Scaffold (or complete) a vault; idempotent. The target is `path` or, if omitted, `--vault`; passing both is an error, and neither uses the current directory. `--set-default` records the vault as the global default. `--encrypted` creates an [encrypted vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md). |
-| `new <title>` | Create a note from a [template](01M28Q32BNT6XKW8DFW56GH06T-templates-and-daily-notes.md) and open it. `--template`/`-t <name>` picks a template; `--empty` writes no content at all, for a caller that authors the note itself; `--print`/`-p` just prints the path. |
-| `today` | Open today's note, creating it from the [`today` template](01M28Q32BNT6XKW8DFW56GH06T-templates-and-daily-notes.md) on first use that day. `--print`/`-p` just prints the path. |
-| `write <id\|filename\|path>` | Replace one note's content with text read from stdin, then realign the filename and refresh the views. Names its target rather than searching for it, never prompts, and works on an encrypted vault, including a locked one. |
-| `search [id\|query]` | The one browse/filter/full-text/open entry point (alias `list`). Takes a [query language](01M28Q32FC8RW01C5DSEEV77DW-query-language.md) expression and opens the [picker](01M28Q32FZCNHV2PZ5FSG8E360-the-interactive-picker.md) when several notes match; with `-n` it prints the matches as a table instead. `--print`/`-p` prints the selected note's path instead of opening it; `--print-content`/`-P` prints the note's text (exactly one note). |
-| `delete <id\|query>` | Remove a note and refresh the views (`-f`/`--force` skips the prompt). Must resolve to exactly one note: several matches open the picker interactively and are an error under `-n`, where `--force` is required as there is no prompt. |
-| `render [id\|query]` | [Render one note to a PDF](01M28Q32H5RYMZ5MHBQSQQN13B-rendering-to-pdf-and-html.md) with ntropy's own typst engine (only `typst` required on `PATH`), or with `--to html` to a web page with a `<stem>_files/` directory beside it, or with `--to ansi` to the note drawn for a terminal, both needing no tool. Must resolve to exactly one note; with no selector the picker opens over all notes, like `search`. `--to` picks the format (default `pdf`, or `typst` for the emitted Typst document), `--engine` overrides the format's default engine, `-o` the output path (default `./<slug>.<ext>`), `--theme` overrides the vault's [configured theme](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md), `-p` prints the artifact path. An existing artifact is refused unless `--force` replaces it. |
-| `show [id\|query]` | Print one note formatted for the terminal: its frontmatter, then its Markdown with headings, emphasis, lists, tables, quotes, callouts and highlighted code styled, at the terminal's width (`--width` sets another). A note taller than the screen opens in `$PAGER`, or `less -R`; `-n` never pages. Into a pipe it is plain text, and `NO_COLOR` leaves out the colours. Selects its note as `render` does. |
-| `site -o <dir> [query]` | [Export the vault as a static website](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md): a page per note, a tag tree, a page per view and group, sidebar, outline, breadcrumbs. Works from disk without a server. The optional query restricts the exported notes. `--force` empties a non-empty directory, `--theme` overrides the [site theme](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md), `-p` prints the front page's path. `site theme init <name>` copies the built-in theme into the vault. |
-| `reconcile` | Catch up after edits made outside ntropy: give a copied note a ULID of its own, realign filenames whose slug drifted from the title, rewrite links that pointed at the old names, re-sync every view, and bring `.gitignore` in line with the configured views. |
-| `view list\|add\|remove` | Manage [materialized views](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md), e.g. `ntropy view add by-status --field status`. A view name is lowercase letters, digits and dashes, nested with `/`; `add` refuses anything else. Removing a view leaves its directory on disk and tells you so; ntropy never deletes a directory. |
+| `init [path]` | Create a vault at `path`, or add what an existing vault lacks; it never touches what exists. Without `path` it uses `--vault`, or else the current directory; passing both is an error. `--set-default` records the vault as the global default. `--encrypted` creates an encrypted vault, see [Encrypted vaults](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md). |
+| `new <title>` | Create a note from a template and open it in your editor. `-t`/`--template <name>` picks the template. `--empty` creates the file with no content, for a script that writes the note itself. `-p`/`--print` prints the path instead of opening the editor. See [Templates and daily notes](01M28Q32BNT6XKW8DFW56GH06T-templates-and-daily-notes.md). |
+| `today` | Open today's note, created from the `today` template on first use that day. `-p`/`--print` prints the path instead. |
+| `write <id\|filename\|path>` | Replace one note's whole text with what stdin holds, then realign the filename and refresh the views. It names its target, so it never searches or prompts. It works in an encrypted vault, a locked one included. |
+| `search [id\|query]` | List, filter, full-text search and open notes; `list` is an alias. It takes a query or a full ULID. One match opens in your editor, several open the picker. Under `-n` the matches print as a table. `-p`/`--print` prints the chosen note's path instead, and `-P`/`--print-content` its text, for exactly one note. See [Finding notes](01M28Q32ESBVS3H2KJMRS99K87-finding-notes.md) and [Query language](01M28Q32FC8RW01C5DSEEV77DW-query-language.md). |
+| `delete <id\|query>` | Delete exactly one note and refresh the views. It asks first; `-f`/`--force` skips the question, and under `-n` it is required. Several matches open the picker, and under `-n` they are an error. |
+| `render [id\|query]` | Render one note, chosen as `search` chooses. `--to` picks the format: `pdf` (the default, needs `typst` on `PATH`), `typst`, `html` (with a `<stem>_files/` directory beside the page) or `ansi`. `-o` names the artifact, by default `./<slug>.<ext>`. `--force` replaces an existing artifact, and `-p` prints its path. `--theme` overrides the vault's theme, `--engine` the format's engine. See [Rendering to PDF and HTML](01M28Q32H5RYMZ5MHBQSQQN13B-rendering-to-pdf-and-html.md). |
+| `show [id\|query]` | Print one note drawn for the terminal, chosen as `render` chooses, at the terminal's width (`--width` sets another). A note taller than the screen opens in `$PAGER`, or `less -R`; `-n` never pages. Into a pipe it is plain text. |
+| `site -o <dir> [query]` | Export the vault as a static website that works from disk. A query restricts the exported notes. `--force` empties a non-empty `<dir>`, `--theme` overrides the site theme, and `-p` prints the front page's path. `site theme init <name>` copies the built-in theme into the vault. See [Exporting a website](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md). |
+| `reconcile` | Catch up after editing files outside ntropy. It gives a copied note a ULID of its own, renames files whose slug no longer matches the title, and rewrites links to the old names. Then it re-syncs the views and brings `.gitignore` in line with them. |
+| `view list\|add\|remove` | Manage views, as in `ntropy view add by-status --field status`. `remove` leaves the view's directory on disk. See [Materialized views](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md). |
 | `tags` | List every tag with its note count. |
-| `info` | Show the active vault and how it was resolved, the global default, and stats: note/tag/view/template counts, skipped-note warnings, the creation-date span, the top tags, and the template names. `--print`/`-p` prints the vault's path alone, for [shell integration](01M28Q32N56MS70ETPES4794HJ-scripting-and-the-shell.md). |
-| `unlock` / `lock` | Store or forget an [encrypted vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md)'s key, so ordinary commands need no passphrase. |
-| `vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault's storage, re-encrypt it to a fresh key, or change the passphrase. `encrypt`, `decrypt`, and `rekey` rewrite every note, so each asks first (`-y` skips) and each is safe to interrupt (`--resume` finishes). `passphrase` re-wraps only the key file and leaves the notes untouched. `rekey` and `passphrase` take `--new-passphrase-file` for the new passphrase. |
-| `lsp` | Run the [language server](01M28Q32MG1WQ0BTSBGCER8A2R-language-server.md) over stdin/stdout for your editor. |
+| `info` | Show the active vault and how it was found, the global default, and statistics of the vault. `-p`/`--print` prints the vault's path alone. |
+| `unlock` / `lock` | Store or forget an encrypted vault's key, so ordinary commands need no passphrase. |
+| `vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault to encrypted storage and back, re-encrypt it to a fresh key, or change the passphrase. The first three rewrite every note. They ask first; `-y` skips the question, and under `-n` it is required. `--resume` finishes an interrupted run. `rekey` and `passphrase` take `--new-passphrase-file`. |
+| `lsp` | Run the language server for your editor, over stdin and stdout. See [Language server](01M28Q32MG1WQ0BTSBGCER8A2R-language-server.md). |
 
 ## Global flags
 
@@ -35,10 +38,10 @@ These work on any command:
 
 | Flag | What it does |
 |------|--------------|
-| `--vault <path>` | Operate on the vault at this path. Overrides every other way of [finding the vault](01M28Q32CAAZA2PWAP4RR44GMA-finding-the-vault.md). |
-| `-n`, `--non-interactive` | Force plain behaviour even on a terminal: no picker, no editor, no prompts. Environments without a controlling terminal, such as cron and CI, get this automatically. |
+| `--vault <path>` | Operate on the vault at this path. It overrides every other way of finding the vault, see [Finding the vault](01M28Q32CAAZA2PWAP4RR44GMA-finding-the-vault.md). |
+| `-n`, `--non-interactive` | Plain behaviour even on a terminal: no picker, no editor, no prompts. Without a controlling terminal, as under cron and CI, this is automatic. |
 | `--strict` | Treat malformed or badly named notes, and views skipped for an invalid name, as errors instead of warnings. |
-| `-i`, `--identity <path>` | Use this age identity file instead of the OS credential store. `$NTROPY_IDENTITY` is consulted when the flag is absent. See [encrypted vaults](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md). |
+| `-i`, `--identity <path>` | Use this age identity file instead of the OS credential store. Without the flag, `$NTROPY_IDENTITY` is read. |
 | `--passphrase-file <path>` | Read the vault passphrase from the first line of this file wherever one would otherwise be typed. On `vault passphrase` it is the current passphrase. |
 
 `-V`/`--version` prints the version and `-h`/`--help` the help.

@@ -1,10 +1,10 @@
 ---
 title: Limitations
-tags: [docs/develop]
+tags: [docs/reference]
 site:
-  order: 1
+  order: 2
 ---
-Three things ntropy does not do, each the result of a design choice rather
+Two things ntropy does not do, each the result of a design choice rather
 than an oversight. The decision records behind them are linked from each
 section.
 
@@ -26,17 +26,6 @@ Your files are the database. ntropy keeps no index and no daemon. Every
 Query cost therefore grows with the vault on every run. That is fine for
 hundreds to low thousands of notes, which is what ntropy is tuned for, and
 not for hundred-thousand-note archives. In return everything stays plain,
-greppable, committable files, and nothing can go stale or corrupt, because
+greppable, committable files. Nothing can go stale or corrupt, because
 there is nothing derived to invalidate. Since the filesystem stays
 canonical, a cache can be added later without turning it into a database.
-
-## Views can drift on out-of-band edits
-
-ntropy refreshes the view trees after its own mutations (create, edit,
-retitle, delete). Change frontmatter or rename files behind its back, with
-`$EDITOR` or a script, and the views will not catch up until the next
-`ntropy reconcile`. That one command syncs the view trees, realigns
-filenames whose slug drifted from the title, and rewrites links that
-pointed at the old filenames, as described under
-[Commands](01M28Q3292T4MPPX6NZN69PN6H-commands.md). The notes themselves
-are never stale, only the derived views.
