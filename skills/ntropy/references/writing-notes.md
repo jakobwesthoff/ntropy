@@ -262,6 +262,8 @@ Non-`.md` files and subdirectories inside `all-notes/` are ignored by ntropy,
 so images and other attachments live right next to the notes and are referenced
 with ordinary relative Markdown syntax (`![diagram](diagram.png)`). Only
 inter-note links get the ULID-based refresh treatment.
+A `#` in a link target always starts the fragment, so a file with a `#` in its
+name cannot be linked.
 
 ## Slug and normalization facts
 

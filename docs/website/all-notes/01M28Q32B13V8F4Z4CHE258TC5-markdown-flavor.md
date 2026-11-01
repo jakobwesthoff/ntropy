@@ -64,3 +64,8 @@ copies, such as `.ntropy` or `.git`
 lists them). Rendering to PDF reads
 them from the vault: the `typst` compiler runs with the vault as its root,
 so a path that leaves the vault cannot be resolved.
+
+> [!NOTE]
+> A `#` in a link or image target always starts the fragment.
+> `[the spec](spec.pdf#page=2)` links `spec.pdf` and keeps `#page=2`, so a
+> file with a `#` in its name cannot be linked.
