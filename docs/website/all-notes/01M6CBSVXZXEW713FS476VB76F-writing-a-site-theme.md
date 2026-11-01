@@ -12,12 +12,20 @@ a vault with a few notes and a web browser.
 [Making a front page](01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page.md) continues with the same theme, and
 [Site themes](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md) lists every
 property, class, block, and template variable the steps use, and many more.
+The look of a PDF comes from a
+[document theme](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md) instead;
+[Writing a document theme](01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md)
+builds one.
 
 ## Quick start
 
-Run the commands in your vault's directory, or add `--vault <path>` to each
-of them. First copy the built-in theme into the vault under the name
-`harbor`:
+Every command in this guide runs in the root of your vault:
+
+```bash
+cd "$(ntropy info -p)"
+```
+
+First copy the built-in theme into the vault under the name `harbor`:
 
 ```bash
 ntropy site theme init harbor
@@ -32,6 +40,14 @@ yet:
 [site]
 theme = "harbor"
 ```
+
+> [!NOTE]
+> A vault names its themes in `.ntropy/config.toml`. `[render] theme` picks
+> a document theme, a Typst file in `.ntropy/themes/typst/`, for PDF and
+> Typst output; `[site] theme` picks a site theme, a directory in
+> `.ntropy/themes/site/`, for `ntropy site` and `render --to html`.
+> `--theme <name>` picks another theme for one command, and
+> `--theme default` the built-in look.
 
 Export the site and open its front page:
 
@@ -54,7 +70,7 @@ header's switch for the light scheme: the square before the site name, the
 date, the rule under the title, and the current entry of the outline are
 teal now.
 
-![A note page of the built-in theme with a teal accent](/assets/site-theme/01-quick-start.png)
+![A note page of the built-in theme with a teal accent](../assets/site-theme/01-quick-start.png)
 
 That is the whole loop: edit the theme, export, reload. Every step below
 repeats it.
@@ -141,11 +157,11 @@ together at the end of the file, ready to carry over to a fresh copy:
 Export and reload. With the sun picked, the page is a cool grey with teal
 links:
 
-![The harbor palette in the light scheme](/assets/site-theme/02-colours-light.png)
+![The harbor palette in the light scheme](../assets/site-theme/02-colours-light.png)
 
 Click the moon, and the page turns blue-black with a bright teal accent:
 
-![The harbor palette in the dark scheme](/assets/site-theme/03-colours-dark.png)
+![The harbor palette in the dark scheme](../assets/site-theme/03-colours-dark.png)
 
 > [!NOTE]
 > A property you leave out of the dark blocks keeps its built-in dark value,
@@ -302,7 +318,7 @@ rules as specific as itself or less, so harbor names both.
 
 Export and reload:
 
-![Harbor's callouts, the tip with the anchor icon](/assets/site-theme/04-callouts.png)
+![Harbor's callouts, the tip with the anchor icon](../assets/site-theme/04-callouts.png)
 
 ## Step 6: Tables
 
@@ -325,7 +341,7 @@ Export and reload: header cells are teal on a light teal ground.
 > The built-in stylesheet does this once the note column is narrower than
 > 32rem.
 
-![A two-column table as cards at 390 pixels](/assets/site-theme/05-tables-phone.png)
+![A two-column table as cards at 390 pixels](../assets/site-theme/05-tables-phone.png)
 
 > [!WARNING]
 > The card view needs `.layout > main` to be a container
@@ -406,7 +422,7 @@ The links need a few lines of CSS at the end of `style.css`:
 Export and reload: the header holds Home and Tags beside the search, and
 every page ends with the footer.
 
-![The header links](/assets/site-theme/06-header.png)
+![The header links](../assets/site-theme/06-header.png)
 
 > [!NOTE]
 > On a phone the header row has room for the menu button, the site name,

@@ -2,7 +2,7 @@
 title: Document themes
 tags: [docs/publish]
 site:
-  order: 2
+  order: 3
 ---
 A vault can render its PDFs in its own livery. A document theme is one
 Typst file under `.ntropy/themes/typst/` that redefines what it wants and

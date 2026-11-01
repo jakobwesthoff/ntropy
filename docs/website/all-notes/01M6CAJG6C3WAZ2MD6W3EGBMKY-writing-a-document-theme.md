@@ -11,7 +11,8 @@ ntropy's own look and changing one thing you can see per step.
 [Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md) is the
 reference behind it. The look of `render --to html` and of an exported
 website comes from a [site theme](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md)
-instead.
+instead; [Writing a site theme](01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme.md)
+builds one.
 
 You need [typst](https://typst.app) on your `PATH`, which every PDF
 render needs, and a vault.
@@ -103,6 +104,14 @@ Switch the theme on by adding this table at the end of
 theme = "handout"
 ```
 
+> [!NOTE]
+> A vault names its themes in `.ntropy/config.toml`. `[render] theme` picks
+> a document theme, a Typst file in `.ntropy/themes/typst/`, for PDF and
+> Typst output; `[site] theme` picks a site theme, a directory in
+> `.ntropy/themes/site/`, for `ntropy site` and `render --to html`.
+> `--theme <name>` picks another theme for one command, and
+> `--theme default` the built-in look.
+
 Render again. The PDF looks the same as before, because the theme is still
 a copy. Now make it yours: add a colour at the very top of `handout.typ`,
 
@@ -129,10 +138,6 @@ step 6.
 > A small change needs no copy. A theme file holding only
 > `#set text(font: "IBM Plex Sans")` changes the font and keeps the
 > built-in layout. The copy is for changing the layout itself.
-
-> [!TIP]
-> `--theme default` renders one note in the built-in look, which is handy
-> for a side-by-side comparison.
 
 ## Step 2: Page and paper
 

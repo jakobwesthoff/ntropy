@@ -264,9 +264,9 @@ Export and reload: the front page ends with the cards and the footer, and
 Welcome is gone from the sidebar, its counts, and the previous and next
 links of the other pages.
 
-![The harbor front page](/assets/site-theme/07-front-page.png)
+![The harbor front page](../assets/site-theme/07-front-page.png)
 
-![The front page on a phone in the dark scheme](/assets/site-theme/08-front-page-phone.png)
+![The front page on a phone in the dark scheme](../assets/site-theme/08-front-page-phone.png)
 
 The note stays a note. It keeps its own page at `notes/welcome.html`,
 drawn with the same template, `ntropy search` finds it, and you change the
