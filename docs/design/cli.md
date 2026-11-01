@@ -285,8 +285,8 @@ Examples:
 
 Print one note drawn for the terminal by the ansi engine
 ([ansi-engine.md](ansi-engine.md), ADR 0083): its frontmatter block, then
-its Markdown as written, with headings, emphasis, lists, tables, quotes and
-highlighted code styled. The selector and the exactly-one rule are
+its Markdown as written, with headings, emphasis, lists, tables, quotes,
+callouts and highlighted code styled. The selector and the exactly-one rule are
 `render`'s: omitted, every note feeds the picker; several matches open the
 picker interactively and are an error under `-n`; no match, or an empty
 vault, exits non-zero; a cancelled picker is a successful no-op.

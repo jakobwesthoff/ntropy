@@ -45,7 +45,10 @@ warning naming what it dropped.
 
 The `ansi` format, the note drawn for a terminal, drops raw HTML without
 a warning and keeps the text between inline tags. It shows an image as
-`[image: alt]` with its source after it.
+`[image: alt]` with its source after it. It draws the five callouts with a
+heavy bar and a bold title after a symbol, and any other `> [!type]` quote
+as a neutral callout with `○`, where PDF and HTML keep it a quote with the
+marker as text.
 
 Remote image URLs stay `<img>` tags in HTML and on the site, where the
 browser fetches them. In a PDF they become links showing the alt text,

@@ -13,6 +13,8 @@ engine abstraction lives on under
 [ADR 0071](0071-escaping-untrusted-text-for-the-terminal.md): a drawn note's
 text is escaped too. `docs/design/ansi-engine.md` carries the model.
 
+Amended by [ADR 0084](0084-ansi-drawing-follows-patine-2-2.md).
+
 ## Context
 
 ntropy renders a note to PDF, Typst and HTML. Nothing shows a note formatted

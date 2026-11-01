@@ -2096,6 +2096,11 @@ fn render_to_html_reports_the_format_and_engine() {
     );
 }
 
+/// A note holding the five GitHub alerts, one line of body each.
+const FIVE_ALERTS: &str = "---\ntitle: Alerts\n---\n\
+    > [!NOTE]\n> One.\n\n> [!TIP]\n> Two.\n\n> [!IMPORTANT]\n> Three.\n\n\
+    > [!WARNING]\n> Four.\n\n> [!CAUTION]\n> Five.\n";
+
 /// `render --to ansi` of `id` in `vault`, run with no tool on `PATH`.
 fn render_to_ansi(vault: &Path, id: &str, extra: &[&str]) -> std::process::Output {
     let mut cmd = ntropy(vault);
@@ -2125,6 +2130,17 @@ fn render_to_ansi_writes_the_drawn_note_without_any_tool() {
     assert!(artifact.contains("title"), "{artifact:?}");
     assert!(artifact.contains("\x1b[1mtext\x1b[22m"), "{artifact:?}");
     assert!(artifact.contains("\x1b[38;5;"), "{artifact:?}");
+}
+
+#[test]
+fn render_to_ansi_draws_an_alert_as_a_coloured_callout() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "alerts", FIVE_ALERTS);
+    let output = render_to_ansi(dir.path(), ULID_A, &[]);
+    assert!(output.status.success(), "{}", rendered(&output));
+    let artifact = fs::read_to_string(dir.path().join("alerts.ansi")).expect("ansi artifact");
+    assert!(artifact.contains("\x1b[38;5;4m┃ \x1b[39m"), "{artifact:?}");
+    assert!(artifact.contains("Warning"), "{artifact:?}");
 }
 
 #[test]
@@ -2203,6 +2219,20 @@ fn show_prints_the_note_drawn_as_plain_text_into_a_pipe() {
     redacted(dir.path()).bind(|| {
         assert_cmd_snapshot!(ntropy_show(dir.path()).args(["show", "-n", ULID_A]));
     });
+}
+
+#[test]
+fn show_into_a_pipe_draws_an_alert_as_a_text_callout() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "alerts", FIVE_ALERTS);
+    let output = ntropy_show(dir.path())
+        .args(["show", "-n", ULID_A])
+        .output()
+        .expect("run show");
+    assert!(output.status.success(), "{}", rendered(&output));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("┃ ▲ Warning"), "{stdout:?}");
+    assert!(!stdout.contains('\x1b'), "{stdout:?}");
 }
 
 #[test]
@@ -5521,6 +5551,27 @@ printf 'LESS=%s\nLESSSECURE=%s\n' "${{LESS-unset}}" "${{LESSSECURE-unset}}" > "$
         assert!(run.output.status.success(), "{}", rendered(&run.output));
         assert!(run.terminal.contains("\x1b[4:2m"), "{:?}", run.terminal);
         assert!(!run.terminal.contains("\x1b[38;5;"), "{:?}", run.terminal);
+    }
+
+    #[test]
+    fn no_color_dims_the_bars_of_callouts() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alerts", FIVE_ALERTS);
+        // A stub pager makes a drawing taller than the terminal fail the
+        // assertion below instead of leaving `less` waiting on the terminal.
+        let stub = write_stub_pager(vault, "pager", "");
+        let run = run_on_terminal(show(vault).env("NO_COLOR", "1").env("PAGER", &stub), 60, 80);
+        assert!(run.output.status.success(), "{}", rendered(&run.output));
+        assert_eq!(recorded(vault, "pager-stdin"), None);
+        assert!(!run.terminal.contains("\x1b[38;5;"), "{:?}", run.terminal);
+        assert_eq!(run.terminal.matches('┃').count(), 10, "{:?}", run.terminal);
+        assert_eq!(
+            run.terminal.matches("\x1b[2m┃ \x1b[22m").count(),
+            10,
+            "{:?}",
+            run.terminal
+        );
     }
 
     #[test]

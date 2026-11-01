@@ -57,7 +57,7 @@ minijinja = "2"
 nucleo = "0.5.0"
 # The library alone: without the default `cli` feature, patine's own binary
 # with its argument parser and terminal size query is not built.
-patine = { version = "2.1.0", default-features = false }
+patine = { version = "2.2.0", default-features = false }
 pulldown-cmark = { version = "0.13.4", default-features = false }
 regex = "1.13.0"
 regex-syntax = "0.8.11"

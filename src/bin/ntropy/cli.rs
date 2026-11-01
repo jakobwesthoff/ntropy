@@ -216,11 +216,12 @@ pub enum Command {
     /// Show a note drawn for the terminal.
     ///
     /// The note's frontmatter, then its Markdown with headings, emphasis,
-    /// lists, tables, quotes and highlighted code styled, laid out at the
-    /// terminal's width. A note taller than the screen goes through `$PAGER`,
-    /// or `less -R` when it is unset; `-n` never pages. Without a terminal on
-    /// stdout the text comes without escape sequences, and `NO_COLOR` leaves
-    /// out the colours. Must resolve to exactly one note, like `render`.
+    /// lists, tables, quotes, callouts and highlighted code styled, laid out
+    /// at the terminal's width. A note taller than the screen goes through
+    /// `$PAGER`, or `less -R` when it is unset; `-n` never pages. Without a
+    /// terminal on stdout the text comes without escape sequences, and
+    /// `NO_COLOR` leaves out the colours. Must resolve to exactly one note,
+    /// like `render`.
     Show {
         /// A full ULID or a query DSL expression, as trailing arguments that are
         /// each read on their own; words in one argument form a phrase

@@ -79,7 +79,7 @@ warnings do.
   a site: the sidebar, the search, breadcrumbs, and the pager.
 - `ansi` writes the note drawn for a terminal at 80 columns: the
   frontmatter as a highlighted block, then
-  the body with its headings, emphasis, lists, tables, quotes and
+  the body with its headings, emphasis, lists, tables, quotes, callouts and
   highlighted code styled by ANSI escape sequences. `less -R report.ansi`
   or `cat report.ansi` shows it. A link, a link to another note included,
   shows its target dimmed after the text; an image shows as

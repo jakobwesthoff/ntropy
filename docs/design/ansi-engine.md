@@ -32,7 +32,8 @@ What patine draws for each construct:
 | Bare URLs and email addresses | underlined; a `www.` host has its `http://` target dimmed after it |
 | Images | `[image: alt]` with the source dimmed after it |
 | Inline code, code blocks | in the palette's code colour; a code block indented by two columns, a fence with a known language highlighted |
-| Block quotes and callouts | behind `│ ` bars; a callout's `[!NOTE]` marker stays text |
+| Block quotes | behind `│ ` bars |
+| Callouts | a quote whose first line is a marker (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`, or another type): behind `┃ ` bars, with a bold title after a symbol (`●`, `◆`, `■`, `▲`, `✕`) in blue, green, magenta, yellow or red; another type is a neutral callout with `○` and no colour. A quote with two spaces or a tab after `>` before the marker, or with an escaped marker, stays a quote. The `html` and `pdf` formats keep a type beyond the five alerts as a quote with the marker as text |
 | Tables | drawn with box characters |
 | Task lists | `☑` and `☐`, a done task dimmed |
 | Footnotes | a dimmed `[n]` at each reference, the definitions after the body |
@@ -72,8 +73,9 @@ underline, `9` strikethrough, `38;5;<n>` the colour, then `39`, `29`, `24`,
 A drawing has one of three forms:
 
 - `Colored`: every style. The artifact uses it, and `show` on a terminal.
-- `Styled`: every style but the colours, with patine's dim quote bars
-  instead of cyan ones. `show` uses it on a terminal under `NO_COLOR`.
+- `Styled`: every style but the colours, with patine's dim quote and
+  callout bars instead of cyan and heavy undimmed ones. `show` uses it on a
+  terminal under `NO_COLOR`.
 - `Plain`: the text alone, which `show` writes when stdout is not a
   terminal.
 
@@ -96,6 +98,11 @@ document takes.
   inline style equals `patine::render` of the same source byte for byte,
   pinning the writer against the patine in `Cargo.lock`.
 - `Styled` equals `Colored` without its colour sequences.
+- Callouts: in `Colored` the bar and the bold title of each of the five kinds
+  carry the kind's colour and a type beyond them is neutral; in `Styled` the
+  bars are dim and the title is bold without a colour; in `Plain` the bar,
+  symbol and title are text. A callout's title is escaped like any text. A
+  terminal test runs `show` under `NO_COLOR` over all five alerts.
 - Hostile text: raw and decoded control characters, in text, frontmatter and
   link destinations, come out escaped, and no escape character is left
   outside a well-formed style sequence.

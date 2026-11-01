@@ -9,6 +9,19 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Changed
+
+- `ntropy show` and `ntropy render --to ansi` draw GitHub alerts (`> [!NOTE]`,
+  `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`) as callouts: a heavy
+  bar on every line and a bold title after a symbol, in the kind's colour. A
+  quote whose first line is another `[!type]` marker becomes a neutral
+  callout. Under `NO_COLOR` the bars are dim and the title is bold; into a
+  pipe the text stays without styles. These were quotes with the marker shown
+  as text ([ADR 0084](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0084-ansi-drawing-follows-patine-2-2.md)).
+- patine is updated to 2.2.0.
+
 ## v2.5.0 - 2026-11-01
 
 ### Added

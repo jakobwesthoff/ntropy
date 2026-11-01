@@ -19,8 +19,8 @@ for how it filters and how to move around in it.
 
 To read a note without opening the editor, `ntropy show` takes the same
 selector and prints the note formatted for the terminal: the frontmatter,
-then the Markdown with its headings, emphasis, lists, tables and code
-styled, at the terminal's width. A note longer than the screen opens in
+then the Markdown with its headings, emphasis, lists, tables, quotes,
+callouts and code styled, at the terminal's width. A note longer than the screen opens in
 your `$PAGER`, or in `less -R` when `PAGER` is unset. Set `NO_COLOR` to keep
 the styles and lose the colours.
 

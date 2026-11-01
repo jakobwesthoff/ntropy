@@ -12,7 +12,7 @@
 
 use std::fmt::Write as _;
 
-use patine::{QuoteStyle, StyledSpan, TextStyle, Underline};
+use patine::{CalloutStyle, QuoteStyle, StyledSpan, TextStyle, Underline};
 
 use super::{PreparedDocument, RenderContext, RenderError, Renderer};
 
@@ -68,11 +68,14 @@ pub fn draw_source(frontmatter: &str, body: &str, options: &AnsiOptions) -> Draw
     // the note has them.
     let source = format!("---\n{frontmatter}---\n{body}");
 
-    // Without colours the quote bars would be cyan; dim bars keep them apart
-    // from the quoted text.
+    // Without colours the quote bars would be cyan and the callout bars
+    // heavy and undimmed; dim bars keep them apart from the text. patine
+    // styles callouts independently of quotes, so both are set.
     let mut patine_options = patine::RenderOptions::new();
     if options.form == Form::Styled {
-        patine_options = patine_options.with_quote_style(QuoteStyle::DimBar);
+        patine_options = patine_options
+            .with_quote_style(QuoteStyle::DimBar)
+            .with_callout_style(CalloutStyle::DimBar);
     }
     let lines = patine::render_lines_with(&source, options.width, &patine_options);
 
@@ -437,6 +440,90 @@ mod tests {
         assert!(drawn.text.contains("\n  a     b\n"), "{:?}", drawn.text);
         assert!(drawn.text.contains("\n        c\n"), "{:?}", drawn.text);
         assert_eq!(drawn.line_widths, line_widths(&drawn.text));
+    }
+
+    // =========================================================
+    // Callouts
+    // =========================================================
+
+    /// A note holding one alert of `marker`'s kind with a one-line body.
+    fn alert_note(marker: &str) -> String {
+        format!("---\ntitle: A\n---\n> [!{marker}]\n> Body.\n")
+    }
+
+    #[test]
+    fn a_colored_drawing_paints_a_callout_in_the_kinds_colour() {
+        for (marker, color, symbol, title) in [
+            ("NOTE", patine::AnsiColor::Blue, '●', "Note"),
+            ("TIP", patine::AnsiColor::Green, '◆', "Tip"),
+            ("IMPORTANT", patine::AnsiColor::Magenta, '■', "Important"),
+            ("WARNING", patine::AnsiColor::Yellow, '▲', "Warning"),
+            ("CAUTION", patine::AnsiColor::Red, '✕', "Caution"),
+        ] {
+            let drawn = draw_note(&alert_note(marker), 80, Form::Colored).text;
+            let index = color.index();
+            let bar = format!("\x1b[38;5;{index}m┃ \x1b[39m");
+            let heading = format!("\x1b[1m\x1b[38;5;{index}m{symbol} {title}\x1b[39m\x1b[22m");
+            assert!(drawn.contains(&bar), "{marker}: {bar:?} in {drawn:?}");
+            assert!(
+                drawn.contains(&heading),
+                "{marker}: {heading:?} in {drawn:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_styled_drawing_dims_the_bar_of_a_callout_and_keeps_its_title_bold() {
+        let drawn = draw_note(&alert_note("WARNING"), 80, Form::Styled).text;
+        assert!(drawn.contains("\x1b[2m┃ \x1b[22m"), "{drawn:?}");
+        assert!(drawn.contains("\x1b[1m▲ Warning\x1b[22m"), "{drawn:?}");
+        assert!(!drawn.contains("\x1b[38;5;"), "{drawn:?}");
+    }
+
+    #[test]
+    fn a_plain_drawing_shows_a_callout_as_text_alone() {
+        let drawn = draw_note(&alert_note("WARNING"), 80, Form::Plain).text;
+        let lines: Vec<&str> = drawn.lines().collect();
+        assert!(lines.contains(&"┃ ▲ Warning"), "{drawn:?}");
+        assert!(lines.contains(&"┃ Body."), "{drawn:?}");
+        assert!(!drawn.contains('\x1b'), "{drawn:?}");
+    }
+
+    #[test]
+    fn a_marker_beyond_the_alerts_is_a_neutral_callout() {
+        let drawn = draw_note(&alert_note("FOO"), 80, Form::Colored).text;
+        // Neither the bar nor the title has a colour: the first line of the
+        // callout is exactly a bar and a bold title.
+        assert!(drawn.contains("┃ \x1b[1m○ Foo\x1b[22m\n"), "{drawn:?}");
+    }
+
+    /// Guard: escaping runs on every span, a callout's title included.
+    #[test]
+    fn a_callout_title_is_escaped_like_any_text() {
+        let note = "---\ntitle: A\n---\n> [!NOTE] title &#x1b;[2J\n> body\n";
+        for form in [Form::Plain, Form::Styled, Form::Colored] {
+            let drawn = draw_note(note, 80, form).text;
+            assert!(drawn.contains("\\u{1b}[2J"), "{form:?}: {drawn:?}");
+            assert!(!without_sgr(&drawn).contains('\x1b'), "{form:?}: {drawn:?}");
+        }
+    }
+
+    /// Guard: the callout's bar and symbols count one column each, as the
+    /// drawn line is.
+    #[test]
+    fn rows_count_a_callout_by_its_drawn_width() {
+        let drawn = draw_note(&alert_note("CAUTION"), 80, Form::Colored);
+        assert_eq!(drawn.line_widths, line_widths(&drawn.text));
+    }
+
+    /// Guard: a plain quote keeps its own bar beside a callout.
+    #[test]
+    fn a_quote_keeps_its_bar_beside_a_callout() {
+        let note = "---\ntitle: A\n---\n> quoted\n\n> [!NOTE]\n> called\n";
+        let drawn = draw_note(note, 80, Form::Plain).text;
+        let lines: Vec<&str> = drawn.lines().collect();
+        assert!(lines.contains(&"│ quoted"), "{drawn:?}");
+        assert!(lines.contains(&"┃ called"), "{drawn:?}");
     }
 
     // =========================================================
