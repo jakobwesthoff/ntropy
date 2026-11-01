@@ -152,7 +152,7 @@
     } else {
       (bottom: 0.4pt + luma(210))
     },
-    inset: 7pt,
+    inset: 0.6364em,
   )
   show table.cell.where(y: 0): set text(weight: "bold")
   // A column without a Markdown alignment reaches typst as `auto`, which takes
@@ -160,7 +160,138 @@
   // without this rule those cells would be centered too. A column with an
   // alignment keeps its own.
   show table.cell: set align(start)
-  show table: it => align(center, it)
+  // Typst sizes an automatic column from the text it measures, and a bold
+  // header or a code chip is drawn wider than what was measured, so cells run
+  // into each other in a table that is nearly as wide as the page. The rule
+  // measures every column itself and builds the table with those widths: the
+  // widest line of each column when all of them fit, otherwise the widest
+  // word plus the cell padding as the least and the free width shared out in
+  // proportion to what each column still wants. When even the least widths do
+  // not fit, the table is set in smaller text, which scales the padding too
+  // (it is in `em`). The size never drops below 60 percent, as text any
+  // smaller is unreadable. A table that does not fit at that size is recorded
+  // under the label `ntropy-table-too-wide`, which the engine queries to
+  // warn. The result is still a table, so it breaks across pages and repeats
+  // its header.
+  show table: it => layout(size => {
+    let floor = 0.6
+    let columns = it.columns.len()
+    // The table built below has fixed widths and comes through this rule
+    // again.
+    if columns == 0 or not it.columns.any(width => width == auto) {
+      return align(center, it)
+    }
+
+    // The horizontal padding of one cell. A function-valued inset cannot be
+    // read, so the prelude's own padding stands in for it.
+    let to-length(value) = if type(value) == relative {
+      value.length.to-absolute()
+    } else if type(value) == length {
+      value.to-absolute()
+    } else {
+      0pt
+    }
+    let padding = if type(it.inset) == dictionary {
+      to-length(it.inset.at("left", default: it.inset.at("rest", default: 0pt)))
+        + to-length(it.inset.at("right", default: it.inset.at("rest", default: 0pt)))
+    } else if type(it.inset) == function {
+      2 * 0.6364em.to-absolute()
+    } else {
+      2 * to-length(it.inset)
+    }
+
+    // The content of a cell as fragments, with `none` where a line may break.
+    // A word of the cell is a run of fragments between two breaks, which
+    // typst keeps in several elements when it holds an escaped hyphen, so the
+    // fragments are joined again before they are measured. Each fragment is
+    // wrapped in the element it is drawn in (the code chip, bold), so it is
+    // measured through the same rules.
+    let pieces(content, wrap) = if type(content) == str {
+      let parts = content.split(regex("\\s+"))
+      parts.enumerate().map(((index, part)) => {
+        let fragment = if part == "" { () } else { (wrap(part),) }
+        if index > 0 { (none,) + fragment } else { fragment }
+      }).flatten()
+    } else if content.func() == raw {
+      pieces(content.text, word => wrap(raw(word)))
+    } else if content.func() == text {
+      pieces(content.text, wrap)
+    } else if content.func() == [ ].func() or content.func() == linebreak {
+      (none,)
+    } else if content.func() == strong {
+      pieces(content.body, word => wrap(strong(word)))
+    } else if content.func() == emph {
+      pieces(content.body, word => wrap(emph(word)))
+    } else if content.func() == footnote {
+      (wrap(content),)
+    } else if content.has("body") {
+      pieces(content.body, wrap)
+    } else if content.has("children") {
+      content.children.map(child => pieces(child, wrap)).flatten()
+    } else {
+      ()
+    }
+    let words(content) = {
+      let found = ()
+      let current = ()
+      for fragment in pieces(content, word => word) {
+        if fragment == none {
+          if current.len() > 0 {
+            found.push(current.join())
+            current = ()
+          }
+        } else {
+          current.push(fragment)
+        }
+      }
+      if current.len() > 0 {
+        found.push(current.join())
+      }
+      found
+    }
+
+    // Per column: the least width (widest word) and the most (widest cell on
+    // one line), both with the padding.
+    let least = (0pt,) * columns
+    let most = (0pt,) * columns
+    let cells = it.children
+      .map(child => if child.func() == table.header { child.children } else { (child,) })
+      .flatten()
+    for (index, cell) in cells.enumerate() {
+      let column = calc.rem(index, columns)
+      let body = if cell.func() == table.cell { cell.body } else { cell }
+      let weight = if index < columns { "bold" } else { "regular" }
+      for word in words(body) {
+        least.at(column) = calc.max(least.at(column), measure(text(weight: weight, word)).width + padding)
+      }
+      most.at(column) = calc.max(most.at(column), measure(text(weight: weight, body)).width + padding)
+    }
+
+    let least-total = least.sum()
+    let most-total = most.sum()
+    let ratio = 1.0
+    if least-total > size.width {
+      ratio = calc.max(size.width / least-total, floor)
+      if size.width / least-total < floor {
+        [#metadata((columns: columns, scale: size.width / least-total))<ntropy-table-too-wide>]
+      }
+    }
+
+    // Widths scale with the text size, and the width left over goes to the
+    // columns in proportion to how much wider than their least they want to be.
+    let widths = if most-total * ratio <= size.width {
+      most.map(width => width * ratio)
+    } else {
+      let spare = calc.max(size.width - least-total * ratio, 0pt)
+      let wanted = most-total - least-total
+      least.zip(most).map(((low, high)) => {
+        low * ratio + if wanted > 0pt { spare * ((high - low) / wanted) } else { 0pt }
+      })
+    }
+
+    set text(size: ratio * 1em)
+    align(center, table(columns: widths, align: it.align, ..it.children))
+  })
 
   // Links in classic muted blue; thematic breaks in light grey.
   show link: set text(fill: rgb("#0969da"))

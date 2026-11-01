@@ -177,6 +177,16 @@ quote with any other marker, such as `> [!FOO]`, stays a `quote`, so
 `callout` only ever sees the five kinds. Raw HTML is dropped, with a warning
 naming it.
 
+The built-in look also measures every column and sets the column widths
+itself, so cells do not run into each other. When the widest word of each
+column does not fit the page, the table is set in smaller text, down to 60
+percent of the size. A table that would need smaller text stays at 60
+percent, and a PDF render warns about it; `--strict` turns the warning into
+a failure. Widths come from the text of the cells, so an image in a cell
+counts as no width. `--to typst` gives no warning, since the check runs typst
+on the document after the PDF compile. If that check cannot run, the render
+warns that it could not check the tables and still finishes.
+
 Every footnote is drawn once, at its first reference in the text, and
 every later reference shows the same number. Headings carry labels that
 start with `ntropy-h-`, and footnotes carry labels that start with

@@ -1299,11 +1299,16 @@ fn write_stub_typst(vault: &Path) {
 /// Draining stdin mirrors the real compiler consuming the document; the marker
 /// lands at the last argument of `typst compile - <path>`, the output path. A
 /// write that fails, such as one into a directory that does not exist, ends in
-/// exit status 1 as it does for the real compiler.
+/// exit status 1 as it does for the real compiler. A `query` for tables that
+/// do not fit the page finds none.
 /// `cat` is named by absolute path: the tests reduce `PATH` to the relative
 /// `stub-bin` entry, under which no `cat` exists.
 const STUB_TYPST_SCRIPT: &str = r#"#!/bin/sh
 /bin/cat > /dev/null
+if [ "$1" = "query" ]; then
+  printf '[]\n'
+  exit 0
+fi
 out=""
 for arg in "$@"; do
   out="$arg"
@@ -1330,6 +1335,10 @@ fn write_typst_script(dir: &Path, script: &str, mode: u32) {
 fn write_arg_recording_typst(vault: &Path) {
     let script = r#"#!/bin/sh
 /bin/cat > /dev/null
+if [ "$1" = "query" ]; then
+  printf '[]\n'
+  exit 0
+fi
 out=""
 for arg in "$@"; do
   out="$arg"
@@ -1909,6 +1918,60 @@ fn render_keeps_a_directory_that_was_already_there_when_the_render_fails() {
     assert!(!output.status.success());
     assert!(dir.path().join("missing/keep.txt").exists());
     assert!(!dir.path().join("missing/dir").exists());
+}
+
+/// A fake `typst` that writes the PDF marker for `compile` and answers the
+/// `query` for clamped tables with one table that needs 50 percent.
+const STUB_TYPST_CLAMPED_TABLE: &str = r#"#!/bin/sh
+/bin/cat > /dev/null
+if [ "$1" = "query" ]; then
+  printf '[{"columns":16,"scale":0.5}]\n'
+  exit 0
+fi
+out=""
+for arg in "$@"; do
+  out="$arg"
+done
+printf 'stub pdf via typst\n' > "$out" || exit 1
+exit 0
+"#;
+
+fn render_a_table_note_with_a_clamping_stub(strict: bool) -> std::process::Output {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wide",
+        "---\ntitle: Wide\n---\n| a | b |\n| - | - |\n| 1 | 2 |\n",
+    );
+    write_typst_script(&dir.path().join(STUB_BIN), STUB_TYPST_CLAMPED_TABLE, 0o755);
+    let mut cmd = ntropy(dir.path());
+    cmd.env("PATH", STUB_BIN);
+    if strict {
+        cmd.arg("--strict");
+    }
+    cmd.args(["render", ULID_A, "-n"]);
+    cmd.output().expect("run render")
+}
+
+#[test]
+fn a_table_that_does_not_fit_the_page_warns_and_still_renders() {
+    let output = render_a_table_note_with_a_clamping_stub(false);
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("a table with 16 columns needs the text at 50% of its size"),
+        "no warning about the table:\n{stderr}"
+    );
+}
+
+#[test]
+fn a_table_that_does_not_fit_the_page_fails_a_strict_render() {
+    let output = render_a_table_note_with_a_clamping_stub(true);
+    assert!(
+        !output.status.success(),
+        "--strict did not fail on the table warning"
+    );
 }
 
 #[test]
@@ -4393,12 +4456,21 @@ fn the_default_pdf_look_embeds_only_fonts_typst_bundles() {
     );
 }
 
-/// Every word of a PDF with its horizontal extent, as `pdftotext -bbox` reports
-/// them: the word, its left edge and its right edge, in points.
+/// A word of a PDF as `pdftotext -bbox` reports it, in points.
+#[derive(Debug)]
+struct PdfWord {
+    text: String,
+    page: usize,
+    x_min: f32,
+    x_max: f32,
+    y_min: f32,
+}
+
+/// Every word of a PDF with its box.
 ///
 /// The check needs poppler's `pdftotext`, the tool that also lists the fonts
 /// of a PDF with `pdffonts`, and says so when it is missing.
-fn pdf_words(pdf: &Path) -> Vec<(String, f32, f32)> {
+fn pdf_words(pdf: &Path) -> Vec<PdfWord> {
     let output = Command::new("pdftotext")
         .args(["-bbox"])
         .arg(pdf)
@@ -4414,15 +4486,159 @@ fn pdf_words(pdf: &Path) -> Vec<(String, f32, f32)> {
             .parse()
             .expect("a number")
     };
-    text.lines()
-        .filter(|line| line.trim_start().starts_with("<word "))
-        .map(|line| {
-            let word = line[line.find('>').expect("tag end") + 1..]
-                .trim_end_matches("</word>")
-                .to_string();
-            (word, attribute(line, "xMin"), attribute(line, "xMax"))
-        })
-        .collect()
+    let mut page = 0;
+    let mut words = Vec::new();
+    for line in text.lines().map(str::trim_start) {
+        if line.starts_with("<page ") {
+            page += 1;
+        } else if line.starts_with("<word ") {
+            let word = line[line.find('>').expect("tag end") + 1..].trim_end_matches("</word>");
+            words.push(PdfWord {
+                text: word.to_string(),
+                page,
+                x_min: attribute(line, "xMin"),
+                x_max: attribute(line, "xMax"),
+                y_min: attribute(line, "yMin"),
+            });
+        }
+    }
+    words
+}
+
+/// Render `body` as the note `Tables` to a PDF and return the vault directory
+/// and the PDF's path.
+fn render_note_to_real_pdf(body: &str) -> (tempfile::TempDir, PathBuf) {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "tables",
+        &format!("---\ntitle: Tables\n---\n{body}"),
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "tables.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let pdf = dir.path().join("tables.pdf");
+    (dir, pdf)
+}
+
+/// Fail when two words of a page overlap on one line, or a word leaves the text
+/// column of an A4 page with the built-in 2.2cm side margins.
+fn assert_words_neither_overlap_nor_leave_the_page(words: &[PdfWord]) {
+    const MARGIN: f32 = 62.36;
+    const PAGE_WIDTH: f32 = 595.28;
+    for word in words {
+        assert!(
+            word.x_min >= MARGIN - 0.5 && word.x_max <= PAGE_WIDTH - MARGIN + 0.5,
+            "`{}` leaves the text column: {word:?}",
+            word.text
+        );
+    }
+    for (index, left) in words.iter().enumerate() {
+        for right in &words[index + 1..] {
+            let same_line = left.page == right.page && (left.y_min - right.y_min).abs() < 1.0;
+            let (first, second) = if left.x_min <= right.x_min {
+                (left, right)
+            } else {
+                (right, left)
+            };
+            assert!(
+                !same_line || first.x_max <= second.x_min + 0.3,
+                "`{}` and `{}` run into each other: {first:?} {second:?}",
+                first.text,
+                second.text
+            );
+        }
+    }
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_wide_table_keeps_its_cells_apart_in_the_pdf() {
+    let (_dir, pdf) = render_note_to_real_pdf(
+        "| ID | Pipeline | Region | Start | End | Owner | State | Runs | Failures | Notes |\n\
+         | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n\
+         | 1042 | Release pipeline | eu-central | 2026-10-01 | 2026-11-01 | platform-team | succeeded | 1234 | 12 | nightly |\n",
+    );
+    assert_words_neither_overlap_nor_leave_the_page(&pdf_words(&pdf));
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_table_that_cannot_fit_the_page_warns_with_real_typst() {
+    // Sixteen columns of one long word each need far less than 60 percent of
+    // the text size to fit an A4 page. The warning rides on the real
+    // `typst query` of the label the prelude puts on such a table.
+    let dir = setup_vault();
+    let header: String = (0..16)
+        .map(|column| format!("| Column{column}x "))
+        .collect();
+    let rule: String = (0..16).map(|_| "| --- ").collect();
+    let row: String = (0..16).map(|_| "| unbreakablevalue ").collect();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wide",
+        &format!("---\ntitle: Wide\n---\n{header}|\n{rule}|\n{row}|\n"),
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "wide.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("a table with 16 columns needs the text at"),
+        "no warning about the table:\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("deprecated"),
+        "typst's own deprecation text leaked:\n{stderr}"
+    );
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_table_of_code_identifiers_keeps_its_cells_apart_in_the_pdf() {
+    // Inline code is wider than the text around it: a monospace font and a
+    // chip with padding.
+    let (_dir, pdf) = render_note_to_real_pdf(
+        "| Module | Function | Type | Error |\n| --- | --- | --- | --- |\n\
+         | `ntropy::render::typst::emitter` | `render_table_with_alignment` | `PreparedDocument` | `RenderError::ToolFailed` |\n",
+    );
+    assert_words_neither_overlap_nor_leave_the_page(&pdf_words(&pdf));
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_long_wide_table_breaks_across_pages_in_the_pdf() {
+    // A table that needs a smaller text size must still break across pages and
+    // repeat its header, as every other table does.
+    let mut body = String::from(
+        "| ID | Pipeline | Region | Start | End | Owner | State | Runs | Failures | Notes | Queue | Reviewer |\n\
+         | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n",
+    );
+    for row in 0..80 {
+        body.push_str(&format!(
+            "| {row} | Release pipeline | eu-central | 2026-10-01 | 2026-11-01 | platform-team | succeeded | 1234 | 12 | nightly | high-priority | maintainers |\n"
+        ));
+    }
+    let (_dir, pdf) = render_note_to_real_pdf(&body);
+    let words = pdf_words(&pdf);
+    assert_words_neither_overlap_nor_leave_the_page(&words);
+    let header_pages: std::collections::BTreeSet<usize> = words
+        .iter()
+        .filter(|word| word.text == "Pipeline")
+        .map(|word| word.page)
+        .collect();
+    assert!(
+        header_pages.len() >= 2,
+        "the table did not break across pages with a repeated header: {header_pages:?}"
+    );
 }
 
 #[test]
@@ -4454,26 +4670,26 @@ fn a_table_column_without_an_alignment_is_left_aligned_in_the_pdf() {
     let word = |text: &str| {
         words
             .iter()
-            .find(|(word, _, _)| word == text)
+            .find(|word| word.text == text)
             .unwrap_or_else(|| panic!("`{text}` is not in the pdf: {words:?}"))
     };
 
     // First column: both cells start at the same left edge.
     assert_eq!(
-        word("Canary").1,
-        word("Everyone").1,
+        word("Canary").x_min,
+        word("Everyone").x_min,
         "the cells of a column without an alignment are not left aligned"
     );
     // Second column: "All" starts where "The first five percent of traffic" does.
     assert_eq!(
-        word("All").1,
-        word("The").1,
+        word("All").x_min,
+        word("The").x_min,
         "the cells of a column without an alignment are not left aligned"
     );
     // A `---:` column keeps its right alignment.
     assert_eq!(
-        word("7").2,
-        word("12345").2,
+        word("7").x_max,
+        word("12345").x_max,
         "a column with an alignment lost it"
     );
 }

@@ -185,7 +185,7 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Footnote | drawn at its first place in the text as `#[#footnote[...]<ntropy-fn-N>];`, N the footnote's position in the walk's order of first shown reference. Every later reference, one inside a footnote's own content or another footnote's included, is `#footnote(<ntropy-fn-N>);`, which shows the number of the labelled footnote and draws nothing, so a footnote prints once however often it is referenced and a footnote may reference itself or a cycle of others. The `#[...]` wrapper keeps the label on the footnote when the reference sits in a heading, where a bare label would attach to the heading; the closing `;` ends the expression, so a `(` in the note's text after a reference stays text. Typst numbers footnotes in the order they appear in the document, which can differ from N: a footnote first referenced inside another footnote's content is drawn there. A theme must not define labels starting with `ntropy-fn-`, must not draw a heading or the body twice when a footnote with a repeat reference sits in it (a duplicated label fails the compile), and a `show footnote` rule runs for repeats too, where `it.body` is a label. Definitions are buffered because pulldown-cmark delivers them separately from references. A reference in the skipped title heading draws nothing and does not decide a footnote's place in the order |
 | Thematic break | `#line(length: 100%)` |
 | Soft / hard break | single space / `#linebreak();` |
-| Table | `#table(columns: n, align: (...), table.header(...), cells)` |
+| Table | `#table(columns: n, align: (...), table.header(...), cells)`; the prelude's `show table` rule measures the columns and sets the widths, see Table widths |
 | Image, local path | `#image("path");`, path verbatim (string-literal escaped) without a `#fragment`, which selects nothing in an embedded image. A link to a local file keeps its fragment in the `#link` string |
 | Image, remote URL | `#link("url")[alt text];` plus a render warning — `typst compile` performs no network access, so remote images cannot appear in the artifact |
 | Mermaid, emoji shortcodes, color chips | out of scope: rendered as their literal text (a mermaid block is an ordinary code block), no warning |
@@ -244,6 +244,24 @@ The root is also typst's sandbox for the paths a document names: a path
 left as written because it climbs out of the vault fails the compile
 with typst's "would escape the project root" error.
 
+- **Table widths.** The prelude's `show table` rule measures every column
+  (the widest word, header cells bold, and the widest cell on one line, both
+  plus the horizontal padding) and rebuilds the table with those widths, so
+  it still breaks across pages and repeats its header. Typst's own automatic
+  columns drew bold headers and code chips wider than it had measured, and
+  cells ran into each other. When the widest words do not fit the text
+  width, the table is set in smaller text, never below 60 percent. A table
+  that would still not fit is recorded as
+  `metadata((columns:, scale:))` under the label `ntropy-table-too-wide`.
+  After a successful compile the `pdf` arm runs
+  `typst query --root <vault> --field value - <ntropy-table-too-wide>` on the
+  same document, only when the emitted body holds `#table(`, and warns for
+  each record. A query that fails, cannot start or answers something
+  unreadable is a warning that the tables could not be checked and does not
+  fail the render. The measuring sees text only, so an image in a cell counts
+  as no width. The `typst` format gives no warning, as it runs no compiler.
+  `typst query` is deprecated in typst 0.15.1, which names
+  `typst eval` as the replacement.
 - **Paragraphs: blank-line separation**, not `#par()[...]`. Typst reads a
   blank line as a paragraph break natively. The escaping rules make the
   explicit wrapper's one advantage moot — soft breaks emit a space and

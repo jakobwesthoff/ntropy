@@ -31,6 +31,15 @@ change in any release
   not define labels with that prefix or draw the body, or a block that holds
   a heading, twice: Typst rejects the duplicated label as soon as a link
   names that heading.
+- The cells of a wide table no longer run into each other in a PDF. The
+  built-in look now measures the columns and sets their widths itself. When
+  the widest words of the columns do not fit the page, the table is set in
+  smaller text, down to 60 percent of the size. A table that needs less than
+  that stays at 60 percent and the render warns with the column count and the
+  size it needed, which `--strict` turns into a failure. The widths come from
+  the text of the cells, so an image in a cell counts as no width. `--to typst`
+  gives no warning, and the check needs `typst query`; if it cannot run, the
+  render warns that it could not check the tables and finishes.
 - A table column without an alignment (`| --- |`) is left-aligned in a PDF,
   as in HTML. The built-in look centered every header and body cell of such a
   column. Columns with `:---`, `:---:` or `---:` keep their alignment. A

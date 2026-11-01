@@ -104,6 +104,11 @@ Show and set rules inside `note` style these:
 | hard line break | `linebreak()` |
 | raw HTML | dropped, with a warning |
 
+The built-in look measures the columns of a table and sets their widths. When
+the widest words do not fit the page it sets the table in smaller text, down
+to 60 percent; a table that needs less than that stays at 60 percent and a PDF
+render warns (`--strict` fails on it). Images in cells count as no width.
+
 ## Assets and imports
 
 typst runs with `--root <vault>` and reads the document on stdin, which

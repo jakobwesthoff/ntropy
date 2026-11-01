@@ -124,10 +124,11 @@ impl Renderer for Typst {
                     "-".into(),
                     ctx.output_path().as_os_str().to_os_string(),
                 ];
+                let document = document.into_bytes();
                 let invocation = Invocation {
                     program: "typst".to_string(),
                     args,
-                    stdin: Some(document.into_bytes()),
+                    stdin: Some(document.clone()),
                 };
 
                 let out = ctx.run(&invocation)?;
@@ -137,9 +138,85 @@ impl Renderer for Typst {
                         stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
                     });
                 }
+
+                // Only a table can be too wide, so a note without one pays for
+                // no second run of the compiler.
+                if body.contains("#table(") {
+                    warn_about_tables_that_do_not_fit(ctx, &doc.vault_root, document);
+                }
                 Ok(())
             }
         }
+    }
+}
+
+/// Label the prelude puts on the record of a table it had to set in text
+/// smaller than it allows itself, see the table rule in `prelude.typ`.
+const TABLE_TOO_WIDE_LABEL: &str = "<ntropy-table-too-wide>";
+
+/// Ask the compiler which tables of `document` do not fit the page at the
+/// smallest text size the prelude allows, and warn about each one.
+///
+/// The prelude decides this with the measured widths of the cells, which only
+/// the compiler can know, so the answer comes from a second run on the same
+/// document. A check that cannot run or cannot be read is a warning of its own
+/// and leaves the finished PDF alone.
+///
+/// `typst query` is deprecated since typst 0.15 in favour of
+/// `typst eval --in - 'query(<label>)...'`; its deprecation text on stderr is
+/// not a problem of the note and is not shown.
+fn warn_about_tables_that_do_not_fit(
+    ctx: &mut dyn RenderContext,
+    vault_root: &std::path::Path,
+    document: Vec<u8>,
+) {
+    let invocation = Invocation {
+        program: "typst".to_string(),
+        args: vec![
+            "query".into(),
+            "--root".into(),
+            vault_root.as_os_str().to_os_string(),
+            "--field".into(),
+            "value".into(),
+            "-".into(),
+            TABLE_TOO_WIDE_LABEL.into(),
+        ],
+        stdin: Some(document),
+    };
+    let cannot_check =
+        |cause: &str| format!("could not check whether the tables fit the page: {cause}");
+
+    let out = match ctx.run(&invocation) {
+        Ok(out) => out,
+        Err(error) => {
+            ctx.warn(&cannot_check(&error.to_string()));
+            return;
+        }
+    };
+    if !out.success {
+        ctx.warn(&cannot_check(String::from_utf8_lossy(&out.stderr).trim()));
+        return;
+    }
+
+    #[derive(serde::Deserialize)]
+    struct Clamped {
+        columns: u32,
+        scale: f64,
+    }
+    let clamped: Vec<Clamped> = match serde_json::from_slice(&out.stdout) {
+        Ok(clamped) => clamped,
+        Err(error) => {
+            ctx.warn(&cannot_check(&error.to_string()));
+            return;
+        }
+    };
+    for table in clamped {
+        ctx.warn(&format!(
+            "a table with {} columns needs the text at {}% of its size to fit the page; \
+             it is set at 60% and its cells may run into each other",
+            table.columns,
+            (table.scale * 100.0).round()
+        ));
     }
 }
 
@@ -487,6 +564,159 @@ mod tests {
             }
             other => panic!("expected ToolFailed, got {other:?}"),
         }
+    }
+
+    /// A note whose body holds one table, so the pdf arm asks typst which
+    /// tables the prelude had to clamp.
+    fn table_document() -> PreparedDocument {
+        doc(
+            "Wide",
+            "{}",
+            "| a | b |\n| - | - |\n| 1 | 2 |\n",
+            Vec::new(),
+        )
+    }
+
+    fn tool_output(success: bool, stdout: &str, stderr: &str) -> Result<ToolOutput, RenderError> {
+        Ok(ToolOutput {
+            success,
+            stdout: stdout.as_bytes().to_vec(),
+            stderr: stderr.as_bytes().to_vec(),
+        })
+    }
+
+    fn pdf_context() -> FakeContext {
+        FakeContext::new().with_output("/artifacts/note.pdf")
+    }
+
+    #[test]
+    fn a_note_without_a_table_asks_typst_nothing_after_the_compile() {
+        let document = doc("Plain", "{}", "Some text.\n", Vec::new());
+        let mut ctx = pdf_context();
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert_eq!(ctx.invocations.len(), 1, "only the compile runs");
+    }
+
+    #[test]
+    fn a_table_makes_the_pdf_arm_query_the_clamped_tables() {
+        let mut ctx = pdf_context()
+            .script(tool_output(true, "", ""))
+            .script(tool_output(true, "[]", ""));
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&table_document(), &mut ctx)
+            .expect("render succeeds");
+
+        assert_eq!(ctx.invocations.len(), 2, "the compile and the query");
+        let query = &ctx.invocations[1];
+        assert_eq!(query.program, "typst");
+        let args: Vec<String> = query
+            .args
+            .iter()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            args,
+            vec![
+                "query",
+                "--root",
+                "/vault",
+                "--field",
+                "value",
+                "-",
+                "<ntropy-table-too-wide>"
+            ],
+            "the query reads the same document from stdin"
+        );
+        assert_eq!(
+            query.stdin, ctx.invocations[0].stdin,
+            "the query sees the document the compile saw"
+        );
+        assert!(ctx.warnings.is_empty(), "no clamped table, no warning");
+    }
+
+    #[test]
+    fn a_table_clamped_at_the_floor_warns_with_its_columns_and_scale() {
+        let mut ctx = pdf_context()
+            .script(tool_output(true, "", ""))
+            .script(tool_output(
+                true,
+                r#"[{"columns":16,"scale":0.5073},{"columns":12,"scale":0.4}]"#,
+                "warning: the `typst query` subcommand is deprecated\n",
+            ));
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&table_document(), &mut ctx)
+            .expect("a clamped table is a warning, not a failure");
+
+        assert_eq!(
+            ctx.warnings,
+            vec![
+                "a table with 16 columns needs the text at 51% of its size to fit the page; \
+                 it is set at 60% and its cells may run into each other",
+                "a table with 12 columns needs the text at 40% of its size to fit the page; \
+                 it is set at 60% and its cells may run into each other",
+            ],
+            "the deprecation text on stderr is not a warning of ours"
+        );
+    }
+
+    #[test]
+    fn a_failed_query_warns_about_the_check_and_keeps_the_render() {
+        let mut ctx = pdf_context()
+            .script(tool_output(true, "", ""))
+            .script(tool_output(false, "", "error: unknown subcommand\n"));
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&table_document(), &mut ctx)
+            .expect("a failed check does not fail the render");
+
+        assert_eq!(ctx.warnings.len(), 1);
+        assert!(
+            ctx.warnings[0].contains("could not check whether the tables fit the page")
+                && ctx.warnings[0].contains("unknown subcommand"),
+            "the warning names the check and the cause: {:?}",
+            ctx.warnings
+        );
+    }
+
+    #[test]
+    fn an_unreadable_query_answer_warns_about_the_check() {
+        let mut ctx = pdf_context()
+            .script(tool_output(true, "", ""))
+            .script(tool_output(true, "not json", ""));
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&table_document(), &mut ctx)
+            .expect("an unreadable answer does not fail the render");
+
+        assert_eq!(ctx.warnings.len(), 1);
+        assert!(
+            ctx.warnings[0].contains("could not check whether the tables fit the page"),
+            "{:?}",
+            ctx.warnings
+        );
+    }
+
+    #[test]
+    fn a_query_that_cannot_start_warns_about_the_check() {
+        let mut ctx = pdf_context().script(tool_output(true, "", "")).script(Err(
+            RenderError::RendererUnavailable {
+                tool: "typst".to_string(),
+                hint: "install typst".to_string(),
+            },
+        ));
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&table_document(), &mut ctx)
+            .expect("a check that cannot run does not fail the render");
+        assert_eq!(ctx.warnings.len(), 1);
+    }
+
+    #[test]
+    fn a_failed_compile_runs_no_query() {
+        let mut ctx = pdf_context().script(tool_output(false, "", "error: broken"));
+        Typst::for_pdf_format(RenderOptions::default(), None)
+            .render(&table_document(), &mut ctx)
+            .expect_err("the compile failed");
+        assert_eq!(ctx.invocations.len(), 1);
     }
 
     #[test]
