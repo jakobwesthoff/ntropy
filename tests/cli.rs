@@ -5346,14 +5346,16 @@ mod show_on_a_terminal {
         };
         // SAFETY: `master` and `slave` are valid pointers to `c_int`s, `size`
         // outlives the call, and the name and termios arguments may be null.
-        // macOS declares the pointers `*mut`, Linux `*const`; `&mut` fits both.
+        // macOS declares the size pointer `*mut`, Linux `*const`. A raw
+        // `*mut` fits both, where a `&mut` trips clippy's
+        // `unnecessary_mut_passed` on Linux.
         let rc = unsafe {
             libc::openpty(
                 &mut master,
                 &mut slave,
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
-                &mut size,
+                &raw mut size,
             )
         };
         assert_eq!(rc, 0, "openpty failed: {}", io::Error::last_os_error());
