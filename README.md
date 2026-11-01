@@ -71,7 +71,8 @@ ntropy search tag:work and not status:done
 ntropy show 'quarterly review'
 ```
 
-New notes are stamped out from
+Notes open in the editor `$VISUAL` names, or else `$EDITOR`; set one
+first. New notes are stamped out from
 [templates](https://ntropy.westhoffswelt.de/notes/templates-and-daily-notes.html);
 `today` has its own daily template; and `search` speaks a small
 [query language](https://ntropy.westhoffswelt.de/notes/query-language.html),
@@ -89,19 +90,23 @@ The full documentation is a website that ntropy exports from the vault under
 in this repository, so it reads the same as any vault you publish yourself:
 
 - [Getting started](https://ntropy.westhoffswelt.de/tags/docs/start/index.html):
-  installation, first steps, a tour, and the command reference.
+  installation, the editor, a first vault, and a tour from a first note to
+  a PDF and a website.
 - [Notes and the vault](https://ntropy.westhoffswelt.de/tags/docs/notes/index.html):
-  the note format, Markdown, templates, finding the vault, views, encryption,
-  and configuration.
+  templates and daily notes, finding the vault, encryption, the note
+  format, and Markdown.
 - [Finding notes](https://ntropy.westhoffswelt.de/tags/docs/find/index.html):
-  the query language and the interactive picker.
+  search and the picker, views, and the query language.
 - [Publishing](https://ntropy.westhoffswelt.de/tags/docs/publish/index.html):
-  rendering to PDF and HTML, document themes, exporting a website, and site
-  themes with their templates.
+  rendering a note to PDF and HTML, and exporting a website.
+- [Themes](https://ntropy.westhoffswelt.de/tags/docs/themes/index.html):
+  document and site themes, with a guide for each.
 - [Integrations](https://ntropy.westhoffswelt.de/tags/docs/integrate/index.html):
-  the language server, scripting and the shell, and the agent skill.
+  scripting and the shell, the language server, and the agent skill.
+- [Reference](https://ntropy.westhoffswelt.de/tags/docs/reference/index.html):
+  every command and flag, configuration, and limitations.
 - [Development](https://ntropy.westhoffswelt.de/tags/docs/develop/index.html):
-  building ntropy, its limitations, and the design records.
+  building ntropy and the design records.
 
 The design itself is recorded as decision records under
 [`docs/adr/`](https://github.com/jakobwesthoff/ntropy/tree/main/docs/adr)
