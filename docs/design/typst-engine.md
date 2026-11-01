@@ -346,7 +346,7 @@ definition wins for everything below it, and a theme that defines only
 | :--- | :--- | :--- |
 | `note` | `note(title: none, frontmatter: (:), paper: "a4", body)` | the whole document, through `#show` |
 | `callout` | `callout(kind: "note", body)` | each GFM admonition; `kind` is one of the five kinds, since a quote with any other marker stays a `#quote` |
-| `notelink` | `notelink(body)` | a resolved note-to-note link's title |
+| `notelink` | `notelink(body)` | the text of a resolved note link, inside its `#link`: the target's title, or the author's text when the link carries a heading anchor and that text is not blank. A note link to the note itself with an anchor follows the fragment rules of the element mapping instead of linking to the note's artifact: `#link(<ntropy-h-N>)` for a heading, the top of the first page for `#top`, and `notelink` with no `#link` for an anchor that names no heading |
 | `task` | `task(done: false)` | each task-list checkbox |
 
 `fmt-value`, `is-empty` and `callout-styles` are helpers the prelude

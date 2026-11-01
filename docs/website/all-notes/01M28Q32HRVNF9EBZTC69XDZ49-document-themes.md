@@ -91,7 +91,7 @@ the built-in look for the others:
 | :--- | :--- | :--- |
 | `note` | `note(title: none, frontmatter: (:), paper: "a4", body)` | the whole document |
 | `callout` | `callout(kind: "note", body)` | a `> [!NOTE]` admonition |
-| `notelink` | `notelink(body)` | a link to another note |
+| `notelink` | `notelink(body)` | the text of a note link: the target's title, or the link's text when it carries a heading anchor and has text |
 | `task` | `task(done: false)` | a task-list checkbox |
 
 The theme's source is spliced into the emitted document after ntropy's
@@ -164,7 +164,7 @@ on these elements:
 | `` `code` `` | `raw` inline |
 | `*em*`, `**strong**`, `~~gone~~` | `emph`, `strong`, `strike` |
 | `[text](url)`, bare URLs | `link` |
-| a link to another note | `link` to `<slug>.pdf` around `notelink` |
+| a note link | `link` to `<slug>.pdf` around `notelink`, or `link` to the heading's label when the link names a heading of the note itself |
 | `![alt](path)` with a local path | `image` with a path from the vault root |
 | `[^label]` | `footnote` |
 | `---` | `line(length: 100%)` |

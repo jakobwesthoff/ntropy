@@ -35,7 +35,7 @@ one and the others stay.
 | :--- | :--- | :--- |
 | `note` | `note(title: none, frontmatter: (:), paper: "a4", body)` | the whole document, through `#show` |
 | `callout` | `callout(kind: "note", body)` | each `> [!NOTE]`-style alert; `kind` is `note`, `tip`, `important`, `warning` or `caution` |
-| `notelink` | `notelink(body)` | the text of a link to another note, inside `#link("<slug>.pdf")` |
+| `notelink` | `notelink(body)` | the text of a note link, inside `#link("<slug>.pdf")`: the target's title, or the link's text when it carries a heading anchor and has text. A link to the note itself with an anchor goes to the heading's `<ntropy-h-N>` label instead, to the top of the first page for `#top`, and nowhere when the anchor names no heading |
 | `task` | `task(done: false)` | a task-list checkbox |
 
 The prelude's helpers `fmt-value` (any frontmatter value as text),
@@ -96,7 +96,7 @@ Show and set rules inside `note` style these:
 | code block / `` `code` `` | `raw` block (fence language) / `raw` inline |
 | emphasis, strong, strikethrough | `emph`, `strong`, `strike` |
 | links, bare URLs, `<mail@host>` | `link` |
-| link to another note | `link("<slug>.pdf")` around `notelink` |
+| note link | `link("<slug>.pdf")` around `notelink`, or `link(<ntropy-h-N>)` when the link names a heading of the note itself |
 | local image | `image("<path from the vault root>")` |
 | remote image | `link` to the URL, with a warning |
 | `[^label]` | `footnote` |
