@@ -1297,7 +1297,9 @@ fn write_stub_typst(vault: &Path) {
 /// The fake compiler [`write_stub_typst`] installs.
 ///
 /// Draining stdin mirrors the real compiler consuming the document; the marker
-/// lands at the last argument of `typst compile - <path>`, the output path.
+/// lands at the last argument of `typst compile - <path>`, the output path. A
+/// write that fails, such as one into a directory that does not exist, ends in
+/// exit status 1 as it does for the real compiler.
 /// `cat` is named by absolute path: the tests reduce `PATH` to the relative
 /// `stub-bin` entry, under which no `cat` exists.
 const STUB_TYPST_SCRIPT: &str = r#"#!/bin/sh
@@ -1307,7 +1309,7 @@ for arg in "$@"; do
   out="$arg"
 done
 if [ -n "$out" ]; then
-  printf 'stub pdf via typst\n' > "$out"
+  printf 'stub pdf via typst\n' > "$out" || exit 1
 fi
 exit 0
 "#;
@@ -1333,7 +1335,7 @@ for arg in "$@"; do
   out="$arg"
 done
 if [ -n "$out" ]; then
-  : > "$out"
+  : > "$out" || exit 1
   for arg in "$@"; do
     printf '%s
 ' "$arg" >> "$out"
@@ -1736,6 +1738,177 @@ fn render_output_flag_is_honored() {
     assert!(dir.path().join("custom.pdf").exists());
     // The default name was not used.
     assert!(!dir.path().join("wanted.pdf").exists());
+}
+
+/// Render a note to the format `to` into `missing/dir/x.<ext>`, a directory
+/// that does not exist, and return the vault directory, the run and the path
+/// asked for.
+///
+/// With `stub` the stub `typst` stands in for the compiler, otherwise `PATH`
+/// names no tool at all, which is all the formats without an external tool
+/// need.
+fn render_into_missing_directory(
+    to: &str,
+    ext: &str,
+    stub: bool,
+) -> (tempfile::TempDir, std::process::Output, PathBuf) {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    let artifact = dir.path().join("missing/dir").join(format!("x.{ext}"));
+    let mut cmd = ntropy(dir.path());
+    if stub {
+        write_stub_typst(dir.path());
+        cmd.env("PATH", STUB_BIN);
+    } else {
+        cmd.env("PATH", "no-such-bin");
+    }
+    cmd.args(["render", ULID_A, "--to", to, "-o"]);
+    cmd.arg(&artifact).arg("-n");
+    let output = cmd.output().expect("run render");
+    (dir, output, artifact)
+}
+
+fn assert_rendered_into_missing_directory(to: &str, ext: &str, stub: bool) {
+    let (_dir, output, artifact) = render_into_missing_directory(to, ext, stub);
+    assert!(
+        output.status.success(),
+        "render to {to} failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        artifact.exists(),
+        "no {to} artifact at {}",
+        artifact.display()
+    );
+}
+
+#[test]
+fn render_to_pdf_creates_the_missing_output_directory() {
+    assert_rendered_into_missing_directory("pdf", "pdf", true);
+}
+
+#[test]
+fn render_to_typst_creates_the_missing_output_directory() {
+    assert_rendered_into_missing_directory("typst", "typ", false);
+}
+
+#[test]
+fn render_to_html_creates_the_missing_output_directory() {
+    assert_rendered_into_missing_directory("html", "html", false);
+}
+
+#[test]
+fn render_to_ansi_creates_the_missing_output_directory() {
+    assert_rendered_into_missing_directory("ansi", "ansi", false);
+}
+
+#[test]
+fn render_names_the_output_directory_it_cannot_create() {
+    // A regular file where a directory has to be: the error names the
+    // directory, and no artifact appears.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    fs::write(dir.path().join("a-file"), "not a directory").expect("write the blocking file");
+    let mut cmd = ntropy(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    cmd.args([
+        "render",
+        ULID_A,
+        "--to",
+        "ansi",
+        "-o",
+        "a-file/sub/x.ansi",
+        "-n",
+    ]);
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("while creating the directory `a-file/sub`"),
+        "the error does not name the directory:\n{stderr}"
+    );
+    assert!(!dir.path().join("a-file/sub").exists());
+}
+
+#[test]
+fn render_removes_the_directories_it_made_when_typst_is_missing() {
+    // The directory is made before the engine runs, and the engine is where a
+    // missing tool shows up, so the failed run takes its directories back.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    cmd.args(["render", ULID_A, "-o", "missing/dir/x.pdf", "-n"]);
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success());
+    assert!(
+        !dir.path().join("missing").exists(),
+        "the failed render left its output directory behind"
+    );
+}
+
+#[test]
+fn render_removes_the_directories_it_made_when_typst_fails() {
+    // A compile error is the other early failure: the tool starts, exits
+    // non-zero and writes nothing.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    write_typst_script(
+        &dir.path().join(STUB_BIN),
+        "#!/bin/sh\n/bin/cat > /dev/null\necho 'error: no compile' >&2\nexit 1\n",
+        0o755,
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.env("PATH", STUB_BIN);
+    cmd.args(["render", ULID_A, "-o", "missing/dir/x.pdf", "-n"]);
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success());
+    assert!(
+        !dir.path().join("missing").exists(),
+        "the failed render left its output directory behind"
+    );
+}
+
+#[test]
+fn render_keeps_a_directory_that_was_already_there_when_the_render_fails() {
+    // Only what the run created is removed: `missing/` exists beforehand and
+    // stays, `dir/` is the run's own and goes.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    fs::create_dir(dir.path().join("missing")).expect("pre-existing directory");
+    fs::write(dir.path().join("missing/keep.txt"), "kept").expect("pre-existing file");
+    let mut cmd = ntropy(dir.path());
+    cmd.env("PATH", "no-such-bin");
+    cmd.args(["render", ULID_A, "-o", "missing/dir/x.pdf", "-n"]);
+    let output = cmd.output().expect("run render");
+    assert!(!output.status.success());
+    assert!(dir.path().join("missing/keep.txt").exists());
+    assert!(!dir.path().join("missing/dir").exists());
 }
 
 #[test]

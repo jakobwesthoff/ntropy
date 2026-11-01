@@ -244,7 +244,9 @@ correctly, and is a successful no-op without it, like `delete`.
   arrive.
 - `--output <path>` / `-o` names the artifact; the default is
   `./<slug>.<ext>` in the current directory, from the slug component of the
-  note's filename and the format's extension. The `html` format also writes
+  note's filename and the format's extension. A missing parent directory of
+  the path is created for every format, and removed again when the render
+  fails, as far as the run made it. The `html` format also writes
   `<stem>_files/` beside the artifact (ADR 0057). That default name is what
   a note link in another artifact points at (ADR 0044), so a set of notes
   rendered without `-o` into one directory cross-references itself. A

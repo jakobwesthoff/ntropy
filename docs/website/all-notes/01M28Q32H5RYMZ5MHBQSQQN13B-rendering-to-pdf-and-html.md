@@ -35,8 +35,9 @@ under `-n` an ambiguous selector is an error listing the candidates. With
 no selector at all, every note feeds the picker.
 
 Without `-o`, the artifact is `./<slug>.<ext>` in the current directory:
-the slug of the note's filename plus `pdf`, `typ`, `html`, or `ansi`. `-p` prints
-the artifact's path on stdout and nothing else, which is what makes
+the slug of the note's filename plus `pdf`, `typ`, `html`, or `ansi`. With `-o`,
+a missing parent directory of the path is created, whichever format you render.
+`-p` prints the artifact's path on stdout and nothing else, which is what makes
 `open "$(ntropy render -p ...)"` work. Without `-p`, ntropy announces the
 render and ends with a report naming the artifact, the format and engine
 that produced it, and its size:

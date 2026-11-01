@@ -31,6 +31,11 @@ change in any release
   not define labels with that prefix or draw the body, or a block that holds
   a heading, twice: Typst rejects the duplicated label as soon as a link
   names that heading.
+- `render -o some/new/dir/note.<ext>` now creates the missing directory for
+  every format. `--to html` already did. `--to pdf`, `--to typst` and
+  `--to ansi` stopped with `No such file or directory`. A render that fails
+  afterwards, say because `typst` is not installed, removes the directories
+  it made. An error creating the directory names it.
 - The tick in a done task box of a PDF no longer comes from a font on the
   machine. None of the fonts typst brings along has the check mark glyph, so
   typst took it from a system font without a word of warning (`.SFNS-Regular`

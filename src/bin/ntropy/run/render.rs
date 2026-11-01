@@ -209,11 +209,17 @@ pub fn cmd_render(
         );
     }
 
+    // Every format writes its artifact through a path whose parent may not
+    // exist yet. Creating it here, before the engine runs, gives all formats
+    // the same behaviour instead of leaving it to whichever tool writes first.
+    let made = create_output_directory(&output_path, &absolute_output)?;
+
     let mut ctx =
         ProcessContext::new(absolute_output).context("while creating the render workspace")?;
-    renderer
-        .render(&doc, &mut ctx)
-        .context("while rendering the note")?;
+    if let Err(error) = renderer.render(&doc, &mut ctx) {
+        remove_empty_directories(&made);
+        return Err(error).context("while rendering the note");
+    }
 
     // `--print` writes exactly the artifact path to stdout for command
     // substitution (ADR 0036); otherwise a completion report names the
@@ -238,6 +244,46 @@ pub fn cmd_render(
         &warnings,
         ctx.warning_count(),
     ))
+}
+
+/// Create the directory the artifact goes into, and return the directories
+/// this call made, outermost first.
+///
+/// `shown` is the output path as the user gave it, so the error names the
+/// directory the way the command line did. `absolute` is the path the
+/// directory is created from.
+fn create_output_directory(shown: &Path, absolute: &Path) -> Result<Vec<PathBuf>> {
+    let Some(parent) = absolute.parent() else {
+        return Ok(Vec::new());
+    };
+    let mut made: Vec<PathBuf> = parent
+        .ancestors()
+        .take_while(|dir| !dir.exists())
+        .map(Path::to_path_buf)
+        .collect();
+    made.reverse();
+
+    std::fs::create_dir_all(parent).with_context(|| {
+        let shown_parent = shown
+            .parent()
+            .filter(|dir| !dir.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        format!("while creating the directory `{}`", shown_parent.display())
+    })?;
+    Ok(made)
+}
+
+/// Remove the directories a failed render made, innermost first.
+///
+/// `remove_dir` refuses a directory that holds anything, so an artifact or a
+/// file the engine left behind is never deleted. A directory that cannot be
+/// removed stays, since a leftover empty directory is harmless.
+fn remove_empty_directories(made: &[PathBuf]) {
+    for dir in made.iter().rev() {
+        if std::fs::remove_dir(dir).is_err() {
+            return;
+        }
+    }
 }
 
 /// The default artifact path: the note's slug joined to the format's extension,

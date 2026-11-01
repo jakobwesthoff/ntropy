@@ -48,7 +48,9 @@ model.
 - `--output <path>` / `-o` names the artifact. The default is
   `./<slug>.<ext>` in the current working directory, where `<slug>` is the
   slug component of the note's filename and `<ext>` is the format's
-  extension (`pdf`, `typ`, `html`, or `ansi`). The `html` format also writes
+  extension (`pdf`, `typ`, `html`, or `ansi`). A missing parent directory
+  of the path is created for every format, and removed again when the
+  render fails, as far as the run made it. The `html` format also writes
   `<stem>_files/` beside the artifact
   ([html-engine.md](html-engine.md)). An existing artifact, or a
   non-empty files directory, is refused unless `--force` is given,
