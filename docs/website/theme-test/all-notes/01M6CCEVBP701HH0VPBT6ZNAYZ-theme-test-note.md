@@ -231,6 +231,26 @@ paragraph.[^second] A third sentence refers to the first footnote again.[^first]
 A long word: Donaudampfschifffahrtsgesellschaftskapitänsmützenabzeichen.
 A long URL: https://example.org/a/very/long/path/that/does/not/break/at/any/space/at/all/index.html.
 A long line of code: `configuration.load_from_environment().merge_with_vault_settings().apply()`.
+A link with a long label:
+[https://example.org/a/very/long/path/that/does/not/break/at/any/space/at/all/index.html](https://example.org/a).
+
+- A list item with a long address
+  https://example.org/a/very/long/path/that/does/not/break/at/any/space/at/all/index.html
+  and `configuration.load_from_environment().merge_with_vault_settings().apply()`.
+
+> [!NOTE]
+> A callout with a long address
+> https://example.org/a/very/long/path/that/does/not/break/at/any/space/at/all/index.html.
+
+| Key | Value |
+| --- | --- |
+| A long address | https://example.org/a/very/long/path/that/does/not/break/at/any/space/at/all/index.html |
+
+### Donaudampfschifffahrtsgesellschaftskapitänsmützenabzeichen as a heading
+
+A footnote with a long address.[^wrapping]
+
+[^wrapping]: See https://example.org/a/very/long/path/that/does/not/break/at/any/space/at/all/index.html.
 
 ---
 

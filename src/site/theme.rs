@@ -738,10 +738,10 @@ mod tests {
     // =====================================================================
 
     /// Every declaration of `property` in `css`, with the preludes of the
-    /// at-rules around it. Enough of CSS for the stylesheets this crate
-    /// ships: comments are dropped, and a declaration ends at `;` or at the
-    /// `}` that closes its rule.
-    fn declarations(css: &str, property: &str) -> Vec<(Vec<String>, String)> {
+    /// at-rules around it and the selector of its rule. Enough of CSS for the
+    /// stylesheets this crate ships: comments are dropped, and a declaration
+    /// ends at `;` or at the `}` that closes its rule.
+    fn declarations(css: &str, property: &str) -> Vec<(Vec<String>, String, String)> {
         let without_comments = regex::Regex::new(r"(?s)/\*.*?\*/")
             .expect("pattern")
             .replace_all(css, "");
@@ -757,7 +757,13 @@ mod tests {
                     .filter(|prelude| prelude.starts_with('@'))
                     .cloned()
                     .collect();
-                found.push((at_rules, value.trim().to_string()));
+                let selector = preludes
+                    .iter()
+                    .rev()
+                    .find(|prelude| !prelude.starts_with('@'))
+                    .cloned()
+                    .unwrap_or_default();
+                found.push((at_rules, selector, value.trim().to_string()));
             }
         };
         for character in without_comments.chars() {
@@ -810,8 +816,8 @@ mod tests {
 
             let printed_grounds: Vec<String> = declarations(&css, "--bg")
                 .into_iter()
-                .filter(|(at_rules, _)| !on_screen_only(at_rules))
-                .map(|(_, value)| value)
+                .filter(|(at_rules, _, _)| !on_screen_only(at_rules))
+                .map(|(_, _, value)| value)
                 .collect();
             assert!(
                 !printed_grounds.is_empty(),
@@ -829,7 +835,7 @@ mod tests {
                 printed_grounds[0]
             );
 
-            for (at_rules, value) in declarations(&css, "color") {
+            for (at_rules, _, value) in declarations(&css, "color") {
                 if value == "var(--shiki-dark)" {
                     assert!(
                         on_screen_only(&at_rules),
@@ -838,5 +844,106 @@ mod tests {
                 }
             }
         }
+    }
+
+    // =====================================================================
+    // Wrapping
+    // =====================================================================
+
+    /// The declarations of `property` that apply on every screen and in print,
+    /// as one entry per selector of a comma list (`.a, .b { ... }` yields
+    /// `.a` and `.b`) with the declared value.
+    fn unconditional_declarations(css: &str, property: &str) -> Vec<(String, String)> {
+        declarations(css, property)
+            .into_iter()
+            .filter(|(at_rules, _, _)| at_rules.is_empty())
+            .flat_map(|(_, selector, value)| {
+                selector
+                    .split(',')
+                    .map(|part| (part.trim().to_string(), value.clone()))
+                    .collect::<Vec<_>>()
+            })
+            .collect()
+    }
+
+    /// A word wider than its box has to break at the box edge, or the page
+    /// scrolls sideways on a phone. This pins the rules that make that so in
+    /// both shipped stylesheets:
+    ///
+    /// - `body` lets a word break where it does not fit an empty line. The
+    ///   value is inherited by running text, links, inline code and table
+    ///   cells, and never lowers a minimum size, so short words next to a
+    ///   long one stay whole.
+    /// - A flex item or grid track is never narrower than its longest word,
+    ///   unless `overflow-wrap: anywhere` lowers that minimum. The containers
+    ///   that hold text from a note (titles, tags, keys, values, group names)
+    ///   opt in.
+    /// - `white-space: nowrap` on a tag would keep it from breaking at all.
+    ///
+    /// The test reads the stylesheets, so it guarantees that a stylesheet
+    /// which drops a rule fails. It does not prove what a browser draws;
+    /// measuring the exported pages at phone width does that.
+    #[test]
+    fn running_text_breaks_at_the_line_end_in_both_shipped_themes() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+        let website =
+            std::fs::read_to_string(root.join("docs/website/.ntropy/themes/site/ntropy/style.css"))
+                .expect("the documentation site's stylesheet exists");
+        let mut failures = Vec::new();
+        for (name, css) in [
+            ("built-in", SiteTheme::builtin().stylesheet),
+            ("website", website),
+        ] {
+            let wrapping = unconditional_declarations(&css, "overflow-wrap");
+            let value_of = |selector: &str, declarations: &[(String, String)]| {
+                declarations
+                    .iter()
+                    .rev()
+                    .find(|(candidate, _)| candidate == selector)
+                    .map(|(_, value)| value.clone())
+            };
+
+            if value_of("body", &wrapping).as_deref() != Some("break-word") {
+                failures.push(format!(
+                    "{name}: body does not declare overflow-wrap: break-word"
+                ));
+            }
+            for container in [
+                ".frontmatter",
+                ".note-meta",
+                ".note-rows",
+                ".group-chips",
+                ".sidebar",
+                ".breadcrumbs",
+                ".palette-meta",
+            ] {
+                if value_of(container, &wrapping).as_deref() != Some("anywhere") {
+                    failures.push(format!(
+                        "{name}: {container} does not declare overflow-wrap: anywhere"
+                    ));
+                }
+            }
+
+            let columns = unconditional_declarations(&css, "grid-template-columns");
+            for grid in [".frontmatter", ".frontmatter dl"] {
+                if !value_of(grid, &columns).is_some_and(|value| value.starts_with("fit-content("))
+                {
+                    failures.push(format!(
+                        "{name}: {grid} lets a long key widen the first column"
+                    ));
+                }
+            }
+
+            let no_wrap = unconditional_declarations(&css, "white-space");
+            if value_of(".count", &no_wrap).as_deref() != Some("nowrap") {
+                failures.push(format!("{name}: .count can break its number"));
+            }
+            for tag in [".tag", ".tag-cloud a"] {
+                if value_of(tag, &no_wrap).as_deref() == Some("nowrap") {
+                    failures.push(format!("{name}: {tag} cannot break a long tag"));
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{failures:#?}");
     }
 }

@@ -195,6 +195,14 @@ keeps these, or the matching behavior goes:
 - `@media print` hides the `#` and lets a table grow to its full width.
   The dark palette and the dark token colors of code are inside
   `@media screen`, so a page prints in the light palette.
+- `body` sets `overflow-wrap: break-word`, so a link, an inline code span or
+  a word without a space breaks at the line end instead of widening the
+  page. The containers of note text that sit in a flex row or grid
+  (`.frontmatter`, `.note-meta`, `.note-rows`, `.group-chips`, `.sidebar`,
+  `.breadcrumbs`, `.palette-meta`) set `overflow-wrap: anywhere`, which also
+  lets their items shrink below their longest word. Setting `anywhere` on
+  `body` breaks short words next to a long item, and `white-space: nowrap`
+  on a tag or a number keeps it from breaking.
 - `.visually-hidden` hides the names of the scheme buttons and keeps them
   for screen readers.
 
@@ -228,7 +236,9 @@ anchor. A landing note, "Site tour", makes a group page with a listing,
 three tour stops give the sidebar order and the pager, "Tour detail" has a
 breadcrumb of three steps, "Raw HTML and remote images" holds what only web
 pages show, and a hidden note has a page that no sidebar or listing names.
-The view `by-status` and the tags fill the sidebar.
+A note whose title, tag, frontmatter key and frontmatter value are each one
+word wider than a phone screen shows how a theme wraps unbreakable text. The
+view `by-status` and the tags fill the sidebar.
 
 Download it, copy a theme into it, and export it with that theme:
 

@@ -136,6 +136,18 @@ change in any release
   colours. It kept the dark palette, light text on a dark ground. A theme
   copied with `site theme init` before this release prints dark until its
   dark rules are limited to `@media screen` the same way.
+- A page of `site` and `render --to html` no longer scrolls sideways on a
+  phone when a note holds a long link, an inline code span or any word without
+  a space. The 2.9.0 fix covered wide tables only. A word
+  that does not fit its line breaks at the line end, in running text,
+  headings, lists, callouts, footnotes, the frontmatter (a long key or value),
+  listings, tag pages, the tag index, the breadcrumbs, the open sidebar and
+  the search palette. A word that fits stays whole, and a code block or a
+  table wider than its column still scrolls inside its own box. A long tag
+  breaks too, and a tag's icon and a breadcrumb's chevron stay beside its
+  first line. A theme copied with `site theme init` earlier keeps its old
+  stylesheet; it needs the new `overflow-wrap` rules of the built-in
+  `style.css`, which are described in the site themes documentation.
 
 ## v2.9.0 - 2026-11-01
 

@@ -221,6 +221,14 @@ A theme reworking the layout around the built-in rules keeps these:
   screens without hover, and on `body.document` pages below 70rem.
 - Print hides the `#` and lets a table grow; the dark palette and the dark
   code colors are screen-only, so a page prints in the light palette.
+- `body` sets `overflow-wrap: break-word`, so a link, an inline code span or
+  a word without a space breaks at the line end instead of widening the
+  page. The containers of note text in a flex row or grid (`.frontmatter`,
+  `.note-meta`, `.note-rows`, `.group-chips`, `.sidebar`, `.breadcrumbs`,
+  `.palette-meta`) set `overflow-wrap: anywhere`, which also lets their items
+  shrink below their longest word. `anywhere` on `body` breaks short words
+  next to a long item, and `white-space: nowrap` on a tag or a number keeps
+  it from breaking.
 - `.visually-hidden` hides the scheme buttons' names and keeps them for
   screen readers.
 

@@ -24,6 +24,9 @@ section names the few parts this vault cannot show.
   what only web pages show.
 - [Hidden note](01M6CCEVGR648RP1RMXKKM3XP6-hidden-note.md): a page that no
   sidebar, listing or pager names.
+- [Donaudampfschifffahrtsgesellschaftskapitaensmuetzenabzeichenverleihung](01M6CH3GY5AYJD5Z44FG452SBS-donaudampfschifffahrtsgesellschaftskapitaensmuetzenabzeichenverleihung.md):
+  a title, a tag, a frontmatter key and a frontmatter value that are one long
+  word each, in the sidebar, the listings, the tag index and the note header.
 - The sidebar: the view `by-status` with a group per status, and the tags.
   The tag pages and the view's pages list their notes.
 - This page is the front page, set by `index` in the `[site]` table of

@@ -220,6 +220,26 @@ html[data-theme="dark"] {
 body {
   margin: 0;
   padding: 1.5rem 1rem;
+  /* A word wider than its line breaks at the line end instead of widening
+   * the page. Unlike `anywhere`, `break-word` leaves minimum sizes alone,
+   * so the short words of the page chrome never shrink below themselves
+   * and a table wider than its column still scrolls inside its wrapper. */
+  overflow-wrap: break-word;
+}
+
+/* Text from a note can be one unbreakable word wider than the screen: a
+ * title, a tag, a frontmatter key or value, a group name. A flex item or grid
+ * track is never narrower than its longest word under `break-word`, so the
+ * containers of such text lower that minimum with `anywhere` and let the item
+ * shrink to the column. */
+.frontmatter,
+.note-meta,
+.note-rows,
+.group-chips,
+.sidebar,
+.breadcrumbs,
+.palette-meta {
+  overflow-wrap: anywhere;
 }
 
 main {
@@ -306,10 +326,12 @@ a.note-link {
   gap: 0.25rem 0.9rem;
 }
 
+/* A flex row keeps the icon beside the first line of a tag that wraps. */
 .tag {
+  display: inline-flex;
+  align-items: baseline;
   color: var(--muted);
   text-decoration: none;
-  white-space: nowrap;
 }
 
 .tag .icon {
@@ -317,7 +339,10 @@ a.note-link {
   height: 0.85em;
   margin-right: 0.3em;
   opacity: 0.8;
-  vertical-align: -0.1em;
+  /* A flex item ignores vertical-align, so the icon is moved down by hand
+   * to sit on the text's baseline. */
+  position: relative;
+  top: 0.1em;
 }
 
 a.tag:hover {
@@ -327,7 +352,7 @@ a.tag:hover {
 
 .frontmatter {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: fit-content(50%) 1fr;
   column-gap: 1.25rem;
   row-gap: 0.15rem;
   margin: 1rem 0 0;
@@ -353,7 +378,7 @@ a.tag:hover {
 
 .frontmatter dl {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: fit-content(50%) 1fr;
   column-gap: 0.75rem;
 }
 
@@ -1248,7 +1273,6 @@ body.palette-open {
 .tag-cloud a {
   color: var(--fg);
   text-decoration: none;
-  white-space: nowrap;
 }
 
 .tag-cloud a:hover {
@@ -1265,6 +1289,7 @@ body.palette-open {
   font-family: var(--mono);
   font-size: 0.75rem;
   margin-left: 0.4em;
+  white-space: nowrap;
 }
 
 /* Content column, outline column. */
@@ -1306,6 +1331,11 @@ body.palette-open {
   padding: 0;
 }
 
+.breadcrumbs li {
+  display: flex;
+  align-items: baseline;
+}
+
 .breadcrumbs a {
   color: inherit;
   text-decoration: none;
@@ -1320,7 +1350,9 @@ body.palette-open {
   height: 0.9em;
   margin-right: 0.25rem;
   color: var(--faint);
-  vertical-align: -0.15em;
+  flex: none;
+  position: relative;
+  top: 0.15em;
 }
 
 .pager {
