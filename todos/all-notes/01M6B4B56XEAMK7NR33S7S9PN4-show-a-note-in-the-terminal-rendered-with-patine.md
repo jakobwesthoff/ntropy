@@ -19,14 +19,19 @@ shows a note in the terminal.
   proposal, to be built now:
   - A new format in the render registry (ADR 0038), `--to ansi`, whose
     engine renders the `PreparedDocument` through `patine` (library,
-    `default-features = false`): note links replaced by the target's
-    title as the HTML engine resolves them, a header with title, tags
-    and date, the body through `patine::render`.
+    `default-features = false`).
   - A command `ntropy show <ID|QUERY>` that prints a note rendered this
     way to the terminal: at the terminal's width, through a pager
     (`less -R` or `$PAGER`) when it is taller than the screen, without
     colours when stdout is not a terminal or `NO_COLOR` is set, and the
     same note selection as `render` when no argument is given.
+- 2026-11-01, the owner, on the look: no header of ntropy's own. The
+  output is the note's front matter, as patine renders front matter,
+  followed by its Markdown as written, its own `# ` heading included.
+  A link to another note stays the Markdown link it is: its display text
+  with the target's filename (`<ulid>-<slug>.md`) dimmed after it, as
+  patine shows every link, rather than being replaced by the target's
+  title.
 - Known cost: patine pulls in comrak, syntect and two-face, a few MB of
   binary for syntax definitions; ntropy keeps pulldown-cmark for its own
   parsing. Images show as patine's `[image: alt] (url)` text.
