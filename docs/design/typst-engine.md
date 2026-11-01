@@ -216,9 +216,12 @@ vault cannot be expressed against the root and is left as written, for
 the compiler to reject by name.
 
 Because the emitted document addresses assets from the vault root,
-compiling a `typst`-format artifact by hand takes `typst compile --root
-<vault>`. An artifact whose note and theme reference no files compiles
-on its own.
+compiling a `typst`-format artifact by hand takes the vault as the root.
+typst refuses a main file outside its root ("source file must be
+contained in project root"), so an artifact written outside the vault
+goes in on stdin, as the pdf pipeline feeds it:
+`typst compile --root <vault> - <output> < <artifact>`. An artifact whose
+note and theme reference no files compiles on its own.
 
 The pdf pipeline runs `typst compile --root <vault> - <output>` and feeds
 the emitted document on stdin, so it compiles the `typst` format's
@@ -331,7 +334,7 @@ definition wins for everything below it, and a theme that defines only
 | Function | Signature | Called for |
 | :--- | :--- | :--- |
 | `note` | `note(title: none, frontmatter: (:), paper: "a4", body)` | the whole document, through `#show` |
-| `callout` | `callout(kind: "note", body)` | each GFM admonition; `kind` is one of the five kinds or an unrecognized one |
+| `callout` | `callout(kind: "note", body)` | each GFM admonition; `kind` is one of the five kinds, since a quote with any other marker stays a `#quote` |
 | `notelink` | `notelink(body)` | a resolved note-to-note link's title |
 | `task` | `task(done: false)` | each task-list checkbox |
 

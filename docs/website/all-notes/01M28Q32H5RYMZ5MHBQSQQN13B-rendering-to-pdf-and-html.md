@@ -15,8 +15,9 @@ of the web page comes from a
 
 ## Rendering a note
 
-The default output is a PDF with the title, date, and tags up top and the
-body below. Links to other notes show the target's current title.
+The default output is a PDF with the title up top, a line of the other
+frontmatter fields below it with the tags as chips, and the body below
+that. Links to other notes show the target's current title.
 
 ```bash
 # Render a note into ./<slug>.pdf in the current directory

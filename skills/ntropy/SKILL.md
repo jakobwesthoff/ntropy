@@ -285,3 +285,5 @@ The `[site]` table, the nav table, the `site` frontmatter keys, and the
 standalone `render --to html` page: [references/site.md](references/site.md).
 Writing a theme (layout, tokens, fonts, icons, markup):
 [references/site-themes.md](references/site-themes.md).
+Writing a document theme for PDF and Typst output (`note`, show rules,
+fonts, paper): [references/document-themes.md](references/document-themes.md).
