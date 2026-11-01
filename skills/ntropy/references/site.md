@@ -243,7 +243,7 @@ a `note:` line, which `--strict` does not count.
 
 | DON'T | DO |
 |-------|----|
-| Put content under a `site:` frontmatter key | keep `site` for `order`, `label`, `hidden`, `index`, `listing`, `related` only |
+| Put content under a `site:` frontmatter key | keep `site` for `order`, `label`, `hidden`, `index`, `listing`, `related`, `template` only |
 | `index = "Welcome"` or `{ note = "welcome" }` | the full 26-character ULID, looked up with `ntropy search -n` |
 | Number tags to force an order (`01-start`) | `site.order` on the notes; a landing note's order places its group |
 | Hand over a site whose export printed warnings | fix what they name, or export with `--strict` in scripts |

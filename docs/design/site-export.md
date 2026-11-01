@@ -315,7 +315,10 @@ so does a file that resolves outside the theme and the vault
 Loading a theme fails, naming the file, when its `style.css`, an icon or a
 template resolves outside the theme and the vault.
 Every page links `style.css` and `render --to html` copies it beside the
-artifact; a directory without it is not a theme. A theme provides the
+artifact; a directory without it is not a theme. The theme's
+stylesheet and fonts are all the pages get: nothing of the built-in
+theme is added to them, while icons and templates are layered by name
+over the built-in ones. A theme provides the
 palettes for both light and dark mode; the page follows the system
 preference by default and remembers a manual choice in the browser. The
 shipped themes limit the dark palette to the screen, so a printed page
@@ -340,7 +343,7 @@ page, `group` for a tag, view, or group page, a landing note's page
 among them, and a section index, and `document` for the `render --to
 html` artifact. `note` is the note the page is rendered from, with
 `id`, `title`, `created`, `tags`, and `frontmatter`, the raw mapping;
-a page rendered from no note leaves it undefined. `vars` is the
+a page rendered from no note leaves it none. `vars` is the
 config's `[site.vars]` table as it stands, except that a TOML date,
 time, or datetime reaches the template as text in the form TOML writes
 it: `2026-11-01`, `12:00:00`, `2026-11-01T12:00:00`, or
@@ -358,9 +361,9 @@ fragments that are HTML already (`icons`, `sidebar`, `outline`,
 `body`) are spliced as they are; every other value is escaped.
 
 The built-in `page.html` extends `base.html`, whose blocks are
-`title`, `head`, `body_class`, and `body`, and defines an empty block
-at each of its own seams: `head` (after the stylesheet and scripts),
-`header_nav` (after the site name), `header_tools` (between the search
+`title`, `head`, `body_class`, and `body`; it fills those four, `head`
+with the stylesheet, the inline scheme script, and the scripts, and
+defines an empty block at each of its own seams: `header_nav` (after the site name), `header_tools` (between the search
 button and the scheme switch), `before_content` and `after_content`
 (inside `main`, around breadcrumbs, content, and pager), `footer`
 (after the layout), and `scripts` (at the end of the body). A theme
@@ -370,7 +373,8 @@ sizes that shape the pages (the reading column, the chrome's widths, the
 gaps between blocks and sections, the radii, the shadows, the transition
 length), in custom properties on the root element named for their job,
 so a theme that wants only a palette or a wider column redefines those
-and keeps the rest; the README lists them.
+in its copy of the stylesheet (a theme's `style.css` replaces the
+built-in one); the website's Site themes page lists them.
 
 The icons are the theme's `icons/` directory. At export every
 `<name>.svg` in it becomes a `<symbol id="icon-<name>">` of a hidden
@@ -386,8 +390,8 @@ license.
 Selection is `--theme`, then `[site] theme`, then the built-in theme. The
 binary embeds exactly one built-in theme, every file under
 `src/site/theme/`, templates included, and `site theme init` copies them
-out as the starting point for a custom one. The README's theme section
-is the contract a theme author writes against.
+out as the starting point for a custom one. The website's Site themes
+page is the contract a theme author writes against.
 
 ## Search data
 
