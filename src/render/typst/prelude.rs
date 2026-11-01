@@ -16,8 +16,9 @@
 
 /// The default prelude source, embedded from `prelude.typ`.
 ///
-/// Defines `callout` (a bordered block with a bold, capitalized kind lead-in,
-/// all five GFM kinds and any unknown kind rendered through the one form) and
+/// Defines `callout` (a bordered block with a bold, capitalized kind lead-in;
+/// the emitter calls it for the five GFM kinds only, and a kind outside them
+/// takes the same form in neutral grey) and
 /// `note` (prominent centered title, every frontmatter field as a key-value
 /// line, then the body).
 pub const PRELUDE: &str = include_str!("prelude.typ");

@@ -49,10 +49,11 @@ expression: document
   caution: (color: rgb("#cf222e"), label: "Caution"),
 )
 
-// A callout is a GFM admonition. Every kind renders through the same form —
-// colored left bar, tinted fill, colored bold lead-in — so an unrecognized
-// kind is handled by the same code path in neutral grey with its own
-// capitalized name as the lead-in.
+// A callout is a GFM admonition: a colored left bar, a tinted fill, and a
+// colored bold lead-in. The emitter calls it for the five GFM kinds only, as
+// another marker stays a quote. A kind outside the table, such as one a theme
+// passes itself, takes the same form in neutral grey with its own capitalized
+// name as the lead-in.
 #let callout(kind: "note", body) = {
   let style = callout-styles.at(
     kind,
