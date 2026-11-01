@@ -108,11 +108,19 @@ const TAB_STOP: usize = 8;
 /// line: the drawing then moves no cursor and its width is known.
 fn shown_text(text: &str, column: usize) -> String {
     let mut shown = String::with_capacity(text.len());
+    // The column where the text since the last tab starts, and where that
+    // text starts in `shown`. Each run between two tabs is measured once, so
+    // the cost stays in proportion to the text; a grapheme never spans a
+    // tab, so measuring by runs counts as patine counts the whole line.
+    let mut run_column = column;
+    let mut run_start = 0;
     for ch in text.chars() {
         if ch == '\t' {
-            let at = column + text_width(&shown);
+            let at = run_column + text_width(&shown[run_start..]);
             let spaces = TAB_STOP - at % TAB_STOP;
             shown.extend(std::iter::repeat_n(' ', spaces));
+            run_column = at + spaces;
+            run_start = shown.len();
         } else if crate::text::escape::needs_escape(ch) {
             shown.extend(ch.escape_debug());
         } else {
@@ -487,6 +495,25 @@ mod tests {
             .position(|l| l.contains('ﾞ'))
             .expect("the line is drawn");
         assert_eq!(drawn.line_widths[line], 2);
+    }
+
+    /// A tab's stop depends on everything before it on the line. Measuring
+    /// that again at every tab costs time quadratic in the tabs: a release
+    /// build took 3.4 s for 10,000 tabs on one line, where patine's own
+    /// layout takes under 10 ms. The limit is far above what measuring each
+    /// run of text once takes.
+    #[test]
+    fn tabs_cost_time_in_proportion_to_their_number() {
+        let tabs = 10_000;
+        let note = format!("---\ntitle: T\n---\n```\n{}\n```\n", "a\t".repeat(tabs));
+        let started = std::time::Instant::now();
+        let drawn = draw_note(&note, 80, Form::Plain);
+        let elapsed = started.elapsed();
+        assert!(drawn.text.contains("a       a"));
+        assert!(
+            elapsed < std::time::Duration::from_secs(1),
+            "drawing {tabs} tabs took {elapsed:?}"
+        );
     }
 
     // =========================================================
