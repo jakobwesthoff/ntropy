@@ -26,7 +26,8 @@ use ntropy::text::escape_controls;
 
 use crate::cli::GlobalArgs;
 
-use super::{exit_for_warnings, output, picker, report_ambiguous};
+use super::one_note::Selection;
+use super::{exit_for_warnings, output};
 
 /// Render the note named by `selector` to a document artifact.
 ///
@@ -113,59 +114,13 @@ pub fn cmd_render(
             .to_string(),
     };
 
-    // A blank selector browses the whole vault, exactly as `search` enters its
-    // picker; anything else resolves as a full ULID or a DSL query (the
-    // id-or-query rule of ADR 0025). Scan warnings surface either way.
-    let selector = super::optional(&selector).map(str::to_string);
-    let matches = match selector.as_deref() {
-        Some(selector) => {
-            ops::resolve_selection(session, selector).context("while resolving the selector")?
-        }
-        None => ops::search(session, None).context("while listing notes")?,
-    };
-    output::print_warnings(&matches.warnings);
-
     // Narrow to exactly one note, honoring the ambiguity rule shared with
-    // `delete` (ADR 0025). The picker yields a candidate, so the full note is
-    // recovered from the resolved set by id, since rendering needs its body.
-    let note = match matches.notes.as_slice() {
-        [] => {
-            match &selector {
-                Some(selector) => eprintln!("error: no note matches `{selector}`"),
-                None => eprintln!("No notes matched your search criteria."),
-            }
-            return Ok(ExitCode::FAILURE);
-        }
-        [note] => note.clone(),
-        notes => {
-            if interactive {
-                let candidates = ops::to_candidates(notes)?;
-                match picker::pick(candidates, picker::align_candidates)? {
-                    Some(selected) => notes
-                        .iter()
-                        .find(|n| n.id == selected.id)
-                        .expect("the picked candidate is one of the resolved notes")
-                        .clone(),
-                    // A cancelled picker fails under `-p` so
-                    // `open "$(ntropy render -p ...)"` branches correctly;
-                    // without it a cancel is a successful no-op like `delete`.
-                    None if print => return Ok(ExitCode::FAILURE),
-                    None => return Ok(ExitCode::SUCCESS),
-                }
-            } else {
-                match &selector {
-                    Some(selector) => report_ambiguous(selector, notes)?,
-                    // Without a picker there is nothing to narrow a bare
-                    // invocation with, so it asks for a selector instead of
-                    // dumping every note as an ambiguity list.
-                    None => eprintln!(
-                        "error: rendering needs a selector in non-interactive mode ({} notes)",
-                        notes.len()
-                    ),
-                }
-                return Ok(ExitCode::FAILURE);
-            }
-        }
+    // `delete` (ADR 0025).
+    let (selection, warnings) =
+        super::one_note::select_one(session, &selector, interactive, print, "rendering")?;
+    let note = match selection {
+        Selection::Note(note) => *note,
+        Selection::Exit(code) => return Ok(code),
     };
 
     // The default artifact name is the note's slug plus the format's extension,
@@ -273,7 +228,7 @@ pub fn cmd_render(
     // run just like scan warnings, so they fold into the same exit decision.
     Ok(exit_for_warnings(
         global.strict,
-        &matches.warnings,
+        &warnings,
         ctx.warning_count(),
     ))
 }

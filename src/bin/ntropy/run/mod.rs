@@ -15,6 +15,7 @@ mod interact;
 #[cfg(feature = "encryption")]
 mod keys;
 mod lsp;
+mod one_note;
 mod output;
 mod picker;
 #[cfg(feature = "encryption")]
