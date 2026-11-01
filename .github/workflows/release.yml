@@ -1,7 +1,7 @@
 name: Release
 
 # Each job grants its token only what that job needs. The called CI reads;
-# only the two release jobs can write.
+# only the release jobs can write.
 permissions: {}
 
 on:
@@ -68,3 +68,26 @@ jobs:
           archive: ntropy-$tag-$target
           checksum: sha256
           token: ${{ secrets.GITHUB_TOKEN }}
+
+  # The theme test material the documentation offers for download, packed
+  # from the tagged commit: a release carries the test note and vault that
+  # match its binary, under the same file names in every release.
+  upload-theme-test:
+    needs: create-release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Pack the theme test archives
+        run: scripts/pack-theme-test.sh docs/website/theme-test theme-test-downloads
+      - name: Attach them to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber \
+            theme-test-downloads/theme-test-note.tar.gz \
+            theme-test-downloads/theme-test-vault.tar.gz

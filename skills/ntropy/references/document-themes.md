@@ -160,3 +160,7 @@ in an encrypted vault, `ntropy reconcile` afterwards encrypts the notes.
 Remove them with `ntropy delete -n -f 01M6CCEVBP701HH0VPBT6ZNAYZ`,
 `ntropy delete -n -f 01M6CCEVCDRQ5504MDH503KQT2` and
 `rm -r assets/theme-test`.
+
+Every GitHub release attaches the same archive, packed from the release's
+commit: `https://github.com/jakobwesthoff/ntropy/releases/download/<tag>/theme-test-note.tar.gz`
+matches that release's binary.

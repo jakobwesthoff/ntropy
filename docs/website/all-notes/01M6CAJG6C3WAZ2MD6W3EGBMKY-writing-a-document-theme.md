@@ -92,7 +92,11 @@ vault:
 curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-note.tar.gz | tar xz -C "$(ntropy info -p)"
 ```
 
-That adds two notes tagged `theme-test` to `all-notes/` and the folder
+Every [ntropy release](https://github.com/jakobwesthoff/ntropy/releases/latest)
+also carries `theme-test-note.tar.gz`, packed from the same commit as its
+binary.
+
+The archive adds two notes tagged `theme-test` to `all-notes/` and the folder
 `assets/theme-test/`. In an encrypted vault, run `ntropy reconcile` after
 it, which encrypts the two notes. To remove them again:
 
