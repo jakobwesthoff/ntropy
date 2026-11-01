@@ -1362,7 +1362,7 @@ mod tests {
             icons: std::collections::BTreeMap::new(),
             templates: std::collections::BTreeMap::from([(
                 "page.html".to_string(),
-                "{{ kind }}|{{ path }}|{% if note %}{{ note.title }}/{{ note.frontmatter.status }}{% else %}-{% endif %}|{{ vars.owner }}|{{ nav | length }}"
+                "{{ kind }}|{{ path }}|{% if note %}{{ note.title }}/{{ note.frontmatter.status }}{% else %}-{% endif %}|{{ vars.owner }}|{{ vars.released }}|{{ nav | length }}"
                     .to_string(),
             )]),
         };
@@ -1377,7 +1377,7 @@ mod tests {
         let vault_ids = ids(&notes);
         let options = SiteOptions {
             index: Some(A.to_string()),
-            vars: toml::from_str("owner = \"Acme\"\n").expect("vars"),
+            vars: toml::from_str("owner = \"Acme\"\nreleased = 2026-11-01\n").expect("vars"),
             ..SiteOptions::default()
         };
         let built = build(&Input {
@@ -1395,22 +1395,25 @@ mod tests {
         let probe = |path: &str| text(&built, path);
         assert_eq!(
             probe("index.html"),
-            "front|index.html|Rust Tips/done|Acme|2",
+            "front|index.html|Rust Tips/done|Acme|2026-11-01|2",
             "the index note's copy at the root is the front page"
         );
         assert_eq!(
             probe("notes/rust-tips.html"),
-            "note|notes/rust-tips.html|Rust Tips/done|Acme|2"
+            "note|notes/rust-tips.html|Rust Tips/done|Acme|2026-11-01|2"
         );
         assert_eq!(
             probe("tags/programming/index.html"),
-            "group|tags/programming/index.html|Landing/|Acme|2",
+            "group|tags/programming/index.html|Landing/|Acme|2026-11-01|2",
             "a landing note renders its group's page"
         );
-        assert_eq!(probe("tags/index.html"), "group|tags/index.html|-|Acme|2");
+        assert_eq!(
+            probe("tags/index.html"),
+            "group|tags/index.html|-|Acme|2026-11-01|2"
+        );
         assert_eq!(
             probe("views/by-status/done/index.html"),
-            "group|views/by-status/done/index.html|-|Acme|2"
+            "group|views/by-status/done/index.html|-|Acme|2026-11-01|2"
         );
     }
 

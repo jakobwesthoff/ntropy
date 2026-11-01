@@ -271,7 +271,7 @@ impl Page {
             prefix => &self.prefix,
             kind => self.kind.name(),
             note => Serde(&self.note),
-            vars => Serde(&self.vars),
+            vars => Serde(VarsTable(&self.vars)),
             nav => Serde(&self.nav),
             stylesheet => &self.stylesheet,
             scripts => Serde(&self.scripts),
@@ -291,6 +291,44 @@ impl Page {
 /// `templates/<name>.html`.
 pub fn template_name(name: &str) -> String {
     format!("{name}.html")
+}
+
+/// The `[site.vars]` table as the templates read it. The toml crate
+/// serializes a date, time or datetime as a one-field struct only its own
+/// deserializer understands, which a template would see as a map. Here
+/// every datetime, at any depth, serializes as the string its text form
+/// gives, and every other value serializes as the toml crate does.
+struct VarsTable<'a>(&'a toml::Table);
+
+struct VarsValue<'a>(&'a toml::Value);
+
+impl Serialize for VarsTable<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (key, value) in self.0 {
+            map.serialize_entry(key, &VarsValue(value))?;
+        }
+        map.end()
+    }
+}
+
+impl Serialize for VarsValue<'_> {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeSeq;
+        match self.0 {
+            toml::Value::Datetime(datetime) => serializer.collect_str(datetime),
+            toml::Value::Array(items) => {
+                let mut seq = serializer.serialize_seq(Some(items.len()))?;
+                for item in items {
+                    seq.serialize_element(&VarsValue(item))?;
+                }
+                seq.end()
+            }
+            toml::Value::Table(table) => VarsTable(table).serialize(serializer),
+            other => other.serialize(serializer),
+        }
+    }
 }
 
 /// Interpolation escaping: the same five characters the HTML writer
@@ -647,14 +685,14 @@ mod tests {
     }
 
     /// A theme template sees numbers, nulls and nested lists as the kinds
-    /// they were written as, not as text. A TOML datetime in `[site.vars]`
-    /// arrives as a map, the way the toml crate serializes it.
+    /// they were written as, not as text. A TOML date or datetime in
+    /// `[site.vars]` arrives as the string its text form gives.
     #[test]
     fn a_template_reads_every_kind_of_value_the_context_carries() {
         let templates = Templates::new(&theme_with(&[(
             "page.html",
             concat!(
-                "{{ vars.ratio }}|{{ vars.whole }}|{{ vars.count + 1 }}|{{ vars.when is mapping }}|",
+                "{{ vars.ratio }}|{{ vars.whole }}|{{ vars.count + 1 }}|{{ vars.when }}|{{ vars.when is string }}|",
                 "{{ vars.flag }}|{{ vars.list | length }}|{{ vars.nested[1][0] }}|",
                 "{{ note.frontmatter.nothing is none }}|{{ note.frontmatter.score + 1 }}|",
                 "{{ note.frontmatter.list[1] }}|",
@@ -691,8 +729,99 @@ mod tests {
         .expect("renders");
         assert_eq!(
             rendered,
-            "1.5|2.0|42|True|True|3|3|True|3.5|b|earlier.html|True|True|True|4|False"
+            "1.5|2.0|42|2026-11-01|True|True|3|3|True|3.5|b|earlier.html|True|True|True|4|False"
         );
+    }
+
+    /// Renders `source` as the `page.html` of a theme, with the TOML text
+    /// `vars` as the `[site.vars]` table.
+    fn render_with_vars(source: &str, vars: &str) -> String {
+        let templates = Templates::new(&theme_with(&[("page.html", source)])).expect("parses");
+        Page {
+            vars: toml::from_str(vars).expect("the fixture vars parse"),
+            ..page()
+        }
+        .render(&templates)
+        .expect("renders")
+    }
+
+    #[test]
+    fn a_toml_date_time_and_datetime_read_as_text() {
+        assert_eq!(
+            render_with_vars(
+                "{{ vars.offset }}|{{ vars.local }}|{{ vars.day }}|{{ vars.clock }}|{{ vars.offset is string }}|{{ vars.day is mapping }}",
+                concat!(
+                    "offset = 2026-11-01T12:00:00+01:00\n",
+                    "local = 2026-11-01T12:00:00\n",
+                    "day = 2026-11-01\n",
+                    "clock = 12:00:00\n",
+                ),
+            ),
+            "2026-11-01T12:00:00+01:00|2026-11-01T12:00:00|2026-11-01|12:00:00|True|False"
+        );
+    }
+
+    /// The text is the canonical form of `toml::Datetime`, which keeps the
+    /// parsed fields and not the bytes of the file.
+    #[test]
+    fn a_datetime_reads_in_the_canonical_form_toml_writes_it() {
+        assert_eq!(
+            render_with_vars(
+                "{{ vars.spaced }}|{{ vars.lower }}|{{ vars.minutes }}|{{ vars.trimmed }}|{{ vars.zero }}|{{ vars.long }}|{{ vars.offset }}",
+                concat!(
+                    "spaced = 2026-11-01 12:00:00Z\n",
+                    "lower = 2026-11-01t12:00:00z\n",
+                    "minutes = 12:00\n",
+                    "trimmed = 12:00:00.500\n",
+                    "zero = 12:00:00.000\n",
+                    "long = 12:00:00.1234567891\n",
+                    "offset = 2026-11-01T12:00:00-07:00\n",
+                ),
+            ),
+            "2026-11-01T12:00:00Z|2026-11-01T12:00:00Z|12:00|12:00:00.5|12:00:00.0|12:00:00.123456789|2026-11-01T12:00:00-07:00"
+        );
+    }
+
+    #[test]
+    fn a_datetime_inside_arrays_and_nested_tables_reads_as_text() {
+        assert_eq!(
+            render_with_vars(
+                concat!(
+                    "{{ vars.dates[1] }}|{{ vars.nested[1][0] }}|{{ vars.a.b.when }}|{{ vars.tables[0].when }}|",
+                    "{% for d in vars.dates %}[{{ d }}]{% endfor %}|{{ vars.mixed }}",
+                ),
+                concat!(
+                    "dates = [2026-11-01, 1979-05-27T07:32:00Z]\n",
+                    "nested = [[2026-11-01], [12:00:00]]\n",
+                    "mixed = [1, \"a\", 2.0, 2026-11-01]\n",
+                    "[a.b]\nwhen = 2026-11-01T12:00:00Z\n",
+                    "[[tables]]\nwhen = 2026-11-01\n",
+                ),
+            ),
+            "1979-05-27T07:32:00Z|12:00:00|2026-11-01T12:00:00Z|2026-11-01|[2026-11-01][1979-05-27T07:32:00Z]|[1, &#39;a&#39;, 2.0, &#39;2026-11-01&#39;]"
+        );
+    }
+
+    /// YAML has no timestamp type in `serde_yaml_ng`, so a frontmatter date
+    /// is text without any conversion.
+    #[test]
+    fn a_yaml_frontmatter_date_is_text() {
+        let templates = Templates::new(&theme_with(&[(
+            "page.html",
+            "{{ note.frontmatter.date }}|{{ note.frontmatter.date is string }}",
+        )]))
+        .expect("parses");
+        let rendered = Page {
+            note: Some(NoteContext {
+                frontmatter: serde_yaml_ng::from_str("date: 2026-11-01\n")
+                    .expect("the fixture frontmatter parses"),
+                ..page().note.expect("the fixture page has a note")
+            }),
+            ..page()
+        }
+        .render(&templates)
+        .expect("renders");
+        assert_eq!(rendered, "2026-11-01|True");
     }
 
     /// Renders `source` as the `page.html` of a theme.

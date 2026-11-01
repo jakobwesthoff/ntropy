@@ -329,7 +329,10 @@ among them, and a section index, and `document` for the `render --to
 html` artifact. `note` is the note the page is rendered from, with
 `id`, `title`, `created`, `tags`, and `frontmatter`, the raw mapping;
 a page rendered from no note leaves it undefined. `vars` is the
-config's `[site.vars]` table as it stands. `nav` is the sidebar as
+config's `[site.vars]` table as it stands, except that a TOML date,
+time, or datetime reaches the template as text in the form TOML writes
+it: `2026-11-01`, `12:00:00`, `2026-11-01T12:00:00`, or
+`2026-11-01T12:00:00+01:00`. `nav` is the sidebar as
 data: one entry per section with `label`, `href`, `cloud`, `open`, and
 `items`, each item with `kind` (`note` or `group`), `label`, `href`
 (none for a group assembled by hand), `current`, `open`, `count` (a

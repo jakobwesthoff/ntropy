@@ -767,21 +767,24 @@ mod tests {
             theme: Some(SiteTheme {
                 templates: BTreeMap::from([(
                     "page.html".to_string(),
-                    "{{ kind }}|{{ path }}|{{ note.title }}|{{ note.tags[0] }}|{{ note.frontmatter.priority }}|{{ vars.owner }}|{{ nav | length }}|{{ sidebar }}"
+                    "{{ kind }}|{{ path }}|{{ note.title }}|{{ note.tags[0] }}|{{ note.frontmatter.priority }}|{{ vars.owner }}|{{ vars.released }}|{{ nav | length }}|{{ sidebar }}"
                         .to_string(),
                 )]),
                 ..SiteTheme::builtin()
             }),
             theme_dir: None,
             lang: "en".to_string(),
-            vars: toml::from_str("owner = \"Acme\"\n").expect("vars"),
+            vars: toml::from_str("owner = \"Acme\"\nreleased = 2026-11-01\n").expect("vars"),
         };
         let document = doc("My Note", "priority: 2\n", "text\n", Vec::new());
         let mut ctx = FakeContext::new();
         Html::new(settings)
             .render(&document, &mut ctx)
             .expect("render succeeds");
-        assert_eq!(ctx.page(), "document|note.html|My Note|area/work|2|Acme|0|");
+        assert_eq!(
+            ctx.page(),
+            "document|note.html|My Note|area/work|2|Acme|2026-11-01|0|"
+        );
     }
 
     #[test]

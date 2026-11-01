@@ -186,7 +186,9 @@ The same table holds `title` (defaults to the vault directory name),
 ntropy reads nothing from it, and the theme's templates receive it as
 `vars`, which is where a footer's copyright line or a row of header
 links comes from. Both are shown in
-[Site themes](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md).
+[Site themes](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md). A date, time,
+or datetime in the table reaches the templates as text in the form TOML
+writes it (`2026-11-01`, `2026-11-01T12:00:00+01:00`).
 
 ## Search
 

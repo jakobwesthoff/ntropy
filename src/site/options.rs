@@ -211,6 +211,16 @@ mod tests {
     }
 
     #[test]
+    fn a_date_in_the_vars_table_parses_as_a_toml_datetime() {
+        let options: SiteOptions =
+            toml::from_str("[vars]\nreleased = 2026-11-01\n").expect("parse");
+        assert_eq!(
+            options.vars["released"],
+            toml::Value::Datetime("2026-11-01".parse().expect("a valid date"))
+        );
+    }
+
+    #[test]
     fn the_vars_table_takes_any_shape_and_round_trips() {
         let options: SiteOptions = toml::from_str(
             "[vars]\ngithub = \"https://github.com/x/y\"\nyear = 2026\n\n[vars.links]\nhome = \"/\"\n",

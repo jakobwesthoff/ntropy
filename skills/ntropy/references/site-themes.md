@@ -185,7 +185,7 @@ Every page template receives the same variables:
 |----------|---------------|
 | `kind` | `front` (the front page), `note` (a note's own page), `group` (a tag, view, or group page, a landing note's among them), or `document` (a `render --to html` page) |
 | `note` | the note the page is rendered from: `id`, `title`, `created`, `tags`, and `frontmatter` (the raw mapping, `note.frontmatter.tagline` for a field of your own); undefined on a page made of a listing alone |
-| `vars` | the `[site.vars]` table of `.ntropy/config.toml`, free-form; ntropy reads nothing from it |
+| `vars` | the `[site.vars]` table of `.ntropy/config.toml`, free-form; ntropy reads nothing from it; a TOML date, time, or datetime arrives as text in the form TOML writes it, such as `2026-11-01` or `2026-11-01T12:00:00+01:00` |
 | `nav` | the sidebar as data: sections with `label`, `href`, `cloud`, `open`, and `items`; items with `kind` (`note` or `group`), `label`, `href` (none for a group made by hand), `current`, `open`, `count`, and their own `items` |
 | `sidebar`, `outline`, `body`, `icons` | rendered HTML fragments: the sidebar, the outline, the content, the icon sprite |
 | `title`, `site_title`, `lang`, `path`, `prefix` | the page's title and the site's, the `lang` attribute, the page's site-relative path (`notes/welcome.html`), and the `../` that reaches the site root |

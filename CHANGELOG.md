@@ -9,6 +9,18 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Fixed
+
+- A TOML date, time or datetime in `[site.vars]` reaches the templates of
+  `site` and `render --to html` as text in the form TOML writes it
+  (`2026-11-01`, `12:00:00`, `2026-11-01T12:00:00`,
+  `2026-11-01T12:00:00+01:00`) instead of as a map with the key
+  `$__toml_private_datetime`. The text is the canonical form: `T` separates
+  date and time, `T` and `Z` are upper case, and a fraction of seconds loses
+  trailing zeros.
+
 ## v2.7.0 - 2026-11-01
 
 ### Changed
