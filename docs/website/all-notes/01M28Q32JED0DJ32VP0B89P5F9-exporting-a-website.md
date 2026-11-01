@@ -2,16 +2,14 @@
 title: Exporting a website
 tags: [docs/publish]
 site:
-  order: 4
+  order: 1
 ---
 `ntropy site` turns the vault into a static website: a set of files any
 web host serves, and that a browser opens straight from disk, no server
-needed. This page covers the command, what the site contains, and how
-the `site` table in a note's frontmatter and the `[site]` config shape
-the navigation. The look of the pages is the subject of
+needed. The pages take their look from a site theme, described in
 [Site themes](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md).
 
-## The site command
+## Export and open
 
 ```bash
 ntropy site -o ./public              # every note
@@ -20,87 +18,39 @@ open "$(ntropy site -o ./public -p)" # export, then open the front page
 ```
 
 `-o` is required. A non-empty output directory is refused unless you
-pass `--force`, which empties it first. The optional
-[query](01M28Q32FC8RW01C5DSEEV77DW-query-language.md) restricts the
+pass `--force`, which empties it first. The optional query restricts the
 exported notes; a link to a note outside the set stays plain text. `-p`
-prints the path of `index.html` and nothing else. Without it the command
-ends with a report naming the directory, the page count, and the
+prints the path of `index.html` and nothing else. Without it, the
+command ends with a report naming the directory, the page count, and the
 warnings.
 
-Warnings go to stderr, and the site is written anyway; `--strict` makes
-them fail the exit code, which is what a build script wants. An export
-warns about a referenced file that is missing or lies outside the vault,
-a linked folder that has nothing to copy, a code fence whose language has no highlighting grammar, a link to a note
-outside the exported set, a link whose `#heading-id` matches no heading on
-the target's page, a configured index note that is not exported,
-a `site` table that is no mapping or holds a key of the wrong type, a
-`root` that names no page, a nav item the site cannot resolve, a
-`template` the theme does not have, and a link to a file the export never
-copies (see below). Metadata the export leaves out of a linked folder, such
-as `.DS_Store`, prints as a `note:` line instead, which `--strict` does not
-count.
-
-The output is plaintext, so writing it inside an
-[encrypted vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md) prints
+The output is plaintext, so writing it inside an encrypted vault prints
 a warning. Write it elsewhere.
 
 ## What the site contains
 
-The site mirrors the ways you reach a note in the vault. Every note is a
-page under `notes/`. The tag hierarchy is a tree of pages under `tags/`,
-each listing the notes carrying the tag or any tag below it. Every
-[materialized view](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md)
-becomes a tree under `views/`, nested like its directory; a view over
-`tags` is skipped, since the tag pages already are that view. Images and
-files the notes link are copied under `files/`, a linked directory with
-its tree. A `#` in a link ends the path: `spec.pdf#page=2` copies
-`spec.pdf` and keeps `#page=2` in the link, so a file with a `#` in its
-name cannot be linked. Links are relative, so the site works from `file://` and
-from any path on a host.
+The site mirrors the ways you reach a note in the vault:
 
-Some files are never copied, whether a note links them directly or they
-sit in a linked folder or in the site theme, at any depth:
-
-- note tools' configuration: `.ntropy`, `.ntropy-vault`, `.obsidian`;
-- version control and its history: `.bzr`, `.fslckout`, `.git`, `.hg`,
-  `.jj`, `.pijul`, `.svn`, `CVS`, `_darcs`;
-- sync tools' state: `.dropbox.cache`, `.stfolder`, `.stversions`;
-- trash: `$RECYCLE.BIN` and every name that starts with `.Trash`;
-- credentials: `.aws`, `.env`, `.gnupg`, `.netrc`, `.ssh`;
-- file-manager metadata: `.DS_Store`, `Thumbs.db`.
-
-Notes the export leaves out are never copied either: a link to
-`all-notes/` or to a view's folder copies the files of the exported notes
-only, and a link to another note's file keeps its text with a warning. For
-this, every file directly in `all-notes/` ending in `.md` or `.age`, in any
-letter case, counts as a note.
-
-Names match in any letter case, except `CVS`, so a folder `CVs` is
-copied. A linked folder also leaves out every hidden file and folder in
-it; a hidden file that a note links by name is copied unless it is on the
-list. A link to a listed file is a warning and keeps its text in the
-page. The site is never copied into itself, but an earlier render or site
-export stored inside the vault is an ordinary folder, which a link to a
-folder holding it copies.
-
-Only files inside the vault are copied. A file or folder that is a symlink
-to somewhere else on the machine is left out with a warning, wherever the
-symlink sits: an asset folder like `assets -> ~/Pictures`, or an
-`all-notes/` that is itself a symlink, whose notes still become pages but
-whose images and files beside them are not copied. The rule has no
-exceptions, so copy such files into the vault to have them in the site. A
-symlink that stays inside the vault works as before.
+- Every note is a page under `notes/`.
+- The tag hierarchy is a tree of pages under `tags/`, each listing the
+  notes carrying the tag or any tag below it.
+- Every view becomes a tree under `views/`, nested like its directory. A
+  view over `tags` is skipped, since the tag pages already are that
+  view.
+- Images and files the notes link are copied under `files/`, a linked
+  directory with its tree. Links are relative, so the site works from
+  `file://` and from any path on a host.
 
 Each page carries a sidebar with the views and the top-level tags,
-breadcrumbs, an outline of the note's headings that follows your
-position while you scroll, and previous/next links that follow the
-sidebar's reading order. A note page ends with the notes that share the
-most tags with it, at most eight. Tags link to their pages everywhere
-they appear. Every heading in a note ends with a link to itself, a `#` that
-shows in the margin when you hover the heading or tab to it, so you can copy
-the address of a section. Note links point at the target's page. Every page has a
-light/dark/system switch that remembers your choice in the browser. On
-a phone the sidebar is a drawer behind the menu button.
+breadcrumbs, and an outline of the note's headings that follows your
+position while you scroll. A note page ends with the notes that share
+the most tags with it, at most eight. Tags link to their pages
+everywhere they appear, and note links point at the target's page. Every
+heading in a note ends with a link to itself, a `#` that shows in the
+margin when you hover the heading or tab to it, so you can copy the
+address of a section. Every page has a light/dark/system switch that
+remembers your choice in the browser. On a phone the sidebar is a drawer
+behind the menu button.
 
 Code blocks are highlighted in the browser for 72 languages, each page
 loading only the grammars its code needs. A fence language without one
@@ -131,21 +81,20 @@ site:
 ```
 
 Inside a group, the entries with an `order` come first, then the notes
-without one newest first, then the child groups by name. A landing
-note's title and body become its group's page, with the listing of what
-the group holds below only when the note asks, and links to the note go
-there. A hidden note keeps its page and stays searchable; it just
-appears nowhere in the navigation. Previous and next follow the
-sidebar's reading order across groups and sections, so a tag subtree with
-landing notes reads like a book. A link into another section is labelled
-"Previous chapter" or "Next chapter".
+without one, newest first, then the child groups by name. A landing
+note's title and body become its group's page, and links to the note go
+there. The listing of what the group holds appears below it only when
+the note asks for it. A hidden note keeps its page and stays searchable;
+it just appears nowhere in the navigation.
+
+Previous and next follow the sidebar's reading order across groups and
+sections, so a tag subtree with landing notes reads like a book. A link
+into another section is labelled "Previous chapter" or "Next chapter".
 
 `template` names a template of the site theme that renders the note's
-pages instead of the built-in `page.html`, which is how a landing page
-gets a hero or an impressum drops the sidebar. What such a template
-receives is described under
-[Site themes](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md). A name the
-theme has no template for is a warning, and `page.html` is used.
+pages instead of the built-in `page.html`. That is how a landing page
+gets a hero, or an impressum drops the sidebar. A name the theme has no
+template for is a warning, and `page.html` is used.
 
 The `site` table is never shown as a frontmatter field on the page.
 
@@ -182,36 +131,98 @@ items = [
 Every item takes an optional `label`, which wins over a landing note's.
 An item that names something the export does not have is a warning and
 is left out, so the site is still written. `related = false` drops the
-related notes from every page, which a documentation tree wants, since
-its pages all share the same tags; a note's own `site.related` wins over
-it either way.
+related notes from every page, which suits a documentation tree whose
+pages all share the same tags. A note's own `site.related` wins over it
+either way.
 
-The same table holds `title` (defaults to the vault directory name),
+The same table holds `title` (by default the vault directory's name),
 `index` (the ULID of the front page's note), `lang` (the page language,
 `en` by default), and `theme`. A `[site.vars]` table is free-form:
 ntropy reads nothing from it, and the theme's templates receive it as
-`vars`, which is where a footer's copyright line or a row of header
-links comes from. Both are shown in
-[Site themes](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md). A date, time,
-or datetime in the table reaches the templates as text in the form TOML
-writes it (`2026-11-01`, `2026-11-01T12:00:00+01:00`).
+`vars`. That is where a footer's copyright line or a row of header links
+comes from. A date, time, or datetime in the table reaches the templates
+as text in the form TOML writes it (`2026-11-01`,
+`2026-11-01T12:00:00+01:00`).
 
 ## Search
 
-The search is a palette over the page: the header's button, `/`, or
-Ctrl+K (Cmd+K on a Mac) opens it, typing searches as you go, the arrow
-keys and Enter open a result. It is made for readers rather than for the
-query language: a word matches titles, tags, frontmatter values, and
-text, two words need both, `tag:wis` finds `wisdome`, and a matching tag
-or view page appears above the notes. The typed terms of the
-[query language](01M28Q32FC8RW01C5DSEEV77DW-query-language.md) still
-narrow, `tag:work and not status:done` works, and `text:` is the same
-regex as in the CLI. The search runs in the browser over data exported
-with the site, so it works from disk.
+The search is a palette over the page, made for readers rather than for
+the query language. It runs in the browser over data exported with the
+site, so it works from disk.
 
-## One note as a page
+| Key | Action |
+|-----|--------|
+| `/`, `Ctrl+K` (`Cmd+K` on a Mac), or the header's search button | Open the search |
+| _type_ | Search as you type |
+| arrow keys | Move through the results |
+| `Enter` | Open the selected result |
 
-`ntropy render --to html` renders a single note to the same page on its
-own, with a files directory beside it holding what the page needs. The
-details are under
-[Rendering to PDF and HTML](01M28Q32H5RYMZ5MHBQSQQN13B-rendering-to-pdf-and-html.md).
+A word matches titles, tags, frontmatter values, and text, and two words
+need both. `tag:wis` finds `wisdome`, and a matching tag or view page
+appears above the notes. The typed terms of the
+[Query language](01M28Q32FC8RW01C5DSEEV77DW-query-language.md) still
+narrow: `tag:work and not status:done` works, and `text:` is the same
+regex as in the CLI.
+
+## Warnings
+
+Warnings go to stderr, and the site is written anyway. `--strict` makes
+them fail the exit code, which is what a build script wants. An export
+warns about:
+
+- a referenced file that is missing or lies outside the vault;
+- a linked folder that has nothing to copy;
+- a link to a file the export never copies (see below);
+- a code fence whose language has no highlighting grammar;
+- a link to a note outside the exported set;
+- a link whose `#heading-id` matches no heading on the target's page;
+- a configured index note that is not exported;
+- a `site` table that is no mapping, or holds a key of the wrong type;
+- a `root` that names no page;
+- a nav item the site cannot resolve;
+- a `template` the theme does not have.
+
+Metadata the export leaves out of a linked folder, such as `.DS_Store`,
+prints as a `note:` line instead, which `--strict` does not count.
+
+## Files an export never copies
+
+Some files are never copied, whether a note links them directly or they
+sit in a linked folder or in the site theme, at any depth:
+
+- note tools' configuration: `.ntropy`, `.ntropy-vault`, `.obsidian`;
+- version control and its history: `.bzr`, `.fslckout`, `.git`, `.hg`,
+  `.jj`, `.pijul`, `.svn`, `CVS`, `_darcs`;
+- sync tools' state: `.dropbox.cache`, `.stfolder`, `.stversions`;
+- trash: `$RECYCLE.BIN` and every name that starts with `.Trash`;
+- credentials: `.aws`, `.env`, `.gnupg`, `.netrc`, `.ssh`;
+- file-manager metadata: `.DS_Store`, `Thumbs.db`.
+
+Names match in any letter case, except `CVS`, so a folder `CVs` is
+copied. A linked folder also leaves out every hidden file and folder in
+it; a hidden file that a note links by name is copied unless it is on
+the list. A link to a listed file is a warning and keeps its text in the
+page.
+
+Notes the export leaves out are never copied either. A link to
+`all-notes/` or to a view's folder copies the files of the exported
+notes only, and a link to another note's file keeps its text with a
+warning. For this, every file directly in `all-notes/` ending in `.md`
+or `.age`, in any letter case, counts as a note.
+
+The site is never copied into itself. An earlier render or site export
+stored inside the vault, though, is an ordinary folder, which a link to
+a folder holding it copies.
+
+Only files inside the vault are copied. A file or folder that is a
+symlink to somewhere else on the machine is left out with a warning,
+wherever the symlink sits. That covers an asset folder like
+`assets -> ~/Pictures`, and an `all-notes/` that is itself a symlink,
+whose notes still become pages but whose images and files beside them
+are not copied. The rule has no exceptions, so copy such files into the
+vault to have them in the site. A symlink that stays inside the vault
+works as any other path.
+
+A `#` in a link ends the path: `spec.pdf#page=2` copies `spec.pdf` and
+keeps `#page=2` in the link, so a file with a `#` in its name cannot be
+linked.
