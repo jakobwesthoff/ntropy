@@ -512,6 +512,29 @@ mod tests {
         assert_eq!(ctx.warnings.len(), 2, "{joined}");
     }
 
+    #[test]
+    fn a_link_to_a_file_with_a_fragment_mirrors_the_file_and_keeps_the_fragment() {
+        let vault = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(vault.path().join("all-notes")).expect("all-notes");
+        std::fs::write(vault.path().join("all-notes/spec.pdf"), b"pdf").expect("spec");
+        let mut document = doc("Spec", "{}", "[the spec](spec.pdf#page=2)\n", Vec::new());
+        document.vault_root = vault.path().to_path_buf();
+        document.path = vault.path().join("all-notes/note.md");
+        let mut ctx = FakeContext::new();
+        Html::new(DocumentSettings::default())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        assert!(
+            ctx.page()
+                .contains("<a href=\"note_files/files/all-notes/spec.pdf#page=2\">the spec</a>"),
+            "{}",
+            ctx.page()
+        );
+        let copies: Vec<&str> = ctx.copies.iter().map(|(_, to)| to.as_str()).collect();
+        assert_eq!(copies, ["files/all-notes/spec.pdf"]);
+        assert!(ctx.warnings.is_empty(), "{:?}", ctx.warnings);
+    }
+
     /// A vault with an ordinary asset beside the vault's `.ntropy`, a
     /// repository and Finder metadata, and `Linker` at `all-notes/note.md`
     /// whose body is `body`.

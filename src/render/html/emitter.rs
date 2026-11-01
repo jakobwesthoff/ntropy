@@ -161,10 +161,16 @@ impl HtmlOutput<'_> {
 
     /// The `href` for a link destination: a local path goes through the
     /// targets and is recorded as an asset, anything else is left as written.
+    ///
+    /// A `#` ends the path. The file is looked up and copied without what
+    /// follows it, and the fragment is appended to the href as written, so
+    /// `spec.pdf#page=2` opens the copied file at its second page. A file
+    /// whose own name contains `#` cannot be linked.
     fn link_href(&mut self, dest: &str) -> String {
         if is_local(dest) {
-            self.record_asset(dest);
-            self.targets.asset_href(dest)
+            let (path, fragment) = dest.split_at(dest.find('#').unwrap_or(dest.len()));
+            self.record_asset(path);
+            format!("{}{fragment}", self.targets.asset_href(path))
         } else {
             dest.to_string()
         }
@@ -907,6 +913,36 @@ mod tests {
             linked_html("[s](01ARZ3NDEKTSV4RRFFQ69G5FAV-a#b.md)"),
             "<p><a class=\"note-link\" href=\"target-title.html\">Target Title</a></p>\n"
         );
+    }
+
+    #[test]
+    fn a_local_file_with_a_fragment_is_recorded_without_the_fragment() {
+        let out = emit(
+            "[a](doc.pdf#page=2) [b](doc.pdf#page=3) ![i](pic.svg#icon)",
+            &[],
+            &SiblingArtifacts,
+            None,
+        );
+        assert_eq!(out.assets, vec!["doc.pdf", "pic.svg"]);
+        assert_eq!(
+            out.html,
+            "<p><a href=\"doc.pdf#page=2\">a</a> <a href=\"doc.pdf#page=3\">b</a> <img src=\"pic.svg#icon\" alt=\"i\"></p>\n"
+        );
+    }
+
+    #[test]
+    fn a_fragment_after_the_path_goes_through_the_targets_once() {
+        struct Prefixed;
+        impl Targets for Prefixed {
+            fn note_href(&self, _id: Id, slug: &str) -> String {
+                format!("n/{slug}")
+            }
+            fn asset_href(&self, dest: &str) -> String {
+                format!("files/{dest}")
+            }
+        }
+        let out = emit("[a](doc.pdf#page=2)", &[], &Prefixed, None);
+        assert_eq!(out.html, "<p><a href=\"files/doc.pdf#page=2\">a</a></p>\n");
     }
 
     #[test]

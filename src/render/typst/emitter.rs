@@ -176,8 +176,11 @@ impl Output for TypstOutput<'_> {
                 "remote image cannot be embedded; linked instead: {dest}"
             )));
         } else {
+            // A fragment selects nothing in an embedded image, and typst
+            // would look for a file with the `#` in its name.
+            let path = dest.split_once('#').map_or(dest, |(path, _)| path);
             writer.syntax("#image(\"");
-            writer.string_literal(&resolve_asset(self.asset_base, dest));
+            writer.string_literal(&resolve_asset(self.asset_base, path));
             writer.syntax("\")");
         }
         writer.finish()
@@ -1005,6 +1008,21 @@ mod tests {
         assert_eq!(
             body("![alt text](pics/x.png)"),
             "#image(\"/all-notes/pics/x.png\")\n"
+        );
+    }
+
+    #[test]
+    fn an_image_fragment_is_left_out_of_the_path() {
+        // A fragment selects nothing in an embedded image, and typst would
+        // look for a file with the `#` in its name.
+        assert_eq!(body("![](x.svg#icon)"), "#image(\"/all-notes/x.svg\")\n");
+    }
+
+    #[test]
+    fn a_link_to_a_local_file_keeps_its_fragment() {
+        assert_eq!(
+            body("[spec](spec.pdf#page=2)"),
+            "#link(\"spec.pdf#page=2\")[spec]\n"
         );
     }
 

@@ -175,7 +175,7 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Thematic break | `#line(length: 100%)` |
 | Soft / hard break | single space / `#linebreak()` |
 | Table | `#table(columns: n, align: (...), table.header(...), cells)` |
-| Image, local path | `#image("path")`, path verbatim (string-literal escaped) |
+| Image, local path | `#image("path")`, path verbatim (string-literal escaped) without a `#fragment`, which selects nothing in an embedded image. A link to a local file keeps its fragment in the `#link` string |
 | Image, remote URL | `#link("url")[alt text]` plus a render warning — `typst compile` performs no network access, so remote images cannot appear in the artifact |
 | Mermaid, emoji shortcodes, color chips | out of scope: rendered as their literal text (a mermaid block is an ordinary code block), no warning |
 | Math (`$...$`, `$$...$$`, `math` fences) | not supported: `ENABLE_MATH` stays off, `$` is escaped like all text and renders literally, `math` fences render as plain code blocks |

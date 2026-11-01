@@ -24,6 +24,13 @@ change in any release
   target's page, so `--strict` fails on it. `#top` is always valid, an
   anchor is compared after percent-decoding, and an `id` set by raw HTML in
   the target is not seen.
+- A link or image to a file in the vault with a fragment, such as
+  `[the spec](spec.pdf#page=2)`, copies the file and keeps the fragment in
+  `site` and `render --to html`. Both used to look for a file with the
+  fragment in its name and warn that it was missing. A `#` in a link now
+  always ends the path, so a file with a `#` in its name cannot be linked.
+  `render --to pdf` embeds `![](x.svg#icon)` from `x.svg`; it used to name
+  a file `x.svg#icon`.
 - `reconcile` keeps what follows a `#` in a link target that already read as
   a note link, such as `<ulid>-<slug>.md#a.md`; it used to cut it off.
 

@@ -53,7 +53,9 @@ each listing the notes carrying the tag or any tag below it. Every
 becomes a tree under `views/`, nested like its directory; a view over
 `tags` is skipped, since the tag pages already are that view. Images and
 files the notes link are copied under `files/`, a linked directory with
-its tree. Links are relative, so the site works from `file://` and
+its tree. A `#` in a link ends the path: `spec.pdf#page=2` copies
+`spec.pdf` and keeps `#page=2` in the link, so a file with a `#` in its
+name cannot be linked. Links are relative, so the site works from `file://` and
 from any path on a host.
 
 Some files are never copied, whether a note links them directly or they

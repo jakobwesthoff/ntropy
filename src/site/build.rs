@@ -2171,6 +2171,39 @@ mod tests {
         targets
     }
 
+    #[test]
+    fn a_link_to_a_file_with_a_fragment_copies_the_file_and_keeps_the_fragment() {
+        let vault = vault();
+        let built = site_linking(
+            vault.path(),
+            "[first](diagram.png#page=2) [again](diagram.png#page=3) ![pic](diagram.png#icon)\n",
+        );
+        assert!(built.warnings.is_empty(), "{:?}", built.warnings);
+        assert_eq!(targets(&built), ["files/all-notes/diagram.png"]);
+        let page = text(&built, "notes/linker.html");
+        assert!(
+            page.contains("<a href=\"../files/all-notes/diagram.png#page=2\">first</a>"),
+            "{page}"
+        );
+        assert!(
+            page.contains("<a href=\"../files/all-notes/diagram.png#page=3\">again</a>"),
+            "{page}"
+        );
+        assert!(
+            page.contains("<img src=\"../files/all-notes/diagram.png#icon\" alt=\"pic\">"),
+            "{page}"
+        );
+    }
+
+    #[test]
+    fn a_missing_file_with_a_fragment_is_reported_without_the_fragment() {
+        let vault = vault();
+        let built = site_linking(vault.path(), "[gone](missing.pdf#page=2)\n");
+        let warnings = built.warnings.join("\n");
+        assert!(warnings.ends_with("all-notes/missing.pdf"), "{warnings}");
+        assert_eq!(built.warnings.len(), 1, "{warnings}");
+    }
+
     /// `files` written into the vault, each with its parent directories.
     fn write_files(vault: &Path, files: &[(&str, &str)]) {
         for (path, contents) in files {
