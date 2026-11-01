@@ -42,6 +42,11 @@ And: the template context tells a theme whether a previous or next link
 crosses into another section, so a template can decide how to show it on
 that basis, or leave such a link out entirely.
 
+Look chosen by the user on 2026-11-01 (AskUserQuestion, from three
+shots): a link that crosses into another section shows "Previous
+chapter" or "Next chapter" as its label, in the accent colour and
+semibold; nothing else changes.
+
 ## Suggested fix
 
 Build one pager order over the whole sidebar in its reading order, with
