@@ -176,15 +176,17 @@ column; it comes from the Markdown. A quote with any other marker, such as
 `> [!FOO]`, stays a `quote`, so `callout` only ever sees the five kinds.
 Raw HTML is dropped, with a warning naming it.
 
-Every footnote is drawn once, at its first reference in the text, with a
-label that starts with `ntropy-fn-`, and every later reference shows the
-same number; do not define labels with that prefix. A theme must not draw
-the body, or a heading that holds a footnote the note references more than
-once, twice (an outline of headings or a running header built from the
-headings, say): Typst rejects the duplicated label and the compile fails.
-A `show footnote` rule runs for the repeated references as well, and
-`it.body` is a label there, so a rule that prints the body must check
-`type(it.body) == label`.
+Every footnote is drawn once, at its first reference in the text, and
+every later reference shows the same number. Headings carry labels that
+start with `ntropy-h-`, and footnotes carry labels that start with
+`ntropy-fn-`. Do not define labels with these prefixes. A theme must not
+draw the body twice, nor a block that holds a heading or a footnote with a
+repeated reference: Typst rejects the duplicated label as soon as a link
+names that heading or a later reference names that footnote, and the
+compile fails. An `outline()` of the headings compiles, unless a heading
+holds a footnote the note references again. A `show footnote` rule runs
+for the repeated references as well, and `it.body` is a label there, so a
+rule that prints the body must check `type(it.body) == label`.
 
 ## Fonts
 

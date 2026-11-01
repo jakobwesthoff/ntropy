@@ -43,8 +43,12 @@ export](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md). When rendering to
 PDF (or to the emitted Typst document) it is dropped, and ntropy prints a
 warning naming what it dropped.
 
-A footnote may be referenced more than once, and its definition may
-reference itself or other footnotes. HTML shows one numbered marker per
+A link to a heading of the same note, `[back](#lists)`, or a note link to
+the note itself with `#lists`, works in a PDF and in HTML. In a PDF, a
+fragment that names no heading shows the link text only and raises a
+warning, so `--strict` fails, and `#` or `#top` goes to the top of the
+first page. A footnote may be referenced more than once, and its
+definition may reference itself or other footnotes. HTML shows one numbered marker per
 reference and one list entry. A PDF draws the footnote once, at its first
 reference in the text, and every other reference shows the same number.
 

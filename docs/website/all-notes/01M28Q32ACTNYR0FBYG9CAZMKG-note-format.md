@@ -111,8 +111,10 @@ See [Inside tmux](01j8za2…-notifications.md#inside-tmux).
 
 `ntropy reconcile` refreshes the file name and keeps the `#inside-tmux`. In
 a site or HTML export the link points at the note's page and keeps the
-anchor, and it shows the text you wrote instead of the note's title. A PDF
-cannot address a heading, so there the link opens the other note's PDF.
+anchor, and it shows the text you wrote instead of the note's title. A
+link in a PDF cannot address a heading in another PDF, so there the link
+opens the other note's PDF. A link to a heading of the note itself jumps
+to that heading in its own PDF.
 `ntropy site` warns about an anchor that matches no heading of the target.
 
 A link counts as a note link only when its target starts with a valid ULID

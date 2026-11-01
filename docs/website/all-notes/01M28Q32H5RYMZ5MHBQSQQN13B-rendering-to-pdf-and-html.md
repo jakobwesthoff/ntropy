@@ -120,10 +120,12 @@ until `ntropy reconcile` renames that note.
 
 A link with a heading anchor, `[Inside tmux](<ulid>-<slug>.md#inside-tmux)`,
 shows the text you wrote instead of the note's title. The `html` format
-appends the anchor to the target, `<slug>.html#inside-tmux`. A PDF has no
-headings to jump to, so there the link opens the target's PDF and the
-anchor is dropped. The HTML artifact does not check the anchor, as it does
-not read the other note.
+appends the anchor to the target, `<slug>.html#inside-tmux`. A link in a
+PDF cannot address a heading in another PDF, so there the link opens the
+target's PDF and the anchor is dropped. When the target is the note being
+rendered, the PDF link jumps to the heading instead, and an anchor that
+names no heading shows the link text only, with a warning. The HTML
+artifact does not check the anchor, as it does not read the other note.
 
 The `typst` format emits the same link, and it always points at
 `<slug>.pdf`, never at a `.typ` file: the Typst document is the source of
