@@ -21,6 +21,10 @@ change in any release
   pipe the text stays without styles. These were quotes with the marker shown
   as text ([ADR 0084](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0084-ansi-drawing-follows-patine-2-2.md)).
 - patine is updated to 2.2.1.
+- Dependencies updated to their latest compatible releases: `clap` 4.6.7,
+  `ignore` 0.4.34, `jiff` 0.2.38, `keyring-core` 1.0.1, `libc` 0.2.191,
+  `pulldown-cmark` 0.13.6, `ruzstd` 0.9.1, `serde_json` 1.0.154,
+  `thiserror` 2.0.21, `toml` 1.1.8, `unicode-width` 0.2.3.
 
 ## v2.5.0 - 2026-11-01
 
