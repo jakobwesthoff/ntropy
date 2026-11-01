@@ -229,8 +229,16 @@ expression: document
       pieces(content.body, word => wrap(strong(word)))
     } else if content.func() == emph {
       pieces(content.body, word => wrap(emph(word)))
-    } else if content.func() == footnote {
+    } else if content.func() == footnote or content.func() == smartquote {
       (wrap(content),)
+    } else if content.has("text") {
+      // A symbol, such as the straight quote or `@` the emitter escapes. It
+      // carries its character in `text` but is not a `text` element.
+      (wrap(content),)
+    } else if content.has("child") {
+      // A `styled` element, such as the `text(fill: ..)` a note link wraps its
+      // body in, draws its child with the styles applied.
+      pieces(content.child, wrap)
     } else if content.has("body") {
       pieces(content.body, wrap)
     } else if content.has("children") {

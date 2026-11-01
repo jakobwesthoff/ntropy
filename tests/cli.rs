@@ -4819,6 +4819,53 @@ fn a_font_a_theme_names_that_typst_does_not_know_fails_a_strict_render_with_real
 
 #[test]
 #[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_table_cell_with_a_note_link_keeps_its_cells_apart_in_the_pdf() {
+    // A note link is the link's body wrapped in a styled `notelink` element.
+    // The column measuring has to see the words inside that wrapper, or the
+    // column is squeezed to nothing and the link runs into its neighbour.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_B,
+        "target",
+        "---\ntitle: Target\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_A,
+        "tables",
+        &format!(
+            "---\ntitle: Tables\n---\n\
+             | A | B | C | D | E | F |\n| - | - | - | - | - | - |\n\
+             | [Target]({ULID_B}-target.md) | Pneumonoultramicroscopic | Antidisestablishmentarian | Floccinaucinihilipilification | Hippopotomonstrosesquippedaliophobia | word |\n"
+        ),
+    );
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "tables.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_words_neither_overlap_nor_leave_the_page(&pdf_words(&dir.path().join("tables.pdf")));
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_table_cell_with_quotes_keeps_its_cells_apart_in_the_pdf() {
+    // The emitter escapes a straight quote, which typst reads as a symbol
+    // element of its own. The quotes are part of the word they sit in.
+    let quotes = "\"".repeat(20);
+    let (_dir, pdf) = render_note_to_real_pdf(&format!(
+        "| A | B | C | D |\n| - | - | - | - |\n\
+         | Supercalifragilisticexpialidocious{quotes} | Pneumonoultramicroscopic | Antidisestablishmentarian | Floccinaucinihilipilification |\n",
+    ));
+    assert_words_neither_overlap_nor_leave_the_page(&pdf_words(&pdf));
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
 fn a_table_of_code_identifiers_keeps_its_cells_apart_in_the_pdf() {
     // Inline code is wider than the text around it: a monospace font and a
     // chip with padding.
