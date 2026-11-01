@@ -205,12 +205,12 @@ rule that prints the body must check `type(it.body) == label`.
 The built-in look sets its text in the fonts typst brings along:
 Libertinus Serif, New Computer Modern and DejaVu Sans Mono. The tick in a
 done task box is drawn as a shape, so it needs no font. Libertinus Serif
-covers Latin, Greek, Cyrillic and Hebrew, and typst takes Arabic from DejaVu
-Sans Mono, which has a monospace look. For a script none of these fonts
-covers, such as Japanese, typst takes the glyphs from another font it finds
-on the machine, so the PDF looks different from machine to machine, and
-without such a font the characters become empty boxes, with no warning from
-ntropy, also under `--strict`.
+covers Latin, Greek, Cyrillic and Hebrew. For a script it does not cover,
+such as Arabic or Japanese, typst takes the glyphs from a font it finds on
+the machine, so the PDF looks different from machine to machine. Without
+such a font typst falls back to DejaVu Sans Mono for Arabic, which has a
+monospace look, and Japanese characters become empty boxes, with no warning
+from ntropy, also under `--strict`.
 
 A theme makes such a script look the same everywhere by naming a font for
 it, after the one it already uses:

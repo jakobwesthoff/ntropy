@@ -60,10 +60,10 @@ change in any release
   names that heading.
 - The docs no longer promise that a PDF of the built-in look is the same on
   every machine for every script. Latin, Greek, Cyrillic and Hebrew come from
-  the fonts typst brings along and Arabic from DejaVu Sans Mono. A script none
-  of them covers, such as Japanese, comes from a font on the machine, or is
-  drawn as empty boxes when there is none. Document themes shows how a theme
-  names a font for such a script.
+  the fonts typst brings along. A script they do not cover, such as Arabic or
+  Japanese, comes from a font on the machine. Without one, typst falls back
+  to DejaVu Sans Mono for Arabic and draws Japanese as empty boxes. Document
+  themes shows how a theme names a font for such a script.
 - The cells of a wide table no longer run into each other in a PDF. The
   built-in look now measures the columns and sets their widths itself, and a
   word in a table cell breaks only at a space or a hyphen it has, never by

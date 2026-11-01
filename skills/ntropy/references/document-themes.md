@@ -125,9 +125,10 @@ file is a module of its own and sees neither the prelude's names
 
 The built-in look uses typst's bundled fonts (Libertinus Serif, New
 Computer Modern, DejaVu Sans Mono). Libertinus Serif covers Latin, Greek,
-Cyrillic and Hebrew, and typst takes Arabic from DejaVu Sans Mono. A script
-none of them covers (Japanese, say) comes from a font on the machine, so the
-PDF differs per machine, and is empty boxes without one, with no warning. A
+Cyrillic and Hebrew. A script it does not cover (Arabic or Japanese, say)
+comes from a font on the machine, so the PDF differs per machine. Without
+one, typst falls back to DejaVu Sans Mono for Arabic and draws Japanese as
+empty boxes, with no warning. A
 theme names a font for it: `set text(font: ("Libertinus Serif", "<family>"))`.
 ntropy passes no
 `--font-path`, so a theme can use system fonts and fonts in the

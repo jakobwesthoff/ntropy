@@ -14,10 +14,10 @@ expression: artifact
 //
 // The default theme names only the fonts the typst binary bundles (Libertinus
 // Serif, New Computer Modern, DejaVu Sans Mono). Libertinus Serif covers
-// Latin, Greek, Cyrillic and Hebrew, and typst takes Arabic from DejaVu Sans
-// Mono. A script none of them covers, such as Japanese, is drawn from a font
-// on the machine when there is one, so the note looks different from machine
-// to machine, and as empty boxes when there is none.
+// Latin, Greek, Cyrillic and Hebrew. A script it does not cover, such as
+// Arabic or Japanese, is drawn from a font on the machine when there is one,
+// so the note looks different from machine to machine. Without one, typst
+// falls back to DejaVu Sans Mono for Arabic and draws Japanese as empty boxes.
 
 // Render a frontmatter value as legible inline text. Strings pass through as
 // themselves; arrays and dictionaries recurse so nested metadata stays
