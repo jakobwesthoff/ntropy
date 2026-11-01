@@ -11,9 +11,9 @@
  * The fonts ship beside this file under fonts/ (all under the SIL Open
  * Font License, see fonts/LICENSE): Fraunces for the titles, Literata for
  * note bodies and their headings, DM Sans for the chrome, DM Mono for
- * dates, counts, and code. The standalone document inlines this stylesheet
- * and has no fonts/ beside it; there the stacks fall back to the system
- * faces.
+ * dates, counts, and code. A `render --to html` page finds this stylesheet
+ * and the fonts in the files directory beside it, as a site page finds
+ * them in assets/.
  *
  * Icons are inline SVG `<use>` references into the sprite every page
  * carries, built from icons/; they take the text color, so a theme sizes,
