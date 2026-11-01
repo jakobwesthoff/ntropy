@@ -173,8 +173,9 @@ step:
    flushed before any source is touched (ADR 0079).
 3. Each produced file is verified by decrypting it and comparing against its
    source. Only when every note verifies does the point of no return arrive:
-   the sources are deleted (for `encrypt`, the view trees as well, since
-   views are disabled in encrypted vaults), the deletions and renames are
+   the sources are deleted (for `encrypt`, the view trees as well, and the
+   directories that only led to them, since views are disabled in encrypted
+   vaults), the deletions and renames are
    flushed to disk, and the marker is removed. A rekey installs its new
    keypair between the deletion and the removal of the marker.
 
@@ -313,8 +314,15 @@ ntropy.
 Materialized views are disabled in encrypted vaults: a symlink tree like
 `by-tag/` would spell out the tag taxonomy in plaintext names inside the
 synced directory. `vault encrypt` removes existing view trees at the point of
-no return. A tree it could not remove safely would keep its link names, and
-with them note titles, in plaintext inside the vault, so a fresh `vault
+no return, and with a nested view such as `area/work` the parents that are
+empty once the tree is gone (`area`). A parent holding anything, a user file
+or another directory, stays, and the removal never deletes a file. A failing
+parent removal does not fail the conversion. A resumed `vault encrypt`
+removes the empty parents of every configured view, since a crash after the
+tree removal leaves no record of which views were done. The command prints
+`removed view directory <path>` for each tree and `removed empty directory
+<path>` for each parent. A tree it could not remove safely would keep its
+link names, and with them note titles, in plaintext inside the vault, so a fresh `vault
 encrypt` refuses to start, before it writes the keypair, while a configured
 view has an invalid name, a symlink on the path to its directory, or a path
 that cannot be inspected (ADR 0064). For an invalid name the message names

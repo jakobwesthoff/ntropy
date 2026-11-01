@@ -7471,6 +7471,34 @@ mod encrypted {
     }
 
     #[test]
+    fn vault_encrypt_reports_the_empty_parent_it_removes_with_a_nested_view() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        fs::write(
+            vault.join(".ntropy/config.toml"),
+            "[[view]]\nname = \"area/work\"\nfield = \"tags\"\n",
+        )
+        .expect("config");
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+        fs::create_dir_all(vault.join("area/work/rust")).expect("view tree");
+
+        let stdout = stdout_of(ntropy_convert(vault).args(["vault", "encrypt", "-y"]));
+
+        let lines: Vec<&str> = stdout.lines().collect();
+        // The command prints the canonical vault path, which differs from the
+        // temp dir's own spelling on macOS.
+        let root = fs::canonicalize(vault).expect("canonical vault");
+        let view = format!(
+            "removed view directory {}",
+            root.join("area/work").display()
+        );
+        let parent = format!("removed empty directory {}", root.join("area").display());
+        assert!(lines.contains(&view.as_str()), "{stdout}");
+        assert!(lines.contains(&parent.as_str()), "{stdout}");
+        assert!(!vault.join("area").exists());
+    }
+
+    #[test]
     fn vault_encrypt_refuses_a_copied_note_before_writing_a_key() {
         // The keypair alone marks a vault as encrypted, so the refusal has to
         // come before it, leaving a plaintext vault to reconcile.

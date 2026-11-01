@@ -140,6 +140,9 @@ fn encrypt(
     for dir in &report.views_removed {
         println!("removed view directory {}", output::shown_path(dir));
     }
+    for dir in &report.view_parents_removed {
+        println!("removed empty directory {}", output::shown_path(dir));
+    }
     for view in &report.views_skipped {
         output::warn(&format!("{view}; its directory was left in place"));
     }

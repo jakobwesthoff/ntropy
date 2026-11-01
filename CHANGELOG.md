@@ -27,6 +27,13 @@ change in any release
 
 ### Fixed
 
+- `vault encrypt` removes the empty parent of a nested view. With the view
+  `area/work` it removed `area/work` and left an empty `area/` in the vault
+  root. It now removes every directory above the view that is empty once the
+  tree is gone, and prints `removed empty directory <path>` for each. A
+  directory that holds anything else, a user file or another directory, stays.
+  A resumed `vault encrypt` also removes the empty parents of views whose
+  tree was already gone.
 - An image in a PDF carries its Markdown alt text. `![A diagram of the flow](flow.svg)`
   became `#image("flow.svg")` without it, so the PDF held no alternative text
   and a screen reader announced nothing for the picture. The emitter now

@@ -28,6 +28,7 @@ pub mod marker;
 pub mod plan;
 pub mod rekey;
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 pub use marker::{Marker, Operation};
@@ -40,7 +41,7 @@ use crate::keys::KeyError;
 use crate::reconcile;
 use crate::scan::{self, ScanError};
 use crate::session::VaultSession;
-use crate::vault::Vault;
+use crate::vault::{Vault, ViewName};
 use crate::view::{self, SkippedView};
 
 /// Why a conversion could not run or complete.
@@ -268,6 +269,9 @@ pub struct MigrationReport {
     pub deleted: usize,
     /// View directories removed, for a conversion to encrypted storage.
     pub views_removed: Vec<PathBuf>,
+    /// Directories that only led to a removed view and were empty once it
+    /// was gone, such as `area` for the view `area/work`.
+    pub view_parents_removed: Vec<PathBuf>,
     /// Configured views whose directories were left in place, because they
     /// could not be removed safely.
     pub views_skipped: Vec<SkippedView>,
@@ -434,7 +438,11 @@ pub fn run(
     migration.hooks.after_commit()?;
 
     if migration.operation == Operation::Encrypt {
-        (report.views_removed, report.views_skipped) = remove_view_trees(session)?;
+        (
+            report.views_removed,
+            report.view_parents_removed,
+            report.views_skipped,
+        ) = remove_view_trees(session, migration.resume)?;
     }
 
     // Every note is written to the new key now, which makes the old key the
@@ -522,27 +530,88 @@ fn reads_back_as(cipher: &dyn NoteCipher, path: &Path, expected: &str) -> bool {
     cipher.read(path).is_ok_and(|actual| actual == expected)
 }
 
-/// Remove the materialized view trees, which an encrypted vault cannot have.
+/// A configured view with the directory its tree lives in.
+type ViewDir = (ViewName, PathBuf);
+
+/// What removing the view trees did: the trees removed, the parents removed
+/// with them, and the views skipped.
+type RemovedViewTrees = (Vec<PathBuf>, Vec<PathBuf>, Vec<SkippedView>);
+
+/// Remove the materialized view trees, which an encrypted vault cannot have,
+/// and the directories that only led to them.
 ///
 /// Done at commit rather than up front so an interrupted conversion leaves the
 /// vault's views intact and usable. A view whose tree cannot be removed safely
 /// is skipped and reported rather than failing the run: this runs after the
 /// sources are gone, and failing here would leave the conversion marker
 /// behind.
+///
+/// A fresh run prunes the parents of the trees it removed. A resumed run
+/// prunes the parents of every safe view, because a crash between the tree
+/// removal and the prune leaves nothing behind to say which views were done.
 fn remove_view_trees(
     session: &VaultSession,
-) -> Result<(Vec<PathBuf>, Vec<SkippedView>), MigrateError> {
-    let (dirs, skipped) = removable_view_dirs(session)?;
+    resume: bool,
+) -> Result<RemovedViewTrees, MigrateError> {
+    let (views, skipped) = removable_view_dirs(session)?;
 
     let mut removed = Vec::new();
-    for dir in dirs {
+    let mut prune_parents_of = Vec::new();
+    for (name, dir) in &views {
         if dir.is_dir() {
-            fsutil::remove_dir_all(&dir)?;
-            removed.push(dir);
+            fsutil::remove_dir_all(dir)?;
+            removed.push(dir.clone());
+            prune_parents_of.push(name);
+        } else if resume {
+            prune_parents_of.push(name);
         }
     }
     removed.sort();
-    Ok((removed, skipped))
+
+    // Pruning waits until every tree is gone, so a parent shared by two views
+    // is empty by the time a walk reaches it.
+    let parents: BTreeSet<PathBuf> = prune_parents_of
+        .into_iter()
+        .flat_map(|name| prune_view_parents(session.root(), name))
+        .collect();
+    Ok((removed, parents.into_iter().collect(), skipped))
+}
+
+/// Remove the directories above a removed view that are now empty, innermost
+/// first, and return the ones it removed.
+///
+/// `area` goes with the view `area/work` when nothing else is in it. A
+/// directory holding anything stays, `.DS_Store` included: the prune never
+/// deletes a file. The candidates are the leading segments of the validated
+/// view name, so the walk cannot reach the vault root or anything above it.
+///
+/// The prune is cosmetic and runs after the sources are gone, so any error
+/// ends the walk quietly: failing here would leave the conversion marker
+/// behind, which ADR 0064 rules out between deleting the notes and removing
+/// the marker.
+fn prune_view_parents(root: &Path, name: &ViewName) -> Vec<PathBuf> {
+    let segments: Vec<&str> = name.segments().collect();
+    let mut pruned = Vec::new();
+
+    for depth in (1..segments.len()).rev() {
+        let ancestor = root.join(segments[..depth].iter().collect::<PathBuf>());
+
+        // An ancestor that is already gone, such as the root of a view nested
+        // in another view, has nothing to prune, but the ones above it may.
+        match std::fs::symlink_metadata(&ancestor) {
+            Ok(meta) if meta.is_dir() => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => continue,
+            _ => break,
+        }
+
+        // `remove_dir_if_empty` reports a refusal and a removal alike, so the
+        // directory's presence afterwards says whether it held something.
+        if fsutil::remove_dir_if_empty(&ancestor).is_err() || ancestor.symlink_metadata().is_ok() {
+            break;
+        }
+        pruned.push(ancestor);
+    }
+    pruned
 }
 
 /// The configured views whose trees `vault encrypt` could not remove safely.
@@ -555,17 +624,17 @@ pub fn views_blocking_encrypt(vault: &Vault) -> Result<Vec<SkippedView>, Migrate
     Ok(skipped)
 }
 
-/// The directories of the configured views that can be removed safely, and
-/// the views that cannot: those with an invalid name, and those whose
+/// The configured views that can be removed safely with their directories,
+/// and the views that cannot: those with an invalid name, and those whose
 /// directory sits behind a symlink or cannot be inspected.
-fn removable_view_dirs(vault: &Vault) -> Result<(Vec<PathBuf>, Vec<SkippedView>), MigrateError> {
+fn removable_view_dirs(vault: &Vault) -> Result<(Vec<ViewDir>, Vec<SkippedView>), MigrateError> {
     let config = crate::config::PerVaultConfig::load(&vault.layout().config_file())?;
     let (views, mut skipped) = reconcile::configured_views(&config);
 
     let mut dirs = Vec::new();
     for view in &views {
         match view::contained_dir(vault.layout(), &view.name) {
-            Ok(dir) => dirs.push(dir),
+            Ok(dir) => dirs.push((view.name.clone(), dir)),
             Err(error) => skipped.push(SkippedView::unsafe_dir(&view.name, error)),
         }
     }
@@ -1054,6 +1123,10 @@ mod tests {
             .map(|s| s.name.as_str())
             .collect();
         assert_eq!(skipped, ["area/work"]);
+        assert!(
+            session.root().join("area").symlink_metadata().is_ok(),
+            "the link was removed"
+        );
         assert!(!session.layout().migration_file().exists());
     }
 
@@ -1122,6 +1195,207 @@ mod tests {
         let (_guard, session) = plaintext_vault();
         configure_views(&session, &[("by-tag", "tags")]);
         assert!(views_blocking_encrypt(&session).expect("check").is_empty());
+    }
+
+    // -------------------------------------------------------------------------
+    // Parents of nested views
+    // -------------------------------------------------------------------------
+
+    /// Create the materialized tree of each view, as a sync would leave it.
+    fn materialize_trees(session: &VaultSession, views: &[&str]) {
+        for view in views {
+            std::fs::create_dir_all(session.root().join(view).join("work")).expect("view tree");
+        }
+    }
+
+    #[test]
+    fn encrypt_removes_the_empty_parent_of_a_nested_view() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("area/work", "tags")]);
+        materialize_trees(&session, &["area/work"]);
+
+        let report = encrypt(&session);
+
+        assert!(!session.root().join("area").exists(), "area was left");
+        assert_eq!(report.views_removed, [session.root().join("area/work")]);
+        assert_eq!(report.view_parents_removed, [session.root().join("area")]);
+    }
+
+    #[test]
+    fn encrypt_keeps_a_parent_that_holds_a_user_file() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("area/work", "tags")]);
+        materialize_trees(&session, &["area/work"]);
+        std::fs::write(session.root().join("area/notes.txt"), "mine").expect("user file");
+
+        let report = encrypt(&session);
+
+        assert!(session.root().join("area/notes.txt").exists());
+        assert!(!session.root().join("area/work").exists());
+        assert!(report.view_parents_removed.is_empty());
+    }
+
+    #[test]
+    fn encrypt_keeps_a_parent_that_holds_another_directory() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("area/work", "tags")]);
+        materialize_trees(&session, &["area/work"]);
+        std::fs::create_dir_all(session.root().join("area/not-a-view")).expect("other dir");
+
+        let report = encrypt(&session);
+
+        assert!(session.root().join("area/not-a-view").is_dir());
+        assert!(report.view_parents_removed.is_empty());
+    }
+
+    #[test]
+    fn encrypt_removes_a_parent_shared_by_two_views_once_both_are_gone() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("area/work", "tags"), ("area/home", "tags")]);
+        materialize_trees(&session, &["area/work", "area/home"]);
+
+        let report = encrypt(&session);
+
+        assert!(!session.root().join("area").exists(), "area was left");
+        assert_eq!(report.view_parents_removed, [session.root().join("area")]);
+    }
+
+    #[test]
+    fn encrypt_removes_every_empty_level_above_a_deep_view() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("a/b/c", "tags")]);
+        materialize_trees(&session, &["a/b/c"]);
+
+        let report = encrypt(&session);
+
+        assert!(!session.root().join("a").exists(), "a was left");
+        assert_eq!(
+            report.view_parents_removed,
+            [session.root().join("a"), session.root().join("a/b")]
+        );
+    }
+
+    #[test]
+    fn encrypt_removes_the_parent_of_a_view_nested_in_another_view() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("a/b", "tags"), ("a/b/c", "tags")]);
+        materialize_trees(&session, &["a/b/c"]);
+
+        let report = encrypt(&session);
+
+        assert!(!session.root().join("a").exists(), "a was left");
+        assert_eq!(report.view_parents_removed, [session.root().join("a")]);
+    }
+
+    #[test]
+    fn encrypt_removes_a_view_and_its_nested_view_without_error() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("area", "tags"), ("area/work", "tags")]);
+        materialize_trees(&session, &["area/work"]);
+
+        let report = encrypt(&session);
+
+        assert!(!session.root().join("area").exists());
+        assert!(report.view_parents_removed.is_empty());
+        assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn a_top_level_view_prunes_nothing_and_the_vault_stays_whole() {
+        let (guard, base, session) = nested_plaintext_vault();
+        std::fs::create_dir_all(base.join("empty-sibling")).expect("sibling");
+        configure_views(&session, &[("by-tag", "tags")]);
+        materialize_trees(&session, &["by-tag"]);
+
+        let report = encrypt(&session);
+
+        assert!(report.view_parents_removed.is_empty());
+        assert!(session.root().is_dir());
+        assert!(session.root().join(".ntropy").is_dir());
+        assert!(session.root().join("all-notes").is_dir());
+        assert!(base.join("empty-sibling").is_dir());
+        assert!(base.starts_with(guard.path()));
+    }
+
+    #[test]
+    fn a_fresh_run_keeps_an_empty_directory_above_a_view_it_never_materialized() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("area/work", "tags")]);
+        std::fs::create_dir_all(session.root().join("area")).expect("user dir");
+
+        let report = encrypt(&session);
+
+        assert!(session.root().join("area").is_dir());
+        assert!(report.view_parents_removed.is_empty());
+    }
+
+    /// Interrupt an encrypt after produce, let `leave_state` set up the disk
+    /// the way a crash would have, and resume it.
+    fn resume_after_crash(session: &VaultSession, leave_state: impl FnOnce()) -> MigrationReport {
+        let (recipient, target) = fresh_target();
+        let migration = |resume, hooks: &'static dyn MigrationHooks| Migration {
+            operation: Operation::Encrypt,
+            source: &PlaintextCipher,
+            target: &target,
+            resume,
+            marker: marker_for(Operation::Encrypt, Some(recipient.as_str())),
+            hooks,
+            handover: None,
+        };
+        run(session, &migration(false, &FailAfter(Phase::Produce))).expect_err("interrupted");
+        leave_state();
+        run(session, &migration(true, &NoHooks)).expect("resume")
+    }
+
+    #[test]
+    fn a_resumed_run_removes_the_empty_parents_a_crash_left_behind() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("x/a/b", "tags")]);
+
+        // A crash between the tree removal and the prune leaves the view's
+        // own tree gone and its parents empty.
+        let report = resume_after_crash(&session, || {
+            std::fs::create_dir_all(session.root().join("x/a")).expect("left behind");
+        });
+
+        assert!(!session.root().join("x").exists(), "x was left");
+        assert_eq!(
+            report.view_parents_removed,
+            [session.root().join("x"), session.root().join("x/a")]
+        );
+    }
+
+    #[test]
+    fn a_resumed_run_leaves_a_file_where_a_view_parent_would_be() {
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("area/work", "tags")]);
+
+        let report = resume_after_crash(&session, || {
+            std::fs::write(session.root().join("area"), "a file").expect("file");
+        });
+
+        assert!(session.root().join("area").is_file());
+        assert!(report.view_parents_removed.is_empty());
+    }
+
+    #[test]
+    fn a_parent_that_cannot_be_listed_does_not_stop_the_commit() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (_guard, session) = plaintext_vault();
+        configure_views(&session, &[("area/work", "tags")]);
+        materialize_trees(&session, &["area/work"]);
+        let area = session.root().join("area");
+        // Execute and write without read: the tree below can be removed, the
+        // directory itself cannot be listed.
+        std::fs::set_permissions(&area, std::fs::Permissions::from_mode(0o311)).expect("chmod");
+
+        let report = encrypt(&session);
+
+        std::fs::set_permissions(&area, std::fs::Permissions::from_mode(0o755)).expect("restore");
+        assert!(area.is_dir());
+        assert!(report.view_parents_removed.is_empty());
+        assert!(!session.layout().migration_file().exists());
     }
 
     // -------------------------------------------------------------------------
