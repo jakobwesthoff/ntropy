@@ -17,13 +17,36 @@ The look of a PDF comes from a
 [Writing a document theme](01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md)
 builds one.
 
-## Quick start
+## Before you start
 
 Every command in this guide runs in the root of your vault:
 
 ```bash
 cd "$(ntropy info -p)"
 ```
+
+The steps work on any note. "Check your theme" at the end uses the theme
+test note, which holds the parts of a note body a theme styles: all six
+heading levels, lists, quotes and callouts, tables, code, images, footnotes
+and long words. It comes with the note it links to and the two images it
+shows, and this command puts them into your vault:
+
+```bash
+curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-note.tar.gz | tar xz -C "$(ntropy info -p)"
+```
+
+Every [ntropy release](https://github.com/jakobwesthoff/ntropy/releases/latest)
+also carries `theme-test-note.tar.gz`, packed from the same commit as its
+binary. The archive adds two notes tagged `theme-test` to `all-notes/` and
+the folder `assets/theme-test/`. To remove them again:
+
+```bash
+ntropy delete -n -f 01M6CCEVBP701HH0VPBT6ZNAYZ
+ntropy delete -n -f 01M6CCEVCDRQ5504MDH503KQT2
+rm -r assets/theme-test
+```
+
+## Quick start
 
 First copy the built-in theme into the vault under the name `harbor`:
 
@@ -447,20 +470,21 @@ every page ends with the footer.
 ## Check your theme
 
 Export with `--strict`, which turns every warning into a failed exit code,
-and render one note as a page of its own, picked by its id or a query, as
-for `ntropy search`:
+and render the theme test note from "Before you start" as a page of its
+own:
 
 ```bash
 ntropy site -o /tmp/harbor-site --force --strict
-ntropy render --to html -o /tmp/harbor-note.html --force tag:harbor/log
+ntropy render --to html -o /tmp/harbor-note.html --force 'title:"Theme test note"'
 ```
 
 The rendered page needs the `harbor-note_files/` directory beside it. Then
-go through a note that has callouts, tables, code, and footnotes:
+go through the theme test note, in the site and as the rendered page:
 
 - **Phone and desktop.** Turn on the device toolbar at 390 pixels, then
-  look at a full window. The page never scrolls sideways, the sidebar sits
-  behind the menu button, and the outline comes after the note.
+  look at a full window. Look for anything that makes the page scroll
+  sideways; the sidebar sits behind the menu button, and the outline comes
+  after the note.
 - **Light and dark.** Click the sun and the moon in the header's switch.
   Text, links, callouts, and code read well in both.
 - **Print.** Open the print preview with the moon picked. The page prints
@@ -470,3 +494,18 @@ go through a note that has callouts, tables, code, and footnotes:
   search, and on a phone it is one column.
 - **The built-in look.** Export the same notes with
   `ntropy site -o /tmp/builtin-site --force --theme default` and compare.
+
+Your own vault may not have every kind of page. The theme test vault does:
+a front page, a group page with its listing, a sidebar with a view and
+tags, a breadcrumb of three steps, a hidden note, and the theme test note.
+Download it, copy your theme into it, and export it with the theme:
+
+```bash
+curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-vault.tar.gz | tar xz -C /tmp
+mkdir -p /tmp/theme-test/.ntropy/themes/site
+cp -R .ntropy/themes/site/harbor /tmp/theme-test/.ntropy/themes/site/
+open "$(ntropy --vault /tmp/theme-test site -o /tmp/theme-test-site --force --theme harbor -p)"
+```
+
+Each release carries the vault as `theme-test-vault.tar.gz` too. Its front
+page, Welcome, lists what each page shows and what the vault cannot show.

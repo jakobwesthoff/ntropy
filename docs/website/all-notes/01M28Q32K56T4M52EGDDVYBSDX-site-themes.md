@@ -216,6 +216,39 @@ replaces `page.html` instead of extending it keeps them:
 - the outline: `.outline`, and the ids of the headings in `.note-body`;
 - highlighting: `pre > code` with a `language-<tag>` class.
 
+## Testing a theme
+
+The theme test vault is a small vault made to show a site theme the kinds
+of page and the parts of a page the built-in theme draws. Its front page,
+Welcome, is set by `[site] index` and lists what each note shows. The theme
+test note holds the parts of a note body, with nested quotes, callouts and
+tables, a frontmatter table with nested values, and an outline with all six
+heading levels; a companion note is the target of a link with a heading
+anchor. A landing note, "Site tour", makes a group page with a listing,
+three tour stops give the sidebar order and the pager, "Tour detail" has a
+breadcrumb of three steps, "Raw HTML and remote images" holds what only web
+pages show, and a hidden note has a page that no sidebar or listing names.
+The view `by-status` and the tags fill the sidebar.
+
+Download it, copy a theme into it, and export it with that theme:
+
+```bash
+curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-vault.tar.gz | tar xz
+mkdir -p theme-test/.ntropy/themes/site
+cp -R <vault>/.ntropy/themes/site/mine theme-test/.ntropy/themes/site/
+ntropy --vault theme-test site -o theme-test-site --force --theme mine
+```
+
+Every [ntropy release](https://github.com/jakobwesthoff/ntropy/releases/latest)
+also carries `theme-test-vault.tar.gz`, packed from the same commit as its
+binary. Welcome also names what the vault cannot show: the generated front
+page without `index`, a breadcrumb step without a link, which only a
+`[[site.nav]]` table makes, an empty listing, and the parts the page's
+scripts draw. To have the theme test note in your own vault, for a
+`render --to html` page of it,
+[Writing a site theme](01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme.md#before-you-start)
+gives the command.
+
 ## Templates
 
 The pages are rendered from three
