@@ -27,7 +27,7 @@ brew install jakobwesthoff/tap/ntropy
 The formula also installs typst, which rendering a PDF needs, and the
 shell script that defines `ncd`, a command that changes into your vault.
 It needs one `source` line in your shell's startup file, given in
-[Scripting and the shell](01M28Q32N56MS70ETPES4794HJ-scripting-and-the-shell.md).
+[Shell integration](01M28Q32N56MS70ETPES4794HJ-scripting-and-the-shell.md#shell-integration).
 
 Each release also ships binaries on the
 [GitHub Releases](https://github.com/jakobwesthoff/ntropy/releases) page,

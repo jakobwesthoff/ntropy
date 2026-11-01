@@ -13,6 +13,11 @@ note drawn for a terminal. For the whole vault as a website, see
 
 ## Render a note to PDF
 
+A PDF needs [typst](https://typst.app) on your `PATH`; ntropy converts the
+note to Typst itself and only typesets with it. Install it, for example,
+with `brew install typst`; the Homebrew formula for ntropy installs it
+along. Without it, the render fails with an error naming it.
+
 ```bash
 # Render a note into ./<slug>.pdf in the current directory
 ntropy render 01j8za2…
@@ -24,12 +29,6 @@ open "$(ntropy render -p 01j8za2… -o q3-report.pdf)"
 The PDF shows the title up top, the other frontmatter fields below it
 with the tags as chips, and the body below that. Links to other notes
 show the target's current title.
-
-ntropy converts the note to Typst with its own engine and only typesets
-the PDF with [typst](https://typst.app). That is the one tool you install
-yourself, for example with `brew install typst`; the Homebrew formula for
-ntropy installs it along. If typst is not on your `PATH`, the render fails
-with an error naming it.
 
 Without `-p`, ntropy announces the render and ends with a report naming
 the artifact, the format and engine that produced it, and its size:
@@ -80,10 +79,9 @@ both.
   the theme, the fonts, the scripts, the grammars the page's code needs,
   and the images it shows. A linked folder is copied without any note
   but this one, and without the files a website export never copies,
-  such as `.git` and hidden files. Move or send the two together. The
-  page keeps the header, the scheme switch, and the outline, and drops
-  what needs a site: the sidebar, the search, breadcrumbs, and the
-  pager.
+  such as `.git` and hidden files. The page keeps the header, the scheme
+  switch, and the outline, and drops what needs a site: the sidebar, the
+  search, breadcrumbs, and the pager.
 - `ansi` writes the note drawn for a terminal at 80 columns: the
   frontmatter as a highlighted block, then the body with its headings,
   emphasis, lists, tables, quotes, callouts and highlighted code styled
@@ -94,6 +92,10 @@ both.
   shown escaped, as `\u{1b}`. It needs no tool and takes no theme:
   `--theme` with `--to ansi` is an error. `ntropy show` prints the same
   drawing straight to the terminal, at its width.
+
+> [!NOTE]
+> An `html` page needs its files directory: move or send `report.html`
+> and `report_files/` together.
 
 A PDF drops raw HTML and shows a remote image as a link, each with a
 warning; [Markdown flavor](01M28Q32B13V8F4Z4CHE258TC5-markdown-flavor.md)

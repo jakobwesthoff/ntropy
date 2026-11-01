@@ -220,8 +220,9 @@ replaces `page.html` instead of extending it keeps them:
 ## Testing a theme
 
 The theme test vault shows a theme every kind of page and every part of
-a page the built-in theme draws; Themes describes it and how to export
-it with a theme of your own.
+a page the built-in theme draws;
+[The theme test material](01M6CJK3JX0YS4R2FFHPJTG0JG-themes.md#the-theme-test-material)
+describes it and how to export it with your theme.
 
 ## Templates
 

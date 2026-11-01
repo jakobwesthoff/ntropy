@@ -27,9 +27,9 @@ the flags that matter, then the flags every command accepts.
 | `reconcile` | Catch up after editing files outside ntropy. It gives a copied note a ULID of its own, renames files whose slug no longer matches the title, and rewrites links to the old names. Then it re-syncs the views and brings `.gitignore` in line with them. |
 | `view list\|add\|remove` | Manage views, as in `ntropy view add by-status --field status`. `remove` leaves the view's directory on disk. See [Materialized views](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md). |
 | `tags` | List every tag with its note count. |
-| `info` | Show the active vault and how it was found, the global default, and statistics of the vault. `-p`/`--print` prints the vault's path alone. |
+| `info` | Show the active vault and how it was found, the global default, and statistics of the vault: counts of notes, tags, views and templates, skipped-note warnings, the span of creation dates, the top tags and the template names. `-p`/`--print` prints the vault's path alone. |
 | `unlock` / `lock` | Store or forget an encrypted vault's key, so ordinary commands need no passphrase. |
-| `vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault to encrypted storage and back, re-encrypt it to a fresh key, or change the passphrase. The first three rewrite every note. They ask first; `-y` skips the question, and under `-n` it is required. `--resume` finishes an interrupted run. `rekey` and `passphrase` take `--new-passphrase-file`. |
+| `vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault to encrypted storage and back, re-encrypt it to a fresh key, or change the passphrase. `encrypt`, `decrypt` and `rekey` rewrite every note and ask first; `-y` skips the question, and under `-n` it is required. `--resume` finishes an interrupted run. `rekey` and `passphrase` take `--new-passphrase-file`. |
 | `lsp` | Run the language server for your editor, over stdin and stdout. See [Language server](01M28Q32MG1WQ0BTSBGCER8A2R-language-server.md). |
 
 ## Global flags

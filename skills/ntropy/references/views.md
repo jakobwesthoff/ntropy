@@ -70,7 +70,7 @@ look wrong, reconcile before investigating anything else.
 - **DO NOT commit view directories.** ntropy maintains the vault's root
   `.gitignore` with one managed, comment-marked entry per view, added on
   `view add` and pruned on `view remove`; your own lines are never touched.
-- **ntropy never deletes a directory.** After `view remove` the stale tree
+- **`view remove` deletes no directory.** After it the stale tree
   stays on disk (and, no longer ignored, shows up in `git status`); the command
   reports it so you can `rm -r` it yourself.
 - A view name is lowercase letters, digits and single dashes, optionally

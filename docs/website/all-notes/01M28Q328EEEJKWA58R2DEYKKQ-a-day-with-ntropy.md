@@ -41,11 +41,11 @@ Later, find the note by tag, by status, or by a word you half remember:
 ntropy search 'tag:work and status:"in progress"'
 ```
 
-The whole expression sits in single quotes, so the shell hands the inner
-double quotes through to ntropy. A value with a space in it, like
-`in progress`, has to arrive double-quoted. Without the outer quotes the
-shell strips the inner ones. The query then asks for the status `in` and
-the word `progress`, and finds nothing.
+A value with a space in it, like `in progress`, has to reach ntropy
+double-quoted. Single quotes around the whole expression hand the inner
+double quotes through the shell. Without them the shell strips the inner
+quotes, and the query asks for the status `in` and the word `progress`
+and finds nothing.
 
 A single match opens in your editor. Several open a picker: type to
 narrow the list, and Enter opens the note you meant.
@@ -92,9 +92,11 @@ has the rest.
 
 ## Catch up after editing by hand
 
-ntropy refreshes the views after every change it makes itself. Open the
-note's file in `all-notes/` with your editor directly, change its status
-to `done`, and save. The view does not know yet, until you run:
+ntropy refreshes the views after every change it makes itself. Now
+change the note behind its back: open `all-notes/*-refactor-the-parser.md`
+in your editor directly (the `*` stands for the note's ULID), set its
+status to `done`, and save. The view still files the note under
+`in-progress` until you run:
 
 ```bash
 ntropy reconcile

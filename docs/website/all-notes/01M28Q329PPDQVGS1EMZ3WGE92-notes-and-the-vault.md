@@ -33,6 +33,7 @@ A vault is an ordinary directory with a few well-known children:
 │       └── 2026-06-24-q3-planning.md -> ../../all-notes/01j8za2…-q3-planning.md
 ├── by-status/        # another view, grouped by the `status` field
 ├── README.md         # seeded by `init`: what this directory is, how to get ntropy
+├── .gitignore        # written by ntropy: keeps the view directories out of git
 └── .ntropy/          # config, templates, and themes
 ```
 

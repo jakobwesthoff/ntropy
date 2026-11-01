@@ -8,7 +8,6 @@ site:
 ---
 This section is for people who build ntropy from source or work on it:
 the build, the `just` recipes, the site frontend, and the snapshot tests.
-The design documents and decision records follow on their own page.
 
 The crate splits into a library with the business logic and the `ntropy`
 binary on top of it, so that other front ends can share that logic. The

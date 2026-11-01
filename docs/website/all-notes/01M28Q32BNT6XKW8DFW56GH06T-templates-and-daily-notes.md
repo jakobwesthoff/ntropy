@@ -46,10 +46,10 @@ template that does not exist is an error, never a silent fallback, so a
 typo cannot hand you the wrong shape. A template name may not be empty
 or contain a path separator.
 
-Give the file a lowercase `.md`. `ntropy info` lists no other file as a
-template. `--template meeting` opens `meeting.md`, which finds
-`Meeting.MD` only on a file system that ignores case, as macOS does by
-default.
+> [!NOTE]
+> Name the file with a lowercase `.md`; `ntropy info` lists only those as
+> templates. On a file system that ignores case, as macOS does by
+> default, `--template meeting` still opens a file saved as `Meeting.MD`.
 
 ## Placeholders
 

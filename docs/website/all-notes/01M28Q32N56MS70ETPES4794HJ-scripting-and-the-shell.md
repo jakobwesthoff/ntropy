@@ -9,8 +9,6 @@ site:
 Scripts, editors and coding agents all drive the same ntropy command
 line. This page is the plain-text side: the non-interactive mode, writing
 a note from a script, reading the output, and the `ncd` shell function.
-The language server for editors and the skill for agents follow on their
-own pages.
 
 ## Non-interactive mode
 

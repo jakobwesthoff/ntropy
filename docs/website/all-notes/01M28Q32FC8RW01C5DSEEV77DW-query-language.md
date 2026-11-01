@@ -30,17 +30,7 @@ ntropy search
 ## Terms
 
 A bare word or quoted phrase that is not followed by `:` searches the
-note body. Each argument you type is read on its own. Several words
-inside one argument, as in `ntropy search "borrow checker"`, are a phrase:
-the words in that order with any whitespace between them, a line break
-included, and every character literal, so `"c++ tips"` is not a pattern.
-Separate arguments, as in `ntropy search borrow checker`, find notes that
-contain every word, anywhere in the body and in any order. An argument
-that is a whole query, such as `'tag:work and not status:done'`, stays a
-query, and a phrase that holds a `:`, a parenthesis, a quote or the word
-`and`, `or` or `not` is one too. Write such a phrase with double quotes
-inside single quotes: `ntropy search '"page not found"'`. For more
-precise matching, reach for a typed term:
+note body. For more precise matching, reach for a typed term:
 
 - `tag:x` matches hierarchically. `x` and each note tag are split on
   `/`, and the term matches when `x`'s segments appear as a contiguous
@@ -59,6 +49,19 @@ precise matching, reach for a typed term:
 - `text:pattern` is a regex matched against the note body, compiled with
   smart case: an all-lowercase pattern matches regardless of case, but a
   pattern containing an uppercase letter only matches that case exactly.
+
+### Words, phrases and quoting
+
+Each argument you type is read on its own. Several words
+inside one argument, as in `ntropy search "borrow checker"`, are a phrase:
+the words in that order with any whitespace between them, a line break
+included, and every character literal, so `"c++ tips"` is not a pattern.
+Separate arguments, as in `ntropy search borrow checker`, find notes that
+contain every word, anywhere in the body and in any order. An argument
+that is a whole query, such as `'tag:work and not status:done'`, stays a
+query, and a phrase that holds a `:`, a parenthesis, a quote or the word
+`and`, `or` or `not` is one too. Write such a phrase with double quotes
+inside single quotes: `ntropy search '"page not found"'`.
 
 Quote a value that contains spaces, such as `status:"in progress"`. A
 dot needs no quotes, so `tag:milestone/0.13` works as it is; other

@@ -8,20 +8,14 @@ site:
 ---
 A theme decides how a note looks once it leaves the vault. There are two
 kinds, one for documents and one for web pages, and both live in the
-vault's `.ntropy/themes/`.
+vault's `.ntropy/themes/`. The `ansi` format takes no theme.
 
 ## Two kinds of theme
 
 | Kind | What it is | What it styles | Start with |
 | :--- | :--- | :--- | :--- |
 | Document theme | one Typst file in `.ntropy/themes/typst/` | PDFs, and the Typst document of `--to typst` | [Writing a document theme](01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md), whose step 1 copies ntropy's own look into the file |
-| Site theme | a directory in `.ntropy/themes/site/`: a stylesheet, fonts, icons and page templates | `ntropy site`, and the page of `render --to html` | `ntropy site theme init <name>`, then [Writing a site theme](01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme.md) |
-
-The `ansi` format takes no theme.
-[Making a front page](01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page.md)
-continues the site guide. [Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md)
-and [Site themes](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md) are the
-references behind the guides.
+| Site theme | a directory in `.ntropy/themes/site/`: a stylesheet, fonts, icons and page templates | `ntropy site`, and the page of `render --to html` | [Writing a site theme](01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme.md), whose quick start copies the built-in theme with `ntropy site theme init` |
 
 ## Selecting a theme
 

@@ -271,7 +271,8 @@ typst compile --root <vault> - note.pdf < note.typ
 ```
 
 To see a theme draw the parts of a note in one document, render the
-theme test note, described in Themes.
+theme test note, described under
+[The theme test material](01M6CJK3JX0YS4R2FFHPJTG0JG-themes.md#the-theme-test-material).
 
 ## Paper size
 

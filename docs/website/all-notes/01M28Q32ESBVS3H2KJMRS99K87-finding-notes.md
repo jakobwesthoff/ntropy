@@ -57,10 +57,12 @@ Closing the editor reconciles the note you opened, the way
 name to match its current title and refreshes the links that point at
 it.
 
-A control character or bidi override in a title shows escaped, such as
-`\u{1b}`, and you match against that escaped form. Nothing in a title can
-move the cursor or redraw the screen. `Ctrl-Y` does not print a path that
-holds such a character; `ntropy reconcile` renames the note.
+> [!NOTE]
+> A control character or bidi override in a title shows escaped, such as
+> `\u{1b}`, and you match against that escaped form. Nothing in a title
+> can move the cursor or redraw the screen. `Ctrl-Y` prints no path that
+> holds such a character. `ntropy reconcile` gives the note its canonical
+> name, which holds none.
 
 ## Read a note in the terminal
 

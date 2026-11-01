@@ -95,10 +95,11 @@ ntropy vault passphrase   # change the passphrase; notes are untouched
   invalid name or a symlink in place of its directory, because it could
   not remove that view's tree safely. The message says what to remove
   first.
-- All three refuse to start while two note files share a ULID, such as a
-  note copied by hand, or while a file already sits where a converted
-  note would be written, since either would overwrite a note. Run
-  `ntropy reconcile` first, or move the named files away.
+- `encrypt`, `decrypt` and `rekey` refuse to start while two note files
+  share a ULID, such as a note copied by hand, or while a file already
+  sits where a converted note would be written, since either would
+  overwrite a note. Run `ntropy reconcile` first, or move the named files
+  away.
 
 `vault passphrase` rewrites only the file holding the wrapped key; the
 notes stay as they are. `vault rekey` keeps the current passphrase

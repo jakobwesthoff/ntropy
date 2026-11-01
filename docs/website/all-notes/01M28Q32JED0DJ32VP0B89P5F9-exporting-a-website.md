@@ -6,8 +6,8 @@ site:
 ---
 `ntropy site` turns the vault into a static website: a set of files any
 web host serves, and that a browser opens straight from disk, no server
-needed. The pages take their look from a site theme, described in
-[Site themes](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md).
+needed. The pages take their look from a site theme; see
+[Themes](01M6CJK3JX0YS4R2FFHPJTG0JG-themes.md).
 
 ## Export and open
 
@@ -41,16 +41,20 @@ The site mirrors the ways you reach a note in the vault:
   directory with its tree. Links are relative, so the site works from
   `file://` and from any path on a host.
 
-Each page carries a sidebar with the views and the top-level tags,
-breadcrumbs, and an outline of the note's headings that follows your
-position while you scroll. A note page ends with the notes that share
-the most tags with it, at most eight. Tags link to their pages
-everywhere they appear, and note links point at the target's page. Every
-heading in a note ends with a link to itself, a `#` that shows in the
-margin when you hover the heading or tab to it, so you can copy the
-address of a section. Every page has a light/dark/system switch that
-remembers your choice in the browser. On a phone the sidebar is a drawer
-behind the menu button.
+Every page carries:
+
+- a sidebar with the views and the top-level tags, a drawer behind the
+  menu button on a phone;
+- breadcrumbs;
+- an outline of the note's headings that follows your position while
+  you scroll;
+- a `#` after every heading, shown when you hover or tab to it, whose
+  address you can copy to link the section;
+- a light/dark/system switch that remembers your choice in the browser.
+
+A note page ends with the notes that share the most tags with it, at
+most eight. Tags link to their pages wherever they appear, and note
+links point at the target's page.
 
 Code blocks are highlighted in the browser for 72 languages, each page
 loading only the grammars its code needs. A fence language without one
@@ -137,9 +141,9 @@ either way.
 
 The same table holds `title` (by default the vault directory's name),
 `index` (the ULID of the front page's note), `lang` (the page language,
-`en` by default), and `theme`. A `[site.vars]` table is free-form:
-ntropy reads nothing from it, and the theme's templates receive it as
-`vars`. That is where a footer's copyright line or a row of header links
+`en` by default), and `theme`, the site theme. A `[site.vars]` table is
+free-form: ntropy reads nothing from it, and the theme's templates
+receive it as `vars`. That is where a footer's copyright line or a row of header links
 comes from. A date, time, or datetime in the table reaches the templates
 as text in the form TOML writes it (`2026-11-01`,
 `2026-11-01T12:00:00+01:00`).
@@ -222,7 +226,3 @@ whose notes still become pages but whose images and files beside them
 are not copied. The rule has no exceptions, so copy such files into the
 vault to have them in the site. A symlink that stays inside the vault
 works as any other path.
-
-A `#` in a link ends the path: `spec.pdf#page=2` copies `spec.pdf` and
-keeps `#page=2` in the link, so a file with a `#` in its name cannot be
-linked.

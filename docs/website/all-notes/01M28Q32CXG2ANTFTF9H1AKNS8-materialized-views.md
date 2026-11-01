@@ -81,9 +81,9 @@ version control for you. It keeps an entry for every configured view in
 the vault's root `.gitignore`, and marks its own lines so it never
 touches one you wrote.
 
-ntropy never deletes a directory. `view remove` drops the definition and
-its `.gitignore` entry, and tells you that the view's tree stays on disk
-for you to delete. Since its ignore entry is gone, git now sees that
+`view remove` deletes no directory: it drops the definition and its
+`.gitignore` entry, and tells you that the view's tree stays on disk for
+you to delete. Since its ignore entry is gone, git now sees that
 directory.
 
 ## View names

@@ -213,11 +213,11 @@ Render again, and the text is set in Plex.
 
 > [!WARNING]
 > A font name typst does not find is replaced by the default font. The
-> render shows typst's warning `unknown font family: <name>` as one of its
-> warnings, and `--strict` fails on it. If the PDF still shows the old
-> font, the name is misspelt or `TYPST_FONT_PATHS` is not set in this
-> terminal.
-> `pdffonts /tmp/release-checklist.pdf` (from poppler, if you have it)
+> render prints typst's warning as one of its own:
+> `warning: unknown font family: ibm plex sans (in ...)`. It does so for
+> every typst warning, and `--strict` fails on it. If the PDF still shows
+> the old font, the name is misspelt or `TYPST_FONT_PATHS` is not set in
+> this terminal. `pdffonts /tmp/release-checklist.pdf` (from poppler, if you have it)
 > lists the fonts in the PDF: yours should be there, and Libertinus Serif
 > in its place means the name was not found. A glyph your font lacks is
 > taken from another font, which then shows up in that list too.
@@ -450,15 +450,6 @@ Read it section by section:
   own size;
 - Footnotes and Wrapping: the footnote text, and the long word, URL and
   line of code.
-
-A PDF render shows typst's warnings, such as the one for a font typst
-does not find, as warnings of its own, and `--strict` fails on them. In a
-terminal without `TYPST_FONT_PATHS`, rendering the release checklist
-prints:
-
-```
-warning: unknown font family: ibm plex sans (in `set text(font: "IBM Plex Sans", size: 10pt)`)
-```
 
 A theme that does not compile fails the render with typst's error. The
 line it names after `<stdin>` is a line of the Typst document ntropy

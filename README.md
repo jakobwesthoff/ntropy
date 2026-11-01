@@ -53,6 +53,9 @@ macOS (Apple Silicon & Intel) and Linux (x86_64 & aarch64, statically linked).
 
 ## Quick start
 
+ntropy opens notes in the editor `$VISUAL` names, or else `$EDITOR`, so
+set one first.
+
 ```bash
 # Scaffold a vault (this also seeds a by-tag view)
 ntropy init ~/notes
@@ -71,8 +74,7 @@ ntropy search tag:work and not status:done
 ntropy show 'quarterly review'
 ```
 
-Notes open in the editor `$VISUAL` names, or else `$EDITOR`; set one
-first. New notes are stamped out from
+New notes are stamped out from
 [templates](https://ntropy.westhoffswelt.de/notes/templates-and-daily-notes.html);
 `today` has its own daily template; and `search` speaks a small
 [query language](https://ntropy.westhoffswelt.de/notes/query-language.html),

@@ -4,8 +4,9 @@ tags: [docs/notes]
 site:
   order: 2
 ---
-Every ntropy command works on exactly one vault. Inside a vault, it is
-that vault. This page shows how a project points at a vault kept
+Every ntropy command works on exactly one vault. Run inside a vault, a
+command uses that vault, unless `--vault` or `$NTROPY_VAULT` names
+another. This page shows how a project points at a vault kept
 elsewhere, how to check which vault a command uses, and the full order
 of the rules.
 
