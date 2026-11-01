@@ -134,6 +134,11 @@ rendered, the PDF link jumps to the heading instead, and an anchor that
 names no heading shows the link text only, with a warning. The HTML
 artifact does not check the anchor, as it does not read the other note.
 
+A link to a heading of the same note, `[back](#lists)`, works in a PDF
+and in HTML too. In a PDF, `#` or `#top` goes to the top of the first
+page. A fragment that names no heading shows the link text only, with a
+warning, so `--strict` fails.
+
 The `typst` format emits the same link, and it always points at
 `<slug>.pdf`, never at a `.typ` file: the Typst document is the source of
 a PDF. The `html` format follows the same convention with `<slug>.html`

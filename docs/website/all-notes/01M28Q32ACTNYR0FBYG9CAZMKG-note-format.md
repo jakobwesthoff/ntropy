@@ -2,7 +2,7 @@
 title: Note format
 tags: [docs/notes]
 site:
-  order: 1
+  order: 4
 ---
 A note is a plain Markdown file with a YAML frontmatter block. This page
 describes the frontmatter fields, what the filename carries, and how notes
@@ -37,18 +37,16 @@ Two fields carry special meaning. The rest are yours.
   spelling matters. A list or a mapping as the title is malformed too, and the
   warning says which it found.
 - `tags` is a flat list of strings. A forward slash denotes hierarchy by
-  convention: `area/roadmap` is one tag with two levels, which both
-  [queries](01M28Q32FC8RW01C5DSEEV77DW-query-language.md) and
-  [views](01M28Q32CXG2ANTFTF9H1AKNS8-materialized-views.md) understand.
-  ntropy normalizes each tag when it reads the note: segments are lowercased
-  and whitespace becomes a dash, so `Rust` and `rust` are the same tag, and
-  exact duplicates collapse into one. Punctuation stays as written, so
-  `milestone/0.13`, `c++` and `node.js` are listed and matched exactly like
-  that. A lone string instead of a list is accepted as a single tag. Numbers
-  and booleans are read as their text like a title is (`tags: [2026, rust]`
-  holds both) and quoting a tag keeps its spelling. A list or a mapping inside
-  `tags` makes the note malformed, and the warning names the entry by its
-  position.
+  convention: `area/roadmap` is one tag with two levels, which both queries
+  and views understand. ntropy normalizes each tag when it reads the note:
+  segments are lowercased and whitespace becomes a dash, so `Rust` and
+  `rust` are the same tag, and exact duplicates collapse into one.
+  Punctuation stays as written, so `milestone/0.13`, `c++` and `node.js`
+  are listed and matched exactly like that. A lone string instead of a list
+  is accepted as a single tag. Numbers and booleans are read as their text,
+  as in a title (`tags: [2026, rust]` holds both), and quoting a tag keeps
+  its spelling. A list or a mapping inside `tags` makes the note malformed,
+  and the warning names the entry by its position.
 - Everything else (`status`, `due`, `author`, anything you like) is a free
   field. Filter on it, build a view from it, or just keep it for yourself.
 
@@ -72,20 +70,19 @@ apostrophe is dropped, so `Don't Panic` is `dont-panic`. A title that normalizes
 `untitled`. Because the ULID leads and is millisecond-precise, a plain lexical
 sort of `all-notes/` is chronological.
 
-When you change a title, the slug drifts. `ntropy reconcile` renames the file
-to match again, and ntropy does the same for a single note when you close the
-editor it opened for you. In an [encrypted
-vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md) the file is named
-`<ulid>.age` with no slug at all, so there is nothing to drift.
+When you change a title, the slug drifts. `ntropy reconcile` renames the
+file to match again, and ntropy does the same for a single note when you
+close the editor it opened for you. In an encrypted vault the file is
+named `<ulid>.age` with no slug at all, so there is nothing to drift.
 
 Copying a note file by hand copies its ULID, and two files then claim one
-identity. ntropy keeps the one with the shorter file name as the note and
+identity. ntropy keeps the one with the shorter file name as the note. It
 skips the other with a warning that names the note it kept, so searches,
-views and links see one note per ULID. Passing that ULID to `search` or `delete`
-still matches both files. `ntropy reconcile`, or editing or writing either
-file through ntropy, gives the copy a ULID of its own with the same creation
-time and says so; links that used the shared ULID keep pointing at the note
-that kept it.
+views and links see one note per ULID. Passing that ULID to `search` or
+`delete` still matches both files. `ntropy reconcile`, or editing or
+writing either file through ntropy, gives the copy a ULID of its own with
+the same creation time and says so. Links that used the shared ULID keep
+pointing at the note that kept it.
 
 ## Linking between notes
 
@@ -95,13 +92,16 @@ Notes link to each other with ordinary Markdown links. Nothing custom:
 See [the Q3 plan](01j8za2…-q3-planning.md) for the numbers.
 ```
 
-The target is the note's filename. Because the leading ULID is the note's
-real identity, the link keeps resolving even after the target's title and
-slug change: ntropy reads the first 26 characters of the target as a ULID and
-looks the note up by that. `ntropy reconcile` rewrites the slug portion in
-existing links so the readable part stays accurate and the link stays
+The target is the note's filename. The leading ULID is the note's real
+identity, so the link keeps resolving even after the target's title and
+slug change: ntropy reads the first 26 characters of the target as a ULID
+and looks the note up by that. `ntropy reconcile` rewrites the slug part
+of existing links, so the readable part stays accurate and the link stays
 clickable in a plain viewer. They are ordinary Markdown links, so GitHub,
-your editor's preview, and any other Markdown tool follow them for free.
+your editor's preview, and any other Markdown tool follow them.
+
+In a PDF, a web page and an exported site, a note link shows the target's
+current title instead of the text you wrote.
 
 A link to a heading of another note adds the heading's id after a `#`:
 
@@ -109,26 +109,25 @@ A link to a heading of another note adds the heading's id after a `#`:
 See [Inside tmux](01j8za2…-notifications.md#inside-tmux).
 ```
 
-`ntropy reconcile` refreshes the file name and keeps the `#inside-tmux`. In
-a site or HTML export the link points at the note's page and keeps the
-anchor, and it shows the text you wrote instead of the note's title. A
-link in a PDF cannot address a heading in another PDF, so there the link
-opens the other note's PDF. A link to a heading of the note itself jumps
-to that heading in its own PDF.
+`ntropy reconcile` refreshes the file name and keeps the `#inside-tmux`.
+A link with an anchor shows the text you wrote, not the note's title.
 `ntropy site` warns about an anchor that matches no heading of the target.
+Where such a link leads in a PDF and on a web page is described in
+[Rendering to PDF and HTML](01M28Q32H5RYMZ5MHBQSQQN13B-rendering-to-pdf-and-html.md).
 
 A link counts as a note link only when its target starts with a valid ULID
 and ends in `.md`, optionally followed by `#` and a heading id. Anything
 else, such as external URLs, in-page anchors, or a ULID that matches no
-note, is left alone. Image links (`![..](..)`) and
-links inside code are never treated as note links, and `reconcile` does not
-rewrite them. Code means inline code spans (which may continue over a line
-break), fenced code blocks and indented code blocks.
+note, is left alone. Image links (`![..](..)`) and links inside code are
+never treated as note links, and `reconcile` does not rewrite them. Code
+means inline code spans, which may continue over a line break, fenced
+code blocks and indented code blocks.
 
 Links keep the `<ulid>-<slug>.md` form in an encrypted vault too, even
 though the files there are named `<ulid>.age`. Resolution goes through the
 ULID, not the filesystem, so encrypting or decrypting a vault rewrites no
 note bodies.
 
-You can type these links by hand, but you do not have to. That is what the
-[language server](01M28Q32MG1WQ0BTSBGCER8A2R-language-server.md) is for.
+You can type these links by hand, but you do not have to: the
+[Language server](01M28Q32MG1WQ0BTSBGCER8A2R-language-server.md) completes
+them in your editor.

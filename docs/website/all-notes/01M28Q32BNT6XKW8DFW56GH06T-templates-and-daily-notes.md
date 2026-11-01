@@ -2,22 +2,18 @@
 title: Templates and daily notes
 tags: [docs/notes]
 site:
-  order: 3
+  order: 1
 ---
-Every new note starts from a template, so a note can begin with the
-frontmatter and skeleton it should have instead of a blank file you furnish
-by hand each time. Define the shape of a "meeting note" or a "book review"
-once, and `ntropy new` stamps it out for you. This page covers where
-templates live, the placeholders they can use, how to skip them, and the
-`today` command built on top of them.
+Every new note starts from a template, so it begins with the frontmatter
+and skeleton it should have. Define the shape of a meeting note or a
+book review once, and `ntropy new` stamps it out for you. `ntropy today`
+builds a daily note the same way.
 
-## Template files
+## Make a template
 
-Templates are Markdown-with-frontmatter files in `<vault>/.ntropy/templates/`.
-The filename without `.md` is the template's name. Give it a lowercase
-`.md`: `ntropy info` lists no other file as a template, and `--template
-meeting` opens `meeting.md`, which finds `Meeting.MD` only on a file system
-that ignores case, as macOS does by default:
+A template is a Markdown file with frontmatter in
+`<vault>/.ntropy/templates/`, and its file name without `.md` is the
+template's name:
 
 ```markdown
 <!-- .ntropy/templates/meeting.md -->
@@ -41,15 +37,23 @@ ntropy new Standup --template meeting   # uses meeting.md
 ntropy new Some thought                  # uses default.md
 ```
 
-`init` seeds a `default.md`, used whenever you do not pass `--template`. If
-that file is missing, ntropy falls back to a built-in copy of it. Asking for
-a named template that does not exist is an error rather than a silent
-fallback, so a typo never quietly hands you the wrong shape. A template name
-may not be empty or contain a path separator.
+The fields in it are ordinary frontmatter, described in
+[Note format](01M28Q32ACTNYR0FBYG9CAZMKG-note-format.md).
+
+`init` seeds a `default.md`, which `new` uses without `--template`. If
+that file is missing, ntropy falls back to a built-in copy of it. A named
+template that does not exist is an error, never a silent fallback, so a
+typo cannot hand you the wrong shape. A template name may not be empty
+or contain a path separator.
+
+Give the file a lowercase `.md`. `ntropy info` lists no other file as a
+template. `--template meeting` opens `meeting.md`, which finds
+`Meeting.MD` only on a file system that ignores case, as macOS does by
+default.
 
 ## Placeholders
 
-The `{{...}}` placeholders are filled in at creation time:
+The `{{...}}` placeholders are filled in when the note is created:
 
 | Placeholder | Becomes |
 |-------------|---------|
@@ -59,14 +63,33 @@ The `{{...}}` placeholders are filled in at creation time:
 | `{{slug}}` | the slugified title |
 
 Anything ntropy does not recognize is left untouched, so a stray
-`{{mustache}}` in your prose survives intact.
+`{{mustache}}` in your prose survives.
 
-Inside the frontmatter block, substitution respects the YAML around it. A
-placeholder that is the whole value of a line, as in `title: {{title}}`, is
-written as a YAML-safe scalar, quoted when the value needs it, so a title
-like `Q3: Planning kickoff` or `[draft] roadmap` does not break the file. A
-placeholder inside a quoted string is escaped for that quote style. In the
-body, substitution is verbatim.
+Inside the frontmatter, substitution respects the YAML around it. A
+placeholder that is the whole value of a line, as in `title: {{title}}`,
+is written as a YAML-safe value and quoted when it needs it. A title like
+`Q3: Planning kickoff` or `[draft] roadmap` therefore does not break the
+file. A placeholder inside a quoted string is escaped for that quote
+style. In the body, substitution is verbatim.
+
+## Daily notes with today
+
+`init` also seeds a `today.md` template, which `ntropy today` uses:
+
+```markdown
+---
+title: {{date}}
+tags: [daily]
+---
+# {{date}}
+```
+
+`ntropy today` opens today's note, the note whose title is today's local
+date. The first run of a day creates it from this template, and later
+runs open the same note. If several notes carry today's date as their
+title, the newest one opens. Edit `today.md` to shape your daily note.
+The template has to exist; if it is missing, `ntropy init` on the vault
+seeds it again.
 
 ## Skipping the template
 
@@ -99,22 +122,3 @@ EOF
 `write` names its target (a full ULID, the note's filename, or its path in
 `all-notes/`) and never searches for it, so it opens no picker and asks no
 question.
-
-## Daily notes with today
-
-`init` also seeds a `today.md` template, which powers `ntropy today`:
-
-```markdown
----
-title: {{date}}
-tags: [daily]
----
-# {{date}}
-```
-
-`ntropy today` opens today's note, identified by its title being today's
-local date. The first time you run it on a given day it creates the note
-from this template; later runs reopen the same note. If several notes carry
-today's date as their title, the newest one opens. Edit `today.md` to shape
-your daily note however you like. The template has to exist; a vault created
-before this feature can re-run `ntropy init` to seed it.
