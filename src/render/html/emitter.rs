@@ -59,6 +59,15 @@ pub trait Targets {
 
     /// The `src` or `href` for a local path as written in the note body.
     fn asset_href(&self, dest: &str) -> String;
+
+    /// Whether the page the artifact lands in uses `id` outside the note
+    /// body, such as for its navigation or its icon sprite. A heading never
+    /// takes such an id, or a link to the heading would reach that element.
+    /// Only finitely many ids may answer `true` (see
+    /// [`Output::reserves_id`](markdown::Output::reserves_id)).
+    fn reserved_id(&self, _id: &str) -> bool {
+        false
+    }
 }
 
 /// The convention of a single-note `render`: the target note's artifact sits
@@ -289,6 +298,21 @@ impl Output for HtmlOutput<'_> {
 
     fn dropped_title(&self) -> Option<&str> {
         self.title.as_deref()
+    }
+
+    /// The ids of the footnotes the emitter numbers, `fn-1` to `fn-N` and
+    /// `fnref-1` to `fnref-N`, and whatever the page around the body uses.
+    fn reserves_id(&self, id: &str, footnotes: usize) -> bool {
+        let numbered = |prefix: &str| {
+            id.strip_prefix(prefix)
+                .and_then(|digits| digits.parse::<usize>().ok())
+                .is_some_and(|number| (1..=footnotes).contains(&number))
+                && id
+                    .bytes()
+                    .skip(prefix.len())
+                    .all(|byte| byte.is_ascii_digit())
+        };
+        numbered("fn-") || numbered("fnref-") || self.targets.reserved_id(id)
     }
 
     fn heading(&mut self, heading: &Heading, body: &str) -> String {
@@ -943,6 +967,73 @@ mod tests {
         }
         let out = emit("[a](doc.pdf#page=2)", &[], &Prefixed, None);
         assert_eq!(out.html, "<p><a href=\"files/doc.pdf#page=2\">a</a></p>\n");
+    }
+
+    fn heading_ids(input: &str, targets: &dyn Targets) -> Vec<String> {
+        emit(input, &[], targets, None)
+            .headings
+            .into_iter()
+            .map(|heading| heading.id)
+            .collect()
+    }
+
+    #[test]
+    fn a_heading_does_not_take_the_id_of_a_footnote() {
+        // Footnote 1 owns `fn-1` and `fnref-1`, so these headings move on.
+        let input = "# Fn 1\n\n# Fnref 1\n\ntext[^1]\n\n[^1]: note\n";
+        assert_eq!(
+            heading_ids(input, &SiblingArtifacts),
+            ["fn-1-1", "fnref-1-1"]
+        );
+    }
+
+    #[test]
+    fn headings_named_after_the_footnote_prefix_still_get_their_suffixes() {
+        // `fn-1` and `fn-2` belong to the two footnotes, so the repeated
+        // heading skips both and the search ends.
+        let input = "# Fn\n\n# Fn\n\na[^1] b[^2]\n\n[^1]: one\n\n[^2]: two\n";
+        assert_eq!(heading_ids(input, &SiblingArtifacts), ["fn", "fn-3"]);
+    }
+
+    #[test]
+    fn a_drawn_footnote_heading_is_recorded_after_the_body_headings() {
+        let out = emit(
+            "[^1]: note\n\n    ## A\n\n# A\n\ntext[^1]\n",
+            &[],
+            &SiblingArtifacts,
+            None,
+        );
+        let ids: Vec<&str> = out.headings.iter().map(|h| h.id.as_str()).collect();
+        assert_eq!(ids, ["a", "a-1"]);
+        assert!(out.html.contains("<h2 id=\"a-1\">A"), "{}", out.html);
+    }
+
+    #[test]
+    fn a_page_without_footnotes_reserves_no_footnote_id() {
+        assert_eq!(
+            heading_ids("# Fn 1\n\n# Fnref 1\n", &SiblingArtifacts),
+            ["fn-1", "fnref-1"]
+        );
+    }
+
+    #[test]
+    fn a_heading_does_not_take_an_id_the_targets_reserve() {
+        struct Chrome;
+        impl Targets for Chrome {
+            fn note_href(&self, _id: Id, slug: &str) -> String {
+                format!("{slug}.html")
+            }
+            fn asset_href(&self, dest: &str) -> String {
+                dest.to_string()
+            }
+            fn reserved_id(&self, id: &str) -> bool {
+                id == "sidebar" || id == "icon-tag"
+            }
+        }
+        assert_eq!(
+            heading_ids("# Sidebar\n\n# Sidebar\n\n# Icon tag\n\n# Icons\n", &Chrome),
+            ["sidebar-1", "sidebar-2", "icon-tag-1", "icons"]
+        );
     }
 
     #[test]

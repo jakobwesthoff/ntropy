@@ -25,7 +25,7 @@
 //! files/<vault path>               vault files the notes reference
 //! ```
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use crate::id::Id;
@@ -147,11 +147,13 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
     // its templates, parsed once here.
     let theme = SiteTheme::selected(input.theme.map(|(theme, _)| theme));
     let icons = theme.sprite();
+    let icon_ids = theme.icon_ids();
     let templates = Templates::new(&theme)?;
     let export = Export {
         model: &model,
         templates: &templates,
         icons: &icons,
+        icon_ids: &icon_ids,
         vars: &input.options.vars,
         scope: &scope,
     };
@@ -620,6 +622,8 @@ struct PageTargets<'a> {
     prefix: String,
     note_dir: &'a str,
     scope: &'a ExportScope,
+    /// The ids of the sprite's symbols, which every page inlines.
+    icon_ids: &'a BTreeSet<String>,
 }
 
 impl Targets for PageTargets<'_> {
@@ -635,6 +639,12 @@ impl Targets for PageTargets<'_> {
             Some(path) => format!("{}{FILES_DIR}{path}", self.prefix),
             None => dest.to_string(),
         }
+    }
+
+    /// The navigation pane is `#sidebar`, and the sprite holds an `icon-*`
+    /// symbol per icon.
+    fn reserved_id(&self, id: &str) -> bool {
+        id == "sidebar" || self.icon_ids.contains(id)
     }
 }
 
@@ -703,6 +713,7 @@ fn render_note(
         prefix: prefix.clone(),
         note_dir,
         scope: export.scope,
+        icon_ids: export.icon_ids,
     };
     let emitted = html::emit(&note.body, links, &targets, Some(&note.title));
     let entry = &model.notes[index];
@@ -843,6 +854,8 @@ struct Export<'a> {
     model: &'a Model,
     templates: &'a Templates,
     icons: &'a str,
+    /// The ids of the sprite's symbols, which headings must not take.
+    icon_ids: &'a BTreeSet<String>,
     vars: &'a toml::Table,
     scope: &'a ExportScope,
 }
@@ -2193,6 +2206,52 @@ mod tests {
             page.contains("<img src=\"../files/all-notes/diagram.png#icon\" alt=\"pic\">"),
             "{page}"
         );
+    }
+
+    /// Every `id="..."` of `page`, in order.
+    fn page_ids(page: &str) -> Vec<String> {
+        page.split("id=\"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+            .map(str::to_string)
+            .collect()
+    }
+
+    #[test]
+    fn headings_do_not_take_the_ids_of_the_site_chrome() {
+        let vault = vault();
+        let built = site_linking(
+            vault.path(),
+            "## Sidebar\n\n## Icon tag\n\n## Icons\n\ntext[^1]\n\n## Fn 1\n\n[^1]: note\n",
+        );
+        let page = text(&built, "notes/linker.html");
+        for expected in [
+            "<h2 id=\"sidebar-1\">Sidebar",
+            "<h2 id=\"icon-tag-1\">Icon tag",
+            "<h2 id=\"icons\">Icons",
+            "<h2 id=\"fn-1-1\">Fn 1",
+        ] {
+            assert!(page.contains(expected), "{expected}: {page}");
+        }
+        let ids = page_ids(&page);
+        let unique: HashSet<&String> = ids.iter().collect();
+        assert_eq!(unique.len(), ids.len(), "an id repeats: {ids:?}");
+    }
+
+    #[test]
+    fn the_site_chrome_holds_no_id_the_headings_cannot_know_of() {
+        // A page without headings or footnotes has the sidebar and the
+        // sprite's symbols. Any other id the built-in templates gain has to
+        // be reserved in `PageTargets` too, and this test says so.
+        let vault = vault();
+        let built = site_linking(vault.path(), "plain text\n");
+        let page = text(&built, "notes/linker.html");
+        let theme = SiteTheme::builtin();
+        let mut known = theme.icon_ids();
+        known.insert("sidebar".to_string());
+        for id in page_ids(&page) {
+            assert!(known.contains(&id), "`{id}` is an id no heading avoids");
+        }
     }
 
     #[test]

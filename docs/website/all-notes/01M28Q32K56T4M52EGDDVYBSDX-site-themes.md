@@ -136,6 +136,12 @@ target. The ones a theme most often restyles:
 | Outline | `nav.outline` |
 | State | `aria-current` on the current sidebar entry and outline entry; `body.site` on a site page, `body.document` on a `render --to html` page |
 
+Heading ids never equal an id of the page around them: ntropy suffixes a
+heading that would take `sidebar`, an icon's `icon-<name>` or a footnote's
+`fn-<n>` or `fnref-<n>`. An id that a template of your own theme puts on a
+note page, or that an icon's SVG defines inside its symbol, is yours to keep
+apart from heading ids.
+
 The built-in `style.css` styles all of them and is written to be copied,
 so reading it beside an exported page is the fastest way to find any
 selector not listed here.

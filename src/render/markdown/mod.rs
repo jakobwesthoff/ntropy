@@ -97,9 +97,9 @@ pub struct List {
 ///
 /// The id follows GitHub's rule over the plain text: lowercased, whitespace
 /// becomes a hyphen, every character that is not a letter, a digit, a hyphen,
-/// or an underscore is dropped, and a repeated id within one body gets `-1`,
-/// `-2`, and so on. Anchor links written GitHub-style in a note therefore
-/// resolve unchanged.
+/// or an underscore is dropped, and a repeated id within one body, or an id
+/// the output reserves, gets `-1`, `-2`, and so on (ADR 0087). Anchor links
+/// written GitHub-style in a note therefore resolve unchanged.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Heading {
     pub level: HeadingLevel,
@@ -198,6 +198,17 @@ pub trait Output {
     /// the level, the id, and the plain text.
     fn heading(&mut self, heading: &Heading, body: &str) -> String;
 
+    /// Whether the page the output builds already uses `id` for something
+    /// other than a heading, so a heading must not take it. `footnotes` is
+    /// the number of footnote definitions in the body.
+    ///
+    /// Only finitely many ids may answer `true`. A heading that finds its id
+    /// reserved moves on to `-1`, `-2` and so on, and an unbounded family
+    /// such as every `fn-<digits>` would never let it stop.
+    fn reserves_id(&self, _id: &str, _footnotes: usize) -> bool {
+        false
+    }
+
     /// A block quote, or a GFM callout when `kind` is present.
     fn quote(&mut self, kind: Option<BlockQuoteKind>, body: &str) -> String;
 
@@ -256,7 +267,13 @@ pub fn walk<O: Output>(
     links: &[ResolvedLink],
     output: &mut O,
 ) -> (String, Vec<Warning>) {
-    let mut walker = Walker::new(links, output);
+    // Footnote definitions are counted before the walk because body headings
+    // take their ids on the way, and an output reserves the ids of the
+    // footnotes it numbers.
+    let definitions = Parser::new_ext(body, parser_options())
+        .filter(|event| matches!(event, Event::Start(Tag::FootnoteDefinition(_))))
+        .count();
+    let mut walker = Walker::new(links, output, definitions);
     // The offset iterator carries each event's byte span. The span identifies
     // note links: a Link event's span is matched against `ResolvedLink::range`
     // (both index the same body bytes) to distinguish note links from ordinary
@@ -396,10 +413,29 @@ struct Walker<'a, O: Output> {
     heading_text: Option<String>,
     /// Every heading id handed out so far, so a repeated one gets a suffix.
     heading_ids: Vec<String>,
+    /// The number of footnote definitions in the body.
+    definitions: usize,
+    /// Wraps the placeholder of a heading inside a footnote definition, as
+    /// `nonce` wraps a footnote reference; a separate token, since a label
+    /// could spell any footnote placeholder.
+    heading_nonce: String,
+    /// The headings inside footnote definitions, waiting for their
+    /// definition to be drawn. A heading takes its id only then, so a
+    /// definition nobody draws, or one a later definition of the same label
+    /// replaced, leaves no id behind.
+    deferred_headings: Vec<DeferredHeading>,
+}
+
+/// A heading inside a footnote definition: its rendered inline content and
+/// its plain text, with the id still to come.
+struct DeferredHeading {
+    level: HeadingLevel,
+    text: String,
+    body: String,
 }
 
 impl<'a, O: Output> Walker<'a, O> {
-    fn new(links: &'a [ResolvedLink], output: &'a mut O) -> Self {
+    fn new(links: &'a [ResolvedLink], output: &'a mut O, definitions: usize) -> Self {
         // GFM extended autolinks cover scheme URLs, `www.` URLs, and emails.
         // `linkify` finds scheme URLs and emails out of the box; enabling
         // `www.` needs `url_must_have_scheme(false)`, which also matches bare
@@ -436,6 +472,9 @@ impl<'a, O: Output> Walker<'a, O> {
             image_depth: 0,
             heading_text: None,
             heading_ids: Vec::new(),
+            definitions,
+            heading_nonce: format!("\u{0}ntropy-heading-{}\u{0}", ulid::Ulid::generate()),
+            deferred_headings: Vec::new(),
         }
     }
 
@@ -452,12 +491,55 @@ impl<'a, O: Output> Walker<'a, O> {
         let base = slug(text);
         let mut id = base.clone();
         let mut suffix = 0;
-        while self.heading_ids.contains(&id) {
+        while self.heading_ids.contains(&id) || self.output.reserves_id(&id, self.definitions) {
             suffix += 1;
             id = format!("{base}-{suffix}");
         }
         self.heading_ids.push(id.clone());
         id
+    }
+
+    /// Whether the walk is inside a footnote definition, whatever block of it.
+    fn in_footnote_definition(&self) -> bool {
+        self.stack
+            .iter()
+            .any(|frame| matches!(frame.kind, FrameKind::FootnoteDefinition { .. }))
+    }
+
+    /// The placeholder of the deferred heading `index`.
+    fn heading_placeholder(&self, index: usize) -> String {
+        format!("{n}{index}{n}", n = self.heading_nonce)
+    }
+
+    /// `content` with every deferred heading it holds turned into a rendered
+    /// heading. Each takes its id now, from the same pool as the body's
+    /// headings, so the ids follow the order the page shows them in.
+    fn draw_deferred_headings(&mut self, content: &str) -> String {
+        let open = self.heading_nonce.clone();
+        let mut drawn = String::with_capacity(content.len());
+        let mut rest = content;
+        while let Some(at) = rest.find(&open) {
+            drawn.push_str(&rest[..at]);
+            let after = &rest[at + open.len()..];
+            let end = after
+                .find(&open)
+                .expect("a heading placeholder is closed by its nonce");
+            let index: usize = after[..end]
+                .parse()
+                .expect("a heading placeholder holds the index of a deferred heading");
+            let deferred = &self.deferred_headings[index];
+            let (level, text, body) =
+                (deferred.level, deferred.text.clone(), deferred.body.clone());
+            let id = self.heading_id(&text);
+            let rendered = self.output.heading(&Heading { level, id, text }, &body);
+            drawn.push_str(&rendered);
+            // The placeholder stood in a block of its own, newline included.
+            rest = after[end + open.len()..]
+                .strip_prefix('\n')
+                .unwrap_or(&after[end + open.len()..]);
+        }
+        drawn.push_str(rest);
+        drawn
     }
 
     /// The placeholder emitted at a footnote reference and patched at the end
@@ -481,15 +563,19 @@ impl<'a, O: Output> Walker<'a, O> {
         // appear once the enclosing definition is inlined; the pass count
         // bounds any self-referential cycle.
         let mut substitutions: Vec<(String, String)> = Vec::new();
-        let mut seen: Vec<&String> = Vec::new();
-        for label in &self.footnote_references {
+        let mut seen: Vec<String> = Vec::new();
+        for label in self.footnote_references.clone() {
             if seen.contains(&label) {
                 continue;
             }
-            seen.push(label);
+            seen.push(label.clone());
+            let label = &label;
             let placeholder = self.footnote_placeholder(label);
-            let replacement = match self.footnote_definitions.get(label) {
-                Some(content) => self.output.footnote(content),
+            let replacement = match self.footnote_definitions.get(label).cloned() {
+                Some(content) => {
+                    let content = self.draw_deferred_headings(&content);
+                    self.output.footnote(&content)
+                }
                 None => self.output.text(&format!("[^{label}]")),
             };
             substitutions.push((placeholder, replacement));
@@ -880,6 +966,14 @@ impl<'a, O: Output> Walker<'a, O> {
                     && level == HeadingLevel::H1
                     && self.output.dropped_title() == Some(text.trim())
                 {
+                    return;
+                }
+                if self.in_footnote_definition() {
+                    let index = self.deferred_headings.len();
+                    self.deferred_headings
+                        .push(DeferredHeading { level, text, body });
+                    let placeholder = self.heading_placeholder(index);
+                    self.append_block(&format!("{placeholder}\n"));
                     return;
                 }
                 let id = self.heading_id(&text);
@@ -1607,6 +1701,47 @@ mod tests {
             trace("# A\n\n# A\n\n# A-1\n\n# A"),
             "(h1 #a \"A\" A)\n\n(h1 #a-1 \"A\" A)\n\n(h1 #a-1-1 \"A-1\" A-1)\n\n(h1 #a-2 \"A\" A)\n"
         );
+    }
+
+    #[test]
+    fn a_heading_in_an_unreferenced_footnote_definition_gets_no_id() {
+        // The definition is never drawn, so its heading takes no id and uses
+        // up no suffix: the second body heading is `a-1`, not `a-2`.
+        assert_eq!(
+            trace("# A\n\n[^1]: note\n\n    ## A\n\n# A"),
+            "(h1 #a \"A\" A)\n\n(h1 #a-1 \"A\" A)\n"
+        );
+    }
+
+    #[test]
+    fn a_heading_in_a_drawn_footnote_definition_takes_its_id_after_the_body_headings() {
+        // The definition comes first in the source and is drawn last, so the
+        // body heading keeps `a`.
+        let mut output = Trace {
+            section: true,
+            ..Trace::default()
+        };
+        let (out, _) = walk(
+            "[^1]: note\n\n    ## A\n\n# A\n\ntext[^1]",
+            &[],
+            &mut output,
+        );
+        assert!(out.starts_with("(h1 #a \"A\" A)\n"), "{out}");
+        assert!(out.contains("(h2 #a-1 \"A\" A)"), "{out}");
+    }
+
+    #[test]
+    fn only_the_surviving_definition_of_a_repeated_label_draws_its_headings() {
+        let mut output = Trace {
+            section: true,
+            ..Trace::default()
+        };
+        let input = "[^1]: first\n\n    ## X\n\n[^1]: second\n\n    ## X\n\ntext[^1]";
+        let (out, _) = walk(input, &[], &mut output);
+        // The trace shows the one drawn heading twice, in the reference and
+        // in the section; a second heading would have taken `x-1`.
+        assert!(out.contains("(h2 #x "), "{out}");
+        assert!(!out.contains("#x-1"), "{out}");
     }
 
     #[test]

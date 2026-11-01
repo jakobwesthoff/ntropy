@@ -19,7 +19,7 @@
 //! with the reserved name `default` meaning the built-in theme from either
 //! source ([`crate::render::theme::select`]).
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::sync::OnceLock;
 
@@ -89,6 +89,14 @@ impl SiteTheme {
     /// carries.
     pub fn sprite(&self) -> String {
         icons::sprite(&self.icons)
+    }
+
+    /// The ids of the sprite's symbols, which a page holds besides its note.
+    pub fn icon_ids(&self) -> BTreeSet<String> {
+        self.icons
+            .keys()
+            .map(|name| format!("{}{name}", icons::ID_PREFIX))
+            .collect()
     }
 }
 

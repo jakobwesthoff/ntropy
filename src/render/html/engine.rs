@@ -13,6 +13,8 @@
 //! (ADR 0044). The site export builds its navigation around the same
 //! converted body.
 
+use std::collections::BTreeSet;
+
 use super::emitter::{self, Targets};
 use super::frontmatter;
 use crate::id::Id;
@@ -50,6 +52,8 @@ struct DocumentTargets<'a> {
     /// The note's directory as a root-absolute path within the vault.
     note_dir: &'a str,
     scope: &'a ExportScope,
+    /// The ids of the sprite's symbols the page inlines.
+    icon_ids: &'a BTreeSet<String>,
 }
 
 impl Targets for DocumentTargets<'_> {
@@ -62,6 +66,10 @@ impl Targets for DocumentTargets<'_> {
             Some(path) => format!("{}/{FILES_DIR}{path}", self.files),
             None => dest.to_string(),
         }
+    }
+
+    fn reserved_id(&self, id: &str) -> bool {
+        self.icon_ids.contains(id)
     }
 }
 
@@ -83,10 +91,13 @@ impl Renderer for Html {
         // them must not mirror them into themselves.
         let artifact = ctx.output_path().to_path_buf();
         let scope = ExportScope::new(&doc.vault_root, &[&doc.path], &[&artifact, &files_path]);
+        let theme = SiteTheme::selected(self.settings.theme.as_ref());
+        let icon_ids = theme.icon_ids();
         let targets = DocumentTargets {
             files: &files,
             note_dir: &note_dir,
             scope: &scope,
+            icon_ids: &icon_ids,
         };
         let emitted = emitter::emit(&doc.body, &doc.links, &targets, Some(&doc.title));
         for warning in &emitted.warnings {
@@ -95,7 +106,6 @@ impl Renderer for Html {
 
         // The theme's files, the icons and the templates excepted: a vault
         // theme's from its directory, the built-in theme's from the binary.
-        let theme = SiteTheme::selected(self.settings.theme.as_ref());
         let templates = Templates::new(&theme)?;
         match &self.settings.theme_dir {
             Some(dir) => {
@@ -510,6 +520,38 @@ mod tests {
             "{joined}"
         );
         assert_eq!(ctx.warnings.len(), 2, "{joined}");
+    }
+
+    #[test]
+    fn the_document_chrome_holds_only_the_icons_as_ids() {
+        let document = doc("Ids", "{}", "plain text\n", Vec::new());
+        let mut ctx = FakeContext::new();
+        Html::new(DocumentSettings::default())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        let page = ctx.page();
+        let icons = SiteTheme::builtin().icon_ids();
+        for id in page
+            .split("id=\"")
+            .skip(1)
+            .filter_map(|rest| rest.split('"').next())
+        {
+            assert!(icons.contains(id), "`{id}` is an id no heading avoids");
+        }
+    }
+
+    #[test]
+    fn a_document_reserves_its_icons_but_not_the_sidebar() {
+        // The document template has no sidebar, so a heading may be called
+        // `sidebar`; the sprite is inlined, so `icon-tag` is taken.
+        let document = doc("Ids", "{}", "## Sidebar\n\n## Icon tag\n", Vec::new());
+        let mut ctx = FakeContext::new();
+        Html::new(DocumentSettings::default())
+            .render(&document, &mut ctx)
+            .expect("render succeeds");
+        let page = ctx.page();
+        assert!(page.contains("<h2 id=\"sidebar\">Sidebar"), "{page}");
+        assert!(page.contains("<h2 id=\"icon-tag-1\">Icon tag"), "{page}");
     }
 
     #[test]

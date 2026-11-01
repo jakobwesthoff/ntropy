@@ -24,6 +24,14 @@ change in any release
   target's page, so `--strict` fails on it. `#top` is always valid, an
   anchor is compared after percent-decoding, and an `id` set by raw HTML in
   the target is not seen.
+- A heading's id no longer equals an id the page uses for something else.
+  A heading called "Sidebar" is `sidebar-1` on a site page, where `#sidebar`
+  is the navigation, and a heading that would take an `icon-<name>` of the
+  icon sprite or a footnote's `fn-<n>` or `fnref-<n>` takes the next free
+  suffix too. A heading inside a footnote definition that is never shown, or
+  that a later definition of the same label replaces, no longer takes an id,
+  a suffix or an outline entry; a shown one takes its id after the headings
+  of the body. Ids of pages that had such a heading change.
 - A link or image to a file in the vault with a fragment, such as
   `[the spec](spec.pdf#page=2)`, copies the file and keeps the fragment in
   `site` and `render --to html`. Both used to look for a file with the
