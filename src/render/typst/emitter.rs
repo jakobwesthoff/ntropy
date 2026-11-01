@@ -17,7 +17,12 @@
 //! `#callout(kind:)`, tables as `#table`, thematic breaks as `#line`.
 //!
 //! Inline constructs, all emitted as Typst function calls so that no
-//! user-derived character is ever load-bearing markup:
+//! user-derived character is ever load-bearing markup. Every call the emitter
+//! leaves in running text ends in `;`, which the parser consumes: without it a
+//! `(` in the note's text right after the call reads as more arguments, and a
+//! `;` there disappears. A call that emitter syntax follows directly
+//! (`#notelink` inside the link body, `#footnote` before its label) has none,
+//! and `#task` ends in a space.
 //!
 //! - Emphasis, strong, and strikethrough wrap their content in `#emph[…]`,
 //!   `#strong[…]`, and `#strike[…]`; the wrappers nest.
@@ -115,7 +120,7 @@ impl Output for TypstOutput<'_> {
         let mut writer = TypstWriter::new();
         writer.syntax("#raw(\"");
         writer.string_literal(code);
-        writer.syntax("\")");
+        writer.syntax("\");");
         writer.finish()
     }
 
@@ -124,7 +129,7 @@ impl Output for TypstOutput<'_> {
     }
 
     fn hard_break(&mut self) -> String {
-        "#linebreak()".to_string()
+        "#linebreak();".to_string()
     }
 
     /// The prelude defines `task`, which draws one identical checkbox for both
@@ -144,7 +149,7 @@ impl Output for TypstOutput<'_> {
             InlineStyle::Strong => "strong",
             InlineStyle::Strike => "strike",
         };
-        format!("#{call}[{inner}]")
+        format!("#{call}[{inner}];")
     }
 
     fn link(&mut self, dest: &str, inner: &str) -> String {
@@ -179,7 +184,7 @@ impl Output for TypstOutput<'_> {
             NoteLabel::Title(title) => writer.markup_text(title),
             NoteLabel::Inner(inner) => writer.raw(inner),
         }
-        writer.syntax("]]");
+        writer.syntax("]];");
         writer.finish()
     }
 
@@ -198,7 +203,7 @@ impl Output for TypstOutput<'_> {
             writer.string_literal(dest);
             writer.syntax("\")[");
             writer.markup_text(label);
-            writer.syntax("]");
+            writer.syntax("];");
             warnings.push(Warning::new(format!(
                 "remote image cannot be embedded; linked instead: {dest}"
             )));
@@ -208,7 +213,7 @@ impl Output for TypstOutput<'_> {
             let path = dest.split_once('#').map_or(dest, |(path, _)| path);
             writer.syntax("#image(\"");
             writer.string_literal(&resolve_asset(self.asset_base, path));
-            writer.syntax("\")");
+            writer.syntax("\");");
         }
         writer.finish()
     }
@@ -481,7 +486,7 @@ fn wrap_link(dest: &str, inner: &str) -> String {
     writer.string_literal(dest);
     writer.syntax("\")[");
     writer.syntax(inner);
-    writer.syntax("]");
+    writer.syntax("];");
     writer.finish()
 }
 
@@ -573,7 +578,7 @@ mod tests {
     #[test]
     fn hard_break_becomes_a_linebreak_call() {
         // Two trailing spaces force a hard break.
-        assert_eq!(body("one  \ntwo"), "one#linebreak()two\n");
+        assert_eq!(body("one  \ntwo"), "one#linebreak();two\n");
     }
 
     // =====================================================================
@@ -819,12 +824,15 @@ mod tests {
 
     #[test]
     fn emphasis_strong_and_strike_become_function_calls() {
-        assert_eq!(body("*a* **b** ~~c~~"), "#emph[a] #strong[b] #strike[c]\n");
+        assert_eq!(
+            body("*a* **b** ~~c~~"),
+            "#emph[a]; #strong[b]; #strike[c];\n"
+        );
     }
 
     #[test]
     fn underscore_emphasis_matches_asterisk_emphasis() {
-        assert_eq!(body("_a_ __b__"), "#emph[a] #strong[b]\n");
+        assert_eq!(body("_a_ __b__"), "#emph[a]; #strong[b];\n");
     }
 
     #[test]
@@ -833,7 +841,7 @@ mod tests {
         // stack without the delimiters ever reaching the output.
         assert_eq!(
             body("**bold _italic ~~struck~~_**"),
-            "#strong[bold #emph[italic #strike[struck]]]\n"
+            "#strong[bold #emph[italic #strike[struck];];];\n"
         );
     }
 
@@ -841,14 +849,14 @@ mod tests {
     fn adjacent_styled_words_stay_separate_calls() {
         // Strong immediately followed by strikethrough, no separator: two
         // independent calls with nothing between them.
-        assert_eq!(body("**a**~~b~~"), "#strong[a]#strike[b]\n");
+        assert_eq!(body("**a**~~b~~"), "#strong[a];#strike[b];\n");
     }
 
     #[test]
     fn styled_text_still_escapes_markup_active_characters() {
         // The inner text passes through the markup channel, so a `#` inside an
         // emphasis is escaped just as it is in plain prose.
-        assert_eq!(body("*a#b*"), "#emph[a\\#b]\n");
+        assert_eq!(body("*a#b*"), "#emph[a\\#b];\n");
     }
 
     // =====================================================================
@@ -857,20 +865,20 @@ mod tests {
 
     #[test]
     fn inline_code_becomes_raw_with_string_escaping() {
-        assert_eq!(body("`plain`"), "#raw(\"plain\")\n");
+        assert_eq!(body("`plain`"), "#raw(\"plain\");\n");
     }
 
     #[test]
     fn inline_code_escapes_quotes_and_backslashes() {
         // The two string-literal escapes apply; the markup set does not.
-        assert_eq!(body(r#"`a "b" \c`"#), "#raw(\"a \\\"b\\\" \\\\c\")\n");
+        assert_eq!(body(r#"`a "b" \c`"#), "#raw(\"a \\\"b\\\" \\\\c\");\n");
     }
 
     #[test]
     fn inline_code_with_backticks_inside() {
         // A double-backtick span carries a literal backtick, which needs no
         // escaping inside a Typst string.
-        assert_eq!(body("`` a`b ``"), "#raw(\"a`b\")\n");
+        assert_eq!(body("`` a`b ``"), "#raw(\"a`b\");\n");
     }
 
     // =====================================================================
@@ -881,17 +889,17 @@ mod tests {
     fn external_link() {
         assert_eq!(
             body("[label](https://example.com)"),
-            "#link(\"https://example.com\")[label]\n"
+            "#link(\"https://example.com\")[label];\n"
         );
     }
 
     #[test]
     fn relative_and_anchor_and_mailto_links_pass_the_target_verbatim() {
-        assert_eq!(body("[a](./notes/b.md)"), "#link(\"./notes/b.md\")[a]\n");
-        assert_eq!(body("[a](#section)"), "#link(\"#section\")[a]\n");
+        assert_eq!(body("[a](./notes/b.md)"), "#link(\"./notes/b.md\")[a];\n");
+        assert_eq!(body("[a](#section)"), "#link(\"#section\")[a];\n");
         assert_eq!(
             body("[a](mailto:x@example.org)"),
-            "#link(\"mailto:x@example.org\")[a]\n"
+            "#link(\"mailto:x@example.org\")[a];\n"
         );
     }
 
@@ -899,7 +907,7 @@ mod tests {
     fn link_destination_with_a_quote_is_string_escaped() {
         assert_eq!(
             body(r#"[a](https://example.com/?q="x")"#),
-            "#link(\"https://example.com/?q=\\\"x\\\"\")[a]\n"
+            "#link(\"https://example.com/?q=\\\"x\\\"\")[a];\n"
         );
     }
 
@@ -909,7 +917,7 @@ mod tests {
         // punctuation is escaped.
         assert_eq!(
             body("<https://example.com>"),
-            "#link(\"https://example.com\")[https\\:\\/\\/example\\.com]\n"
+            "#link(\"https://example.com\")[https\\:\\/\\/example\\.com];\n"
         );
     }
 
@@ -920,19 +928,19 @@ mod tests {
         // it, so the emitter adds it while the label stays as written.
         assert_eq!(
             body("<foo@example.org>"),
-            "#link(\"mailto:foo@example.org\")[foo\\@example\\.org]\n"
+            "#link(\"mailto:foo@example.org\")[foo\\@example\\.org];\n"
         );
     }
 
     #[test]
     fn link_label_carrying_markup_keeps_the_markup() {
-        assert_eq!(body("[*a* b](u)"), "#link(\"u\")[#emph[a] b]\n");
+        assert_eq!(body("[*a* b](u)"), "#link(\"u\")[#emph[a]; b];\n");
     }
 
     #[test]
     fn link_inside_emphasis_and_emphasis_inside_link() {
-        assert_eq!(body("*[a](u)*"), "#emph[#link(\"u\")[a]]\n");
-        assert_eq!(body("[**a**](u)"), "#link(\"u\")[#strong[a]]\n");
+        assert_eq!(body("*[a](u)*"), "#emph[#link(\"u\")[a];];\n");
+        assert_eq!(body("[**a**](u)"), "#link(\"u\")[#strong[a];];\n");
     }
 
     // =====================================================================
@@ -949,7 +957,7 @@ mod tests {
         let links = [note_link(4..21, Some(("Target Title", "target-title")))];
         assert_eq!(
             emit(input, &links, ASSET_BASE, None).0,
-            "See #link(\"target-title.pdf\")[#notelink[Target Title]] end\\.\n"
+            "See #link(\"target-title.pdf\")[#notelink[Target Title]]; end\\.\n"
         );
     }
 
@@ -962,7 +970,7 @@ mod tests {
         let links = [note_link(0..7, Some(("A Renamed Note", "old-slug")))];
         assert_eq!(
             emit(input, &links, ASSET_BASE, None).0,
-            "#link(\"old-slug.pdf\")[#notelink[A Renamed Note]]\n"
+            "#link(\"old-slug.pdf\")[#notelink[A Renamed Note]];\n"
         );
     }
 
@@ -991,7 +999,7 @@ mod tests {
         let input = "[the **tmux** part](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#inside-tmux)";
         assert_eq!(
             emit(input, &resolved_links(input), ASSET_BASE, None).0,
-            "#link(\"target-title.pdf\")[#notelink[the #strong[tmux] part]]\n"
+            "#link(\"target-title.pdf\")[#notelink[the #strong[tmux]; part]];\n"
         );
     }
 
@@ -1000,7 +1008,7 @@ mod tests {
         let input = "[ ](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md#inside-tmux)";
         assert_eq!(
             emit(input, &resolved_links(input), ASSET_BASE, None).0,
-            "#link(\"target-title.pdf\")[#notelink[Target Title]]\n"
+            "#link(\"target-title.pdf\")[#notelink[Target Title]];\n"
         );
     }
 
@@ -1012,7 +1020,7 @@ mod tests {
         let links = [note_link(0..22, Some(("The Title", "the-title")))];
         assert_eq!(
             emit(input, &links, ASSET_BASE, None).0,
-            "#link(\"the-title.pdf\")[#notelink[The Title]]\n"
+            "#link(\"the-title.pdf\")[#notelink[The Title]];\n"
         );
     }
 
@@ -1022,7 +1030,7 @@ mod tests {
         let links = [note_link(0..7, Some(("a*b [c] #d", "a-b-c-d")))];
         assert_eq!(
             emit(input, &links, ASSET_BASE, None).0,
-            "#link(\"a-b-c-d.pdf\")[#notelink[a\\*b \\[c\\] \\#d]]\n"
+            "#link(\"a-b-c-d.pdf\")[#notelink[a\\*b \\[c\\] \\#d]];\n"
         );
     }
 
@@ -1033,7 +1041,7 @@ mod tests {
         let links = [note_link(0..20, None)];
         assert_eq!(
             emit(input, &links, ASSET_BASE, None).0,
-            "#emph[display] text\n"
+            "#emph[display]; text\n"
         );
     }
 
@@ -1051,7 +1059,7 @@ mod tests {
         // Same input as the resolved case, but an empty table: the link falls
         // back to an ordinary `#link`, not a note link.
         let input = "See [my note](abc123) end.";
-        assert_eq!(body(input), "See #link(\"abc123\")[my note] end\\.\n");
+        assert_eq!(body(input), "See #link(\"abc123\")[my note]; end\\.\n");
     }
 
     // =====================================================================
@@ -1062,7 +1070,7 @@ mod tests {
     fn local_image_becomes_an_image_call_without_alt() {
         assert_eq!(
             body("![alt text](pics/x.png)"),
-            "#image(\"/all-notes/pics/x.png\")\n"
+            "#image(\"/all-notes/pics/x.png\");\n"
         );
     }
 
@@ -1070,20 +1078,20 @@ mod tests {
     fn an_image_fragment_is_left_out_of_the_path() {
         // A fragment selects nothing in an embedded image, and typst would
         // look for a file with the `#` in its name.
-        assert_eq!(body("![](x.svg#icon)"), "#image(\"/all-notes/x.svg\")\n");
+        assert_eq!(body("![](x.svg#icon)"), "#image(\"/all-notes/x.svg\");\n");
     }
 
     #[test]
     fn a_link_to_a_local_file_keeps_its_fragment() {
         assert_eq!(
             body("[spec](spec.pdf#page=2)"),
-            "#link(\"spec.pdf#page=2\")[spec]\n"
+            "#link(\"spec.pdf#page=2\")[spec];\n"
         );
     }
 
     #[test]
     fn image_with_empty_alt() {
-        assert_eq!(body("![](x.png)"), "#image(\"/all-notes/x.png\")\n");
+        assert_eq!(body("![](x.png)"), "#image(\"/all-notes/x.png\");\n");
     }
 
     #[test]
@@ -1096,7 +1104,7 @@ mod tests {
             ASSET_BASE,
             None,
         );
-        assert_eq!(out, "#link(\"https://h/x.png\")[bold and code]\n");
+        assert_eq!(out, "#link(\"https://h/x.png\")[bold and code];\n");
         assert_eq!(warnings.len(), 1);
     }
 
@@ -1175,7 +1183,7 @@ mod tests {
     #[test]
     fn remote_image_degrades_to_a_link_with_a_warning() {
         let (out, warnings) = emit("![caption](http://host/pic.png)", &[], ASSET_BASE, None);
-        assert_eq!(out, "#link(\"http://host/pic.png\")[caption]\n");
+        assert_eq!(out, "#link(\"http://host/pic.png\")[caption];\n");
         assert_eq!(
             warnings[0].message,
             "remote image cannot be embedded; linked instead: http://host/pic.png"
@@ -1187,7 +1195,7 @@ mod tests {
         let (out, _) = emit("![](https://host/pic.png)", &[], ASSET_BASE, None);
         assert_eq!(
             out,
-            "#link(\"https://host/pic.png\")[https\\:\\/\\/host\\/pic\\.png]\n"
+            "#link(\"https://host/pic.png\")[https\\:\\/\\/host\\/pic\\.png];\n"
         );
     }
 
@@ -1196,7 +1204,7 @@ mod tests {
         // The image renders its degraded or local form inside the link label.
         assert_eq!(
             body("[![alt](local.png)](https://target)"),
-            "#link(\"https://target\")[#image(\"/all-notes/local.png\")]\n"
+            "#link(\"https://target\")[#image(\"/all-notes/local.png\");];\n"
         );
     }
 
@@ -1320,6 +1328,92 @@ mod tests {
     }
 
     // =====================================================================
+    // Text right after an inline call
+    // =====================================================================
+    //
+    // Typst reads a `(` after `#func[...]` or `#func(...)` as more arguments
+    // of the call, and a `[` as one more content argument. Every inline call
+    // therefore ends in `;`, which the markup parser consumes. Each case below
+    // is a test of its own so that a failure names its construct.
+
+    /// One test per construct and following character: `$input` emits as
+    /// `$expected`.
+    macro_rules! call_is_closed {
+        ($($name:ident: $input:expr => $expected:expr;)*) => {
+            $(
+                #[test]
+                fn $name() {
+                    assert_eq!(body($input), $expected);
+                }
+            )*
+        };
+    }
+
+    call_is_closed! {
+        strong_before_a_parenthesis: "**b**(x)" => "#strong[b];(x)\n";
+        strong_before_a_bracket: "**b**[x]" => "#strong[b];\\[x\\]\n";
+        emph_before_a_parenthesis: "*e*(x)" => "#emph[e];(x)\n";
+        emph_before_a_bracket: "*e*[x]" => "#emph[e];\\[x\\]\n";
+        strike_before_a_parenthesis: "~~s~~(x)" => "#strike[s];(x)\n";
+        strike_before_a_bracket: "~~s~~[x]" => "#strike[s];\\[x\\]\n";
+        link_before_a_parenthesis: "[l](https://example.org)(x)"
+            => "#link(\"https://example.org\")[l];(x)\n";
+        link_before_a_bracket: "[l](https://example.org)[x]"
+            => "#link(\"https://example.org\")[l];\\[x\\]\n";
+        autolink_before_a_parenthesis: "<https://example.org>(x)"
+            => "#link(\"https://example.org\")[https\\:\\/\\/example\\.org];(x)\n";
+        autolink_before_a_bracket: "<https://example.org>[x]"
+            => "#link(\"https://example.org\")[https\\:\\/\\/example\\.org];\\[x\\]\n";
+        inline_code_before_a_parenthesis: "`c`(x)" => "#raw(\"c\");(x)\n";
+        inline_code_before_a_bracket: "`c`[x]" => "#raw(\"c\");\\[x\\]\n";
+        hard_break_before_a_parenthesis: "a\\\n(x)" => "a#linebreak();(x)\n";
+        hard_break_before_a_bracket: "a\\\n[x]" => "a#linebreak();\\[x\\]\n";
+        image_before_a_parenthesis: "![](x.png)(y)" => "#image(\"/all-notes/x.png\");(y)\n";
+        image_before_a_bracket: "![](x.png)[y]" => "#image(\"/all-notes/x.png\");\\[y\\]\n";
+        remote_image_before_a_parenthesis: "![alt](https://h/x.png)(y)"
+            => "#link(\"https://h/x.png\")[alt];(y)\n";
+        remote_image_before_a_bracket: "![alt](https://h/x.png)[y]"
+            => "#link(\"https://h/x.png\")[alt];\\[y\\]\n";
+    }
+
+    #[test]
+    fn note_link_before_a_parenthesis() {
+        let input = "[l](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md)(x)";
+        assert_eq!(
+            emit(input, &resolved_links(input), ASSET_BASE, None).0,
+            "#link(\"target-title.pdf\")[#notelink[Target Title]];(x)\n"
+        );
+    }
+
+    #[test]
+    fn note_link_before_a_bracket() {
+        let input = "[l](01ARZ3NDEKTSV4RRFFQ69G5FAV-old.md)[x]";
+        assert_eq!(
+            emit(input, &resolved_links(input), ASSET_BASE, None).0,
+            "#link(\"target-title.pdf\")[#notelink[Target Title]];\\[x\\]\n"
+        );
+    }
+
+    #[test]
+    fn a_task_marker_needs_no_terminator_before_a_parenthesis() {
+        // The space that follows the marker ends the expression, so `task`
+        // is the one inline call without a `;`.
+        assert_eq!(body("- [ ] (x)"), "- #task(done: false) (x)\n");
+    }
+
+    #[test]
+    fn a_checked_task_marker_needs_no_terminator_before_a_parenthesis() {
+        assert_eq!(body("- [x] (x)"), "- #task(done: true) (x)\n");
+    }
+
+    #[test]
+    fn a_semicolon_in_the_text_after_a_call_stays_text() {
+        // The call's own `;` is consumed by the parser; the one in the note's
+        // text is a second character and stays.
+        assert_eq!(body("**b**;x"), "#strong[b];;x\n");
+    }
+
+    // =====================================================================
     // Autolinks (linkify over text)
     // =====================================================================
 
@@ -1327,7 +1421,7 @@ mod tests {
     fn bare_url_mid_sentence_is_linked() {
         assert_eq!(
             body("visit https://example.com now"),
-            "visit #link(\"https://example.com\")[https\\:\\/\\/example\\.com] now\n"
+            "visit #link(\"https://example.com\")[https\\:\\/\\/example\\.com]; now\n"
         );
     }
 
@@ -1337,7 +1431,7 @@ mod tests {
         // target while the label stays as written.
         assert_eq!(
             body("see www.example.com today"),
-            "see #link(\"https://www.example.com\")[www\\.example\\.com] today\n"
+            "see #link(\"https://www.example.com\")[www\\.example\\.com]; today\n"
         );
     }
 
@@ -1347,7 +1441,7 @@ mod tests {
         // ordinary escaped text after the link.
         assert_eq!(
             body("end at https://example.com."),
-            "end at #link(\"https://example.com\")[https\\:\\/\\/example\\.com]\\.\n"
+            "end at #link(\"https://example.com\")[https\\:\\/\\/example\\.com];\\.\n"
         );
     }
 
@@ -1363,7 +1457,7 @@ mod tests {
         // The label text is not autolinked, so the inner URL stays plain.
         assert_eq!(
             body("[https://example.com](https://target)"),
-            "#link(\"https://target\")[https\\:\\/\\/example\\.com]\n"
+            "#link(\"https://target\")[https\\:\\/\\/example\\.com];\n"
         );
     }
 
@@ -1371,7 +1465,7 @@ mod tests {
     fn a_url_inside_inline_code_is_untouched() {
         assert_eq!(
             body("`https://example.com`"),
-            "#raw(\"https://example.com\")\n"
+            "#raw(\"https://example.com\");\n"
         );
     }
 
@@ -1379,7 +1473,7 @@ mod tests {
     fn an_email_in_text_becomes_a_mailto_link() {
         assert_eq!(
             body("mail me at foo@example.org please"),
-            "mail me at #link(\"mailto:foo@example.org\")[foo\\@example\\.org] please\n",
+            "mail me at #link(\"mailto:foo@example.org\")[foo\\@example\\.org]; please\n",
         );
     }
 
@@ -1627,8 +1721,7 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
         // A title is plain text, so one that holds markup never matches.
         assert_eq!(
             body_titled("# Rust *Tips*\n", "Rust *Tips*"),
-            "= Rust #emph[Tips]
-"
+            "= Rust #emph[Tips];\n"
         );
     }
 

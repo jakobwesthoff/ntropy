@@ -141,11 +141,21 @@ set surface as reviewable snapshot diffs.
 ### Structural guarantee
 
 The emitter never uses `*` or `_` as its own delimiters: span styling is
-emitted as function calls (`#emph[...]`, `#strong[...]`, `#strike[...]`,
-`#raw("...")`, `#link(...)[...]`). Since those characters are always
+emitted as function calls (`#emph[...];`, `#strong[...];`, `#strike[...];`,
+`#raw("...");`, `#link(...)[...];`). Since those characters are always
 escaped in markup text, an emitted delimiter could otherwise pair with an
 escaped occurrence in adjacent note text; function-call brackets have no
-such interaction. Markup shorthand is reserved for constructs the emitter
+such interaction.
+
+The one text character that does interact with a call is the `(` or `;`
+right after it: `#strong[b](x)` reads `(x)` as more arguments of the call,
+and a `;` is swallowed as the end of the expression. Every call the emitter
+leaves in running text therefore ends in `;`, which the parser consumes, so
+the characters that follow stay text. A call that emitter syntax follows
+directly (`#notelink` inside the link body, `#footnote` before its label)
+has no `;`, and `#task(...)` ends in a space. The `;` needs no escape in
+markup text for the same reason. `[` and `.` after a call are escaped like
+any markup character. Markup shorthand is reserved for constructs the emitter
 anchors to line starts itself (headings, list items, code fences).
 
 ## Element mapping
@@ -157,26 +167,26 @@ the mapping grows as the bottom-up discussion settles further constructs.
 |---|---|
 | Paragraph | blank-line separation (see below) |
 | Heading level n | `=`×n, space, escaped text, newline (Markdown caps at 6; no clamping needed). A level-one heading that opens the body, as the first block the page shows, and reads exactly the note's title is skipped: `note` draws the title already, as text rather than as a heading. The PDF therefore has no outline entry for it, and a note with no other heading has no outline. Raw HTML the output drops does not count as a shown block. A theme that numbers headings counts a note's sections from `0.1` when the body opened with its title |
-| Emphasis / strong / strikethrough | `#emph[...]` / `#strong[...]` / `#strike[...]` |
-| Inline code | `#raw("...")`, string-literal escaping — renders identically to backtick markup (visually verified, typst 0.15) |
+| Emphasis / strong / strikethrough | `#emph[...];` / `#strong[...];` / `#strike[...];` |
+| Inline code | `#raw("...");`, string-literal escaping — renders identically to backtick markup (visually verified, typst 0.15) |
 | Code block | content-sized fence, language tag, verbatim body. The language tag is the info string's first whitespace-delimited token, and only when it is identifier-shaped (alphanumeric, `-`, `_`); anything else yields no tag, since the tag is spliced after the opening fence unescaped |
 | Bullet list item | `- ` at line start |
 | Ordered list item | `<n>. ` markers — markup carries explicit start numbers, so `6.` survives without `#enum(start:)` |
 | Nested lists | child items indented under their parent, so Typst sees the nesting |
 | Block quote | `#quote(block: true)[...]`, trailing newline |
 | Callout (`> [!NOTE]` …) | `#callout(kind: "note")[...]`, defined by the prelude (see below) |
-| Link (external URL) | `#link("url")[escaped label]` |
-| Bare URL in text (`https://...`, `www....`) | detected by the emitter with the `linkify` crate over text events (GFM autolink rules; pulldown-cmark has no option for this — verified) and emitted as `#link("url")[url]`; a `www.` URL gains an `https://` scheme in the target |
-| Email autolink (`<user@host>` or bare in text) | `#link("mailto:user@host")[user@host]`; the `mailto:` scheme is added so the link is actionable |
-| Note link, resolved | `#link("<target-slug>.pdf")[#notelink[Title]]`, the target note's current title through a prelude-defined function, so a theme can style note links distinctly from ordinary emphasis, wrapped in a link to the target note's own artifact (see below). A link with a heading anchor shows its author's text in `notelink` instead (the title when that text is blank) and drops the anchor: a PDF has no heading ids to address ([ADR 0086](../adr/0086-note-links-may-carry-a-heading-anchor.md)) |
+| Link (external URL) | `#link("url")[escaped label];` |
+| Bare URL in text (`https://...`, `www....`) | detected by the emitter with the `linkify` crate over text events (GFM autolink rules; pulldown-cmark has no option for this — verified) and emitted as `#link("url")[url];`; a `www.` URL gains an `https://` scheme in the target |
+| Email autolink (`<user@host>` or bare in text) | `#link("mailto:user@host")[user@host];`; the `mailto:` scheme is added so the link is actionable |
+| Note link, resolved | `#link("<target-slug>.pdf")[#notelink[Title]];`, the target note's current title through a prelude-defined function, so a theme can style note links distinctly from ordinary emphasis, wrapped in a link to the target note's own artifact (see below). A link with a heading anchor shows its author's text in `notelink` instead (the title when that text is blank) and drops the anchor: a PDF has no heading ids to address ([ADR 0086](../adr/0086-note-links-may-carry-a-heading-anchor.md)) |
 | Note link, unresolved | the wrapper is dropped and the display text's inner inline events are re-emitted, so markup inside the display text survives |
 | Task list item | bullet item with a `#task(done: ...)` lead-in — the prelude-defined function draws one identical checkbox for both states, so checked and unchecked match optically regardless of font glyph coverage |
 | Footnote | drawn at its first place in the text as `#[#footnote[...]<ntropy-fn-N>];`, N the footnote's position in the walk's order of first shown reference. Every later reference, one inside a footnote's own content or another footnote's included, is `#footnote(<ntropy-fn-N>);`, which shows the number of the labelled footnote and draws nothing, so a footnote prints once however often it is referenced and a footnote may reference itself or a cycle of others. The `#[...]` wrapper keeps the label on the footnote when the reference sits in a heading, where a bare label would attach to the heading; the closing `;` ends the expression, so a `(` in the note's text after a reference stays text. Typst numbers footnotes in the order they appear in the document, which can differ from N: a footnote first referenced inside another footnote's content is drawn there. A theme must not define labels starting with `ntropy-fn-`, must not draw a heading or the body twice when a footnote with a repeat reference sits in it (a duplicated label fails the compile), and a `show footnote` rule runs for repeats too, where `it.body` is a label. Definitions are buffered because pulldown-cmark delivers them separately from references. A reference in the skipped title heading draws nothing and does not decide a footnote's place in the order |
 | Thematic break | `#line(length: 100%)` |
-| Soft / hard break | single space / `#linebreak()` |
+| Soft / hard break | single space / `#linebreak();` |
 | Table | `#table(columns: n, align: (...), table.header(...), cells)` |
-| Image, local path | `#image("path")`, path verbatim (string-literal escaped) without a `#fragment`, which selects nothing in an embedded image. A link to a local file keeps its fragment in the `#link` string |
-| Image, remote URL | `#link("url")[alt text]` plus a render warning — `typst compile` performs no network access, so remote images cannot appear in the artifact |
+| Image, local path | `#image("path");`, path verbatim (string-literal escaped) without a `#fragment`, which selects nothing in an embedded image. A link to a local file keeps its fragment in the `#link` string |
+| Image, remote URL | `#link("url")[alt text];` plus a render warning — `typst compile` performs no network access, so remote images cannot appear in the artifact |
 | Mermaid, emoji shortcodes, color chips | out of scope: rendered as their literal text (a mermaid block is an ordinary code block), no warning |
 | Math (`$...$`, `$$...$$`, `math` fences) | not supported: `ENABLE_MATH` stays off, `$` is escaped like all text and renders literally, `math` fences render as plain code blocks |
 | Raw HTML | dropped with a render warning naming what was dropped — never silently |

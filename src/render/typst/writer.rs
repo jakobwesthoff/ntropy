@@ -45,6 +45,10 @@
 /// - `:` completes `http://` autolinks and term-list separators
 /// - `=` heading markers
 /// - `+` enum markers
+///
+/// `(` and `;` mean something only directly after an embedded expression, and
+/// every call the emitter writes into running text ends in `;`, so neither
+/// needs an escape.
 pub const MARKUP_ACTIVE: [char; 20] = [
     '\\', '#', '[', ']', '$', '`', '*', '_', '<', '>', //
     '@', '~', '\'', '"', '-', '.', '/', ':', '=', '+',
@@ -322,7 +326,7 @@ mod tests {
         let mut writer = TypstWriter::new();
         writer.syntax("#raw(\"");
         writer.string_literal(adversarial);
-        writer.syntax("\")");
+        writer.syntax("\");");
         let emitted = writer.finish();
 
         let root = typst_syntax::parse(&emitted);

@@ -2,11 +2,11 @@
 source: src/render/typst/emitter.rs
 expression: body(input)
 ---
-= Heading #emph[one] level
+= Heading #emph[one]; level
 
-== Heading #emph[two] level
+== Heading #emph[two]; level
 
-=== Heading #raw("three") level
+=== Heading #raw("three"); level
 
 ==== Heading \[four\] level
 

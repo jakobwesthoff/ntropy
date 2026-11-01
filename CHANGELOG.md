@@ -13,6 +13,14 @@ change in any release
 
 ### Fixed
 
+- `render --to pdf` no longer fails when a parenthesis directly follows bold,
+  italic, strikethrough, inline code, a link, an image or a hard break, as in
+  `**Note**(s)` or `[docs](https://example.org)(see below)`. Typst read the
+  `(` as more arguments of the call and stopped with `expected function, found
+  content`, so no PDF was written. A semicolon in that position, such as
+  `**bold**; next`, was dropped from the PDF without a message and is kept now.
+  The emitted Typst ends every inline call with `;`, so `render --to typst`
+  output changes in every note with such markup.
 - A footnote that references itself, or two footnotes that reference each
   other, no longer leak ntropy's internal placeholder into the PDF. `render
   --to pdf` and `render --to typst` printed text such as

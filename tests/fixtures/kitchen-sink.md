@@ -19,6 +19,9 @@ bare URL https://example.com/path plus www.example.org and mail to
 <jaw@ekko.io> too. Literal math $x^2$ stays text. Unicode: Über Größe
 日本語.
 
+Text right after inline markup stays text: **bold**(x), `code`(y), a
+[link](https://example.org)(z) and a trailing semicolon **b**; here.
+
 A resolved note link to [old title](01BRZ3NDEKTSV4RRFFQ69G5FAV-linked.md)
 and a dangling one to [**bold** ghost](01CRZ3NDEKTSV4RRFFQ69G5FAV-gone.md).
 

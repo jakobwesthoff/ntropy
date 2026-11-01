@@ -7,6 +7,9 @@ bare URL <a href="https://example.com/path">https://example.com/path</a> plus <a
 <a href="mailto:jaw@ekko.io">jaw@ekko.io</a> too. Literal math $x^2$ stays text. Unicode: Über Größe
 日本語.</p>
 
+<p>Text right after inline markup stays text: <strong>bold</strong>(x), <code>code</code>(y), a
+<a href="https://example.org">link</a>(z) and a trailing semicolon <strong>b</strong>; here.</p>
+
 <p>A resolved note link to <a class="note-link" href="linked.html">Current Linked Title</a>
 and a dangling one to <strong>bold</strong> ghost.</p>
 

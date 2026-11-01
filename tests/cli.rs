@@ -3845,6 +3845,64 @@ fn render_kitchen_sink_pins_the_full_typst_document() {
 
 #[test]
 #[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn text_right_after_inline_markup_survives_a_real_typst_compile() {
+    // `#strong[b](x)` parses but fails when typst evaluates it, and a `;`
+    // right after a call is swallowed, so only a compile and a look at the
+    // PDF's text show that both characters reach the page. Every construct is
+    // followed by `(x)` and by `;`, in a paragraph, a heading, a list item, a
+    // table cell, a callout and a footnote.
+    let dir = setup_vault();
+    let body = "\
+# Heading with **b**(h)\n\n\
+Plain **b**(x) and *e*(x) and ~~s~~(x) and `c`(x) and [l](https://example.org)(x).\n\n\
+Semicolons **b**; and `c`; and [l](https://example.org); end.\n\n\
+- item **b**(i)\n\n\
+| head **b**(t) | other |\n| --- | --- |\n| cell `c`(t) | [l](https://example.org)(t) |\n\n\
+> [!NOTE]\n> callout **b**(n)\n\n\
+Footnote[^a] text.\n\n[^a]: inside **b**(f) and *e*;\n";
+    write_note(
+        dir.path(),
+        ULID_A,
+        "after-markup",
+        &format!("---\ntitle: After markup\n---\n{body}"),
+    );
+
+    let mut pdf = ntropy(dir.path());
+    pdf.args(["render", ULID_A, "-o", "after-markup.pdf", "-n"]);
+    pdf.current_dir(dir.path());
+    let output = pdf.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // `pdftotext` is optional: without it the compile above still catches the
+    // `(` failure, and only the dropped-`;` check is skipped.
+    let Ok(text) = Command::new("pdftotext")
+        .arg(dir.path().join("after-markup.pdf"))
+        .arg("-")
+        .output()
+    else {
+        println!("pdftotext not found; skipped the text assertions");
+        return;
+    };
+    let text = String::from_utf8_lossy(&text.stdout);
+    // Inline code sits in a monospace font, which pdftotext separates from the
+    // following text by a space.
+    for expected in [
+        "b(h)", "b(x)", "e(x)", "s(x)", "c (x)", "l(x)", "b(i)", "b(t)", "c (t)", "l(t)", "b(n)",
+        "b(f)", "b;", "c ;", "l;", "e;",
+    ] {
+        assert!(
+            text.contains(expected),
+            "{expected:?} missing from: {text:?}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
 fn render_kitchen_sink_compiles_with_real_typst() {
     // The full roundtrip's final leg: the kitchen-sink note rendered to pdf by
     // the real `typst` binary, plus a png of the same document for optical
