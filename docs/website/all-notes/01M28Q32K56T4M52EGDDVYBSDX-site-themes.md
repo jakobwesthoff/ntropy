@@ -133,6 +133,7 @@ target. The ones a theme most often restyles:
 | A note | `.note-header` (`.note-title`, `.note-meta`, `.tags`, `.frontmatter`), `.note-body`, `.related` |
 | Lists | `.note-rows` of `.note-row`; `.group-chips` of `.chip`, each with a `.count` |
 | Body blocks | `.callout.callout-<kind>` with `.callout-title`; highlighted code as `.shiki`, colored per token through `--shiki-light` and `--shiki-dark` |
+| Heading link | `a.heading-anchor` at the end of every heading in a note body, holding a `#` in a `span`; the built-in themes show it in the margin on hover and on keyboard focus. `.heading-anchor { display: none }` hides it |
 | Outline | `nav.outline` |
 | State | `aria-current` on the current sidebar entry and outline entry; `body.site` on a site page, `body.document` on a `render --to html` page |
 

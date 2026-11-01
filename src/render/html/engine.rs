@@ -409,7 +409,12 @@ mod tests {
             "{page}"
         );
         assert!(page.contains("<dt>priority</dt>\n<dd>2</dd>"), "{page}");
-        assert!(page.contains("<h1 id=\"heading\">Heading</h1>"), "{page}");
+        assert!(
+            page.contains(
+                "<h1 id=\"heading\">Heading<a class=\"heading-anchor\" href=\"#heading\""
+            ),
+            "{page}"
+        );
         assert!(page.contains("<em>body</em>"), "{page}");
         assert!(
             page.contains("<symbol id=\"icon-tag\""),

@@ -96,7 +96,9 @@ breadcrumbs, an outline of the note's headings that follows your
 position while you scroll, and previous/next links that follow the
 sidebar's reading order. A note page ends with the notes that share the
 most tags with it, at most eight. Tags link to their pages everywhere
-they appear. Note links point at the target's page. Every page has a
+they appear. Every heading in a note ends with a link to itself, a `#` that
+shows in the margin when you hover the heading or tab to it, so you can copy
+the address of a section. Note links point at the target's page. Every page has a
 light/dark/system switch that remembers your choice in the browser. On
 a phone the sidebar is a drawer behind the menu button.
 

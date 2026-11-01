@@ -11,6 +11,18 @@ change in any release
 
 ## Unreleased
 
+### Added
+
+- Every heading of a note body in `site` and `render --to html` ends with a
+  link to itself, `<a class="heading-anchor" href="#<id>">` holding a `#`. In
+  the built-in theme and the documentation site's theme the `#` sits in the
+  margin left of the heading and shows on hover and on keyboard focus; inside
+  quotes and callouts, on touch screens, on narrow screens and on
+  `render --to html` pages below 70rem it follows the text, and in print it
+  is hidden. A custom theme that does not style `.heading-anchor` shows the
+  `#` after the heading text; `.heading-anchor { display: none }` hides it.
+  The link's accessible name, "Link to this section", is English.
+
 ### Fixed
 
 - A link to a heading of another note, `[text](<ulid>-<slug>.md#<heading-id>)`,

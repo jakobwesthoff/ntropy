@@ -323,6 +323,14 @@ impl Output for HtmlOutput<'_> {
         writer.attribute(&heading.id);
         writer.syntax("\">");
         writer.raw(body);
+        // The link follows the heading's content so a screen reader reads the
+        // text first. A theme places it: the built-in themes put the `#` in
+        // the margin, left of the heading, and show it on hover and focus.
+        writer.syntax("<a class=\"heading-anchor\" href=\"#");
+        writer.attribute(&heading.id);
+        writer.syntax(
+            "\" aria-label=\"Link to this section\"><span aria-hidden=\"true\">#</span></a>",
+        );
         writer.syntax(&format!("</h{level}>\n"));
         writer.finish()
     }
@@ -535,12 +543,61 @@ mod tests {
         assert_eq!(html("a\n\nb"), "<p>a</p>\n\n<p>b</p>\n");
     }
 
+    /// The anchor link every heading ends with.
+    fn permalink(id: &str) -> String {
+        format!(
+            "<a class=\"heading-anchor\" href=\"#{id}\" aria-label=\"Link to this section\"><span aria-hidden=\"true\">#</span></a>"
+        )
+    }
+
     #[test]
-    fn headings_of_every_level_carry_an_id() {
+    fn every_heading_ends_with_a_link_to_itself() {
+        let expected: Vec<String> = (1..=6)
+            .map(|level| {
+                format!(
+                    "<h{level} id=\"h{level}\">h{level}{}</h{level}>\n",
+                    permalink(&format!("h{level}"))
+                )
+            })
+            .collect();
         assert_eq!(
-            html("# 1\n## 2\n### 3\n#### 4\n##### 5\n###### 6"),
-            "<h1 id=\"1\">1</h1>\n\n<h2 id=\"2\">2</h2>\n\n<h3 id=\"3\">3</h3>\n\n<h4 id=\"4\">4</h4>\n\n<h5 id=\"5\">5</h5>\n\n<h6 id=\"6\">6</h6>\n"
+            html("# h1\n## h2\n### h3\n#### h4\n##### h5\n###### h6"),
+            expected.join("\n")
         );
+    }
+
+    #[test]
+    fn the_link_sits_after_the_headings_inline_markup() {
+        assert_eq!(
+            html("## A *b* `c`"),
+            format!(
+                "<h2 id=\"a-b-c\">A <em>b</em> <code>c</code>{}</h2>\n",
+                permalink("a-b-c")
+            )
+        );
+    }
+
+    #[test]
+    fn the_id_in_the_link_is_escaped_as_an_attribute() {
+        // The slug rule never produces such an id; the writer escapes it
+        // all the same, as it does for the heading's own `id`.
+        let mut output = HtmlOutput {
+            targets: &SiblingArtifacts,
+            title: None,
+            assets: Vec::new(),
+            languages: Vec::new(),
+            headings: Vec::new(),
+            note_anchors: Vec::new(),
+            footnotes: Vec::new(),
+        };
+        let heading = Heading {
+            level: pulldown_cmark::HeadingLevel::H2,
+            id: "a\"b&c".to_string(),
+            text: "t".to_string(),
+        };
+        let out = output.heading(&heading, "t");
+        assert!(out.contains("<h2 id=\"a&quot;b&amp;c\">"), "{out}");
+        assert!(out.contains("href=\"#a&quot;b&amp;c\""), "{out}");
     }
 
     #[test]
@@ -553,7 +610,10 @@ mod tests {
         );
         assert_eq!(
             out.html,
-            "<p>Body.</p>\n\n<h1 id=\"rust-tips\">Rust Tips</h1>\n"
+            format!(
+                "<p>Body.</p>\n\n<h1 id=\"rust-tips\">Rust Tips{}</h1>\n",
+                permalink("rust-tips")
+            )
         );
         assert_eq!(out.headings.len(), 1);
         assert_eq!(out.headings[0].id, "rust-tips");
@@ -564,19 +624,31 @@ mod tests {
         let kept = |body: &str| emit(body, &[], &SiblingArtifacts, Some("Rust Tips")).html;
         assert_eq!(
             kept("# Rust tips\n"),
-            "<h1 id=\"rust-tips\">Rust tips</h1>\n"
+            format!(
+                "<h1 id=\"rust-tips\">Rust tips{}</h1>\n",
+                permalink("rust-tips")
+            )
         );
         assert_eq!(
             kept("## Rust Tips\n"),
-            "<h2 id=\"rust-tips\">Rust Tips</h2>\n"
+            format!(
+                "<h2 id=\"rust-tips\">Rust Tips{}</h2>\n",
+                permalink("rust-tips")
+            )
         );
         assert_eq!(
             kept("Intro.\n\n# Rust Tips\n"),
-            "<p>Intro.</p>\n\n<h1 id=\"rust-tips\">Rust Tips</h1>\n"
+            format!(
+                "<p>Intro.</p>\n\n<h1 id=\"rust-tips\">Rust Tips{}</h1>\n",
+                permalink("rust-tips")
+            )
         );
         assert_eq!(
             emit("# Rust Tips\n", &[], &SiblingArtifacts, None).html,
-            "<h1 id=\"rust-tips\">Rust Tips</h1>\n"
+            format!(
+                "<h1 id=\"rust-tips\">Rust Tips{}</h1>\n",
+                permalink("rust-tips")
+            )
         );
     }
 
@@ -603,14 +675,20 @@ mod tests {
                 },
             ]
         );
-        assert!(out.html.contains("<h2 id=\"table-1\">Table</h2>"));
+        assert!(
+            out.html
+                .contains("<h2 id=\"table-1\">Table<a class=\"heading-anchor\" href=\"#table-1\"")
+        );
     }
 
     #[test]
     fn a_heading_id_is_escaped_as_an_attribute() {
         // The slug rule leaves no characters that need escaping, so this
         // pins that the attribute context is used regardless.
-        assert_eq!(html("# a\"b"), "<h1 id=\"ab\">a&quot;b</h1>\n");
+        assert_eq!(
+            html("# a\"b"),
+            format!("<h1 id=\"ab\">a&quot;b{}</h1>\n", permalink("ab"))
+        );
     }
 
     #[test]

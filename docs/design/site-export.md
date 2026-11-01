@@ -172,7 +172,8 @@ separates them, and page names are unique without regard to case, the rule
 the view leaves use ([vault-layout-and-views.md](vault-layout-and-views.md)). The page shows
 the title, the date, the tags each linking to its tag page, and every
 other frontmatter field as key/value beneath, nested values included,
-the `site` table excepted; hiding a field is a theme's job. A body that
+the `site` table excepted; hiding a field is a theme's job. Every heading
+of the body ends with a link to its own id ([html-engine.md](html-engine.md)). A body that
 opens with a level-one heading reading exactly the title has that
 heading dropped
 ([html-engine.md](html-engine.md)). The page has an outline built from

@@ -2002,7 +2002,10 @@ fn render_to_html_writes_the_page_and_its_files_beside_it_without_any_tool() {
         page.contains("<span class=\"site-name\">Report</span>"),
         "{page}"
     );
-    assert!(page.contains("<h2 id=\"findings\">Findings</h2>"), "{page}");
+    assert!(
+        page.contains("<h2 id=\"findings\">Findings<a class=\"heading-anchor\" href=\"#findings\""),
+        "{page}"
+    );
     assert!(
         page.contains("<a class=\"note-link\" href=\"other.html\">The Guide</a>")
             || page.contains("<a class=\"note-link\" href=\"other.html\">The Other One</a>"),

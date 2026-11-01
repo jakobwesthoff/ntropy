@@ -348,6 +348,100 @@ h3 { font-size: 1.2rem; }
 h4 { font-size: 1.05rem; }
 h5, h6 { font-size: 1rem; }
 
+/* The link every heading ends with: a `#` in the margin, left of the
+ * heading, so the text does not move. It shows on hover and on keyboard
+ * focus. Where there is no hover or no margin to use, it follows the text and
+ * stays visible. A theme without these rules shows the `#` after the text. */
+
+h1, h2, h3, h4, h5, h6 {
+  position: relative;
+}
+
+.heading-anchor {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 0.4em);
+  padding: 0 0.3em;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 0.85em;
+  /* The heading's line height, 1.25, at the anchor's smaller size, so the
+   * `#` sits on the heading's first line. */
+  line-height: calc(1.25 / 0.85);
+  font-weight: 400;
+  text-decoration: none;
+  opacity: 0;
+  user-select: none;
+}
+
+:is(h1, h2, h3, h4, h5, h6):hover > .heading-anchor,
+.heading-anchor:focus-visible {
+  opacity: 1;
+}
+
+/* Keeps the heading hovered while the pointer crosses the gap to the `#`. */
+.heading-anchor::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 100%;
+  width: 0.4em;
+  height: 100%;
+}
+
+.heading-anchor:hover,
+.heading-anchor:focus-visible {
+  color: var(--accent);
+}
+
+/* Inside a quote or a callout the margin holds the block's border, and where
+ * there is no hover or no margin to use, the `#` follows the text. */
+blockquote .heading-anchor,
+.callout .heading-anchor {
+  position: static;
+  padding: 0 0.3em;
+  margin-left: 0.25em;
+}
+
+blockquote .heading-anchor::after,
+.callout .heading-anchor::after {
+  display: none;
+}
+
+@media (max-width: 60rem), (hover: none) {
+  .heading-anchor {
+    position: static;
+    padding: 0 0.3em;
+    margin-left: 0.25em;
+    opacity: 0.6;
+  }
+
+  .heading-anchor::after {
+    display: none;
+  }
+}
+
+/* A `render --to html` page has no sidebar, and below this width its left
+ * margin is too narrow for the `#`. */
+@media (max-width: 70rem) {
+  body.document .heading-anchor {
+    position: static;
+    padding: 0 0.3em;
+    margin-left: 0.25em;
+    opacity: 0.6;
+  }
+
+  body.document .heading-anchor::after {
+    display: none;
+  }
+}
+
+@media print {
+  .heading-anchor {
+    display: none;
+  }
+}
+
 p, ul, ol, dl, table, pre, blockquote {
   margin: 0 0 var(--block-gap);
 }
