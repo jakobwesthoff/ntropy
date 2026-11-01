@@ -41,9 +41,11 @@ that writes the drawing there.
   be started, the drawing is printed. The drawing reaches the pager on a
   pipe, and a pager that stops reading is not an error. A `$PAGER` the shell
   could not run (status 126 or 127) is an error; every other exit status is
-  ignored. While the pager runs, ntropy catches `SIGINT` with a handler that
-  does nothing, and waits for the pager. It is a handler and not `SIG_IGN`
-  because an ignored signal stays ignored in the pager.
+  ignored. While the pager runs, ntropy catches `SIGINT` and `SIGQUIT`, the
+  signals Ctrl-C and Ctrl-\ send the whole foreground group, with a handler
+  that does nothing, and waits for the pager; less ignores `SIGQUIT`, so it
+  keeps drawing whatever happens to ntropy. It is a handler and not
+  `SIG_IGN` because an ignored signal stays ignored in the pager.
 - `-n` never pages.
 - Scan warnings print to stderr. Under `--strict` the note is still shown
   and the exit code fails.

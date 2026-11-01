@@ -18,7 +18,7 @@ use crate::cli::GlobalArgs;
 
 use super::exit_for_warnings;
 use super::one_note::Selection;
-use super::signals::{SigintCaughtScope, SigpipeIgnoredScope};
+use super::signals::{InterruptsCaughtScope, SigpipeIgnoredScope};
 
 /// The shell a `$PAGER` value runs through.
 const SHELL: &str = "/bin/sh";
@@ -204,9 +204,9 @@ fn feed(text: &[u8], pipe: &mut impl Write) -> io::Result<()> {
 /// after the note was read.
 fn page(text: &str, mut command: Command, pager: &Pager, fallback: &mut impl Write) -> Result<()> {
     command.stdin(Stdio::piped());
-    // Installed before the spawn, so no Ctrl-C between the two can end
-    // ntropy while the pager already draws.
-    let interrupts = SigintCaughtScope::new();
+    // Installed before the spawn, so no Ctrl-C or Ctrl-\ between the two can
+    // end ntropy while the pager already draws.
+    let interrupts = InterruptsCaughtScope::new();
     let Ok(mut child) = command.spawn() else {
         drop(interrupts);
         fallback
@@ -238,7 +238,7 @@ fn page(text: &str, mut command: Command, pager: &Pager, fallback: &mut impl Wri
 
 #[cfg(test)]
 mod tests {
-    use super::super::signals::SIGINT_TESTS;
+    use super::super::signals::SIGNAL_TESTS;
     use super::*;
 
     // =========================================================
@@ -414,7 +414,7 @@ mod tests {
 
     #[test]
     fn the_pager_receives_the_text_on_its_stdin() {
-        let _serial = SIGINT_TESTS
+        let _serial = SIGNAL_TESTS
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let dir = tempfile::tempdir().expect("temp dir");
@@ -434,7 +434,7 @@ mod tests {
 
     #[test]
     fn a_pager_quitting_before_reading_everything_is_no_error() {
-        let _serial = SIGINT_TESTS
+        let _serial = SIGNAL_TESTS
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let text = "x".repeat(1 << 20);
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn a_pager_the_shell_cannot_run_is_an_error() {
-        let _serial = SIGINT_TESTS
+        let _serial = SIGNAL_TESTS
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut fallback = Vec::new();
@@ -466,7 +466,7 @@ mod tests {
 
     #[test]
     fn any_other_pager_status_is_ignored() {
-        let _serial = SIGINT_TESTS
+        let _serial = SIGNAL_TESTS
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         // less -K quits with status 2 on Ctrl-C after the note was shown.
@@ -482,7 +482,7 @@ mod tests {
 
     #[test]
     fn a_pager_that_cannot_start_leaves_the_text_to_stdout() {
-        let _serial = SIGINT_TESTS
+        let _serial = SIGNAL_TESTS
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let mut fallback = Vec::new();

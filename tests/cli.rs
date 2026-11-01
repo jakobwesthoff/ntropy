@@ -5688,6 +5688,18 @@ printf 'LESS=%s\nLESSSECURE=%s\n' "${{LESS-unset}}" "${{LESSSECURE-unset}}" > "$
 
     #[test]
     fn an_interrupt_while_the_pager_runs_leaves_ntropy_waiting_for_it() {
+        a_signal_while_the_pager_runs_leaves_ntropy_waiting_for_it(libc::SIGINT);
+    }
+
+    #[test]
+    fn a_quit_while_the_pager_runs_leaves_ntropy_waiting_for_it() {
+        // less ignores Ctrl-\, so it keeps drawing whatever happens to ntropy.
+        a_signal_while_the_pager_runs_leaves_ntropy_waiting_for_it(libc::SIGQUIT);
+    }
+
+    /// Send `signal` to ntropy while the pager runs: ntropy waits for the
+    /// pager and exits as if nothing had happened.
+    fn a_signal_while_the_pager_runs_leaves_ntropy_waiting_for_it(signal: libc::c_int) {
         let dir = setup_vault();
         let vault = dir.path();
         tall_note(vault);
@@ -5716,7 +5728,7 @@ printf 'LESS=%s\nLESSSECURE=%s\n' "${{LESS-unset}}" "${{LESSSECURE-unset}}" > "$
         });
         let pid = libc::pid_t::try_from(child.id()).expect("a pid fits pid_t");
         // SAFETY: `pid` names the child this test started and still waits for.
-        let rc = unsafe { libc::kill(pid, libc::SIGINT) };
+        let rc = unsafe { libc::kill(pid, signal) };
         assert_eq!(rc, 0, "kill failed: {}", io::Error::last_os_error());
         gate(&mut child, "the pager was released", move || {
             fs::write(&release, "go\n").expect("write release");
@@ -5724,7 +5736,7 @@ printf 'LESS=%s\nLESSSECURE=%s\n' "${{LESS-unset}}" "${{LESSSECURE-unset}}" > "$
 
         let output = child.wait_with_output().expect("wait for ntropy");
         let _ = reader.join();
-        assert!(output.status.success(), "{}", rendered(&output));
+        assert_eq!(output.status.code(), Some(0), "{:?}", output.status);
         assert!(
             recorded(vault, "pager-stdin")
                 .expect("the pager ran")

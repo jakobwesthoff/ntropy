@@ -302,8 +302,8 @@ vault, exits non-zero; a cancelled picker is a successful no-op.
   `LESS` of the user's own is kept. When `less` cannot be started, the
   drawing is printed instead. A pager quitting before it read everything is
   no error; a `$PAGER` the shell could not run (status 126 or 127) is one,
-  and any other status of the pager is ignored. Ctrl-C while the pager runs
-  leaves ntropy waiting for it.
+  and any other status of the pager is ignored. Ctrl-C or Ctrl-\ while the
+  pager runs leaves ntropy waiting for it.
 - `-n` never pages.
 - In an encrypted vault the note is drawn from memory and nothing is written
   to disk; the pager gets `LESSSECURE=1`, which keeps less from saving,

@@ -37,24 +37,29 @@ impl Drop for SigpipeIgnoredScope {
     }
 }
 
-/// Catch `SIGINT` with a handler that does nothing for the lifetime of the
-/// value, restoring the previous disposition on drop.
+/// The signals a terminal sends the whole foreground group from the
+/// keyboard, which a pager handles itself: Ctrl-C and Ctrl-\.
+const KEYBOARD_SIGNALS: [libc::c_int; 2] = [libc::SIGINT, libc::SIGQUIT];
+
+/// Catch `SIGINT` and `SIGQUIT` with a handler that does nothing for the
+/// lifetime of the value, restoring the previous dispositions on drop.
 ///
-/// Ctrl-C reaches every process in the terminal's foreground group: a pager
-/// ntropy waits for, and ntropy itself. Caught, the signal leaves ntropy
-/// waiting until the pager is done, so the shell does not take the terminal
-/// back while the pager still draws on it. It is caught rather than ignored
-/// because an ignored signal stays ignored across `exec`, so the pager would
-/// inherit it, while a caught one is reset to the default there.
-pub(super) struct SigintCaughtScope {
-    previous: libc::sigaction,
+/// Ctrl-C and Ctrl-\ reach every process in the terminal's foreground group:
+/// a pager ntropy waits for, and ntropy itself. less handles the first and
+/// ignores the second. Caught, the signals leave ntropy waiting until the
+/// pager is done, so the shell does not take the terminal back while the
+/// pager still draws on it. They are caught rather than ignored because an
+/// ignored signal stays ignored across `exec`, so the pager would inherit it,
+/// while a caught one is reset to the default there.
+pub(super) struct InterruptsCaughtScope {
+    previous: [libc::sigaction; 2],
 }
 
-/// The handler [`SigintCaughtScope`] installs: the signal arrives and nothing
-/// happens.
+/// The handler [`InterruptsCaughtScope`] installs: the signal arrives and
+/// nothing happens.
 extern "C" fn ignore_interrupt(_signal: libc::c_int) {}
 
-impl SigintCaughtScope {
+impl InterruptsCaughtScope {
     pub(super) fn new() -> Self {
         // SAFETY: a zeroed `sigaction` is a valid starting value; the handler
         // is an `extern "C" fn(c_int)` that touches nothing, and `SA_RESTART`
@@ -64,55 +69,66 @@ impl SigintCaughtScope {
             action.sa_sigaction = ignore_interrupt as *const () as libc::sighandler_t;
             action.sa_flags = libc::SA_RESTART;
             libc::sigemptyset(&mut action.sa_mask);
-            let mut previous: libc::sigaction = std::mem::zeroed();
-            libc::sigaction(libc::SIGINT, &action, &mut previous);
-            SigintCaughtScope { previous }
+            let mut previous: [libc::sigaction; 2] = std::mem::zeroed();
+            for (signal, previous) in KEYBOARD_SIGNALS.iter().zip(previous.iter_mut()) {
+                libc::sigaction(*signal, &action, previous);
+            }
+            InterruptsCaughtScope { previous }
         }
     }
 }
 
-impl Drop for SigintCaughtScope {
+impl Drop for InterruptsCaughtScope {
     fn drop(&mut self) {
-        // SAFETY: `self.previous` came from the paired `sigaction` call above.
-        unsafe {
-            libc::sigaction(libc::SIGINT, &self.previous, std::ptr::null_mut());
+        for (signal, previous) in KEYBOARD_SIGNALS.iter().zip(&self.previous) {
+            // SAFETY: `previous` came from the paired `sigaction` call above.
+            unsafe {
+                libc::sigaction(*signal, previous, std::ptr::null_mut());
+            }
         }
     }
 }
 
-/// Held by every test that changes or reads the `SIGINT` disposition, which
-/// is process-wide while tests run on threads side by side.
+/// Held by every test that changes or reads the `SIGINT` or `SIGQUIT`
+/// disposition, which is process-wide while tests run on threads side by
+/// side.
 #[cfg(test)]
-pub(super) static SIGINT_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+pub(super) static SIGNAL_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// The handler `SIGINT` has now.
-    fn current_sigint_handler() -> libc::sighandler_t {
+    /// The handler `signal` has now.
+    fn current_handler(signal: libc::c_int) -> libc::sighandler_t {
         // SAFETY: a zeroed `sigaction` is a valid out-parameter, and a null
         // new action only reads the current one.
         unsafe {
             let mut current: libc::sigaction = std::mem::zeroed();
-            libc::sigaction(libc::SIGINT, std::ptr::null(), &mut current);
+            libc::sigaction(signal, std::ptr::null(), &mut current);
             current.sa_sigaction
         }
     }
 
     #[test]
-    fn sigint_is_caught_inside_the_scope_and_restored_after_it() {
-        let _serial = SIGINT_TESTS
+    fn interrupt_and_quit_are_caught_inside_the_scope_and_restored_after_it() {
+        let _serial = SIGNAL_TESTS
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let before = current_sigint_handler();
-        {
-            let _scope = SigintCaughtScope::new();
-            let inside = current_sigint_handler();
-            assert_ne!(inside, libc::SIG_IGN, "ignored, so a child inherits it");
-            assert_ne!(inside, libc::SIG_DFL, "not caught");
-            assert_ne!(inside, before);
+        for (signal, name) in [(libc::SIGINT, "SIGINT"), (libc::SIGQUIT, "SIGQUIT")] {
+            let before = current_handler(signal);
+            {
+                let _scope = InterruptsCaughtScope::new();
+                let inside = current_handler(signal);
+                assert_ne!(
+                    inside,
+                    libc::SIG_IGN,
+                    "{name} ignored, so a child inherits it"
+                );
+                assert_ne!(inside, libc::SIG_DFL, "{name} not caught");
+                assert_ne!(inside, before, "{name}");
+            }
+            assert_eq!(current_handler(signal), before, "{name} not restored");
         }
-        assert_eq!(current_sigint_handler(), before);
     }
 }
