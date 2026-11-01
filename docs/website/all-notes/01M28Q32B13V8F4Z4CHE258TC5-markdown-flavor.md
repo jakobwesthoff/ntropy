@@ -43,6 +43,11 @@ export](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md). When rendering to
 PDF (or to the emitted Typst document) it is dropped, and ntropy prints a
 warning naming what it dropped.
 
+A footnote may be referenced more than once, and its definition may
+reference itself or other footnotes. HTML shows one numbered marker per
+reference and one list entry. A PDF draws the footnote once, at its first
+reference in the text, and every other reference shows the same number.
+
 The `ansi` format, the note drawn for a terminal, drops raw HTML without
 a warning and keeps the text between inline tags. It shows an image as
 `[image: alt]` with its source after it. It draws the five callouts with a
