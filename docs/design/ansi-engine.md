@@ -63,12 +63,17 @@ escapes' length.
 
 ## The writer
 
-ntropy writes the styled lines itself rather than through patine's writer,
-which takes Markdown and not lines. Each span switches its attributes on,
-writes its text and switches them off in reverse order, with the sequences
-patine's own writer uses: `1` bold, `2` dim, `3` italic, `4` or `4:2`
-underline, `9` strikethrough, `38;5;<n>` the colour, then `39`, `29`, `24`,
-`23` and one `22` for bold and dim. No style carries over a line break.
+The escaped spans go to `patine::ansi`, which writes each span's attributes
+on, its text, and the attributes off in reverse order: `1` bold, `2` dim, `3`
+italic, `4` or `4:2` underline, `9` strikethrough, `38;5;<n>` the colour,
+then `39`, `29`, `24`, `23` and one `22` for bold and dim. No style carries
+over a line break, and a default style writes no sequence. ntropy names no
+style attribute, so an attribute patine adds to `TextStyle` reaches the
+output.
+
+Each form maps a span's style before the lines are written: `Colored` keeps
+it, `Styled` passes it through `TextStyle::without_colors`, `Plain` replaces
+it with the default style.
 
 A drawing has one of three forms:
 
@@ -94,9 +99,6 @@ document takes.
 
 ## Testing
 
-- The `Colored` form of the kitchen-sink fixture and of a note with every
-  inline style equals `patine::render` of the same source byte for byte,
-  pinning the writer against the patine in `Cargo.lock`.
 - `Styled` equals `Colored` without its colour sequences.
 - Callouts: in `Colored` the bar and the bold title of each of the five kinds
   carry the kind's colour and a type beyond them is neutral; in `Styled` the

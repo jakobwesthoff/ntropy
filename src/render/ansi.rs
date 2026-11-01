@@ -5,14 +5,11 @@
 //! The ansi engine: a note drawn for the terminal by patine (ADR 0082,
 //! `docs/design/ansi-engine.md`).
 //!
-//! patine lays the note out as styled lines; ntropy writes those lines
-//! itself, so that every piece of text passes through the escaping of
-//! ADR 0071 on its way out and the drawing can leave out the colours or every
-//! style.
+//! patine lays the note out as styled lines and writes them. In between,
+//! ntropy escapes every span's text (ADR 0071) and restyles the spans, so
+//! the drawing can leave out the colours or every style.
 
-use std::fmt::Write as _;
-
-use patine::{CalloutStyle, QuoteStyle, StyledSpan, TextStyle, Underline};
+use patine::{CalloutStyle, QuoteStyle, StyledLine, StyledSpan, TextStyle};
 
 use super::{PreparedDocument, RenderContext, RenderError, Renderer};
 
@@ -79,18 +76,20 @@ pub fn draw_source(frontmatter: &str, body: &str, options: &AnsiOptions) -> Draw
     }
     let lines = patine::render_lines_with(&source, options.width, &patine_options);
 
-    let mut text = String::new();
+    let mut shown_lines = Vec::with_capacity(lines.len());
     let mut line_widths = Vec::with_capacity(lines.len());
     for line in &lines {
         let mut column = 0;
+        let mut spans = Vec::with_capacity(line.spans.len());
         for span in &line.spans {
             let shown = shown_text(&span.text, column);
             column += text_width(&shown);
-            write_span(&mut text, &shown, span.style, options.form);
+            spans.push(StyledSpan::new(shown, form_style(span.style, options.form)));
         }
-        text.push('\n');
+        shown_lines.push(StyledLine::new(spans));
         line_widths.push(column);
     }
+    let text = patine::ansi(&shown_lines).to_string();
     Drawn { text, line_widths }
 }
 
@@ -139,56 +138,16 @@ fn text_width(text: &str) -> usize {
     StyledSpan::new(text, TextStyle::default()).width()
 }
 
-/// Write one span in `form`: the escape sequences that switch its attributes
-/// on, its text, and the ones that switch them off again in reverse order.
+/// The style a span is written in under `form`.
 ///
-/// The sequences are the ones patine's own writer uses, so a span starts
-/// and ends in the terminal's default style and nothing carries over a line
-/// break. Bold and dim share one reset, SGR 22.
-fn write_span(out: &mut String, text: &str, style: TextStyle, form: Form) {
-    if form == Form::Plain {
-        out.push_str(text);
-        return;
-    }
-    let foreground = match form {
-        Form::Colored => style.foreground,
-        Form::Styled | Form::Plain => None,
-    };
-    if style.bold {
-        out.push_str("\x1b[1m");
-    }
-    if style.dim {
-        out.push_str("\x1b[2m");
-    }
-    if style.italic {
-        out.push_str("\x1b[3m");
-    }
-    match style.underline {
-        Underline::None => {}
-        Underline::Single => out.push_str("\x1b[4m"),
-        Underline::Double => out.push_str("\x1b[4:2m"),
-    }
-    if style.strikethrough {
-        out.push_str("\x1b[9m");
-    }
-    if let Some(color) = foreground {
-        let _ = write!(out, "\x1b[38;5;{}m", color.index());
-    }
-    out.push_str(text);
-    if foreground.is_some() {
-        out.push_str("\x1b[39m");
-    }
-    if style.strikethrough {
-        out.push_str("\x1b[29m");
-    }
-    if style.underline != Underline::None {
-        out.push_str("\x1b[24m");
-    }
-    if style.italic {
-        out.push_str("\x1b[23m");
-    }
-    if style.bold || style.dim {
-        out.push_str("\x1b[22m");
+/// `patine::ansi` writes no sequence for the default style, so `Plain` is
+/// the text alone. `without_colors` is patine's own decision of what counts
+/// as a colour, which keeps a style patine adds later in the drawing.
+fn form_style(style: TextStyle, form: Form) -> TextStyle {
+    match form {
+        Form::Colored => style,
+        Form::Styled => style.without_colors(),
+        Form::Plain => TextStyle::default(),
     }
 }
 
@@ -340,21 +299,6 @@ mod tests {
     // =========================================================
 
     #[test]
-    fn a_colored_drawing_matches_patines_own_writer() {
-        let styles = "---\ntitle: S\n---\n# One\n\n## Two\n\n*it* **bo** ~~st~~ `co` \
-                      [li](https://example.org)\n\n- [x] **x**\n\n> quoted\n\n\
-                      ```rust\nfn main() {}\n```\n";
-        for note in [KITCHEN_SINK, styles] {
-            let mut expected = Vec::new();
-            patine::render(note, &mut expected, 80).expect("writing to a Vec cannot fail");
-            assert_eq!(
-                draw_note(note, 80, Form::Colored).text,
-                String::from_utf8(expected).expect("patine writes UTF-8")
-            );
-        }
-    }
-
-    #[test]
     fn a_styled_drawing_is_the_colored_one_without_colours_and_with_dim_bars() {
         let note = "---\ntitle: S\n---\n# One\n\n`code` and > text\n\n> quoted\n";
         let styled = draw_note(note, 80, Form::Styled).text;
@@ -400,24 +344,26 @@ mod tests {
         let clean = "---\ntitle: H\n---\nraw [2J and 6n and txt, \
                      decoded [31m and ]52;c;x and \
                      [a](xy) [b](xy) [c](xy)\n";
-        let drawn = draw_note(hostile, 200, Form::Colored).text;
-        for escaped in [
-            "\\u{1b}[2J",
-            "\\u{9b}6n",
-            "\\u{202e}txt",
-            "\\u{1b}[31m",
-            "\\u{1b}]52;c;x",
-            "(x\\ry)",
-            "(x\\ny)",
-            "(x\\u{1b}y)",
-        ] {
-            assert!(drawn.contains(escaped), "{escaped} in {drawn:?}");
+        for form in [Form::Plain, Form::Styled, Form::Colored] {
+            let drawn = draw_note(hostile, 200, form).text;
+            for escaped in [
+                "\\u{1b}[2J",
+                "\\u{9b}6n",
+                "\\u{202e}txt",
+                "\\u{1b}[31m",
+                "\\u{1b}]52;c;x",
+                "(x\\ry)",
+                "(x\\ny)",
+                "(x\\u{1b}y)",
+            ] {
+                assert!(drawn.contains(escaped), "{form:?}: {escaped} in {drawn:?}");
+            }
+            assert!(!without_sgr(&drawn).contains('\x1b'), "{form:?}: {drawn:?}");
+            assert_eq!(
+                drawn.lines().count(),
+                draw_note(clean, 200, form).text.lines().count()
+            );
         }
-        assert!(!without_sgr(&drawn).contains('\x1b'), "{drawn:?}");
-        assert_eq!(
-            drawn.lines().count(),
-            draw_note(clean, 200, Form::Colored).text.lines().count()
-        );
     }
 
     #[test]
