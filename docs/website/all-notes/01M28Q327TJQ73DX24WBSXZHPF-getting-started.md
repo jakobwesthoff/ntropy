@@ -6,14 +6,10 @@ site:
   label: Getting started
   order: 1
 ---
-This section gets ntropy onto your machine and takes you through the first
-vault. Install it below, scaffold a vault, and write a note. Then read
-[A day with ntropy](01M28Q328EEEJKWA58R2DEYKKQ-a-day-with-ntropy.md), a short
-tour of how the commands fit together, and keep
-[Commands](01M28Q3292T4MPPX6NZN69PN6H-commands.md), the reference table of
-every command and flag, within reach.
+Three steps make ntropy ready to use: install it, tell it which editor to
+open, and create a vault for your notes.
 
-## Installation
+## Install
 
 ntropy is published on crates.io:
 
@@ -21,69 +17,62 @@ ntropy is published on crates.io:
 cargo install ntropy
 ```
 
-### Homebrew
-
-On macOS and Linux, ntropy also installs from my
+On macOS and Linux it also installs from the
 [Homebrew tap](https://github.com/jakobwesthoff/homebrew-tap):
 
 ```bash
 brew install jakobwesthoff/tap/ntropy
 ```
 
-The formula brings typst along, which
-[PDF rendering](01M28Q32H5RYMZ5MHBQSQQN13B-rendering-to-pdf-and-html.md)
-needs, and installs the [shell integration](01M28Q32N56MS70ETPES4794HJ-scripting-and-the-shell.md)
-script that defines `ncd`. To use it, add this line to your `~/.zshrc` or
-`~/.bashrc`:
+The formula also installs typst, which rendering a PDF needs, and the
+shell script that defines `ncd`, a command that changes into your vault.
+It needs one `source` line in your shell's startup file, given in
+[Scripting and the shell](01M28Q32N56MS70ETPES4794HJ-scripting-and-the-shell.md).
 
-```bash
-source "$(brew --prefix)/opt/ntropy/share/ntropy/ntropy.sh"
-```
-
-### Pre-built binaries
-
-Each release ships binaries on the
-[GitHub Releases](https://github.com/jakobwesthoff/ntropy/releases) page for
-macOS (Apple Silicon and Intel) and Linux (x86_64 and aarch64, statically
-linked).
-
-### Building from source
-
-```bash
-git clone https://github.com/jakobwesthoff/ntropy.git
-cd ntropy
-cargo build --release
-cargo install --path .   # install your working copy onto your PATH
-```
+Each release also ships binaries on the
+[GitHub Releases](https://github.com/jakobwesthoff/ntropy/releases) page,
+for macOS (Apple Silicon and Intel) and Linux (x86_64 and aarch64,
+statically linked).
 
 > [!NOTE]
-> ntropy supports macOS and Linux. Windows is not supported; the reason is in
-> [Limitations](01M28Q32Q4M6KYH4YXJ3EPDHQT-limitations.md).
+> ntropy supports macOS and Linux. Windows is not supported; the reason
+> is in [Limitations](01M28Q32Q4M6KYH4YXJ3EPDHQT-limitations.md). To build
+> ntropy from source, see
+> [Development](01M28Q32PFZCYEGS4TCN4Z0GN9-development.md).
 
-## Quick start
+## Set your editor
+
+ntropy opens a note in the editor that `$VISUAL` names, or else
+`$EDITOR`. With neither set, `new`, `today` and `search` cannot open a
+note and stop with an error. Set one in your shell's startup file, such
+as `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-# Scaffold a vault (this also seeds a by-tag view)
-ntropy init ~/notes
-cd ~/notes
-
-# Create a note from a template and open it in your editor
-ntropy new My first note
-
-# Open today's daily note (created on first use each day)
-ntropy today
-
-# Find and open notes: full query language, fuzzy picker when several match
-ntropy search tag:work and not status:done
+export EDITOR=nvim
 ```
 
-`new` stamps the note out of a
-[template](01M28Q32BNT6XKW8DFW56GH06T-templates-and-daily-notes.md), and
-`today` has a daily template of its own. `search` takes an expression in the
-[query language](01M28Q32FC8RW01C5DSEEV77DW-query-language.md); one match
-opens in your editor, several open the
-[interactive picker](01M28Q32FZCNHV2PZ5FSG8E360-the-interactive-picker.md).
+> [!TIP]
+> The value may carry arguments, as in `EDITOR="code -w"`.
+> [Configuration](01M28Q32E6BHWB0H27MM57KY90-configuration.md) has the
+> details.
 
-You never have to tell ntropy which vault you mean from inside one. It finds
-the vault on its own; the rules are in
-[Finding the vault](01M28Q32CAAZA2PWAP4RR44GMA-finding-the-vault.md).
+## Create a vault
+
+A vault is a directory that holds your notes. Create one and change into
+it:
+
+```bash
+ntropy init ~/notes
+cd ~/notes
+```
+
+`init` creates `all-notes/` for the notes, a `by-tag` view that files
+them by tag, a `README.md`, and `.ntropy/` with the vault's settings and
+templates. Inside the vault, or in any directory below it, every command
+finds it on its own.
+
+> [!TIP]
+> `ntropy init ~/notes --set-default` also makes it the default vault,
+> which commands use wherever no other vault is found.
+> [Finding the vault](01M28Q32CAAZA2PWAP4RR44GMA-finding-the-vault.md)
+> has the rules.

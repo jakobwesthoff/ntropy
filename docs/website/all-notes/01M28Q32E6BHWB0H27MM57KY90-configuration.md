@@ -8,7 +8,7 @@ There is not much to configure, on purpose. This page lists what there is: the e
 
 ## Your editor
 
-ntropy opens notes in `$VISUAL`, then `$EDITOR`. It won't guess a default: if neither is set, opening a note fails with a message saying so. Set one of them in your shell and ntropy uses it for `new`, `today`, and opening notes from the picker.
+ntropy opens notes in `$VISUAL`, or else `$EDITOR`, for `new`, `today` and `search`. It guesses no default: with neither set, opening a note fails with a message saying so.
 
 The value can carry arguments, the way git reads it: ntropy hands it to `/bin/sh` and adds the note's path as the last argument. `EDITOR="code -w"` and `EDITOR="emacsclient -t"` work, and so do `~` and `$VARIABLES` in the value. Quote a program path that contains spaces or other characters special to the shell: `EDITOR="'/Applications/My Editor.app/Contents/MacOS/edit' -w"`.
 
