@@ -41,6 +41,9 @@ change in any release
 - A page from `render --to html` is one column on a narrow screen. It kept the
   outline column beside the note at every width, which left the note 135 px
   wide at a viewport of 390 px.
+- The header of a `render --to html` page ends a title that does not fit with
+  an ellipsis, in the built-in theme and the documentation site's theme. It
+  was cut off mid-word.
 - The documentation site's footer wraps at its separators on a narrow screen
   instead of widening the page.
 - The documentation site's header shows the whole site name on a phone: below

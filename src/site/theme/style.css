@@ -779,10 +779,10 @@ input[type="checkbox"] {
   margin-bottom: var(--section-gap);
 }
 
+/* A block, not a flex box: text-overflow only ellipsizes the text of a
+ * block container, and a document puts its own title here. */
 .site-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.55em;
+  display: block;
   color: var(--fg-bright);
   font-size: 1.05rem;
   font-weight: 600;
@@ -797,9 +797,11 @@ input[type="checkbox"] {
 
 .site-name::before {
   content: "";
-  flex: none;
+  display: inline-block;
   width: 0.6em;
   height: 0.6em;
+  margin-right: 0.55em;
+  vertical-align: 0.02em;
   background: var(--accent);
   border-radius: 2px;
 }
@@ -864,6 +866,19 @@ input[type="checkbox"] {
   background: var(--raised);
   color: var(--accent);
   box-shadow: var(--shadow-raised);
+}
+
+/* At 320px the menu link, the whole site name, the search and the switch
+ * fill the row only with tighter gaps and narrower switch buttons. */
+@media (max-width: 22rem) {
+  .site-header,
+  .header-tools {
+    gap: 0.4rem;
+  }
+
+  .theme-choice {
+    padding: 0.3rem 0.4rem;
+  }
 }
 
 /* The search button, and the palette it opens over the page. */

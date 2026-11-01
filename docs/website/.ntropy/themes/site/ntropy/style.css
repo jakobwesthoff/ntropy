@@ -757,10 +757,10 @@ input[type="checkbox"] {
   margin-bottom: var(--section-gap);
 }
 
+/* A block, not a flex box: text-overflow only ellipsizes the text of a
+ * block container, and a document puts its own title here. */
 .site-name {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45em;
+  display: block;
   color: var(--fg-bright);
   font-family: var(--display);
   font-size: 1.05rem;
@@ -777,9 +777,9 @@ input[type="checkbox"] {
  * the name. */
 .site-name::before {
   content: "$";
-  flex: none;
   color: var(--accent);
   font-weight: 400;
+  margin-right: 0.45em;
 }
 
 .site-name:hover {
