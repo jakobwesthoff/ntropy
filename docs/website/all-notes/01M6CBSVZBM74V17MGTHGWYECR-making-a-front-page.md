@@ -1,8 +1,8 @@
 ---
 title: Making a front page
-tags: [docs/publish]
+tags: [docs/themes]
 site:
-  order: 6
+  order: 3
 ---
 Without a front page of its own, a site opens on a generated overview: the
 newest notes, the top-level tags, and the views. This guide turns one note

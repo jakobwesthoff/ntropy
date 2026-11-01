@@ -112,6 +112,16 @@ render warns (`--strict` fails on it). Images in cells count as no width. A
 theme that wraps tables in a padded block takes that padding out of the
 columns of a squeezed table.
 
+Headings carry labels starting `ntropy-h-` and footnotes labels starting
+`ntropy-fn-`; a theme defines no labels with those prefixes. A footnote is
+drawn once, at its first reference, and later references show its number.
+Drawing the body twice, or a block holding a heading or a repeatedly
+referenced footnote, fails the compile on the duplicated label. An
+`outline()` of the headings compiles unless a heading holds a footnote the
+note references again. A `show footnote` rule also runs for the repeated
+references, where `it.body` is a label: check `type(it.body) == label`
+before printing it.
+
 ## Assets and imports
 
 typst runs with `--root <vault>` and reads the document on stdin, which

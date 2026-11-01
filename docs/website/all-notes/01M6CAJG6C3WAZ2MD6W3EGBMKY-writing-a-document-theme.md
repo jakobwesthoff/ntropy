@@ -1,18 +1,15 @@
 ---
 title: Writing a document theme
-tags: [docs/publish]
+tags: [docs/themes]
 site:
-  order: 2
+  order: 1
 ---
 A document theme is one Typst file in your vault that decides how
 `ntropy render` lays out a PDF: the page, the fonts, the title, the
 callouts. This guide builds one called `handout`, starting from a copy of
-ntropy's own look and changing one thing you can see per step.
-[Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md) is the
-reference behind it. The look of `render --to html` and of an exported
-website comes from a [site theme](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md)
-instead; [Writing a site theme](01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme.md)
-builds one.
+ntropy's own look and changing one thing you can see per step. The
+reference behind it is
+[Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md).
 
 You need [typst](https://typst.app) on your `PATH`, which every PDF
 render needs, and a vault.
@@ -81,31 +78,6 @@ On Linux, use `xdg-open` in place of `open`. The `&&` opens the PDF only
 when the render worked, so a failed render does not leave you looking at
 the previous one.
 
-The seven steps render this note. "Check your theme" at the end uses a
-longer one, the theme test note: every heading level, lists, quotes and
-callouts, tables, code, images, footnotes and long words, so one render
-shows how the theme draws each of them. It comes with the note it links
-to and the two images it shows, and this command puts them into your
-vault:
-
-```bash
-curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-note.tar.gz | tar xz -C "$(ntropy info -p)"
-```
-
-Every [ntropy release](https://github.com/jakobwesthoff/ntropy/releases/latest)
-also carries `theme-test-note.tar.gz`, packed from the same commit as its
-binary.
-
-The archive adds two notes tagged `theme-test` to `all-notes/` and the folder
-`assets/theme-test/`. In an encrypted vault, run `ntropy reconcile` after
-it, which encrypts the two notes. To remove them again:
-
-```bash
-ntropy delete -n -f 01M6CCEVBP701HH0VPBT6ZNAYZ
-ntropy delete -n -f 01M6CCEVCDRQ5504MDH503KQT2
-rm -r assets/theme-test
-```
-
 ## Step 1: Copy the default and switch it on
 
 The whole layout of a PDF is one Typst function, `note`. Copy ntropy's own
@@ -130,12 +102,9 @@ theme = "handout"
 ```
 
 > [!NOTE]
-> A vault names its themes in `.ntropy/config.toml`. `[render] theme` picks
-> a document theme, a Typst file in `.ntropy/themes/typst/`, for PDF and
-> Typst output; `[site] theme` picks a site theme, a directory in
-> `.ntropy/themes/site/`, for `ntropy site` and `render --to html`.
-> `--theme <name>` picks another theme for one command, and
-> `--theme default` the built-in look.
+> `--theme <name>` picks another theme for one render, and
+> `--theme default` the built-in look. How a vault selects its themes is
+> in [Themes](01M6CJK3JX0YS4R2FFHPJTG0JG-themes.md).
 
 Render again. The PDF looks the same as before, because the theme is still
 a copy. Now make it yours: add a colour at the very top of `handout.typ`,
@@ -243,9 +212,11 @@ Render again, and the text is set in Plex.
 ![The note set in IBM Plex Sans](../assets/document-theme/step-3.png)
 
 > [!WARNING]
-> A font name typst does not find is replaced by the default font without
-> a word, also under `--strict`. If the PDF still shows the old font, the
-> name is misspelt or `TYPST_FONT_PATHS` is not set in this terminal.
+> A font name typst does not find is replaced by the default font. The
+> render shows typst's warning `unknown font family: <name>` as one of its
+> warnings, and `--strict` fails on it. If the PDF still shows the old
+> font, the name is misspelt or `TYPST_FONT_PATHS` is not set in this
+> terminal.
 > `pdffonts /tmp/release-checklist.pdf` (from poppler, if you have it)
 > lists the fonts in the PDF: yours should be there, and Libertinus Serif
 > in its place means the name was not found. A glyph your font lacks is
@@ -449,11 +420,19 @@ lists the element each Markdown construct becomes.
 Render a few of your real notes with the theme, and one with
 `--theme default` next to it.
 
-Then render the theme test note from "Before you start":
+Then render the theme test note, which holds a little of every part a
+theme styles. This puts it into your vault and renders it;
+[Themes](01M6CJK3JX0YS4R2FFHPJTG0JG-themes.md) describes what it holds
+and which releases carry it:
 
 ```bash
+curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-note.tar.gz | tar xz -C "$(ntropy info -p)"
 ntropy render --force -o /tmp/theme-test-note.pdf 'title:"Theme test note"' && open /tmp/theme-test-note.pdf
 ```
+
+> [!NOTE]
+> In an encrypted vault, run `ntropy reconcile` after the download. It
+> encrypts the two notes the archive adds.
 
 Read it section by section:
 
@@ -472,30 +451,32 @@ Read it section by section:
 - Footnotes and Wrapping: the footnote text, and the long word, URL and
   line of code.
 
-ntropy does not show typst's warnings, such as the one for a font typst
-does not find. To see them, write the Typst document and compile it
-yourself; with `'title:"Theme test note"'` the same check covers the test
-note:
+A PDF render shows typst's warnings, such as the one for a font typst
+does not find, as warnings of its own, and `--strict` fails on them. In a
+terminal without `TYPST_FONT_PATHS`, rendering the release checklist
+prints:
+
+```
+warning: unknown font family: ibm plex sans (in `set text(font: "IBM Plex Sans", size: 10pt)`)
+```
+
+A theme that does not compile fails the render with typst's error. The
+line it names after `<stdin>` is a line of the Typst document ntropy
+hands to typst, not of your theme file. To see which of your lines it
+is, write that document and compile it yourself, then open
+`/tmp/check.typ` at that line:
 
 ```bash
 ntropy render --to typst --force -o /tmp/check.typ 'title:"Release checklist"'
 typst compile --root "$(ntropy info -p)" - /tmp/check.pdf < /tmp/check.typ
 ```
 
-In a terminal without `TYPST_FONT_PATHS`, that prints:
+An error in a file your theme imports names that file instead.
 
-```
-warning: unknown font family: ibm plex sans
-    ┌─ <stdin>:220:17
-    │
-220 │   set text(font: "IBM Plex Sans", size: 10pt)
-    │                  ^^^^^^^^^^^^^^^
-```
+When you are done with the test note, remove it again:
 
-A theme that does not compile fails the render with typst's error. The
-line it names after `<stdin>` is a line of that Typst document, not of
-your theme file: open `/tmp/check.typ` at that line to see which of your
-lines it is. An error in a file your theme imports names that file
-instead, as
-[Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md#errors-and-warnings)
-describes.
+```bash
+ntropy delete -n -f 01M6CCEVBP701HH0VPBT6ZNAYZ
+ntropy delete -n -f 01M6CCEVCDRQ5504MDH503KQT2
+rm -r assets/theme-test
+```

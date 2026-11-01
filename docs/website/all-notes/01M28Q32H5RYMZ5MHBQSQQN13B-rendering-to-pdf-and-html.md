@@ -155,5 +155,4 @@ shows the text you wrote instead of the note's title.
 ## The look
 
 A PDF takes its look from a document theme, and the `html` page from a
-site theme; see Document themes and
-[Site themes](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md).
+site theme; see [Themes](01M6CJK3JX0YS4R2FFHPJTG0JG-themes.md).

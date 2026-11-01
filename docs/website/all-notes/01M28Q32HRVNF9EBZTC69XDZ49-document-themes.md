@@ -1,57 +1,36 @@
 ---
 title: Document themes
-tags: [docs/publish]
+tags: [docs/themes]
 site:
-  order: 3
+  order: 4
 ---
-A vault can render its PDFs in its own livery. A document theme is one
-Typst file under `.ntropy/themes/typst/` that redefines what it wants and
-inherits the rest. This page covers how to set one up, what a theme may
-override, what it receives, what the note's body is made of, fonts, how it
-reaches assets in the vault, and the paper size.
+A document theme is one Typst file under `.ntropy/themes/typst/` that
+gives a vault's PDFs their own look. It redefines what it wants and
+inherits the rest. This page is the reference: what a theme may
+override, what it receives, what the note's body is made of, fonts,
+assets, errors, and the paper size.
 [Writing a document theme](01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md)
-builds one step by step and is the place to start. The `html` format reads
-none of this; its look comes from a
-[site theme](01M28Q32K56T4M52EGDDVYBSDX-site-themes.md).
+builds one step by step.
 
-## Setting up a theme
+## The theme file
 
-Drop a Typst file into `.ntropy/themes/typst/` and name it in the
-`[render]` section. `ntropy init` does not create the directory, so make
-it first:
+A theme named `corporate` is the file
+`.ntropy/themes/typst/corporate.typ`, selected with `theme = "corporate"`
+in the `[render]` table of `.ntropy/config.toml`; selecting is described
+in [Themes](01M6CJK3JX0YS4R2FFHPJTG0JG-themes.md). `ntropy init` does not
+create the directory, so make it first:
 
 ```bash
 mkdir -p .ntropy/themes/typst
 ```
 
-```toml
-# .ntropy/config.toml
-[render]
-theme = "corporate"
-```
-
-That is the whole setup. From then on every `ntropy render` in the vault
-uses it, with nothing extra on the command line:
-
-```bash
-ntropy render 01j8za2…              # themed
-
-# and so is every note in the vault
-ntropy search -n | tail -n +2 | awk '{print $1}' |
-  while read -r id; do ntropy render -n "$id"; done
-```
-
-`--theme <name>` overrides the configured theme for one render, and
-`--theme default` goes back to ntropy's built-in look. `theme = "default"`
-in the config means the same. A theme that is missing or does not
-compile fails the render: a document is never quietly produced in the
-wrong livery. A configured theme with no file fails before the vault is
-scanned, with an error naming the path it looked for. A theme that does
-not compile fails with typst's error, described under
-[Errors and warnings](#errors-and-warnings).
-
-ntropy ships no named themes of its own beyond the built-in default.
-Themes are the vault's own files.
+From then on every `ntropy render` in the vault uses the theme, with
+nothing extra on the command line. A configured theme with no file fails
+before the vault is scanned, with an error naming the path it looked
+for. A theme that does not compile fails with typst's error, described
+under [Errors and warnings](#errors-and-warnings). ntropy ships no named
+themes of its own beyond the built-in default; themes are the vault's
+own files.
 
 ## What a theme overrides
 
@@ -170,24 +149,27 @@ on these elements:
 | `---` | `line(length: 100%)` |
 | a hard line break | `linebreak()` |
 
-A column with a Markdown alignment keeps it, as every one of its cells sets
-`align` itself. A column without one follows `set table(align: ...)`; the
-built-in look sets `start`. A quote with any other marker, such as
-`> [!FOO]`, stays a `quote`, so `callout` only ever sees the five kinds. Raw HTML is dropped, with a warning
-naming it.
+A column with a Markdown alignment keeps it, as every one of its cells
+sets `align` itself. A column without one follows
+`set table(align: ...)`; the built-in look sets `start`. A quote with any
+other marker, such as `> [!FOO]`, stays a `quote`, so `callout` only ever
+sees the five kinds. Raw HTML is dropped, with a warning naming it.
 
 The built-in look also measures every column and sets the column widths
-itself, so cells do not run into each other. When the widest word of each
-column does not fit the page, the table is set in smaller text, down to 60
-percent of the size. A table that would need smaller text stays at 60
-percent, runs past the right edge of the page and loses the columns beyond
-it. A PDF render warns about it, and `--strict` turns the warning into a
-failure. Widths come from the text of the cells, so an image in a cell
-counts as no width. `--to typst` gives no warning, since the check runs typst
-on the document after the PDF compile. If that check cannot run, the render
-warns that it could not check the tables and still finishes. A theme that
-wraps tables in a padded block takes that padding out of the columns of a
-squeezed table.
+itself, so cells do not run into each other. Widths come from the text of
+the cells, so an image in a cell counts as no width.
+
+- When the widest word of each column does not fit the page, the table
+  is set in smaller text, down to 60 percent of the size.
+- A table that would need smaller text stays at 60 percent, runs past
+  the right edge of the page and loses the columns beyond it. A PDF
+  render warns about it, and `--strict` turns the warning into a
+  failure.
+- `--to typst` gives no such warning, since the check runs typst on the
+  document after the PDF compile. If that check cannot run, the render
+  warns that it could not check the tables and still finishes.
+- A theme that wraps tables in a padded block takes that padding out of
+  the columns of a squeezed table.
 
 Every footnote is drawn once, at its first reference in the text, and
 every later reference shows the same number. Headings carry labels that
@@ -236,12 +218,10 @@ export TYPST_FONT_PATHS="$(ntropy info -p)/assets/fonts"
 `typst fonts` lists the names typst can use, and
 `typst fonts --font-path <dir>` includes a directory.
 
-> [!WARNING]
-> A font name typst does not find falls back to the default font, and the
-> render succeeds. typst's warning `unknown font family: <name>` reaches you
-> as a warning of the render (see
-> [Errors and warnings](#errors-and-warnings)), and `--strict` fails on it.
-> `pdffonts` from poppler lists the fonts a PDF embeds.
+A font name typst does not find falls back to the default font. The
+render still succeeds, with typst's warning `unknown font family: <name>`
+as one of its warnings, and `--strict` fails on it. `pdffonts` from
+poppler lists the fonts a PDF embeds.
 
 ## Assets and the vault root
 
@@ -256,13 +236,6 @@ path, `#import "/.ntropy/themes/typst/colors.typ": accent`. An imported
 file is a module of its own: it sees neither ntropy's definitions such as
 `fmt-value` nor the names of the theme file. Pass it what it needs as
 arguments, or keep the code that uses them in the theme file.
-
-> [!NOTE]
-> Because a theme's assets are addressed from the vault root, compiling a
-> `--to typst` artifact by hand takes the vault as the root. typst refuses
-> a document file outside that root, so hand the artifact over on standard
-> input, as ntropy does:
-> `typst compile --root <vault> - note.pdf < note.typ`.
 
 ## Errors and warnings
 
@@ -282,18 +255,23 @@ points at in backticks and typst's hints, if it has any:
 warning: unknown font family: no-such-font (in `set text(font: "no-such-font")`)
 ```
 
-The line number is left out as it counts lines of the emitted document.
-typst prints nothing for a character no font covers, so that
-case stays silent. The `--to typst` format runs no compiler and shows no
-typst warnings; compiling its artifact by hand, as in the note above,
-prints them.
+The line number is left out, as it counts lines of the emitted
+document. typst prints nothing for a character no font covers, so that
+case stays silent.
 
-To see a theme draw the parts of a note in one document, render the theme
-test note, a download that comes with the note it links to and its two
-images.
-[Writing a document theme](01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md#before-you-start)
-gives the command that puts it into a vault, and its last section what to
-look at.
+The `--to typst` format runs no compiler and shows no typst warnings.
+Compiling its artifact by hand prints them, and shows the emitted line an
+error names. Since a theme's assets are addressed from the vault root,
+the compile takes the vault as its root. typst refuses a document file
+outside that root, so hand the artifact over on standard input, as
+ntropy does:
+
+```bash
+typst compile --root <vault> - note.pdf < note.typ
+```
+
+To see a theme draw the parts of a note in one document, render the
+theme test note, described in Themes.
 
 ## Paper size
 

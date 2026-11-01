@@ -1,18 +1,20 @@
 ---
 title: Site themes
-tags: [docs/publish]
+tags: [docs/themes]
 site:
-  order: 7
+  order: 5
 ---
 A site theme is the stylesheet, fonts, icons, and page templates of the
 exported pages. The same theme styles `ntropy site` and
-`ntropy render --to html`. This page is the contract a theme author
+`ntropy render --to html`. This page is the reference a theme author
 writes against: the directory layout, the custom properties of the
 built-in stylesheet, its fonts and icons, the page markup, what the
 stylesheet and the page scripts rely on, and the templates with their
 blocks and variables.
+[Writing a site theme](01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme.md)
+builds one step by step.
 
-## Layout and selection
+## Layout
 
 A site theme is a directory `.ntropy/themes/site/<name>/` holding what a
 web developer expects: a stylesheet, fonts, icons, and, where the
@@ -28,12 +30,12 @@ anything else    copied as it is into the site's assets/ and beside
 ```
 
 `icons/` goes into the site's `assets/` only; both kinds of page inline
-the icon sprite. Hidden files, and the names a
-[website export](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md)
-never copies such as a theme's `.git`, stay out, as does a file that is a
-symlink to somewhere outside the theme and the vault. If `style.css`, an
-icon or a template is such a symlink, the theme does not load and the
-error names the file.
+the icon sprite. Hidden files stay out, and so do the names an export
+never copies, such as a theme's `.git` (the list is in
+[Exporting a website](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md)).
+A file that is a symlink to somewhere outside the theme and the vault
+stays out too. If `style.css`, an icon or a template is such a symlink,
+the theme does not load, and the error names the file.
 
 What a theme holds is what its pages get. Its `style.css` is the whole
 stylesheet: nothing of the built-in stylesheet is added, and its `fonts/`
@@ -45,19 +47,10 @@ from the built-in theme, which has the same layout:
 ntropy site theme init mine          # writes .ntropy/themes/site/mine/
 ```
 
-```toml
-# .ntropy/config.toml
-[site]
-theme = "mine"
-title = "Team Docs"                  # defaults to the vault directory name
-index = "01ARZ3NDEKTSV4RRFFQ69G5FAV" # the note that becomes the front page
-lang = "en"
-```
-
-`site theme init` refuses to overwrite an existing directory.
-`--theme <name>` overrides the configured theme for one export, and
-`--theme default` returns to the built-in look. A configured theme that
-does not exist fails the export.
+`site theme init` refuses to overwrite an existing directory. The theme
+is selected with `theme = "mine"` in the `[site]` table, as
+[Themes](01M6CJK3JX0YS4R2FFHPJTG0JG-themes.md) describes. A configured
+theme that does not exist fails the export.
 
 The copy `site theme init` writes stays as it is when ntropy is updated.
 To take a newer built-in stylesheet, write a fresh theme under another
@@ -226,38 +219,9 @@ replaces `page.html` instead of extending it keeps them:
 
 ## Testing a theme
 
-The theme test vault is a small vault made to show a site theme the kinds
-of page and the parts of a page the built-in theme draws. Its front page,
-Welcome, is set by `[site] index` and lists what each note shows. The theme
-test note holds the parts of a note body, with nested quotes, callouts and
-tables, a frontmatter table with nested values, and an outline with all six
-heading levels; a companion note is the target of a link with a heading
-anchor. A landing note, "Site tour", makes a group page with a listing,
-three tour stops give the sidebar order and the pager, "Tour detail" has a
-breadcrumb of three steps, "Raw HTML and remote images" holds what only web
-pages show, and a hidden note has a page that no sidebar or listing names.
-A note whose title, tag, frontmatter key and frontmatter value are each one
-word wider than a phone screen shows how a theme wraps unbreakable text. The
-view `by-status` and the tags fill the sidebar.
-
-Download it, copy a theme into it, and export it with that theme:
-
-```bash
-curl -fsSL https://ntropy.westhoffswelt.de/downloads/theme-test-vault.tar.gz | tar xz
-mkdir -p theme-test/.ntropy/themes/site
-cp -R <vault>/.ntropy/themes/site/mine theme-test/.ntropy/themes/site/
-ntropy --vault theme-test site -o theme-test-site --force --theme mine
-```
-
-Every [ntropy release](https://github.com/jakobwesthoff/ntropy/releases/latest)
-also carries `theme-test-vault.tar.gz`, packed from the same commit as its
-binary. Welcome also names what the vault cannot show: the generated front
-page without `index`, a breadcrumb step without a link, which only a
-`[[site.nav]]` table makes, an empty listing, and the parts the page's
-scripts draw. To have the theme test note in your own vault, for a
-`render --to html` page of it,
-[Writing a site theme](01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme.md#before-you-start)
-gives the command.
+The theme test vault shows a theme every kind of page and every part of
+a page the built-in theme draws; Themes describes it and how to export
+it with a theme of your own.
 
 ## Templates
 
@@ -271,26 +235,9 @@ template of the same name; a file in a subdirectory is named by its path
 `ntropy/<name>`. `ntropy/page.html` extends `base.html` and renders a
 note with `note.html` by those plain names, so a theme's own `base.html`
 and `note.html` apply under it too. A theme that only needs a row of
-links and a footer extends the built-in page and fills two of its seams:
-
-```html
-{# .ntropy/themes/site/mine/templates/page.html #}
-{% extends "ntropy/page.html" %}
-{% block header_nav %}<nav class="site-links">
-{% for link in vars.links %}<a href="{{ prefix }}{{ link.href }}">{{ link.label }}</a>
-{% endfor %}</nav>{% endblock %}
-{% block footer %}<footer>{{ vars.copyright }}</footer>{% endblock %}
-```
-
-```toml
-# .ntropy/config.toml
-[site.vars]                          # free-form; only your templates read it
-copyright = "Acme, 2026"
-links = [
-  { label = "Docs", href = "tags/docs/index.html" },
-  { label = "Legal", href = "notes/impressum.html" },
-]
-```
+links and a footer extends the built-in page and fills two of its seams,
+as [step 7 of Writing a site theme](01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme.md#step-7-header-links-and-a-footer)
+shows with the `[site.vars]` table its links come from.
 
 `base.html` defines the blocks `title`, `head`, `body_class`, and
 `body`. The built-in `page.html` fills those four and adds six empty
@@ -370,9 +317,8 @@ export naming the template and the line.
 
 A note picks another template for its pages with `site.template` in its
 frontmatter: `template: splash` renders it with `templates/splash.html`,
-in a site export and in `render --to html` alike, which is how a landing
-page gets a hero or an impressum drops the sidebar. A name the theme has
-no template for is a warning and `page.html` is used. The templates are
+in a site export and in `render --to html` alike. A name the theme has
+no template for is a warning, and `page.html` is used. The templates are
 read at export and never copied into the site; one that fails to parse or
 to render fails the export naming it. A theme template whose own name
 starts with `ntropy/` is refused.
