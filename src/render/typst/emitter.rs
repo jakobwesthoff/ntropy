@@ -484,26 +484,41 @@ fn render_code_block(language: Option<&str>, content: &str) -> String {
     writer.finish()
 }
 
-/// Render a `#table(...)`. The header fixes the column count and per-column
-/// alignment.
+/// Render a `#table(...)`. The header fixes the column count. A column written
+/// with a Markdown alignment (`:---`, `:---:`, `---:`) sets it on each of its
+/// cells. No `align:` argument is written, so a column without one takes the
+/// alignment a theme sets with `set table(align: ..)`.
 fn render_table(table: &Table) -> String {
     let columns = table.header.len();
 
-    let mut writer = TypstWriter::new();
-    writer.syntax(&format!("#table(\ncolumns: {columns},\n"));
-
-    let alignments: Vec<&str> = (0..columns)
+    let alignments: Vec<Option<&str>> = (0..columns)
         .map(|column| match table.alignments.get(column) {
-            Some(Alignment::Left) => "left",
-            Some(Alignment::Center) => "center",
-            Some(Alignment::Right) => "right",
-            // No explicit alignment (or a missing entry) leaves the column to
-            // Typst's default.
-            _ => "auto",
+            Some(Alignment::Left) => Some("left"),
+            Some(Alignment::Center) => Some("center"),
+            Some(Alignment::Right) => Some("right"),
+            _ => None,
         })
         .collect();
-    writer.syntax(&format!("align: ({},),\n", alignments.join(", ")));
 
+    // A cell of an aligned column is `table.cell(align: ..)[..]`. Rows are
+    // padded to the header's width before they reach the emitter, so the cell
+    // index is the column index.
+    let join_cells = |cells: &[String]| -> String {
+        cells
+            .iter()
+            .enumerate()
+            .map(
+                |(column, cell)| match alignments.get(column).copied().flatten() {
+                    Some(alignment) => format!("table.cell(align: {alignment})[{cell}]"),
+                    None => format!("[{cell}]"),
+                },
+            )
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+
+    let mut writer = TypstWriter::new();
+    writer.syntax(&format!("#table(\ncolumns: {columns},\n"));
     writer.syntax(&format!("table.header({},),\n", join_cells(&table.header)));
 
     for row in &table.rows {
@@ -512,16 +527,6 @@ fn render_table(table: &Table) -> String {
 
     writer.syntax(")\n");
     writer.finish()
-}
-
-/// Render each cell as a `[...]` content block and join them for one row. The
-/// cell strings already carry their escaped markup.
-fn join_cells(cells: &[String]) -> String {
-    cells
-        .iter()
-        .map(|cell| format!("[{cell}]"))
-        .collect::<Vec<_>>()
-        .join(", ")
 }
 
 /// Prefix a list item's body with its marker and indent every continuation

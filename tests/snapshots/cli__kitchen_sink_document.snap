@@ -406,10 +406,9 @@ Another reference to the same footnote#footnote(<ntropy-fn-1>);, one used before
 
 #table(
 columns: 3,
-align: (left, center, right,),
-table.header([Left], [Center], [Right],),
-[a], [#emph[b];], [c],
-[short row], [], [],
+table.header(table.cell(align: left)[Left], table.cell(align: center)[Center], table.cell(align: right)[Right],),
+table.cell(align: left)[a], table.cell(align: center)[#emph[b];], table.cell(align: right)[c],
+table.cell(align: left)[short row], table.cell(align: center)[], table.cell(align: right)[],
 )
 
 == Lists <ntropy-h-2>

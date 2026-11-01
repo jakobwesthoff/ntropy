@@ -4642,6 +4642,15 @@ fn pdf_words(pdf: &Path) -> Vec<PdfWord> {
     words
 }
 
+/// Fail unless two edges of words are the same to within the rounding of
+/// `pdftotext`.
+fn assert_same_edge(left: f32, right: f32, message: &str) {
+    assert!(
+        (left - right).abs() < 0.01,
+        "{message}: {left} against {right}"
+    );
+}
+
 /// Render `body` as the note `Tables` to a PDF and return the vault directory
 /// and the PDF's path.
 fn render_note_to_real_pdf(body: &str) -> (tempfile::TempDir, PathBuf) {
@@ -4999,6 +5008,139 @@ fn a_table_column_without_an_alignment_is_left_aligned_in_the_pdf() {
         word("7").x_max,
         word("12345").x_max,
         "a column with an alignment lost it"
+    );
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_theme_aligns_the_table_columns_that_have_no_alignment_in_the_pdf() {
+    // A column written `:---`, `:---:` or `---:` keeps its alignment. The
+    // others follow the theme's `set table(align: ..)`.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "tables",
+        "---\ntitle: Tables\n---\n\
+         | Term | Meaning | Note |\n| --- | :--- | --- |\n\
+         | Canary | The first five percent of traffic | x |\n| Everyone | All | yyyyyyyy |\n",
+    );
+    write_theme(dir.path(), "right", "#set table(align: right)\n");
+    configure_theme(dir.path(), "right");
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "tables.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let words = pdf_words(&dir.path().join("tables.pdf"));
+    let word = |text: &str| {
+        words
+            .iter()
+            .find(|word| word.text == text)
+            .unwrap_or_else(|| panic!("`{text}` is not in the pdf: {words:?}"))
+    };
+    assert_same_edge(
+        word("Canary").x_max,
+        word("Everyone").x_max,
+        "a column without an alignment does not follow the theme",
+    );
+    assert_same_edge(
+        word("All").x_min,
+        word("The").x_min,
+        "a column with `:---` lost its alignment",
+    );
+    assert_same_edge(
+        word("x").x_max,
+        word("yyyyyyyy").x_max,
+        "a column without an alignment does not follow the theme",
+    );
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_theme_aligns_table_columns_by_a_function_in_the_pdf() {
+    // `set table(align: (x, y) => ..)` decides per cell. The unaligned
+    // columns follow it and the column written `---:` keeps its right edge.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "tables",
+        "---\ntitle: Tables\n---\n\
+         | Term | Count | Note |\n| --- | ---: | --- |\n\
+         | Canary | 7 | x |\n| Everyone | 12345 | yyyyyyyy |\n",
+    );
+    write_theme(
+        dir.path(),
+        "by-column",
+        "#set table(align: (x, y) => if x == 0 { right } else { left })\n",
+    );
+    configure_theme(dir.path(), "by-column");
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "tables.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let words = pdf_words(&dir.path().join("tables.pdf"));
+    let word = |text: &str| {
+        words
+            .iter()
+            .find(|word| word.text == text)
+            .unwrap_or_else(|| panic!("`{text}` is not in the pdf: {words:?}"))
+    };
+    assert_same_edge(word("Canary").x_max, word("Everyone").x_max, "first column");
+    assert_same_edge(word("7").x_max, word("12345").x_max, "count column");
+    assert_same_edge(word("x").x_min, word("yyyyyyyy").x_min, "note column");
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_wide_table_keeps_its_cells_apart_under_a_theme_alignment_in_the_pdf() {
+    // The wide-table rule rebuilds the table, which must keep the alignment
+    // the theme sets.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "tables",
+        "---\ntitle: Tables\n---\n\
+         | ID | Pipeline | Region | Start | End | Owner | State | Runs | Failures | Notes |\n\
+         | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n\
+         | 1042 | Release pipeline | eu-central | 2026-10-01 | 2026-11-01 | platform-team | succeeded | 1234 | 12 | nightly |\n\
+         | 7 | Rollback | us-east | 2026-10-02 | 2026-11-02 | infra | failed | 1 | 1 | x |\n",
+    );
+    write_theme(dir.path(), "right", "#set table(align: right)\n");
+    configure_theme(dir.path(), "right");
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "tables.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let words = pdf_words(&dir.path().join("tables.pdf"));
+    assert_words_neither_overlap_nor_leave_the_page(&words);
+    let word = |text: &str| {
+        words
+            .iter()
+            .find(|word| word.text == text)
+            .unwrap_or_else(|| panic!("`{text}` is not in the pdf: {words:?}"))
+    };
+    assert_same_edge(
+        word("1042").x_max,
+        word("7").x_max,
+        "the rebuilt table lost the theme's alignment",
     );
 }
 

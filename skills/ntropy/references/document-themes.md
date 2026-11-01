@@ -92,7 +92,7 @@ Show and set rules inside `note` style these:
 | `- [ ] task` | `list` item starting with `task(done: ...)` and a space; the bullet stays unless `list` is changed |
 | `> quote` | `quote(block: true)` |
 | `> [!NOTE]` and the other four kinds | `callout(kind: ...)`; any other `[!X]` stays a `quote` |
-| pipe table | `table(columns:, align:, table.header(...), ...)`; `align` is always passed (`auto` where the Markdown has none), so `set table(align:)` changes nothing; a column without a Markdown alignment follows `show table.cell: set align(..)`, which the built-in look sets to `start` |
+| pipe table | `table(columns:, table.header(...), ...)`; each cell of a column with a Markdown alignment is `table.cell(align: ..)` and no `align:` is passed, so a column without one follows `set table(align: ..)`, which the built-in look sets to `start` |
 | code block / `` `code` `` | `raw` block (fence language) / `raw` inline |
 | emphasis, strong, strikethrough | `emph`, `strong`, `strike` |
 | links, bare URLs, `<mail@host>` | `link` |
@@ -106,9 +106,11 @@ Show and set rules inside `note` style these:
 
 The built-in look measures the columns of a table and sets their widths. When
 the widest words do not fit the page it sets the table in smaller text, down
-to 60 percent; a table that needs less than that stays at 60 percent, runs past the right
-edge of the page and loses the columns beyond it, and a PDF render warns
-(`--strict` fails on it). Images in cells count as no width.
+to 60 percent; a table that needs less than that stays at 60 percent, runs
+past the right edge of the page and loses the columns beyond it, and a PDF
+render warns (`--strict` fails on it). Images in cells count as no width. A
+theme that wraps tables in a padded block takes that padding out of the
+columns of a squeezed table.
 
 ## Assets and imports
 

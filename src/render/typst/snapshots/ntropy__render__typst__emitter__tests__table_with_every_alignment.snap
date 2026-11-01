@@ -1,10 +1,9 @@
 ---
 source: src/render/typst/emitter.rs
-expression: "emit(\"| L | C | R |\\n| :--- | :---: | ---: |\\n| a | b | c |\")"
+expression: "body(\"| L | C | R |\\n| :--- | :---: | ---: |\\n| a | b | c |\")"
 ---
 #table(
 columns: 3,
-align: (left, center, right,),
-table.header([L], [C], [R],),
-[a], [b], [c],
+table.header(table.cell(align: left)[L], table.cell(align: center)[C], table.cell(align: right)[R],),
+table.cell(align: left)[a], table.cell(align: center)[b], table.cell(align: right)[c],
 )

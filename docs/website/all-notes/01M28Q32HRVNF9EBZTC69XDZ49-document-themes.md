@@ -159,7 +159,7 @@ on these elements:
 | `- [ ] task` | a `list` item that starts with `task(done: ...)` and a space; the list's bullet stays unless the theme changes `list` |
 | `> quote` | `quote(block: true)` |
 | `> [!NOTE]` and the other four kinds | `callout(kind: "note")`, the kind in lower case |
-| pipe table | `table` with a `table.header`; `align` is always passed, from the Markdown alignment row and `auto` where it has none |
+| pipe table | `table` with a `table.header`; each cell of a column with a Markdown alignment is a `table.cell(align: ...)`, and no `align:` is passed |
 | fenced or indented code | `raw` block, with the fence's language |
 | `` `code` `` | `raw` inline |
 | `*em*`, `**strong**`, `~~gone~~` | `emph`, `strong`, `strike` |
@@ -170,11 +170,10 @@ on these elements:
 | `---` | `line(length: 100%)` |
 | a hard line break | `linebreak()` |
 
-A column with a Markdown alignment keeps it: `align` is always passed, so
-`set table(align: ...)` changes nothing. A column without one follows
-`show table.cell: set align(...)`; the built-in look sets it to `start`. A
-quote with any other marker, such as `> [!FOO]`, stays a `quote`, so
-`callout` only ever sees the five kinds. Raw HTML is dropped, with a warning
+A column with a Markdown alignment keeps it, as every one of its cells sets
+`align` itself. A column without one follows `set table(align: ...)`; the
+built-in look sets `start`. A quote with any other marker, such as
+`> [!FOO]`, stays a `quote`, so `callout` only ever sees the five kinds. Raw HTML is dropped, with a warning
 naming it.
 
 The built-in look also measures every column and sets the column widths
@@ -186,7 +185,9 @@ it. A PDF render warns about it, and `--strict` turns the warning into a
 failure. Widths come from the text of the cells, so an image in a cell
 counts as no width. `--to typst` gives no warning, since the check runs typst
 on the document after the PDF compile. If that check cannot run, the render
-warns that it could not check the tables and still finishes.
+warns that it could not check the tables and still finishes. A theme that
+wraps tables in a padded block takes that padding out of the columns of a
+squeezed table.
 
 Every footnote is drawn once, at its first reference in the text, and
 every later reference shows the same number. Headings carry labels that

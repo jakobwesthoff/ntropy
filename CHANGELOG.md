@@ -87,7 +87,8 @@ change in any release
   as in HTML. The built-in look centered every header and body cell of such a
   column. Columns with `:---`, `:---:` or `---:` keep their alignment. A
   custom Typst theme can set the alignment of the cells without one with
-  `show table.cell: set align(...)`.
+  `set table(align: ...)`. ntropy no longer writes an `align:` argument for a
+  table, and each cell of an aligned column carries its own `align`.
 - `render -o some/new/dir/note.<ext>` now creates the missing directory for
   every format. `--to html` already did. `--to pdf`, `--to typst` and
   `--to ansi` stopped with `No such file or directory`. A render that fails
