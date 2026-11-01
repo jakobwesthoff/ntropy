@@ -52,3 +52,7 @@ configured theme is not loaded.
   8,057,472 to 10,106,976 bytes on macOS (Apple Silicon).
 - A line holding escaped characters is wider than the layout width by the
   escapes' length.
+- patine's `TextStyle` is `#[non_exhaustive]`: a style a later patine adds
+  is dropped by ntropy's writer until the writer learns it, and the test
+  that compares the writer with patine's own catches that only when its
+  fixtures use the new style.
