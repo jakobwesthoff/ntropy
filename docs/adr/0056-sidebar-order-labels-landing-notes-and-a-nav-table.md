@@ -27,6 +27,11 @@ links to the section's page where it has one, in place of the "All
 groups" and "Overview" rows. Breadcrumbs start at the section, so a
 section's own page has none.
 
+Amended 2026-11-01 by
+[ADR 0089](0089-previous-and-next-run-through-the-whole-sidebar.md):
+previous and next follow the reading order through the whole sidebar,
+not through one top-level section.
+
 Amends [ADR 0054](0054-site-navigation-and-url-scheme.md), whose
 sidebar had no hand-curated order and whose rejected alternatives
 included a frontmatter order field. The user's answers are recorded in

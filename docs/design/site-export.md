@@ -248,9 +248,17 @@ group holding the note; a landing note's breadcrumb stops above its
 group. A group page's breadcrumb is the one above the group where the
 sidebar first reaches it, or its section and the groups above it when
 the sidebar never does. Previous and next follow the reading order
-through the whole tree of the sidebar section, across group boundaries,
-a landing note before its group's entries, and name the neighbours by
-their labels. On narrow screens the sidebar is a drawer the header's
+through the whole sidebar, sections one after the other, across group
+and section boundaries. A section opens with its own landing note, and a
+group's landing note comes before its entries. Each note is one stop, at
+its first position, and a group without a landing note is no stop. The
+links name the neighbours by their labels. A note the sidebar does not
+reach has no previous and next link, and neither has a front page that is
+no stop. A root group has a section only when it holds notes of its own or
+no child groups, so a root without a section has no landing stop. A link
+into another sidebar section is a change of chapter: the built-in theme
+labels it "Previous chapter" or "Next chapter" in the accent colour, and
+the template context says so (see the template variables). On narrow screens the sidebar is a drawer the header's
 menu button opens by targeting it, which needs no script; Escape and
 following a link inside close it.
 
@@ -356,7 +364,9 @@ rendered. The rest is the page's chrome: `lang`, `site_title`,
 `title`, `path` (the page's site-relative path), `prefix` (the `../`
 that reaches the site root), `stylesheet` and `scripts` (relative to
 the page), `icons` (the sprite), `breadcrumbs` (`label`, `href`),
-`outline`, `prev` and `next` (`title`, `href`), and `body`. The
+`outline`, `prev` and `next` (`title`, `href`, `section`, the title of the
+target's sidebar section, and `crosses_section`, true when that section
+is not the page's own), and `body`. The
 fragments that are HTML already (`icons`, `sidebar`, `outline`,
 `body`) are spliced as they are; every other value is escaped.
 

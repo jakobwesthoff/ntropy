@@ -164,7 +164,8 @@ The page is a `.layout` grid of:
   nesting with another `ul.nav-entries`; the tag section is a
   `section.nav-tags` with an `h2.nav-title` and a `ul.tag-cloud`;
 - `main` with `.breadcrumbs` (a step without a page is a `span`),
-  `.content`, and the `.pager`;
+  `.content`, and the `.pager` (a link into another sidebar section also has
+  `.crosses-section`);
 - `aside.side` holding `nav.outline`.
 
 A note is a `.note-header` (`.note-title`, `.note-meta` with `.note-created`
@@ -286,7 +287,29 @@ Every page template receives the same variables:
 | `sidebar`, `outline`, `body`, `icons` | rendered HTML fragments: the sidebar, the outline, the content, the icon sprite |
 | `title`, `site_title`, `lang`, `path`, `prefix` | the page's title; the site's title, the note's on a `document` page; the `lang` attribute; the page's site-relative path (`notes/welcome.html`); and the `../` that reaches the site root, empty on a `document` page |
 | `stylesheet`, `scripts` | the stylesheet's `href` and every script's `src`, relative to the page |
-| `breadcrumbs`, `prev`, `next` | the trail (`label`, `href`, the latter absent for a group made by hand) and the neighbours (`title`, `href`) |
+| `breadcrumbs`, `prev`, `next` | the trail (`label`, `href`, the latter absent for a group made by hand) and the neighbours (`title`, `href`, `section`, the title of the neighbour's sidebar section, and `crosses_section`, true when that section is not the page's own) |
+
+A neighbour in another sidebar section is a change of chapter. A template
+can mark such a link or leave it out. This one marks it, naming the section
+only when it differs from the neighbour's title:
+
+```jinja
+{% if next %}<a rel="next" href="{{ next.href }}">{% if next.crosses_section %}Next chapter{% if next.section != next.title %}: {{ next.section }}{% endif %}, {% endif %}{{ next.title }}</a>{% endif %}
+```
+
+This one leaves every link into another section out, and the whole
+`nav` with it when no link remains:
+
+```jinja
+{% set earlier = prev and not prev.crosses_section %}
+{% set later = next and not next.crosses_section %}
+{% if earlier or later %}<nav class="pager">
+{% if earlier %}<a rel="prev" href="{{ prev.href }}">{{ prev.title }}</a>{% endif %}
+{% if later %}<a rel="next" href="{{ next.href }}">{{ next.title }}</a>{% endif %}
+</nav>{% endif %}
+```
+
+A template prints a boolean as `True` or `False`.
 
 Every value is escaped except the four fragments; write `{{ prefix }}` before
 a site-relative link so the page works at any depth. A theme file is at

@@ -157,6 +157,11 @@ fn note_context(note: &NoteFragment) -> Value {
 pub struct PageLink {
     pub label: String,
     pub href: String,
+    /// The title of the sidebar section the neighbour belongs to.
+    pub section: String,
+    /// Whether the neighbour belongs to another sidebar section than the
+    /// page does, so that following the link changes the chapter (ADR 0089).
+    pub crosses_section: bool,
 }
 
 /// One step of a page's breadcrumb; a step without a page of its own (a
@@ -260,6 +265,8 @@ impl Page {
                 minijinja::context! {
                     title => &link.label,
                     href => &link.href,
+                    section => &link.section,
+                    crosses_section => link.crosses_section,
                 }
             })
         };
@@ -414,6 +421,8 @@ mod tests {
             prev: Some(PageLink {
                 label: "Earlier <one>".to_string(),
                 href: "earlier.html".to_string(),
+                section: "Reference".to_string(),
+                crosses_section: false,
             }),
             next: None,
             body: "<article>B</article>\n".to_string(),
@@ -608,6 +617,32 @@ mod tests {
         assert_eq!(out, "<p>Rust &lt;Tips&gt; in Vault &amp; Co</p>");
         // The note fragment still comes from the built-in template.
         assert!(templates.has("note.html"));
+    }
+
+    #[test]
+    fn a_neighbour_hands_its_section_and_whether_it_crosses_to_the_template() {
+        let templates = Templates::new(&theme_with(&[(
+            "page.html",
+            "{{ prev.title }}|{{ prev.section }}|{{ prev.crosses_section }};{{ next.title }}|{{ next.section }}|{{ next.crosses_section }}",
+        )]))
+        .expect("parses");
+        let page = Page {
+            prev: Some(PageLink {
+                label: "Earlier".to_string(),
+                href: "earlier.html".to_string(),
+                section: "Guide <one>".to_string(),
+                crosses_section: false,
+            }),
+            next: Some(PageLink {
+                label: "Later".to_string(),
+                href: "later.html".to_string(),
+                section: "Reference".to_string(),
+                crosses_section: true,
+            }),
+            ..page()
+        };
+        let out = page.render(&templates).expect("renders");
+        assert_eq!(out, "Earlier|Guide &lt;one&gt;|False;Later|Reference|True");
     }
 
     #[test]

@@ -1334,6 +1334,11 @@ body.palette-open {
   color: var(--link);
 }
 
+.pager .crosses-section .pager-label {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .outline ul {
   border-left: 1px solid var(--border);
   list-style: none;

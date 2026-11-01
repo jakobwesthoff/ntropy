@@ -32,8 +32,8 @@
 {{ body | trim }}
 </div>
 {% if prev or next %}<nav class="pager">
-{% if prev %}<a class="prev" rel="prev" href="{{ prev.href }}"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg><span class="pager-text"><span class="pager-label">Previous</span><span class="pager-title">{{ prev.title }}</span></span></a>
-{% endif %}{% if next %}<a class="next" rel="next" href="{{ next.href }}"><span class="pager-text"><span class="pager-label">Next</span><span class="pager-title">{{ next.title }}</span></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"/></svg></a>
+{% if prev %}<a class="prev{% if prev.crosses_section %} crosses-section{% endif %}" rel="prev" href="{{ prev.href }}"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg><span class="pager-text"><span class="pager-label">{% if prev.crosses_section %}Previous chapter{% else %}Previous{% endif %}</span><span class="pager-title">{{ prev.title }}</span></span></a>
+{% endif %}{% if next %}<a class="next{% if next.crosses_section %} crosses-section{% endif %}" rel="next" href="{{ next.href }}"><span class="pager-text"><span class="pager-label">{% if next.crosses_section %}Next chapter{% else %}Next{% endif %}</span><span class="pager-title">{{ next.title }}</span></span><svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"/></svg></a>
 {% endif %}</nav>
 {% endif %}{% block after_content %}{% endblock %}</main>
 <aside class="side">

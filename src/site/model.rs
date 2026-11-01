@@ -323,13 +323,19 @@ pub struct Crumb {
     pub page: Option<String>,
 }
 
-/// Where a note sits first in sidebar order, which fixes its breadcrumb and
-/// its previous and next neighbours (ADR 0054).
+/// Where a note sits first in sidebar order, which fixes its breadcrumb, the
+/// sidebar section it belongs to and its previous and next neighbours
+/// (ADR 0054, ADR 0089).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Placement {
     /// The breadcrumb: the sidebar section, then each step down to the
-    /// group holding the note.
+    /// group holding the note. Empty for the landing note of a section, whose
+    /// page is the section's own.
     pub trail: Vec<Crumb>,
+    /// The sidebar section the note belongs to, an index into
+    /// [`Model::sidebar`]. A neighbour in another section is a change of
+    /// chapter.
+    pub section: usize,
     pub prev: Option<usize>,
     pub next: Option<usize>,
 }
@@ -1064,10 +1070,11 @@ fn nav_items(
 }
 
 /// Each note's first placement in sidebar order, and the breadcrumb above
-/// each group the sidebar reaches: sections in order, items in order, a
-/// group's landing note before its entries, its entries in reading order.
-/// Previous and next are the neighbours in that reading order within the
-/// sidebar section, across group boundaries.
+/// each group the sidebar reaches. The sidebar is read once from its first
+/// section to its last: a section's own landing note first, then its items in
+/// order, a group's landing note before its entries. A note is one stop at
+/// its first position, so previous and next form one chain over the whole
+/// sidebar, across group and section boundaries.
 #[allow(clippy::type_complexity)]
 fn placements(
     count: usize,
@@ -1127,11 +1134,21 @@ fn placements(
         }
     }
 
-    for section in sidebar {
+    // One stop per note, in reading order, remembering which sidebar section
+    // and breadcrumb the first position has.
+    let mut stops: Vec<(usize, usize, Vec<Crumb>)> = Vec::new();
+    let mut seen = vec![false; count];
+    for (section_index, section) in sidebar.iter().enumerate() {
+        let mut order = Vec::new();
+        // A section that is a group of the site has its landing note as its
+        // first stop. Its page is the section's own, so no breadcrumb leads
+        // to it.
         if let Some(group) = &section.group {
             group_trails.entry(group.clone()).or_default();
+            if let Some(landing) = group_at_path(sections, group.0, &group.1).landing {
+                order.push((landing, Vec::new()));
+            }
         }
-        let mut order = Vec::new();
         let mut trail = vec![Crumb {
             label: section.label.clone(),
             page: section.page.clone(),
@@ -1143,15 +1160,19 @@ fn placements(
             &mut order,
             &mut group_trails,
         );
-        for (at, (note, trail)) in order.iter().enumerate() {
-            if placements[*note].is_none() {
-                placements[*note] = Some(Placement {
-                    trail: trail.clone(),
-                    prev: at.checked_sub(1).map(|p| order[p].0),
-                    next: order.get(at + 1).map(|n| n.0),
-                });
+        for (note, trail) in order {
+            if !std::mem::replace(&mut seen[note], true) {
+                stops.push((note, section_index, trail));
             }
         }
+    }
+    for (at, (note, section, trail)) in stops.iter().enumerate() {
+        placements[*note] = Some(Placement {
+            trail: trail.clone(),
+            section: *section,
+            prev: at.checked_sub(1).map(|p| stops[p].0),
+            next: stops.get(at + 1).map(|stop| stop.0),
+        });
     }
     (placements, group_trails)
 }
@@ -2165,5 +2186,201 @@ mod tests {
         let model = Model::build_for(&notes, &[], &SiteOptions::default(), Some(&query), "V")
             .expect("the model builds");
         assert!(model.warnings.is_empty(), "{:?}", model.warnings);
+    }
+
+    // =========================================================
+    // The pager runs through the whole sidebar
+    // =========================================================
+
+    fn index_of(model: &Model, title: &str) -> usize {
+        model
+            .notes
+            .iter()
+            .position(|n| n.title == title)
+            .expect("the note exists")
+    }
+
+    fn placement_of<'a>(model: &'a Model, title: &str) -> &'a Placement {
+        model.placements[index_of(model, title)]
+            .as_ref()
+            .expect("the note is placed")
+    }
+
+    fn rooted_at(root: &str) -> SiteOptions {
+        SiteOptions {
+            root: Some(root.to_string()),
+            ..SiteOptions::default()
+        }
+    }
+
+    #[test]
+    fn a_section_boundary_does_not_end_the_pager() {
+        // The hidden note sits in the group the pager leaves and is no stop.
+        let notes = docs_notes();
+        let model = model(&notes, &[], rooted_at("tags/docs"));
+        let install = placement_of(&model, "Install");
+        assert_eq!(install.next, Some(index_of(&model, "Manifest")));
+        let manifest = placement_of(&model, "Manifest");
+        assert_eq!(manifest.prev, Some(index_of(&model, "Install")));
+    }
+
+    #[test]
+    fn a_sections_landing_note_leads_its_pager() {
+        let notes = docs_notes();
+        let model = model(&notes, &[], rooted_at("tags/docs"));
+        let basics = placement_of(&model, "Basics");
+        assert_eq!(basics.prev, None);
+        assert_eq!(basics.next, Some(index_of(&model, "Install")));
+        // The landing note is the page of its section, so nothing is above
+        // it in the breadcrumb.
+        assert!(basics.trail.is_empty(), "{:?}", basics.trail);
+        let install = placement_of(&model, "Install");
+        assert_eq!(install.prev, Some(index_of(&model, "Basics")));
+    }
+
+    #[test]
+    fn the_previous_section_flows_into_a_landing_note() {
+        let notes = [
+            note(A, "Alpha", "tags: [docs/one]\n"),
+            note(
+                B,
+                "Chapter two",
+                "tags: [docs/two]\nsite:\n  index: true\n  label: two\n",
+            ),
+            note(C, "Beta", "tags: [docs/two]\n"),
+        ];
+        let model = model(&notes, &[], rooted_at("tags/docs"));
+        // Sections read `one`, `two`; the second opens with its landing.
+        let alpha = placement_of(&model, "Alpha");
+        assert_eq!(alpha.next, Some(index_of(&model, "Chapter two")));
+        let landing = placement_of(&model, "Chapter two");
+        assert_eq!(landing.prev, Some(index_of(&model, "Alpha")));
+        assert_eq!(landing.next, Some(index_of(&model, "Beta")));
+    }
+
+    #[test]
+    fn a_group_without_a_landing_note_is_passed_through() {
+        // `t/zeta` has no landing note, so it is no stop and the reading
+        // goes from the note before it to the note inside it.
+        let notes = ordered_notes();
+        let model = model(&notes, &[], SiteOptions::default());
+        assert_eq!(
+            placement_of(&model, "Two").next,
+            Some(index_of(&model, "Four"))
+        );
+    }
+
+    #[test]
+    fn a_note_in_two_groups_is_one_stop() {
+        // Group `a` reads Y, X and group `b` reads X, so the order holds X
+        // twice, back to back.
+        let notes = [note(B, "X", "tags: [a, b]\n"), note(C, "Y", "tags: [a]\n")];
+        let model = model(&notes, &[], SiteOptions::default());
+        for (at, placement) in model.placements.iter().enumerate() {
+            let placement = placement.as_ref().expect("placed");
+            assert_ne!(
+                placement.prev,
+                Some(at),
+                "{} is its own prev",
+                model.notes[at].title
+            );
+            assert_ne!(
+                placement.next,
+                Some(at),
+                "{} is its own next",
+                model.notes[at].title
+            );
+        }
+        assert_eq!(placement_of(&model, "Y").next, Some(index_of(&model, "X")));
+        assert_eq!(placement_of(&model, "X").next, None);
+    }
+
+    #[test]
+    fn views_and_tags_chain_without_a_root() {
+        let notes = docs_notes();
+        let views = [ViewDef::parse("by-status", "status").expect("valid view name")];
+        let model = model(&notes, &views, SiteOptions::default());
+        // The view section holds Install and Aside; the tags section adds
+        // the notes only it reaches.
+        let aside = placement_of(&model, "Aside");
+        assert_eq!(aside.next, Some(index_of(&model, "Basics")));
+        assert_eq!(
+            placement_of(&model, "Basics").prev,
+            Some(index_of(&model, "Aside"))
+        );
+    }
+
+    #[test]
+    fn a_nav_table_chains_its_sections() {
+        let notes = docs_notes();
+        let options = nav(&format!(
+            "[[nav]]\nlabel = \"First\"\nitems = [{{ note = \"{A}\" }}]\n[[nav]]\nlabel = \"Second\"\nitems = [{{ note = \"{C}\" }}]\n"
+        ));
+        let model = model(&notes, &[], options);
+        assert_eq!(
+            placement_of(&model, "Basics").next,
+            Some(index_of(&model, "Manifest"))
+        );
+    }
+
+    #[test]
+    fn a_root_landing_leads_the_roots_own_section() {
+        // The root has a note of its own, so it has a section, and the
+        // root's landing note leads it.
+        let notes = [
+            note(
+                A,
+                "Docs home",
+                "tags: [docs]\nsite:\n  index: true\n  label: Docs\n",
+            ),
+            note(B, "Overview", "tags: [docs]\n"),
+            note(C, "Child page", "tags: [docs/child]\n"),
+        ];
+        let model = model(&notes, &[], rooted_at("tags/docs"));
+        let home = placement_of(&model, "Docs home");
+        assert_eq!(home.prev, None);
+        assert_eq!(home.next, Some(index_of(&model, "Overview")));
+        assert_eq!(
+            placement_of(&model, "Overview").next,
+            Some(index_of(&model, "Child page"))
+        );
+    }
+
+    #[test]
+    fn a_root_landing_without_a_root_section_is_no_stop() {
+        // The root holds no note of its own, so the sidebar has no section
+        // for it and the root's page is outside the sidebar.
+        let notes = [
+            note(
+                A,
+                "Docs home",
+                "tags: [docs]\nsite:\n  index: true\n  label: Docs\n",
+            ),
+            note(C, "Child page", "tags: [docs/child]\n"),
+        ];
+        let model = model(&notes, &[], rooted_at("tags/docs"));
+        assert_eq!(model.placements[index_of(&model, "Docs home")], None);
+        assert_eq!(placement_of(&model, "Child page").prev, None);
+    }
+
+    #[test]
+    fn a_placement_records_its_sidebar_section() {
+        let notes = docs_notes();
+        let model = model(&notes, &[], rooted_at("tags/docs"));
+        assert_eq!(placement_of(&model, "Basics").section, 0);
+        assert_eq!(placement_of(&model, "Install").section, 0);
+        assert_eq!(placement_of(&model, "Manifest").section, 1);
+    }
+
+    #[test]
+    fn a_landing_note_of_two_groups_keeps_the_pager_of_its_first_stop() {
+        let notes = [
+            note(A, "Home", "tags: [b, a]\nsite:\n  index: true\n"),
+            note(B, "Other", "tags: [a]\n"),
+        ];
+        let model = model(&notes, &[], SiteOptions::default());
+        let home = placement_of(&model, "Home");
+        assert_eq!(home.prev, None);
+        assert_eq!(home.next, Some(index_of(&model, "Other")));
     }
 }

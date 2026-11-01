@@ -11,6 +11,20 @@ change in any release
 
 ## Unreleased
 
+### Changed
+
+- On an exported site, previous and next now run through the whole sidebar,
+  one section after the other, and a section's landing page has them too.
+  They used to stop at the end of a section, so the last page of a section had
+  no next link. A note that sits in several groups is one stop in the order,
+  which also ends a next link that pointed at the note itself. The built-in
+  theme labels a link into another section "Previous chapter" or "Next
+  chapter" in the accent colour. A theme can tell such a link by the new
+  `section` and `crosses_section` fields of `prev` and `next`, and mark it or
+  leave it out; `title` and `href` stay as they were.
+  [ADR 0089](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0089-previous-and-next-run-through-the-whole-sidebar.md)
+  records the rule.
+
 ### Fixed
 
 - An image in a PDF carries its Markdown alt text. `![A diagram of the flow](flow.svg)`

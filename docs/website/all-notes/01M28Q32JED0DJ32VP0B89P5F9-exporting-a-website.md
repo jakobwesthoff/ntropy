@@ -136,8 +136,9 @@ note's title and body become its group's page, with the listing of what
 the group holds below only when the note asks, and links to the note go
 there. A hidden note keeps its page and stays searchable; it just
 appears nowhere in the navigation. Previous and next follow the
-sidebar's reading order across groups, so a tag subtree with landing
-notes reads like a book.
+sidebar's reading order across groups and sections, so a tag subtree with
+landing notes reads like a book. A link into another section is labelled
+"Previous chapter" or "Next chapter".
 
 `template` names a template of the site theme that renders the note's
 pages instead of the built-in `page.html`, which is how a landing page

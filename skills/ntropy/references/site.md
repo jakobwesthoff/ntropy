@@ -161,8 +161,9 @@ site:
   sidebar, list, or previous/next link.
 - **Labels** on ordinary notes rename them in the sidebar and the pager; the
   page keeps the title.
-- Previous and next follow the sidebar's reading order across groups, so a
-  tag subtree with landing notes reads like a book.
+- Previous and next follow the sidebar's reading order across groups and
+  sections, so a tag subtree with landing notes reads like a book. A link
+  into another section is labelled "Previous chapter" or "Next chapter".
 
 The frontmatter rules for everything else are in
 [writing-notes.md](writing-notes.md).

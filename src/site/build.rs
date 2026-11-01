@@ -776,10 +776,20 @@ fn render_note(
                 .unwrap_or_default()
         }
     };
+    // A neighbour is always placed, since the placements come from the one
+    // order the pager follows.
     let neighbour = |neighbour: Option<usize>| {
-        neighbour.map(|other| PageLink {
-            label: model.notes[other].name().to_string(),
-            href: format!("{prefix}{}", model.notes[other].page),
+        neighbour.zip(placement).map(|(other, own)| {
+            let section = model.placements[other]
+                .as_ref()
+                .expect("a neighbour is a stop of the pager order")
+                .section;
+            PageLink {
+                label: model.notes[other].name().to_string(),
+                href: format!("{prefix}{}", model.notes[other].page),
+                section: model.sidebar[section].label.clone(),
+                crosses_section: section != own.section,
+            }
         })
     };
     let prev = placement.and_then(|placement| neighbour(placement.prev));
@@ -1243,7 +1253,7 @@ mod tests {
     }
 
     #[test]
-    fn neighbours_follow_the_reading_order_of_the_first_section() {
+    fn neighbours_follow_the_reading_order_across_groups() {
         let vault = vault();
         let built = build_site(vault.path(), &SiteOptions::default());
         // The view section reads `done` (Rust Tips) then `open` (Plain):
@@ -2954,6 +2964,210 @@ mod tests {
         assert!(
             built.files.iter().all(|f| !f.path.contains("..")),
             "no page path climbs"
+        );
+    }
+
+    // =========================================================
+    // The pager across sections
+    // =========================================================
+
+    /// Two chapters under `docs`, each opening with a landing note.
+    fn landing_chapters(vault: &Path) -> Vec<Note> {
+        const E: &str = "01ERZ3NDEKTSV4RRFFQ69G5FAV";
+        vec![
+            note(
+                vault,
+                B,
+                "Part one",
+                "tags: [docs/one]\nsite:\n  index: true\n  label: One\n  order: 1\n",
+                "First chapter.\n",
+            ),
+            note(
+                vault,
+                A,
+                "Alpha",
+                "tags: [docs/one]\nsite:\n  order: 2\n",
+                "Alpha text.\n",
+            ),
+            note(
+                vault,
+                E,
+                "Part two",
+                "tags: [docs/two]\nsite:\n  index: true\n  label: Two\n  order: 1\n",
+                "Second chapter.\n",
+            ),
+            note(
+                vault,
+                C,
+                "Beta",
+                "tags: [docs/two]\nsite:\n  order: 2\n",
+                "Beta text.\n",
+            ),
+        ]
+    }
+
+    /// Two chapters under `docs` with no landing notes: `one` holds Alpha
+    /// and Aleph, `two` holds Beta.
+    fn plain_chapters(vault: &Path) -> Vec<Note> {
+        vec![
+            note(
+                vault,
+                A,
+                "Alpha",
+                "tags: [docs/one]\nsite:\n  order: 1\n",
+                "Alpha text.\n",
+            ),
+            note(
+                vault,
+                B,
+                "Aleph",
+                "tags: [docs/one]\nsite:\n  order: 2\n",
+                "Aleph text.\n",
+            ),
+            note(vault, C, "Beta", "tags: [docs/two]\n", "Beta text.\n"),
+        ]
+    }
+
+    /// Build `notes` as a site rooted at `tags/docs`, with the page
+    /// template `page` from a vault theme, or the built-in theme when
+    /// `page` is `None`.
+    fn build_rooted(vault: &Path, notes: Vec<Note>, page: Option<&str>) -> Built {
+        let vault_ids = ids(&notes);
+        let options = SiteOptions {
+            root: Some("tags/docs".to_string()),
+            ..SiteOptions::default()
+        };
+        let theme_dir = theme_in(vault, &[]);
+        let theme = page.map(|page| SiteTheme {
+            name: "corporate".to_string(),
+            templates: std::collections::BTreeMap::from([(
+                "page.html".to_string(),
+                page.to_string(),
+            )]),
+            ..SiteTheme::builtin()
+        });
+        build(&Input {
+            notes: &notes,
+            vault_ids: &vault_ids,
+            views: &[],
+            options: &options,
+            query: None,
+            fallback_title: "Docs",
+            vault_root: vault,
+            theme: theme.as_ref().map(|theme| (theme, theme_dir.as_path())),
+            output_dir: None,
+        })
+        .expect("the site builds")
+    }
+
+    /// A template that prints what a theme can read of each neighbour.
+    const NEIGHBOUR_FIELDS: &str = "{% if prev %}P:{{ prev.title }}|{{ prev.section }}|{{ prev.crosses_section }}{% endif %};{% if next %}N:{{ next.title }}|{{ next.section }}|{{ next.crosses_section }}{% endif %}";
+
+    #[test]
+    fn the_pager_crosses_a_section_and_says_so() {
+        let vault = vault();
+        let built = build_rooted(vault.path(), landing_chapters(vault.path()), None);
+        let alpha = text(&built, "notes/alpha.html");
+        // Into the next chapter: the label names the change.
+        assert!(
+            alpha.contains("<a class=\"next crosses-section\" rel=\"next\" href=\"../tags/docs/two/index.html\"><span class=\"pager-text\"><span class=\"pager-label\">Next chapter</span><span class=\"pager-title\">Two</span>"),
+            "{alpha}"
+        );
+        // Inside the chapter: the markup is the plain one.
+        assert!(
+            alpha.contains("<a class=\"prev\" rel=\"prev\" href=\"../tags/docs/one/index.html\"><svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-chevron-left\"/></svg><span class=\"pager-text\"><span class=\"pager-label\">Previous</span>"),
+            "{alpha}"
+        );
+        // Back out of the chapter's landing page.
+        let two = text(&built, "tags/docs/two/index.html");
+        assert!(
+            two.contains("<a class=\"prev crosses-section\" rel=\"prev\" href=\"../../../notes/alpha.html\"><svg class=\"icon\" aria-hidden=\"true\"><use href=\"#icon-chevron-left\"/></svg><span class=\"pager-text\"><span class=\"pager-label\">Previous chapter</span><span class=\"pager-title\">Alpha</span>"),
+            "{two}"
+        );
+        assert!(
+            two.contains("<a class=\"next\" rel=\"next\" href=\"../../../notes/beta.html\">"),
+            "{two}"
+        );
+    }
+
+    #[test]
+    fn a_theme_can_mark_a_cross_section_link() {
+        let vault = vault();
+        let built = build_rooted(
+            vault.path(),
+            landing_chapters(vault.path()),
+            Some(NEIGHBOUR_FIELDS),
+        );
+        // Onto a landing note, whose title is the section's.
+        assert_eq!(
+            text(&built, "notes/alpha.html"),
+            "P:One|One|False;N:Two|Two|True"
+        );
+        assert_eq!(
+            text(&built, "tags/docs/two/index.html"),
+            "P:Alpha|One|True;N:Beta|Two|False"
+        );
+    }
+
+    #[test]
+    fn a_cross_section_link_onto_a_note_names_the_section() {
+        let vault = vault();
+        let built = build_rooted(
+            vault.path(),
+            plain_chapters(vault.path()),
+            Some(NEIGHBOUR_FIELDS),
+        );
+        assert_eq!(
+            text(&built, "notes/aleph.html"),
+            "P:Alpha|one|False;N:Beta|two|True"
+        );
+        assert_eq!(text(&built, "notes/beta.html"), "P:Aleph|one|True;");
+    }
+
+    #[test]
+    fn a_theme_can_drop_a_cross_section_link() {
+        const SHOW_ALL: &str = "{% if prev or next %}<nav class=\"pager\">{% if prev %}<a class=\"prev\">{{ prev.title }}</a>{% endif %}{% if next %}<a class=\"next\">{{ next.title }}</a>{% endif %}</nav>{% endif %}";
+        const DROP_CROSSING: &str = "{% set earlier = prev and not prev.crosses_section %}{% set later = next and not next.crosses_section %}{% if earlier or later %}<nav class=\"pager\">{% if earlier %}<a class=\"prev\">{{ prev.title }}</a>{% endif %}{% if later %}<a class=\"next\">{{ next.title }}</a>{% endif %}</nav>{% endif %}";
+        let vault = vault();
+        let shown = build_rooted(vault.path(), plain_chapters(vault.path()), Some(SHOW_ALL));
+        let dropped = build_rooted(
+            vault.path(),
+            plain_chapters(vault.path()),
+            Some(DROP_CROSSING),
+        );
+        // Aleph ends its section: the crossing is there to drop.
+        assert_eq!(
+            text(&shown, "notes/aleph.html"),
+            "<nav class=\"pager\"><a class=\"prev\">Alpha</a><a class=\"next\">Beta</a></nav>"
+        );
+        assert_eq!(
+            text(&dropped, "notes/aleph.html"),
+            "<nav class=\"pager\"><a class=\"prev\">Alpha</a></nav>"
+        );
+        // Beta has only the crossing, so no pager is left at all.
+        assert_eq!(
+            text(&shown, "notes/beta.html"),
+            "<nav class=\"pager\"><a class=\"prev\">Aleph</a></nav>"
+        );
+        assert_eq!(text(&dropped, "notes/beta.html"), "");
+        // A link inside the section stays.
+        assert_eq!(
+            text(&dropped, "notes/alpha.html"),
+            "<nav class=\"pager\"><a class=\"next\">Aleph</a></nav>"
+        );
+    }
+
+    #[test]
+    fn a_theme_that_ignores_the_new_fields_keeps_working() {
+        let vault = vault();
+        let built = build_rooted(
+            vault.path(),
+            plain_chapters(vault.path()),
+            Some("{% if prev %}<{{ prev.title }} {{ prev.href }}>{% endif %}"),
+        );
+        assert_eq!(
+            text(&built, "notes/aleph.html"),
+            "<Alpha ../notes/alpha.html>"
         );
     }
 }
