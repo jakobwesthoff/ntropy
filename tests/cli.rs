@@ -4866,6 +4866,51 @@ fn a_table_cell_with_quotes_keeps_its_cells_apart_in_the_pdf() {
 
 #[test]
 #[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_theme_that_wraps_a_table_in_a_padded_block_keeps_the_table_inside_it() {
+    // The widths of a squeezed table are measured where the table is placed.
+    // A theme's `show table` rule that pads the table moves the table's edge
+    // inwards, and the table must fit the room that is left.
+    const INSET: f32 = 4.0;
+    // The text of a cell ends before the edge of its cell by the padding.
+    const CELL_PADDING: f32 = 2.0;
+    const MARGIN: f32 = 62.36;
+    const PAGE_WIDTH: f32 = 595.28;
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "tables",
+        "---\ntitle: Tables\n---\n\
+         | ID | Pipeline | Region | Start | End | Owner | State | Runs | Failures | Notes |\n\
+         | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n\
+         | 1042 | Release pipeline | eu-central | 2026-10-01 | 2026-11-01 | platform-team | succeeded | 1234 | 12 | nightly |\n",
+    );
+    write_theme(
+        dir.path(),
+        "padded",
+        "#show table: it => block(stroke: 1pt + red, inset: 4pt, it)\n",
+    );
+    configure_theme(dir.path(), "padded");
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "-o", "tables.pdf", "-n"]);
+    let output = cmd.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let words = pdf_words(&dir.path().join("tables.pdf"));
+    for word in &words {
+        assert!(
+            word.x_max <= PAGE_WIDTH - MARGIN - INSET - CELL_PADDING,
+            "`{}` leaves the theme's block: {word:?}",
+            word.text
+        );
+    }
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
 fn a_table_of_code_identifiers_keeps_its_cells_apart_in_the_pdf() {
     // Inline code is wider than the text around it: a monospace font and a
     // chip with padding.

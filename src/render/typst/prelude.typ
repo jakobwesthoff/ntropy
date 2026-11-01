@@ -304,7 +304,11 @@
     // after typst hyphenated it would be a word the measuring never saw. A
     // word still breaks at a space or at a hyphen it contains.
     set text(size: ratio * 1em, hyphenate: false)
-    align(center, table(columns: widths, align: it.align, ..it.children))
+    // The widths are passed as shares of the room the table is placed in. A
+    // theme's `show table` rule may pad or frame the table, and the room
+    // inside that block is narrower than the width measured here.
+    let shares = widths.map(width => width / size.width * 100%)
+    align(center, table(columns: shares, align: it.align, ..it.children))
   })
 
   // Links in classic muted blue; thematic breaks in light grey.
