@@ -2147,6 +2147,22 @@ fn render_to_ansi_draws_an_alert_as_a_coloured_callout() {
 }
 
 #[test]
+fn render_to_ansi_draws_a_note_whose_footnote_only_an_unreferenced_footnote_mentions() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "footnotes",
+        "---\ntitle: Footnotes\n---\ntext\n\n[^z]: sees[^b]\n\n[^b]: B\n\nlater[^c]\n\n[^c]: C\n",
+    );
+    let output = render_to_ansi(dir.path(), ULID_A, &[]);
+    assert!(output.status.success(), "{}", rendered(&output));
+    let artifact = fs::read_to_string(dir.path().join("footnotes.ansi")).expect("ansi artifact");
+    assert!(artifact.contains("later"), "{artifact:?}");
+    assert!(!artifact.contains("sees"), "{artifact:?}");
+}
+
+#[test]
 fn render_to_ansi_loads_no_configured_theme() {
     // The `ansi` format has no theme, so a configured one that names no file
     // is never looked up.

@@ -36,7 +36,7 @@ What patine draws for each construct:
 | Callouts | a quote whose first line is a marker (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`, or another type): behind `┃ ` bars, with a bold title after a symbol (`●`, `◆`, `■`, `▲`, `✕`) in blue, green, magenta, yellow or red; another type is a neutral callout with `○` and no colour. A quote with two spaces or a tab after `>` before the marker, or with an escaped marker, stays a quote. The `html` and `pdf` formats keep a type beyond the five alerts as a quote with the marker as text |
 | Tables | drawn with box characters |
 | Task lists | `☑` and `☐`, a done task dimmed |
-| Footnotes | a dimmed `[n]` at each reference, the definitions after the body |
+| Footnotes | a dimmed `[n]` at each reference, the definitions after the body. A footnote is drawn when a reference in the body or in a drawn footnote points to it. One that only undrawn definitions point to, such as definitions that refer only to each other, is not drawn and takes no number. A reference in an image's alt text draws no note. The numbers count the drawn references in order, from 1 |
 | Thematic breaks | a line across the width |
 | Raw HTML | dropped with no warning; the text between inline tags stays |
 

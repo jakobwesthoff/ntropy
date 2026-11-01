@@ -295,6 +295,39 @@ mod tests {
     }
 
     // =========================================================
+    // Footnotes
+    // =========================================================
+
+    /// The plain drawing of a body under a minimal frontmatter block.
+    fn plain_body(body: &str) -> String {
+        draw_source("title: T\n", body, &options(80, Form::Plain)).text
+    }
+
+    #[test]
+    fn a_footnote_only_an_unreferenced_footnote_mentions_is_not_drawn() {
+        // `[^b]` is mentioned by `[^z]` alone and nothing refers to `[^z]`.
+        // patine 2.2.1 panicked on this shape.
+        let drawn = plain_body("text\n\n[^z]: sees[^b]\n\n[^b]: B\n\nlater[^c]\n\n[^c]: C\n");
+        assert!(drawn.contains("later[1]"), "{drawn}");
+        assert!(drawn.contains("[1] C"), "{drawn}");
+        assert!(!drawn.contains("sees"), "{drawn}");
+        assert!(!drawn.contains("[1] B"), "{drawn}");
+    }
+
+    #[test]
+    fn footnotes_that_refer_only_to_each_other_are_not_drawn() {
+        let drawn = plain_body("text\n\n[^a]: [^b]\n\n[^b]: [^a]\n");
+        assert!(!drawn.contains("[1]"), "{drawn}");
+    }
+
+    #[test]
+    fn a_reference_in_image_alt_text_draws_no_footnote() {
+        let drawn = plain_body("![a[^1]](u)\n\n[^1]: n\n");
+        assert!(drawn.contains("[image: a]"), "{drawn}");
+        assert!(!drawn.contains("[1]"), "{drawn}");
+    }
+
+    // =========================================================
     // The escape sequences
     // =========================================================
 

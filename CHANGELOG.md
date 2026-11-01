@@ -19,6 +19,20 @@ change in any release
   nothing, and the footnotes after it were numbered one too high. The same
   holds for a footnote whose only reference sits in text the page does not
   show, such as the title heading it drops. Pages with such a footnote change.
+- `show` and `render --to ansi` no longer crash on a note with a footnote that
+  only an unreferenced footnote definition mentions, for example
+  `[^z]: sees[^b]` with `[^b]` defined and nothing in the body referring to
+  `[^z]`. The crash came from patine and is fixed in patine 2.2.2.
+
+### Changed
+
+- `show` and `render --to ansi` draw a footnote only when the body, or a
+  drawn footnote, refers to it. Definitions that refer only to each other, or
+  a note that only a reference in an image's alt text points to, are no
+  longer drawn, and the numbers count the drawn references only. A footnote
+  first referenced from an undrawn definition and later from the body takes
+  its number from the body reference.
+- patine is updated to 2.2.2.
 
 ## v2.8.0 - 2026-11-01
 
