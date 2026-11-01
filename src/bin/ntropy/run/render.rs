@@ -70,8 +70,9 @@ pub fn cmd_render(
     // here rather than after a scan and a compile (ADR 0045). `default` from
     // either source means the built-in look and reads no file. Which theme
     // kind `--theme` names follows the format: the `html` format takes a site
-    // theme from `[site] theme` and `themes/site/`, every other format a Typst
-    // theme from `[render] theme` and `themes/typst/` (ADR 0048).
+    // theme from `[site] theme` and `themes/site/`, the `ansi` format none
+    // (ADR 0082), every other format a Typst theme from `[render] theme` and
+    // `themes/typst/` (ADR 0048).
     let mut loaded_theme = None;
     let mut site = ntropy::site::DocumentSettings {
         theme: None,
@@ -79,7 +80,12 @@ pub fn cmd_render(
         lang: config.site.lang().to_string(),
         vars: config.site.vars.clone(),
     };
-    if to == "html" {
+    if to == "ansi" {
+        // A theme named for a format that has none would silently do nothing.
+        if theme.is_some() {
+            bail!("the `ansi` format takes no theme");
+        }
+    } else if to == "html" {
         let selected =
             ntropy::render::theme::select(theme.as_deref(), config.site.theme.as_deref());
         site.theme = selected

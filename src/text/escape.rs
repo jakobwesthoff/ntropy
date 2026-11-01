@@ -34,7 +34,7 @@ pub fn escape_controls(raw: &str) -> Cow<'_, str> {
 ///
 /// The directional marks U+200E, U+200F and U+061C stay, as mixed-script
 /// titles need them.
-fn needs_escape(ch: char) -> bool {
+pub(crate) fn needs_escape(ch: char) -> bool {
     ch.is_control() || matches!(ch, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
 }
 

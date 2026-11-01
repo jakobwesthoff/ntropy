@@ -32,8 +32,9 @@ lists, and emoji shortcodes (`:smile:` stays text).
 
 ## Where the output formats differ
 
-The same Markdown walk feeds every output, but the PDF and the web page
-cannot carry everything the same way.
+The same Markdown walk feeds the PDF and the web page, but they cannot
+carry everything the same way. The terminal drawing of the `ansi` format
+comes from the patine library instead.
 
 Raw HTML in a note renders on GitHub and passes through verbatim into the
 `html` format of [`render`](01M28Q32H5RYMZ5MHBQSQQN13B-rendering-to-pdf-and-html.md)
@@ -41,6 +42,10 @@ and into every page of the [website
 export](01M28Q32JED0DJ32VP0B89P5F9-exporting-a-website.md). When rendering to
 PDF (or to the emitted Typst document) it is dropped, and ntropy prints a
 warning naming what it dropped.
+
+The `ansi` format, the note drawn for a terminal, drops raw HTML without
+a warning and keeps the text between inline tags. It shows an image as
+`[image: alt]` with its source after it.
 
 Remote image URLs stay `<img>` tags in HTML and on the site, where the
 browser fetches them. In a PDF they become links showing the alt text,

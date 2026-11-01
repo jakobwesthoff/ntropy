@@ -2096,6 +2096,77 @@ fn render_to_html_reports_the_format_and_engine() {
     );
 }
 
+/// `render --to ansi` of `id` in `vault`, run with no tool on `PATH`.
+fn render_to_ansi(vault: &Path, id: &str, extra: &[&str]) -> std::process::Output {
+    let mut cmd = ntropy(vault);
+    cmd.args(["render", id, "--to", "ansi", "-n"]).args(extra);
+    cmd.env("PATH", "no-such-bin");
+    cmd.output().expect("run render")
+}
+
+#[test]
+fn render_to_ansi_writes_the_drawn_note_without_any_tool() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "drawn",
+        "---\ntitle: Drawn\n---\n# Drawn\n\nThe note body **text**.\n",
+    );
+    let output = render_to_ansi(dir.path(), ULID_A, &[]);
+    assert!(output.status.success(), "{}", rendered(&output));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("Rendered drawn.ansi (ansi via ansi"),
+        "unexpected report: {stdout}"
+    );
+
+    let artifact = fs::read_to_string(dir.path().join("drawn.ansi")).expect("ansi artifact");
+    assert!(artifact.contains("title"), "{artifact:?}");
+    assert!(artifact.contains("\x1b[1mtext\x1b[22m"), "{artifact:?}");
+    assert!(artifact.contains("\x1b[38;5;"), "{artifact:?}");
+}
+
+#[test]
+fn render_to_ansi_loads_no_configured_theme() {
+    // The `ansi` format has no theme, so a configured one that names no file
+    // is never looked up.
+    let dir = setup_vault();
+    fs::write(
+        dir.path().join(".ntropy/config.toml"),
+        "[render]\ntheme = \"no-such-theme\"\n\n[site]\ntheme = \"no-such-theme\"\n",
+    )
+    .expect("config");
+    write_note(
+        dir.path(),
+        ULID_A,
+        "plain",
+        "---\ntitle: Plain\n---\nBody.\n",
+    );
+    let output = render_to_ansi(dir.path(), ULID_A, &[]);
+    assert!(output.status.success(), "{}", rendered(&output));
+    assert!(dir.path().join("plain.ansi").is_file());
+}
+
+#[test]
+fn render_to_ansi_refuses_a_theme() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "plain",
+        "---\ntitle: Plain\n---\nBody.\n",
+    );
+    let output = render_to_ansi(dir.path(), ULID_A, &["--theme", "default"]);
+    assert_eq!(output.status.code(), Some(1), "{}", rendered(&output));
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("error: the `ansi` format takes no theme"),
+        "{}",
+        rendered(&output)
+    );
+    assert!(!dir.path().join("plain.ansi").exists());
+}
+
 #[test]
 fn render_to_html_takes_the_site_theme_from_config_and_the_flag() {
     let dir = setup_vault();
@@ -5365,6 +5436,57 @@ mod encrypted {
             .expect("run");
         assert!(output.status.success(), "{output:?}");
         assert_eq!(String::from_utf8_lossy(&output.stdout), note);
+    }
+
+    /// A vault holding `note` as `ULID_A`, encrypted on disk.
+    fn encrypted_vault_holding(note: &str) -> tempfile::TempDir {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        fs::write(
+            vault.join("all-notes").join(format!("{ULID_A}-shared.md")),
+            note,
+        )
+        .expect("stray plaintext note");
+        ntropy_encrypted(vault)
+            .arg("reconcile")
+            .output()
+            .expect("adopt");
+        assert!(
+            vault
+                .join("all-notes")
+                .join(format!("{ULID_A}.age"))
+                .is_file()
+        );
+        dir
+    }
+
+    #[test]
+    fn render_to_ansi_draws_an_encrypted_note_as_a_plaintext_one() {
+        let note = "---\ntitle: Shared\ntags: [work]\n---\n# Shared\n\nbody **line**\n";
+        let encrypted = encrypted_vault_holding(note);
+        let out = tempfile::tempdir().expect("output dir");
+        let artifact = out.path().join("shared.ansi");
+        let output = ntropy_encrypted(encrypted.path())
+            .args(["render", ULID_A, "--to", "ansi", "-o"])
+            .arg(&artifact)
+            .output()
+            .expect("run render");
+        assert!(output.status.success(), "{}", rendered(&output));
+
+        let plain = setup_vault();
+        write_note(plain.path(), ULID_A, "shared", note);
+        let expected = plain.path().join("expected.ansi");
+        let output = ntropy(plain.path())
+            .args(["-n", "render", ULID_A, "--to", "ansi", "-o"])
+            .arg(&expected)
+            .output()
+            .expect("run render");
+        assert!(output.status.success(), "{}", rendered(&output));
+
+        assert_eq!(
+            fs::read(&artifact).expect("encrypted artifact"),
+            fs::read(&expected).expect("plaintext artifact")
+        );
     }
 
     #[test]

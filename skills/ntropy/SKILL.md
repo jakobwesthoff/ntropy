@@ -1,11 +1,11 @@
 ---
 name: ntropy
 description: >-
-  Create, search, edit, delete, and render notes to PDF or HTML in ntropy
-  Markdown vaults; export a vault or a subset as a static website with a
-  configurable sidebar and theme; create and manage vaults, views, and
-  templates. Use for any task involving ntropy, a note vault, or
-  .ntropy-vault files.
+  Create, search, edit, delete, and render notes to PDF, HTML, or ANSI
+  terminal text in ntropy Markdown vaults; export a vault or a subset as a
+  static website with a configurable sidebar and theme; create and manage
+  vaults, views, and templates. Use for any task involving ntropy, a note
+  vault, or .ntropy-vault files.
 metadata:
   tags: ntropy, notes, markdown, vault, cli, site, website, html
 ---
@@ -61,12 +61,14 @@ language for filtering, and materialized symlink views for filesystem browsing.
 9. **Delete by ULID, with `-f`.** `delete` requires exactly one match and, in
    non-interactive mode, `--force`. Search first, then
    `ntropy delete -n -f <ulid>`.
-10. **`render` to PDF needs `typst` on `PATH`; `typst` and `html` need no
-   tool.** It resolves to exactly one note; pass `-p` to capture the
+10. **`render` to PDF needs `typst` on `PATH`; `typst`, `html` and `ansi`
+   need no tool.** It resolves to exactly one note; pass `-p` to capture the
    artifact path (`out=$(ntropy render -n -p <ulid>)`). `--to typst` emits
    the Typst document. `--to html` writes the note as a web page,
    `<stem>.html` plus a `<stem>_files/` directory beside it that the page
    needs; move the two together ([references/site.md](references/site.md)).
+   `--to ansi` writes the note drawn for a terminal, with ANSI escape
+   sequences, at 80 columns.
 11. **The vault's theme is automatic; never pass `--theme` to get it.** Which
    theme depends on the format: `pdf` and `typst` use `[render] theme` from
    `.ntropy/themes/typst/`, `html` and `site` use `[site] theme`, a
@@ -74,7 +76,8 @@ language for filtering, and materialized symlink views for filesystem browsing.
    one, `--theme default` forces ntropy's built-in look, and `site theme
    init <name>` copies the built-in site theme out as a starting point. A
    theme that is missing or broken fails the render rather than falling
-   back.
+   back. `ansi` takes no theme: never pass `--theme` with `--to ansi`, it is
+   an error.
 12. **Rendering a linked set: no `-o`, one directory.** A note link becomes a
    link to `<target-slug>.pdf` (or `.html`), the name `render` gives the
    target's own artifact by default. Render each note from the same working
@@ -131,7 +134,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy write <id\|filename\|path>` | Replace that note's content with the whole note text read from stdin, then realign the filename and refresh views. Names its target, never searches: a full ULID, the filename, or the path. Refuses text that is not a well-formed note. Prints the resulting path. |
 | `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, or `-P` to print one note's text. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
-| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`), `typst` for the emitted document, or `html` for a web page with a `<stem>_files/` directory beside it; the last two need no external tool. Resolves to exactly one note; `-p` prints the artifact path; an existing artifact is refused without `--force`; a default name from a file name with control or bidi characters, or a leading `-`, is refused (run `ntropy reconcile` or pass `-o`). |
+| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`), `typst` for the emitted document, `html` for a web page with a `<stem>_files/` directory beside it, or `ansi` for the note drawn for a terminal (no theme); the last three need no external tool. Resolves to exactly one note; `-p` prints the artifact path; an existing artifact is refused without `--force`; a default name from a file name with control or bidi characters, or a leading `-`, is refused (run `ntropy reconcile` or pass `-o`). |
 | `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website: a page per note, a tag tree, a page per view and group, a front page, sidebar, search, works from disk. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `--theme` overrides the site theme. `site theme init <name>` copies the built-in theme into the vault. Warnings name missing files, links to files an export never copies (`.ntropy`, `.git`, credentials and the like), dangling links, and unresolvable navigation; `--strict` fails on them. Hidden files and metadata left out of a linked folder are `note:` lines, which `--strict` does not count. Details: [references/site.md](references/site.md). |
 | `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |

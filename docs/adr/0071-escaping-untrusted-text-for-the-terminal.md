@@ -6,6 +6,8 @@ Date: 2026-10-30
 
 Accepted
 
+Amended 2026-11-01 by [ADR 0082](0082-ansi-render-format-drawn-by-patine.md).
+
 ## Context
 
 Note titles, file and directory names, link targets in note bodies,

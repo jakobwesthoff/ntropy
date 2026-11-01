@@ -14,6 +14,7 @@
 
 use std::collections::HashMap;
 
+use super::ansi::{Ansi, AnsiOptions, DEFAULT_WIDTH, Form};
 use super::html::Html;
 use super::{RenderError, RenderOptions, Renderer, Theme, Typst};
 use crate::site::DocumentSettings;
@@ -54,8 +55,9 @@ pub struct Registry {
 impl Registry {
     /// The registry ntropy ships with: `pdf` and `typst`, both produced by the
     /// ntropy-owned typst engine constructed with the vault's render options
-    /// and the selected Typst theme, and `html`, produced by the html engine
-    /// with the site settings.
+    /// and the selected Typst theme; `html`, produced by the html engine
+    /// with the site settings; and `ansi`, the note drawn for the terminal
+    /// with every style at the default width, which takes no options.
     ///
     /// `theme` is the already-loaded Typst theme for this render, or `None`
     /// for the built-in look; `site` carries the loaded site theme the same
@@ -78,6 +80,15 @@ impl Registry {
             Box::new(Typst::for_typst_format(options, theme)),
         );
         registry.register("html", "html", "html", Box::new(Html::new(site)));
+        registry.register(
+            "ansi",
+            "ansi",
+            "ansi",
+            Box::new(Ansi::new(AnsiOptions {
+                width: DEFAULT_WIDTH,
+                form: Form::Colored,
+            })),
+        );
         registry
     }
 
@@ -354,6 +365,26 @@ mod tests {
             "html"
         );
         assert!(registry.resolve("html", Some("typst")).is_err());
+    }
+
+    /// The shipping registry serves `ansi` through the ansi engine with the
+    /// `ansi` extension; the typst engine is unknown for it.
+    #[test]
+    fn shipped_registry_resolves_ansi_through_the_ansi_engine() {
+        let registry = Registry::new(RenderOptions::default(), None, DocumentSettings::default());
+        assert!(registry.resolve("ansi", None).is_ok());
+        assert!(registry.resolve("ansi", Some("ansi")).is_ok());
+        assert_eq!(
+            registry.extension("ansi").expect("ansi is registered"),
+            "ansi"
+        );
+        assert_eq!(
+            registry
+                .default_engine("ansi")
+                .expect("ansi has a default engine"),
+            "ansi"
+        );
+        assert!(registry.resolve("ansi", Some("typst")).is_err());
     }
 
     /// `typ` is an unlisted alias of `typst`: it resolves the same engine, the

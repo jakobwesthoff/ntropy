@@ -286,6 +286,7 @@ mod tests {
             created: "2020-01-01".to_string(),
             frontmatter: serde_yaml_ng::from_str(frontmatter)
                 .expect("the fixture frontmatter parses into a mapping"),
+            frontmatter_source: frontmatter.to_string(),
             body: body.to_string(),
             links,
         }

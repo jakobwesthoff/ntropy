@@ -4,19 +4,22 @@ The `render` command and its engines: how a note becomes an output artifact
 such as a PDF. Decisions are recorded in
 [ADR 0037](../adr/0037-render-command-surface.md),
 [ADR 0038](../adr/0038-pluggable-rendering-engine-with-pandoc-and-typst.md),
-[ADR 0040](../adr/0040-custom-typst-engine-with-own-markdown-emitter.md), and
-[ADR 0074](../adr/0074-typst-runs-in-ntropys-working-directory.md);
+[ADR 0040](../adr/0040-custom-typst-engine-with-own-markdown-emitter.md),
+[ADR 0074](../adr/0074-typst-runs-in-ntropys-working-directory.md), and
+[ADR 0082](../adr/0082-ansi-render-format-drawn-by-patine.md);
 selector semantics in [query-and-search.md](query-and-search.md), the overall
 command surface in [cli.md](cli.md).
 
-`render` produces one output artifact from a single note. Three formats ship:
+`render` produces one output artifact from a single note. Four formats ship:
 `pdf`, the default, and `typst`, the emitted Typst document, both from
 ntropy's typst engine, which converts the note to Typst markup, hands it out
 directly for `typst`, and compiles it with the external `typst` binary for
 `pdf`; and `html`, a self-contained web page from the html engine, which
 converts the same note through the shared Markdown walk and inlines the site
-theme's stylesheet. The engines' models live in
-[typst-engine.md](typst-engine.md) and [html-engine.md](html-engine.md); this
+theme's stylesheet; and `ansi`, the note drawn for a terminal by the ansi
+engine through the patine library. The engines' models live in
+[typst-engine.md](typst-engine.md), [html-engine.md](html-engine.md) and
+[ansi-engine.md](ansi-engine.md); this
 document covers the shared command surface, preparation, and execution
 model.
 
@@ -36,15 +39,16 @@ model.
   non-zero under `-p`, so `open "$(ntropy render -p ...)"` branches
   correctly, and is a successful no-op without it, like `delete`.
 - `--to <format>` selects the output format, `pdf` (the default),
-  `typst`, or `html`.
-- `--engine <name>` overrides the format's default engine. Both shipped
-  formats are produced by the typst engine; the flag exists so that
+  `typst`, `html`, or `ansi`.
+- `--engine <name>` overrides the format's default engine. `pdf` and
+  `typst` are produced by the typst engine, `html` by the html engine and
+  `ansi` by the ansi engine; the flag exists so that
   invocations written today keep working when alternative engines
   arrive.
 - `--output <path>` / `-o` names the artifact. The default is
   `./<slug>.<ext>` in the current working directory, where `<slug>` is the
   slug component of the note's filename and `<ext>` is the format's
-  extension (`pdf`, `typ`, or `html`). The `html` format also writes
+  extension (`pdf`, `typ`, `html`, or `ansi`). The `html` format also writes
   `<stem>_files/` beside the artifact
   ([html-engine.md](html-engine.md)). An existing artifact, or a
   non-empty files directory, is refused unless `--force` is given,
@@ -89,7 +93,8 @@ The result is the name a plaintext vault would have produced.
 
 ## Formats and engines
 
-A **format** is the artifact kind the user asks for (`pdf`, `typst`, `html`). An
+A **format** is the artifact kind the user asks for (`pdf`, `typst`, `html`,
+`ansi`). An
 **engine** is an implementation able to produce one or more formats. The
 registry maps
 every format to the engines that produce it, one marked as the format's
@@ -109,7 +114,8 @@ engine-agnostic, lossless view of the note and its vault context.
 - The note's id, storage path, title, tags, and creation date (derived from
   the ULID, rendered in the system-local timezone, ADR 0010).
 - The full frontmatter mapping: the lifted fields and every other field
-  alike.
+  alike, and the frontmatter block's text as the note has it between its
+  fences.
 - The raw body, verbatim.
 - The link table: every note-to-note link in the body (ADR 0028) with its
   span, display text, and target id, plus the target note's current title
@@ -236,11 +242,12 @@ tools installed:
 - `src/render/` (library): the document model and shared preparation, the
   format/engine registry, `Renderer`, `RenderContext`, `RenderError`, the
   shared Markdown walk and its output trait under `src/render/markdown/`,
-  the typst engine under `src/render/typst/`, and the HTML emitter under
-  `src/render/html/`.
-- `src/bin/ntropy/run/render.rs` (binary): `cmd_render` (selector
-  resolution, picker on ambiguity, output-path defaulting) and the
-  production `RenderContext`.
+  the typst engine under `src/render/typst/`, the HTML emitter under
+  `src/render/html/`, and the ansi engine in `src/render/ansi.rs`.
+- `src/bin/ntropy/run/render.rs` (binary): `cmd_render` (output-path
+  defaulting, the vault-containment warning) and the production
+  `RenderContext`. The selector resolution with the picker on ambiguity is
+  `src/bin/ntropy/run/one_note.rs`.
 
 The selector plumbing is reused as-is: `ops::resolve_selection` and the
 generic picker already serve `search` and `delete` unchanged.
@@ -264,7 +271,10 @@ decides how to honor a setting for the formats it produces.
   naming the path. `--theme` overrides it per invocation and the reserved
   name `default` selects the built-in look from either source.
 
-The `html` format reads none of this: its look comes from `[site] theme`,
+The `ansi` format reads none of this and takes no theme: `--theme` with it
+is an error, and a configured theme is not loaded.
+
+The `html` format reads none of this either: its look comes from `[site] theme`,
 a directory in `<vault>/.ntropy/themes/site/`, and its page language from
 `[site] lang` ([site-export.md](site-export.md)). `--theme` names whichever
 kind the format uses, so a vault configuring both renders each format in

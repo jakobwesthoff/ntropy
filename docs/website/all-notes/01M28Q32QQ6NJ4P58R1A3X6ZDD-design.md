@@ -14,6 +14,7 @@ made.
 
 ## Design documents
 
+- [The ANSI engine](https://github.com/jakobwesthoff/ntropy/blob/main/docs/design/ansi-engine.md)
 - [CLI reference (v1)](https://github.com/jakobwesthoff/ntropy/blob/main/docs/design/cli.md)
 - [Configuration](https://github.com/jakobwesthoff/ntropy/blob/main/docs/design/configuration.md)
 - [Encryption](https://github.com/jakobwesthoff/ntropy/blob/main/docs/design/encryption.md)
@@ -107,3 +108,4 @@ made.
 - [0079. Note writes are flushed to disk](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0079-note-writes-are-flushed-to-disk.md)
 - [0080. A rekey stages its new key before replacing notes](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0080-a-rekey-stages-its-new-key-before-replacing-notes.md)
 - [0081. Numbers and booleans in titles and tags read as text](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0081-numbers-and-booleans-in-titles-and-tags-read-as-text.md)
+- [0082. ANSI render format drawn by patine](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0082-ansi-render-format-drawn-by-patine.md)

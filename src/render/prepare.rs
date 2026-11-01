@@ -58,6 +58,12 @@ pub fn prepare(
         tags: note.tags.clone(),
         created: note.created_date()?,
         frontmatter: note.frontmatter.clone(),
+        // A parsed note's header is its fenced block, so the split always
+        // finds one; the empty fallback only keeps this infallible.
+        frontmatter_source: crate::note::frontmatter::split(&note.raw_header)
+            .frontmatter
+            .unwrap_or_default()
+            .to_string(),
         body: note.body.clone(),
         links,
     })
@@ -132,6 +138,7 @@ mod tests {
                 ],
                 "status": String("draft"),
             },
+            frontmatter_source: "title: Quarterly Review\ntags: [area/work, programming/rust]\nstatus: draft\n",
             body: "The body text.\n",
             links: [],
         }

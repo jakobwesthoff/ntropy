@@ -8,6 +8,7 @@ The command surface and its behavior. Consolidates
 [ADR 0031](../adr/0031-merge-edit-into-search.md),
 [ADR 0036](../adr/0036-interactivity-keyed-to-the-controlling-terminal.md),
 [ADR 0037](../adr/0037-render-command-surface.md),
+[ADR 0082](../adr/0082-ansi-render-format-drawn-by-patine.md),
 and the query DSL in [query-and-search.md](query-and-search.md).
 
 ## Global behavior
@@ -217,8 +218,11 @@ matches every note nor opens the picker.
 
 Turn one note into a document artifact: `pdf` (the default, compiled by the
 external `typst` binary, the one tool that must be on `PATH`), `typst`, the
-emitted Typst document, or `html`, a self-contained web page
-([html-engine.md](html-engine.md)); the latter two need no external tool. An
+emitted Typst document, `html`, a self-contained web page
+([html-engine.md](html-engine.md)), or `ansi`, the note drawn for a
+terminal at 80 columns ([ansi-engine.md](ansi-engine.md),
+[ADR 0082](../adr/0082-ansi-render-format-drawn-by-patine.md)); the latter
+three need no external tool. An
 engine whose tool is missing is an error naming what to install, never a
 silent fall-back. The
 selector follows the same id-or-query rule as `search`
@@ -232,7 +236,8 @@ correctly, and is a successful no-op without it, like `delete`.
 
 - `--to <format>` names the output format and defaults to `pdf`.
 - `--engine <name>` overrides the format's default engine; `pdf` and `typst`
-  are produced by the typst engine, `html` by the html engine, and the flag
+  are produced by the typst engine, `html` by the html engine, `ansi` by the
+  ansi engine, and the flag
   exists so invocations written today keep working when other engines
   arrive.
 - `--output <path>` / `-o` names the artifact; the default is
@@ -255,6 +260,8 @@ correctly, and is a successful no-op without it, like `delete`.
   `<vault>/.ntropy/themes/site/<name>/` and overrides `[site] theme`
   (ADR 0048). The reserved name `default` selects the built-in look. A name
   with no file, or one carrying a path, fails before the vault is scanned.
+  The `ansi` format takes no theme: `--theme` with it fails before the scan,
+  and a configured theme is not loaded (ADR 0082).
 - `--print` / `-p` prints the artifact's path to stdout as one line on success
   (ADR 0036); without it a `Rendering <reference>...` line announces the work
   and a completion report follows:

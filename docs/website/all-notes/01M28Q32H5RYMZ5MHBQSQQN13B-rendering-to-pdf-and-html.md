@@ -5,8 +5,9 @@ site:
   order: 1
 ---
 `ntropy render` turns a single note into a document: a typeset PDF, the
-Typst source behind it, or a standalone web page. This page covers the
-command, its three formats, and how rendered notes link to each other. The
+Typst source behind it, a standalone web page, or the note drawn for a
+terminal. This page covers the command, its four formats, and how rendered
+notes link to each other. The
 look of a PDF is the subject of
 [Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md); the look
 of the web page comes from a
@@ -32,7 +33,7 @@ under `-n` an ambiguous selector is an error listing the candidates. With
 no selector at all, every note feeds the picker.
 
 Without `-o`, the artifact is `./<slug>.<ext>` in the current directory:
-the slug of the note's filename plus `pdf`, `typ`, or `html`. `-p` prints
+the slug of the note's filename plus `pdf`, `typ`, `html`, or `ansi`. `-p` prints
 the artifact's path on stdout and nothing else, which is what makes
 `open "$(ntropy render -p ...)"` work. Without `-p`, ntropy announces the
 render and ends with a report naming the artifact, the format and engine
@@ -76,6 +77,15 @@ warnings do.
   send the two together. The page keeps
   the header, the scheme switch, and the outline, and drops what needs
   a site: the sidebar, the search, breadcrumbs, and the pager.
+- `ansi` writes the note drawn for a terminal at 80 columns: the
+  frontmatter as a highlighted block, then
+  the body with its headings, emphasis, lists, tables, quotes and
+  highlighted code styled by ANSI escape sequences. `less -R report.ansi`
+  or `cat report.ansi` shows it. A link, a link to another note included,
+  shows its target dimmed after the text; an image shows as
+  `[image: alt] (url)`. Raw HTML is left out without a warning. Control
+  characters in the note are shown escaped, as `\u{1b}`. It needs no tool
+  and takes no theme: `--theme` with `--to ansi` is an error.
 
 Whatever the format, `render` refuses to overwrite an existing artifact,
 or for `html` a non-empty files directory, unless you pass `--force`,

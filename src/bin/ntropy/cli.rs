@@ -169,22 +169,24 @@ pub enum Command {
     /// Render a note to a document artifact.
     ///
     /// `--to` selects the output format: `pdf` (the default), `typst`, the
-    /// emitted Typst document, or `html`, a self-contained web page. `pdf` is
-    /// produced by ntropy's own typst engine, which compiles the note with the
-    /// external `typst` binary, so only `typst` need be on `PATH`. The `typst`
-    /// and `html` formats need no external tool.
+    /// emitted Typst document, `html`, a self-contained web page, or `ansi`,
+    /// the note drawn for a terminal with ANSI escape sequences at 80
+    /// columns. `pdf` is produced by ntropy's own typst engine, which compiles
+    /// the note with the external `typst` binary, so only `typst` need be on
+    /// `PATH`. The other formats need no external tool.
     ///
     /// The look comes from the vault's config in `.ntropy/config.toml`:
     /// `[render] theme`, a Typst file in `.ntropy/themes/typst/`, for `pdf`
     /// and `typst`; `[site] theme`, a directory in `.ntropy/themes/site/`,
-    /// for `html`. `--theme` overrides it for one invocation.
+    /// for `html`. `--theme` overrides it for one invocation. `ansi` takes no
+    /// theme.
     Render {
         /// A full ULID or a query DSL expression, as trailing arguments that are
         /// each read on their own; words in one argument form a phrase
         /// (omitted = choose from all notes).
         #[arg(value_name = "ID|QUERY")]
         selector: Vec<String>,
-        /// The output format: `pdf` (default), `typst`, or `html`.
+        /// The output format: `pdf` (default), `typst`, `html`, or `ansi`.
         #[arg(long, value_name = "FORMAT", default_value = ntropy::render::DEFAULT_FORMAT)]
         to: String,
         /// Override the format's default engine.

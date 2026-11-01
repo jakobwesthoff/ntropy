@@ -22,6 +22,7 @@ use std::path::{Component, Path, PathBuf};
 
 use crate::id::Id;
 
+pub mod ansi;
 pub mod html;
 pub mod markdown;
 pub mod options;
@@ -186,6 +187,10 @@ pub struct PreparedDocument {
     /// The full frontmatter mapping: the lifted fields and every other field
     /// alike, carried losslessly.
     pub frontmatter: serde_yaml_ng::Mapping,
+    /// The frontmatter block as the note has it, between its `---` fences and
+    /// without them: the text the mapping was parsed from, formatting,
+    /// comments and key order included.
+    pub frontmatter_source: String,
     /// The raw body, verbatim.
     pub body: String,
     pub links: Vec<ResolvedLink>,

@@ -9,6 +9,22 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Added
+
+- `ntropy render --to ansi` draws a note for a terminal: its frontmatter
+  block, then its Markdown with headings, emphasis, lists, tables, quotes and
+  highlighted code styled by ANSI escape sequences, at 80 columns, into
+  `<slug>.ansi`. `less -R <slug>.ansi` or `cat` shows it. Links, note links
+  included, show their target dimmed after the text, and images show as
+  `[image: alt] (url)`. Control characters in the note, also ones written as
+  `&#x1b;`, are shown escaped. The format takes no theme, so `--theme` with
+  it is an error. The drawing comes from the
+  [patine](https://crates.io/crates/patine) library, which makes the release
+  binary about 2 MB larger
+  ([ADR 0082](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0082-ansi-render-format-drawn-by-patine.md)).
+
 ## v2.4.1 - 2026-10-30
 
 ### Fixed

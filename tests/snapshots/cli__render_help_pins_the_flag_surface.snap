@@ -14,9 +14,9 @@ exit_code: 0
 ----- stdout -----
 Render a note to a document artifact.
 
-`--to` selects the output format: `pdf` (the default), `typst`, the emitted Typst document, or `html`, a self-contained web page. `pdf` is produced by ntropy's own typst engine, which compiles the note with the external `typst` binary, so only `typst` need be on `PATH`. The `typst` and `html` formats need no external tool.
+`--to` selects the output format: `pdf` (the default), `typst`, the emitted Typst document, `html`, a self-contained web page, or `ansi`, the note drawn for a terminal with ANSI escape sequences at 80 columns. `pdf` is produced by ntropy's own typst engine, which compiles the note with the external `typst` binary, so only `typst` need be on `PATH`. The other formats need no external tool.
 
-The look comes from the vault's config in `.ntropy/config.toml`: `[render] theme`, a Typst file in `.ntropy/themes/typst/`, for `pdf` and `typst`; `[site] theme`, a directory in `.ntropy/themes/site/`, for `html`. `--theme` overrides it for one invocation.
+The look comes from the vault's config in `.ntropy/config.toml`: `[render] theme`, a Typst file in `.ntropy/themes/typst/`, for `pdf` and `typst`; `[site] theme`, a directory in `.ntropy/themes/site/`, for `html`. `--theme` overrides it for one invocation. `ansi` takes no theme.
 
 Usage: ntropy render [OPTIONS] [ID|QUERY]...
 
@@ -26,7 +26,7 @@ Arguments:
 
 Options:
       --to <FORMAT>
-          The output format: `pdf` (default), `typst`, or `html`
+          The output format: `pdf` (default), `typst`, `html`, or `ansi`
           
           [default: pdf]
 
