@@ -43,7 +43,7 @@
 //! incorporates: block frames separate with a blank line, inline frames
 //! concatenate in place.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use linkify::{LinkFinder, LinkKind};
 use pulldown_cmark::{CodeBlockKind, Event, LinkType, Options, Parser, Tag, TagEnd};
@@ -395,8 +395,9 @@ struct Walker<'a, O: Output> {
     /// Footnote definitions collected during the walk, keyed by label. Filled
     /// wherever a definition appears; consumed when references are patched.
     footnote_definitions: HashMap<String, String>,
-    /// The labels every footnote reference used, so patching visits exactly
-    /// the referenced ones (undefined included, unreferenced excluded).
+    /// The labels every footnote reference used, in the order the walk met
+    /// them. Patching visits the ones the body reaches (see
+    /// [`Walker::reached_labels`]), undefined labels included.
     footnote_references: Vec<String>,
     /// A per-run random token wrapping footnote-reference placeholders. See
     /// [`Walker::footnote_placeholder`] for the collision argument.
@@ -549,23 +550,69 @@ impl<'a, O: Output> Walker<'a, O> {
         format!("{n}{label}{n}", n = self.nonce)
     }
 
+    /// The labels found in the footnote-reference placeholders of `text`.
+    /// A placeholder is `nonce label nonce`, so splitting on the nonce leaves
+    /// the labels at the odd positions.
+    fn placeholder_labels(&self, text: &str) -> Vec<String> {
+        text.split(self.nonce.as_str())
+            .skip(1)
+            .step_by(2)
+            .map(str::to_string)
+            .collect()
+    }
+
+    /// The labels of the footnotes the page shows: those the document body
+    /// references, and those the content of a shown footnote references in
+    /// turn. A reference whose text never reaches the body (it sits in a
+    /// definition nobody references, or in a title heading the page drops)
+    /// shows nothing, and neither does a footnote only such a reference
+    /// points at.
+    ///
+    /// A heading inside a definition is held back until the definition is
+    /// drawn, so the references in its text count as the definition's own.
+    fn reached_labels(&self, body: &str) -> HashSet<String> {
+        let mut reached = HashSet::new();
+        let mut pending = self.placeholder_labels(body);
+        while let Some(label) = pending.pop() {
+            if !reached.insert(label.clone()) {
+                continue;
+            }
+            let Some(content) = self.footnote_definitions.get(&label) else {
+                continue;
+            };
+            pending.extend(self.placeholder_labels(content));
+            for held in content
+                .split(self.heading_nonce.as_str())
+                .skip(1)
+                .step_by(2)
+            {
+                let index: usize = held
+                    .parse()
+                    .expect("a heading placeholder holds the index of a deferred heading");
+                pending.extend(self.placeholder_labels(&self.deferred_headings[index].body));
+            }
+        }
+        reached
+    }
+
     fn finish(mut self) -> (String, Vec<Warning>) {
         let document = self
             .stack
             .pop()
             .expect("the document frame is pushed at construction and never popped");
-        // Patch every footnote reference. A defined reference renders through
-        // the output's footnote construct, once per label in the order labels
-        // were first referenced, so an output that numbers footnotes numbers
-        // them in reading order; an undefined one renders as its literal
-        // source text (GFM). The substitutions are applied repeatedly because
-        // a definition may itself contain references, whose placeholders only
-        // appear once the enclosing definition is inlined; the pass count
-        // bounds any self-referential cycle.
+        let reached = self.reached_labels(&document.body);
+        // Patch every footnote reference the page shows. A defined reference
+        // renders through the output's footnote construct, once per label in
+        // the order labels were first referenced, so an output that numbers
+        // footnotes numbers them in reading order; an undefined one renders
+        // as its literal source text (GFM). The substitutions are applied
+        // repeatedly because a definition may itself contain references,
+        // whose placeholders only appear once the enclosing definition is
+        // inlined; the pass count bounds any self-referential cycle.
         let mut substitutions: Vec<(String, String)> = Vec::new();
         let mut seen: Vec<String> = Vec::new();
         for label in self.footnote_references.clone() {
-            if seen.contains(&label) {
+            if seen.contains(&label) || !reached.contains(&label) {
                 continue;
             }
             seen.push(label.clone());
@@ -1589,6 +1636,25 @@ mod tests {
         );
         assert!(!out.contains('\u{0}'), "placeholder leaked: {out:?}");
         assert_eq!(out, "(p x(fn (p sees(fn (p B)))))\n");
+    }
+
+    #[test]
+    fn a_footnote_only_an_unreferenced_definition_mentions_never_reaches_the_output() {
+        let mut output = Trace::default();
+        let (out, _) = walk("x\n\n[^a]: sees[^b]\n\n[^b]: B", &[], &mut output);
+        assert_eq!(out, "(p x)\n");
+        assert!(output.footnotes.is_empty(), "{:?}", output.footnotes);
+    }
+
+    #[test]
+    fn a_footnote_reached_through_a_heading_of_a_shown_definition_is_patched() {
+        let (out, _) = walk(
+            "x[^a]\n\n[^a]:\n    # H[^b]\n\n[^b]: B",
+            &[],
+            &mut Trace::default(),
+        );
+        assert!(!out.contains('\u{0}'), "placeholder leaked: {out:?}");
+        assert!(out.contains("(fn (p B))"), "{out:?}");
     }
 
     #[test]

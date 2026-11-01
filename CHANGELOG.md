@@ -9,6 +9,17 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Fixed
+
+- A footnote that only an unreferenced footnote definition mentions is no
+  longer listed in `site` and `render --to html`. It used to get a number and
+  a "↩" link back to a reference that is not on the page, so the link did
+  nothing, and the footnotes after it were numbered one too high. The same
+  holds for a footnote whose only reference sits in text the page does not
+  show, such as the title heading it drops. Pages with such a footnote change.
+
 ## v2.8.0 - 2026-11-01
 
 ### Added

@@ -25,8 +25,8 @@
 //!
 //! Footnotes become a numbered `<sup class="footnote-ref">` at each reference
 //! and a `<section class="footnotes">` appended after the body, in first-
-//! reference order. Raw HTML, blocks and inline fragments alike, passes
-//! through verbatim.
+//! reference order. Only footnotes the body reaches are numbered and listed.
+//! Raw HTML, blocks and inline fragments alike, passes through verbatim.
 //!
 //! # What the emitter records
 //!
@@ -150,7 +150,8 @@ struct HtmlOutput<'a> {
     headings: Vec<Heading>,
     note_anchors: Vec<(Id, String)>,
     /// The rendered content of every footnote the walk handed over, in
-    /// first-reference order; the position is the footnote's number.
+    /// first-reference order; the position is the footnote's number. The walk
+    /// hands over the footnotes the body reaches and no others.
     footnotes: Vec<String>,
 }
 
@@ -1180,6 +1181,76 @@ mod tests {
             out.contains("<li id=\"fn-1\">\n<p>sees<sup class=\"footnote-ref\"><a href=\"#fn-2\" id=\"fnref-2\">2</a></sup></p>\n"),
             "{out}"
         );
+    }
+
+    /// Every back link of the footnote section has its reference on the page,
+    /// and no walk placeholder survives.
+    fn assert_every_backref_has_its_reference(out: &str) {
+        assert!(!out.contains('\u{0}'), "placeholder leaked: {out:?}");
+        for target in out.split("class=\"footnote-backref\" href=\"#").skip(1) {
+            let id = target
+                .split('"')
+                .next()
+                .expect("split yields a first piece");
+            assert!(
+                out.contains(&format!("id=\"{id}\"")),
+                "back link to a missing {id}: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_footnote_only_an_unreferenced_definition_mentions_is_not_drawn() {
+        let out = html("text\n\n[^a]: sees[^b]\n\n[^b]: B");
+        assert!(!out.contains("footnote-backref"), "{out}");
+        assert_eq!(out, "<p>text</p>\n");
+    }
+
+    #[test]
+    fn a_chain_behind_an_unreferenced_definition_is_not_drawn() {
+        let out = html("text\n\n[^a]: [^b]\n\n[^b]: [^c]\n\n[^c]: C");
+        assert_eq!(out, "<p>text</p>\n");
+    }
+
+    #[test]
+    fn definitions_referencing_each_other_without_a_body_reference_are_not_drawn() {
+        let out = html("text\n\n[^a]: [^b]\n\n[^b]: [^a]");
+        assert_eq!(out, "<p>text</p>\n");
+    }
+
+    #[test]
+    fn a_footnote_only_a_replaced_definition_mentions_is_not_drawn() {
+        let out = html("x[^a]\n\n[^a]: old[^b]\n\n[^a]: new\n\n[^b]: B");
+        assert_every_backref_has_its_reference(&out);
+        assert!(!out.contains("<li id=\"fn-2\">"), "{out}");
+    }
+
+    #[test]
+    fn later_footnotes_are_numbered_without_the_ones_not_drawn() {
+        let out = html("a[^z]\n\n[^q]: sees[^b]\n\n[^b]: B\n\n[^z]: Z");
+        assert_every_backref_has_its_reference(&out);
+        assert!(out.contains("<li id=\"fn-1\">\n<p>Z</p>"), "{out}");
+        assert!(!out.contains("fn-2"), "{out}");
+    }
+
+    #[test]
+    fn a_footnote_referenced_from_a_heading_of_a_drawn_definition_is_drawn() {
+        let out = html("x[^a]\n\n[^a]:\n    # Head[^b]\n\n[^b]: B");
+        assert_every_backref_has_its_reference(&out);
+        assert_eq!(out.matches("footnote-backref").count(), 2, "{out}");
+    }
+
+    #[test]
+    fn a_footnote_referenced_from_a_heading_of_an_undrawn_definition_is_not_drawn() {
+        let out = html("text\n\n[^a]:\n    # Head[^b]\n\n[^b]: B");
+        assert_eq!(out, "<p>text</p>\n");
+    }
+
+    #[test]
+    fn a_reference_in_the_dropped_title_heading_draws_no_footnote() {
+        let out = emit("# T[^a]\n\nx\n\n[^a]: A", &[], &SiblingArtifacts, Some("T")).html;
+        assert_every_backref_has_its_reference(&out);
+        assert!(!out.contains("footnote-backref"), "{out}");
     }
 
     #[test]
