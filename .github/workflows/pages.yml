@@ -10,6 +10,7 @@ on:
     branches: [main]
     paths:
       - 'docs/website/**'
+      - 'scripts/pack-theme-test.sh'
       - '.github/workflows/pages.yml'
   workflow_run:
     workflows: [Release]
@@ -55,6 +56,12 @@ jobs:
 
       - name: Export the site
         run: ./ntropy --vault docs/website -n site -o dist --strict
+
+      # The theme test material the documentation links under downloads/.
+      # The CI check renders and exports it with the binary of the commit;
+      # packing it needs no ntropy.
+      - name: Pack the theme test downloads
+        run: scripts/pack-theme-test.sh docs/website/theme-test dist/downloads
 
       - name: Setup Pages
         uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0

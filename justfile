@@ -50,6 +50,21 @@ coverage:
 bench *ARGS:
     ./scripts/benchmark.sh {{ARGS}}
 
-# Export the documentation vault (docs/website) as the project website into ./dist
-website:
+# Export the documentation vault (docs/website) as the project website into
+# ./dist, with the theme test material under dist/downloads/
+website: theme-test
     cargo run --quiet -- --vault docs/website -n site -o dist --force --strict
+    scripts/pack-theme-test.sh docs/website/theme-test dist/downloads
+
+# The ULID of the test note in docs/website/theme-test.
+theme_test_note := "01M6CCEVBP701HH0VPBT6ZNAYZ"
+
+# Check the theme test vault (docs/website/theme-test), which readers download
+# to develop a theme against: its test note renders to PDF and HTML and the
+# vault exports, all without a warning. Needs typst on PATH. The output
+# directory is made first, since a PDF render does not create it.
+theme-test:
+    mkdir -p target/theme-test
+    cargo run --quiet -- --vault docs/website/theme-test -n --strict render --to pdf -o target/theme-test/theme-test-note.pdf --force {{theme_test_note}}
+    cargo run --quiet -- --vault docs/website/theme-test -n --strict render --to html -o target/theme-test/theme-test-note.html --force {{theme_test_note}}
+    cargo run --quiet -- --vault docs/website/theme-test -n --strict site -o target/theme-test/site --force

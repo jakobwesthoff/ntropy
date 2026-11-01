@@ -36,9 +36,16 @@ jobs:
           tool: just
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
       - run: just check
+      # `just website` renders the theme test note to PDF, which takes the
+      # typst binary. Its version is pinned like the actions, so a typst
+      # release changes nothing here until this line does.
+      - uses: typst-community/setup-typst@6a2cfaf0b28d636b00148f965e315bae81079aaa # v5.3.1
+        with:
+          typst-version: 0.15.1
       # The documentation vault under docs/website must export cleanly
       # with the binary this commit builds; the project page is that
-      # export.
+      # export. The theme test vault offered for download has to render
+      # and export without a warning as well.
       - run: just website
 
   # The browser-side files under src/site/dist/ are committed; this job

@@ -1,0 +1,15 @@
+[[view]]
+name = "by-tag"
+field = "tags"
+
+[[view]]
+name = "by-status"
+field = "status"
+
+[site]
+title = "Theme test"
+index = "01M6CCEVAZBEXV2526NMCV1316"
+lang = "en"
+
+[site.vars]
+tagline = "Every part of a site, for testing a theme"
