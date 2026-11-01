@@ -268,9 +268,10 @@ links of the other pages.
 
 ![The front page on a phone in the dark scheme](../assets/site-theme/08-front-page-phone.png)
 
-The note stays a note. It keeps its own page at `notes/welcome.html`,
-drawn with the same template, `ntropy search` finds it, and you change the
-introduction, the tagline, or the cards by editing it.
+The note stays a note. It keeps its own page, drawn with the same
+template, at `notes/welcome.html`, or with a short tail after `welcome`
+when another note's slug is `welcome` too. `ntropy search` finds it, and
+you change the introduction, the tagline, or the cards by editing it.
 
 > [!NOTE]
 > The ntropy website goes the other way: its front page template holds all

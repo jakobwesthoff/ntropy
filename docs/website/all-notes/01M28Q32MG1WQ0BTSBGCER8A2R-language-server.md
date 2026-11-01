@@ -40,10 +40,9 @@ vim.api.nvim_create_autocmd("FileType", {
   end,
 })
 
--- Optional: snippet support makes `[` completion place the cursor after the link.
--- (Neovim's built-in client advertises it; nvim-cmp/blink users get it too.)
+-- Optional keys: follow a link, and find a note by title.
 vim.keymap.set("n", "gd", vim.lsp.buf.definition)
-vim.keymap.set("n", "<leader>fn", vim.lsp.buf.workspace_symbol) -- find note by title
+vim.keymap.set("n", "<leader>fn", vim.lsp.buf.workspace_symbol)
 ```
 
 `ntropy` must be on your `PATH`. Open a note under `all-notes/`, type `[`, and the completion menu lists your notes. `gd` follows a link, and the workspace-symbol picker jumps to any note by title.

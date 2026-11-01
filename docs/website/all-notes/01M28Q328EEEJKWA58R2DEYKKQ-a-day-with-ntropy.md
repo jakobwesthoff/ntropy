@@ -44,7 +44,8 @@ ntropy search 'tag:work and status:"in progress"'
 The whole expression sits in single quotes so the shell hands the inner
 double quotes through to ntropy; a value containing a space, like
 `in progress`, has to arrive double-quoted. Without the outer quotes the shell
-strips the inner ones and the query fails with a syntax error.
+strips the inner ones. The query then asks for the status `in` and the word
+`progress`, and finds nothing.
 
 A single match opens straight in your editor. Several drop you into the
 [interactive picker](01M28Q32FZCNHV2PZ5FSG8E360-the-interactive-picker.md),

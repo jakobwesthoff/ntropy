@@ -52,9 +52,11 @@ just site-install   # bun install --frozen-lockfile in site/
 just site-build     # build the site frontend into src/site/dist/
 just site-test      # type-check, lint, format-check, and test the frontend
 just site-check     # site-build + site-test + git diff on src/site/dist/ (the CI gate)
+just theme-test     # render and export the theme test vault, all --strict (needs typst)
+just website        # theme-test, then export docs/website into ./dist with the downloads
 ```
 
-CI runs `just check` and `just site-check`.
+CI runs `just check`, `just website` and `just site-check`.
 
 `just verify-render` runs the tests that need a `typst` binary on the
 `PATH`. Its pdf, png, and typ artifacts land under `target/verify-render/`

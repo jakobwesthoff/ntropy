@@ -44,7 +44,7 @@ Against an [encrypted vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md), `-
 
 ## Exit codes
 
-A `search` that matches nothing exits non-zero, so `if ntropy search -n tag:urgent; then …` branches on "did anything match" without parsing a single line. Where a note has to be named back to you, as in a delete prompt or an ambiguous match, it appears as `date  title  [tags]  (id)`.
+A `search` that matches nothing exits non-zero, so `if ntropy search -n tag:urgent; then …` branches on "did anything match" without parsing a single line. `delete` under `-n` asks nothing, so it refuses to run without `-f` (`--force`). Where a note has to be named back to you, as in a delete prompt or an ambiguous match, it appears as `date  title  [tags]  (id)`.
 
 ## Shell integration
 
@@ -63,4 +63,4 @@ ncd                   # cd to whichever vault is active here
 ncd --vault ~/notes   # or name one; every global flag is forwarded
 ```
 
-It has to be a shell function rather than an `ntropy cd` subcommand, because a process cannot change its parent shell's working directory. An unresolvable vault leaves the shell where it was. Nothing installs the file for you; source it yourself.
+It has to be a shell function rather than an `ntropy cd` subcommand, because a process cannot change its parent shell's working directory. An unresolvable vault leaves the shell where it was. The Homebrew formula puts the script on disk; a `cargo install` or a downloaded binary does not, so source it from a checkout of the repository. Either way, the `source` line in your shell's startup file is yours to add.

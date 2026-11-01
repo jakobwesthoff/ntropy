@@ -44,6 +44,7 @@ ntropy site theme init mine                   # copy the built-in theme to .ntro
   `--strict` makes them fail the exit code, which is what a build script
   wants. The warnings an export raises:
   - a referenced image or file that is missing, or lies outside the vault;
+  - a linked folder that has nothing to copy;
   - a link to a note outside the exported set;
   - a link `<ulid>-<slug>.md#<id>` whose `<id>` matches no heading of the
     target's page;

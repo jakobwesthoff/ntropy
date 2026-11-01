@@ -32,10 +32,13 @@ open "$(ntropy render -p 01j8za2… -o q3-report.pdf)"
 [query](01M28Q32FC8RW01C5DSEEV77DW-query-language.md). It has to end up
 with exactly one note. Several matches open the picker, pre-filtered;
 under `-n` an ambiguous selector is an error listing the candidates. With
-no selector at all, every note feeds the picker.
+no selector at all, every note feeds the picker; under `-n` that is an
+error asking for a selector.
 
 Without `-o`, the artifact is `./<slug>.<ext>` in the current directory:
-the slug of the note's filename plus `pdf`, `typ`, `html`, or `ansi`. With `-o`,
+the slug of the note's filename plus `pdf`, `typ`, `html`, or `ansi`. In an
+[encrypted vault](01M28Q32DHD3RH94HNF80RQNGT-encrypted-vaults.md), whose
+file names carry no slug, the slug comes from the title. With `-o`,
 a missing parent directory of the path is created, whichever format you render.
 `-p` prints the artifact's path on stdout and nothing else, which is what makes
 `open "$(ntropy render -p ...)"` work. Without `-p`, ntropy announces the
@@ -55,8 +58,8 @@ install yourself, for example with `brew install typst`. The Homebrew
 formula for ntropy installs it as a dependency. If it is not on your
 `PATH`, the render fails with an error naming it.
 
-Content the artifact cannot carry, raw HTML in a PDF or a remote image
-(typst fetches nothing from the network), is dropped with a warning on
+A PDF drops raw HTML, and it shows a remote image as a link to its URL,
+because typst fetches nothing from the network. Each prints a warning on
 stderr. Under `--strict`, those warnings fail the command, as scan
 warnings do.
 

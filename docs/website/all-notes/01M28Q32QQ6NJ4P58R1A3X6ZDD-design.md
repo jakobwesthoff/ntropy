@@ -112,3 +112,6 @@ made.
 - [0083. `show` prints a note drawn for the terminal](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0083-show-prints-a-note-drawn-for-the-terminal.md)
 - [0084. The ansi drawing follows patine 2.2](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0084-ansi-drawing-follows-patine-2-2.md)
 - [0085. Page templates render with minijinja 3](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0085-page-templates-render-with-minijinja-3.md)
+- [0086. Note links may carry a heading anchor](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0086-note-links-may-carry-a-heading-anchor.md)
+- [0087. Heading ids avoid the ids of the page](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0087-heading-ids-avoid-the-ids-of-the-page.md)
+- [0088. Links to a note's own headings resolve in its PDF](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0088-links-to-a-notes-own-headings-resolve-in-its-pdf.md)

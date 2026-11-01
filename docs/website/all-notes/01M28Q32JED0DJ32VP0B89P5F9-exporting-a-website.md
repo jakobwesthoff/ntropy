@@ -30,7 +30,7 @@ warnings.
 Warnings go to stderr, and the site is written anyway; `--strict` makes
 them fail the exit code, which is what a build script wants. An export
 warns about a referenced file that is missing or lies outside the vault,
-a code fence whose language has no highlighting grammar, a link to a note
+a linked folder that has nothing to copy, a code fence whose language has no highlighting grammar, a link to a note
 outside the exported set, a link whose `#heading-id` matches no heading on
 the target's page, a configured index note that is not exported,
 a `site` table that is no mapping or holds a key of the wrong type, a
@@ -65,7 +65,7 @@ sit in a linked folder or in the site theme, at any depth:
 - version control and its history: `.bzr`, `.fslckout`, `.git`, `.hg`,
   `.jj`, `.pijul`, `.svn`, `CVS`, `_darcs`;
 - sync tools' state: `.dropbox.cache`, `.stfolder`, `.stversions`;
-- trash: `$RECYCLE.BIN` and every `.Trash…` folder;
+- trash: `$RECYCLE.BIN` and every name that starts with `.Trash`;
 - credentials: `.aws`, `.env`, `.gnupg`, `.netrc`, `.ssh`;
 - file-manager metadata: `.DS_Store`, `Thumbs.db`.
 

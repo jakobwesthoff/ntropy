@@ -160,8 +160,9 @@ open dist/index.html
 
 The vault is an ordinary ntropy vault: `ntropy --vault docs/website new`,
 `search`, and `write` work on it, and its `.ntropy/config.toml` holds the
-site's title, front page, and sidebar root. The demo recording in
-`docs/website/assets/` is produced by `docs/vhs/record.sh`
+site's title, front page, and sidebar root. The front page's demo
+recording in `docs/website/.ntropy/themes/site/ntropy/media/` is produced by
+`docs/vhs/record.sh`
 (see [`docs/vhs/README.md`](https://github.com/jakobwesthoff/ntropy/blob/main/docs/vhs/README.md)).
 
 ## License

@@ -117,9 +117,9 @@ Named for their job on these pages, not as a generic scale:
 | `--page-width`, `--gutter` | the layout's outer width and side padding |
 | `--sidebar-width`, `--outline-width`, `--column-gap`, `--header-height` | the chrome's dimensions |
 | `--block-gap`, `--section-gap` | between the blocks of a note, between sections |
-| `--radius-control`, `--radius-block`, `--radius-panel`, `--radius-pill` | buttons and inputs; code, quotes, tables, callouts; the search panel; chips |
+| `--radius-control`, `--radius-block`, `--radius-panel`, `--radius-pill` | images, the scheme buttons, search results, sidebar groups and note rows; code, quotes, tables, callouts, the search button and the scheme switch; the search panel; chips |
 | `--accent-bar` | the bar on code blocks, quotes, and callouts |
-| `--shadow-panel`, `--shadow-raised` | the two shadows, on the search panel and on raised elements |
+| `--shadow-panel`, `--shadow-raised` | the two shadows: the search panel and the phone's sidebar drawer; the chosen scheme button |
 | `--motion` | the length of every transition |
 
 ## Fonts

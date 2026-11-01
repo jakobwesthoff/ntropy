@@ -155,7 +155,7 @@ on these elements:
 | `#` to `######` headings | `heading`, levels 1 to 6 |
 | paragraphs | paragraphs separated by blank lines |
 | `- item` | `list` |
-| `1. item` | `enum`, with the numbers as written |
+| `1. item` | `enum`, starting at the list's first number and counting up from it |
 | `- [ ] task` | a `list` item that starts with `task(done: ...)` and a space; the list's bullet stays unless the theme changes `list` |
 | `> quote` | `quote(block: true)` |
 | `> [!NOTE]` and the other four kinds | `callout(kind: "note")`, the kind in lower case |

@@ -16,14 +16,12 @@ into and browse with any tool. Windows needs Developer Mode or admin rights
 to create symlinks, so ntropy targets Unix and leaves Windows out
 ([ADR 0020](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0020-unix-only-v1-with-soft-performance-target.md)).
 There is no Windows build, no symlink fallback, and no Windows testing.
-Support is deferred, not ruled out. The open questions are the symlink
-privilege, path and case-folding differences, and the missing `SIGPIPE`.
+Support is deferred, not ruled out.
 
 ## Personal scale
 
 Your files are the database. ntropy keeps no index and no daemon. Every
-`list`, `search`, and `filter` walks `all-notes/` and parses frontmatter on
-demand
+`search` walks `all-notes/` and parses frontmatter on demand
 ([ADR 0002](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0002-stateless-filesystem-scanning-over-a-derived-index.md)).
 Query cost therefore grows with the vault on every run. That is fine for
 hundreds to low thousands of notes, which is what ntropy is tuned for, and

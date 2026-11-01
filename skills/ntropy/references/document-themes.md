@@ -88,7 +88,7 @@ Show and set rules inside `note` style these:
 | Markdown | Typst |
 | :--- | :--- |
 | `#` to `######` | `heading`, levels 1 to 6 |
-| `- item` / `1. item` | `list` / `enum` (numbers as written) |
+| `- item` / `1. item` | `list` / `enum` (from the first item's number, counting up) |
 | `- [ ] task` | `list` item starting with `task(done: ...)` and a space; the bullet stays unless `list` is changed |
 | `> quote` | `quote(block: true)` |
 | `> [!NOTE]` and the other four kinds | `callout(kind: ...)`; any other `[!X]` stays a `quote` |

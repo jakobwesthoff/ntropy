@@ -8,7 +8,7 @@ LLM coding agents can drive ntropy well, since the CLI is fully scriptable, but 
 
 ## What the skill teaches
 
-[`skills/ntropy/`](https://github.com/jakobwesthoff/ntropy/tree/main/skills/ntropy) holds a `SKILL.md` with the vault model, a set of rules for agents, a do/don't table, and a command reference, plus reference docs on writing notes, querying, vaults, views, the website export with its navigation settings, and site themes.
+[`skills/ntropy/`](https://github.com/jakobwesthoff/ntropy/tree/main/skills/ntropy) holds a `SKILL.md` with the vault model, a set of rules for agents, a do/don't table, and a command reference, plus reference docs on writing notes, querying, vaults, views, the website export with its navigation settings, site themes, and document themes.
 
 The rules are the part an agent gets wrong on its own:
 

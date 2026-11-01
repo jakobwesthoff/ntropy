@@ -24,7 +24,7 @@ ntropy view remove by-status               # drop the definition (directory stay
 
 There is no `view edit`; editing a view is remove + add. Definitions live in
 `<vault>/.ntropy/config.toml` and travel with the vault. `init` seeds a
-`by-tag` view over the `tags` field.
+`by-tag` view over the `tags` field, unless the vault is encrypted.
 
 ## Grouping semantics
 

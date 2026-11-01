@@ -37,7 +37,7 @@ ntropy view list                            # show configured views
 ntropy view remove by-status                # drop the definition
 ```
 
-`init` seeds a `by-tag` view on the `tags` field. Add one for whatever frontmatter field you navigate by: `status`, `project`, `author`, `area`, anything you put in your [notes](01M28Q32ACTNYR0FBYG9CAZMKG-note-format.md).
+`init` seeds a `by-tag` view on the `tags` field, unless the vault is encrypted. Add one for whatever frontmatter field you navigate by: `status`, `project`, `author`, `area`, anything you put in your [notes](01M28Q32ACTNYR0FBYG9CAZMKG-note-format.md).
 
 `view remove` drops the definition and its `.gitignore` entry, but ntropy never deletes a directory. The now-stale view tree stays on disk and the command tells you so, so you can delete it yourself. Since its ignore entry is gone, git now sees that directory.
 

@@ -14,8 +14,10 @@ templates live, the placeholders they can use, how to skip them, and the
 ## Template files
 
 Templates are Markdown-with-frontmatter files in `<vault>/.ntropy/templates/`.
-The filename without `.md` is the template's name. The extension is lowercase
-`.md`; a file named `Meeting.MD` is not a template:
+The filename without `.md` is the template's name. Give it a lowercase
+`.md`: `ntropy info` lists no other file as a template, and `--template
+meeting` opens `meeting.md`, which finds `Meeting.MD` only on a file system
+that ignores case, as macOS does by default:
 
 ```markdown
 <!-- .ntropy/templates/meeting.md -->
