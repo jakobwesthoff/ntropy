@@ -4327,6 +4327,58 @@ A note link to this note: [self]({ULID_A}-headings.md#lists).\n\n\
 
 #[test]
 #[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn an_image_alt_text_reaches_the_real_pdf_as_its_alternative_text() {
+    // The emitted `alt:` is only worth anything if typst writes it into the
+    // PDF, which the raw bytes show without any extra tool. The alt text is
+    // plain ASCII without parentheses and backslashes because typst writes
+    // anything else as a UTF-16 hex string or with escapes, which a byte
+    // search for the literal text would miss. The image without alt must not
+    // add a second `/Alt`.
+    const TINY_PNG: &[u8] = &[
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44,
+        0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x06, 0x00, 0x00, 0x00, 0x1F,
+        0x15, 0xC4, 0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00,
+        0x01, 0x00, 0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
+        0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
+    ];
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "alt",
+        "---\ntitle: Alt\n---\n![A diagram of the flow](flow.png)\n\n![](plain.png)\n",
+    );
+    for image in ["flow.png", "plain.png"] {
+        fs::write(dir.path().join("all-notes").join(image), TINY_PNG).expect("write image");
+    }
+
+    let mut pdf = ntropy(dir.path());
+    pdf.args(["render", ULID_A, "-o", "alt.pdf", "-n", "--strict"]);
+    pdf.current_dir(dir.path());
+    let output = pdf.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    let bytes = fs::read(dir.path().join("alt.pdf")).expect("read the pdf");
+    let count = |needle: &[u8]| {
+        bytes
+            .windows(needle.len())
+            .filter(|window| *window == needle)
+            .count()
+    };
+    assert_eq!(
+        count(b"/Alt(A diagram of the flow)"),
+        1,
+        "the alt text is missing from the pdf"
+    );
+    assert_eq!(count(b"/Alt"), 1, "the image without alt gained an /Alt");
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
 fn render_note_link_reaches_the_real_pdf_as_a_link_to_the_sibling_file() {
     // What the stub cannot show: that the emitted `#link` survives the real
     // compiler as a PDF link annotation, and that its target names a file

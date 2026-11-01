@@ -435,7 +435,7 @@ indented code block
 
 == Media and HTML <ntropy-h-4>
 
-#image("/all-notes/diagram.png");
+#image("/all-notes/diagram.png", alt: "A local diagram");
 
 #link("https://example.com/remote.png")[A remote image];
 

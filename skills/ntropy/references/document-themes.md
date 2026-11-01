@@ -97,7 +97,7 @@ Show and set rules inside `note` style these:
 | emphasis, strong, strikethrough | `emph`, `strong`, `strike` |
 | links, bare URLs, `<mail@host>` | `link` |
 | note link | `link("<slug>.pdf")` around `notelink`, or `link(<ntropy-h-N>)` when the link names a heading of the note itself |
-| local image | `image("<path from the vault root>")` |
+| local image | `image("<path from the vault root>", alt: "<alt text>")`, without `alt:` when the alt text is blank |
 | remote image | `link` to the URL, with a warning |
 | `[^label]` | `footnote` |
 | `---` | `line(length: 100%)` |

@@ -13,6 +13,12 @@ change in any release
 
 ### Fixed
 
+- An image in a PDF carries its Markdown alt text. `![A diagram of the flow](flow.svg)`
+  became `#image("flow.svg")` without it, so the PDF held no alternative text
+  and a screen reader announced nothing for the picture. The emitter now
+  writes `#image("flow.svg", alt: "A diagram of the flow")`, and nothing
+  looks different on the page. An empty or blank alt text writes no `alt:`
+  argument.
 - A note link that points at a heading of its own note, such as
   `[back](<ulid>-self-link.md#lists)`, jumps to the heading in a PDF. It
   opened the note's own file at page 1 and gave no warning. It follows the

@@ -186,7 +186,7 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Thematic break | `#line(length: 100%)` |
 | Soft / hard break | single space / `#linebreak();` |
 | Table | `#table(columns: n, align: (...), table.header(...), cells)`; the prelude's `show table` rule measures the columns and sets the widths, see Table widths |
-| Image, local path | `#image("path");`, path verbatim (string-literal escaped) without a `#fragment`, which selects nothing in an embedded image. A link to a local file keeps its fragment in the `#link` string |
+| Image, local path | `#image("path", alt: "text");`, path verbatim (string-literal escaped) without a `#fragment`, which selects nothing in an embedded image. The alt text is the flattened plain text with control characters turned into spaces and the ends trimmed, string-literal escaped, and it ends up as the alternative text of the PDF figure; a blank alt writes no `alt:` argument. A link to a local file keeps its fragment in the `#link` string |
 | Image, remote URL | `#link("url")[alt text];` plus a render warning — `typst compile` performs no network access, so remote images cannot appear in the artifact |
 | Mermaid, emoji shortcodes, color chips | out of scope: rendered as their literal text (a mermaid block is an ordinary code block), no warning |
 | Math (`$...$`, `$$...$$`, `math` fences) | not supported: `ENABLE_MATH` stays off, `$` is escaped like all text and renders literally, `math` fences render as plain code blocks |

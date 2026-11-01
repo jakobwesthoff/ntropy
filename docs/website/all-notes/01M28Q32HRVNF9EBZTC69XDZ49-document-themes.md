@@ -165,7 +165,7 @@ on these elements:
 | `*em*`, `**strong**`, `~~gone~~` | `emph`, `strong`, `strike` |
 | `[text](url)`, bare URLs | `link` |
 | a note link | `link` to `<slug>.pdf` around `notelink`, or `link` to the heading's label when the link names a heading of the note itself |
-| `![alt](path)` with a local path | `image` with a path from the vault root |
+| `![alt](path)` with a local path | `image` with a path from the vault root and `alt:` set to the alt text, left out when the alt text is blank |
 | `[^label]` | `footnote` |
 | `---` | `line(length: 100%)` |
 | a hard line break | `linebreak()` |

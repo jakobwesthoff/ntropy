@@ -35,8 +35,9 @@
 //!   `#link(<ntropy-h-N>)[label]`, naming the label of the heading with that
 //!   id, and as plain text with a warning when no heading has it. Every other
 //!   link, autolinks included, renders as `#link("target")[label]`.
-//! - A local image becomes `#image("path")`, rewritten to a root-absolute
-//!   path under the note's directory (ADR 0045); a remote `http(s)` image
+//! - A local image becomes `#image("path", alt: "text")`, rewritten to a
+//!   root-absolute path under the note's directory (ADR 0045); a remote
+//!   `http(s)` image
 //!   cannot be embedded by the offline compiler, so it degrades to
 //!   `#link("url")[alt-or-url]` and raises a [`Warning`].
 //! - A footnote is drawn at its first reference in the text as
@@ -222,8 +223,9 @@ impl Output for TypstOutput<'_> {
         writer.finish()
     }
 
-    /// A local path becomes `#image("path")`; a remote one cannot be embedded
-    /// offline and degrades to a link plus a warning.
+    /// A local path becomes `#image("path", alt: "text")`, with the alt text
+    /// left out when it is blank; a remote one cannot be embedded offline and
+    /// degrades to a link plus a warning.
     fn image(&mut self, dest: &str, alt: &str, warnings: &mut Vec<Warning>) -> String {
         let lowered = dest.to_ascii_lowercase();
         let remote = lowered.starts_with("http://") || lowered.starts_with("https://");
@@ -247,7 +249,22 @@ impl Output for TypstOutput<'_> {
             let path = dest.split_once('#').map_or(dest, |(path, _)| path);
             writer.syntax("#image(\"");
             writer.string_literal(&resolve_asset(self.asset_base, path));
-            writer.syntax("\");");
+            writer.syntax("\"");
+            // Character references can put control characters into the alt;
+            // a newline would be split by a list item's continuation indent
+            // inside the string. Typst records a blank alt as a present but
+            // empty description, so only text that remains gets written.
+            let alt: String = alt
+                .chars()
+                .map(|c| if c.is_control() { ' ' } else { c })
+                .collect();
+            let alt = alt.trim();
+            if !alt.is_empty() {
+                writer.syntax(", alt: \"");
+                writer.string_literal(alt);
+                writer.syntax("\"");
+            }
+            writer.syntax(");");
         }
         writer.finish()
     }
@@ -1151,10 +1168,54 @@ mod tests {
     // =====================================================================
 
     #[test]
-    fn local_image_becomes_an_image_call_without_alt() {
+    fn local_image_becomes_an_image_call_with_its_alt() {
         assert_eq!(
             body("![alt text](pics/x.png)"),
-            "#image(\"/all-notes/pics/x.png\");\n"
+            "#image(\"/all-notes/pics/x.png\", alt: \"alt text\");\n"
+        );
+    }
+
+    #[test]
+    fn image_with_a_blank_alt_writes_no_alt() {
+        // Typst accepts `alt: " "` and records it as a present but blank
+        // description, which is worse than none.
+        assert_eq!(body("![ ](x.png)"), "#image(\"/all-notes/x.png\");\n");
+    }
+
+    #[test]
+    fn image_alt_with_quotes_and_backslashes_is_string_escaped() {
+        // An unescaped `\u{41}` would reach the PDF as `A`.
+        assert_eq!(
+            body("![a \\\\u{41} \"q\"](x.png)"),
+            "#image(\"/all-notes/x.png\", alt: \"a \\\\u{41} \\\"q\\\"\");\n"
+        );
+    }
+
+    #[test]
+    fn image_alt_with_markup_is_passed_as_plain_text() {
+        assert_eq!(
+            body("![*bold* and `code`](x.png)"),
+            "#image(\"/all-notes/x.png\", alt: \"bold and code\");\n"
+        );
+    }
+
+    #[test]
+    fn image_alt_keeps_typst_markup_characters_literal() {
+        // Inside a string literal `#`, `$` and `@` are text, so the
+        // markup escapes of `markup_text` would show up as stray backslashes.
+        assert_eq!(
+            body("![#strong[x] $y @a](x.png)"),
+            "#image(\"/all-notes/x.png\", alt: \"#strong[x] $y @a\");\n"
+        );
+    }
+
+    #[test]
+    fn image_alt_with_a_character_reference_newline_becomes_a_space_in_a_list_item() {
+        // A raw newline inside the string would be split by the list item's
+        // continuation indent and put spaces into the alt.
+        assert_eq!(
+            body("- ![a&#10;b](x.png)"),
+            "- #image(\"/all-notes/x.png\", alt: \"a b\");\n"
         );
     }
 
@@ -1163,6 +1224,14 @@ mod tests {
         // A fragment selects nothing in an embedded image, and typst would
         // look for a file with the `#` in its name.
         assert_eq!(body("![](x.svg#icon)"), "#image(\"/all-notes/x.svg\");\n");
+    }
+
+    #[test]
+    fn image_with_alt_and_a_fragment_drops_the_fragment_only() {
+        assert_eq!(
+            body("![icon](x.svg#icon)"),
+            "#image(\"/all-notes/x.svg\", alt: \"icon\");\n"
+        );
     }
 
     #[test]
@@ -1288,7 +1357,7 @@ mod tests {
         // The image renders its degraded or local form inside the link label.
         assert_eq!(
             body("[![alt](local.png)](https://target)"),
-            "#link(\"https://target\")[#image(\"/all-notes/local.png\");];\n"
+            "#link(\"https://target\")[#image(\"/all-notes/local.png\", alt: \"alt\");];\n"
         );
     }
 
