@@ -895,7 +895,7 @@ mod tests {
     }
 
     #[test]
-    fn a_page_from_no_note_leaves_note_undefined() {
+    fn a_page_from_no_note_has_a_falsy_note() {
         let templates = Templates::new(&theme_with(&[(
             "page.html",
             "{% if note %}{{ note.title }}{% else %}no note{% endif %}|{{ kind }}",
