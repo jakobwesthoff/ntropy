@@ -1506,7 +1506,8 @@ body.palette-open {
  * opens by targeting it. */
 
 @media (max-width: 60rem) {
-  .layout {
+  .layout,
+  .document .layout {
     --gutter: 1rem;
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:

@@ -37,6 +37,9 @@ change in any release
   two columns carries explicit ARIA roles. A custom theme that styles `table`
   with a border or a radius now draws it inside that wrapper; style
   `.table-wrap` instead.
+- A page from `render --to html` is one column on a narrow screen. It kept the
+  outline column beside the note at every width, which left the note 135 px
+  wide at a viewport of 390 px.
 - The documentation site's footer wraps at its separators on a narrow screen
   instead of widening the page.
 
