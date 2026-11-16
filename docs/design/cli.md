@@ -154,18 +154,28 @@ plaintext vault and `.age` in an encrypted one. A symlink to such a file
 selects that note, which makes the entries of a view directory selectors too.
 
 - A path selects exactly that file. Unlike the ULID, which names a note and
-  every copy of it (ADR 0067), the path of a copy selects the copy alone.
+  every copy of it (ADR 0067), the path of a copy selects the copy alone. Of
+  two names of one file, as a hard link makes them, the one typed is selected.
 - An existing file that is no note of the vault is an error, `` `<selector>`
   is not a note in the vault's `all-notes/` ``, instead of a query that matches
-  nothing. A bare name missing from `all-notes/` that exists in the working
-  directory is that error too.
+  nothing. A bare name missing from `all-notes/` that names a file in the
+  working directory is that error too when the file lies inside the vault, a
+  symlinked root included. Outside the vault the bare name is a query word, so
+  `ntropy search CHANGELOG.md` run in another project's directory stays a text
+  search.
+- A file directly in `all-notes/` that is stored the way the vault does not
+  store notes is an error that says so. A plaintext `.md` file in an encrypted
+  vault is reported as plaintext Markdown that `ntropy reconcile` encrypts;
+  any other is reported as not stored the way the vault stores notes, with the
+  extension it does use.
 - The name of a note file, `<ulid>-<slug>.md` or `<ulid>.age`, whose file does
   not exist is an error, `` no note `<selector>` in the vault's `all-notes/` ``.
   As a query it would match the notes that link to the old name.
 - Any other `.md` or `.age` argument whose file does not exist is a query, as
   is a path beside other arguments.
-- A file directly in `all-notes/` that the scan skips selects no note, and the
-  scan's warning says why.
+- A note file directly in `all-notes/`, in the vault's note extension, that the
+  scan skips, malformed or badly named, selects no note, and the scan's warning
+  says why.
 - Resolving the name reads no note, so a locked vault still tells a file that
   is no note from one that is; reading the note itself needs the key.
 

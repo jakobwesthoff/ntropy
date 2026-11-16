@@ -27,6 +27,12 @@ pub enum TargetError {
     NotFound(String),
     #[error("`{0}` is not a note in the vault's `all-notes/`")]
     OutsideVault(String),
+    #[error(
+        "`{0}` is plaintext Markdown in an encrypted vault; run `ntropy reconcile` to encrypt it"
+    )]
+    PlaintextInEncryptedVault(String),
+    #[error("`{0}` is not stored the way this vault stores notes (`.{1}`)")]
+    WrongStorage(String, String),
     #[error("`{0}` names {1} files; pass the full filename of the one you mean")]
     Ambiguous(String, usize),
 }
@@ -36,9 +42,12 @@ pub enum TargetError {
 pub(crate) enum Named {
     /// A note file directly in `all-notes/`, as the path to open it by.
     Note(PathBuf),
-    /// An existing file that is no note of this vault: elsewhere, or not
-    /// stored the way the vault stores its notes.
+    /// An existing file that is no note of this vault: it is not directly in
+    /// `all-notes/`.
     NotANote,
+    /// A file directly in `all-notes/` that is not stored the way the vault
+    /// stores its notes, as the file the name resolves to.
+    WrongStorage(PathBuf),
     /// Nothing exists at the name.
     Missing,
 }
@@ -62,6 +71,7 @@ pub fn locate(session: &VaultSession, target: &str) -> Result<PathBuf> {
     match name_file(session, target) {
         Named::Note(path) => Ok(path),
         Named::NotANote => Err(TargetError::OutsideVault(target.to_string()).into()),
+        Named::WrongStorage(real) => Err(storage_error(session, target, &real).into()),
         Named::Missing => Err(TargetError::NotFound(target.to_string()).into()),
     }
 }
@@ -98,16 +108,45 @@ pub(crate) fn name_file(session: &VaultSession, target: &str) -> Named {
         path.clone()
     };
 
+    if !in_all_notes(&real, &all_notes) {
+        return Named::NotANote;
+    }
     let stored_as_notes = real
         .extension()
         .is_some_and(|extension| extension == session.cipher().extension());
-    if !stored_as_notes || !in_all_notes(&real, &all_notes) {
-        return Named::NotANote;
+    if !stored_as_notes {
+        return Named::WrongStorage(real);
     }
 
     match (is_link, real.file_name()) {
         (true, Some(name)) => Named::Note(all_notes.join(name)),
         _ => Named::Note(path),
+    }
+}
+
+/// The error for `target`, which resolved to `real`, a file in `all-notes/`
+/// that the vault does not store notes in.
+///
+/// A plaintext note in an encrypted vault is the one case `ntropy reconcile`
+/// repairs, by encrypting it.
+pub(crate) fn storage_error(session: &VaultSession, target: &str, real: &Path) -> TargetError {
+    let plaintext_markdown = real.extension().is_some_and(|extension| extension == "md");
+    if session.is_encrypted() && plaintext_markdown {
+        TargetError::PlaintextInEncryptedVault(target.to_string())
+    } else {
+        TargetError::WrongStorage(target.to_string(), session.cipher().extension().to_string())
+    }
+}
+
+/// Whether the existing file `path` lies inside the vault's root directory,
+/// as the file system resolves both, so a symlinked root counts.
+pub(crate) fn in_vault(session: &VaultSession, path: &Path) -> bool {
+    match (
+        std::fs::canonicalize(path),
+        std::fs::canonicalize(session.root()),
+    ) {
+        (Ok(file), Ok(root)) => file.starts_with(root),
+        _ => false,
     }
 }
 
@@ -260,8 +299,65 @@ mod tests {
     #[test]
     fn a_file_stored_the_way_the_vault_does_not_store_notes_is_not_a_note() {
         let (_guard, session) = vault_with_view();
+        let path = write_note(&session, &format!("{ULID}.age"), "not a note");
+        assert_eq!(
+            named(&session, &format!("{ULID}.age")),
+            Named::WrongStorage(path)
+        );
+    }
+
+    #[test]
+    fn a_file_stored_the_other_way_outside_all_notes_is_no_note_at_all() {
+        let (guard, session) = vault_with_view();
+        let stray = guard.path().join(format!("{ULID}.age"));
+        std::fs::write(&stray, "not a note").expect("write");
+        assert_eq!(
+            named(&session, stray.to_str().expect("utf-8")),
+            Named::NotANote
+        );
+    }
+
+    #[test]
+    fn a_plaintext_vault_says_which_extension_it_stores() {
+        let (_guard, session) = vault_with_view();
         write_note(&session, &format!("{ULID}.age"), "not a note");
-        assert_eq!(named(&session, &format!("{ULID}.age")), Named::NotANote);
+        let err = locate(&session, &format!("{ULID}.age")).expect_err("wrong storage");
+        assert_eq!(
+            err.to_string(),
+            format!("`{ULID}.age` is not stored the way this vault stores notes (`.md`)")
+        );
+    }
+
+    #[test]
+    fn a_file_inside_the_vault_is_in_the_vault() {
+        let (guard, session) = vault_with_view();
+        let readme = guard.path().join("README.md");
+        std::fs::write(&readme, "# About\n").expect("write");
+        assert!(in_vault(&session, &readme));
+    }
+
+    #[test]
+    fn a_file_elsewhere_is_not_in_the_vault() {
+        let (_guard, session) = vault_with_view();
+        let elsewhere = tempfile::tempdir().expect("temp dir");
+        let file = elsewhere.path().join("CHANGELOG.md");
+        std::fs::write(&file, "# Changes\n").expect("write");
+        assert!(!in_vault(&session, &file));
+        assert!(!in_vault(&session, &elsewhere.path().join("absent.md")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlinked_vault_root_still_holds_its_files() {
+        let (guard, session) = vault_with_view();
+        let readme = guard.path().join("README.md");
+        std::fs::write(&readme, "# About\n").expect("write");
+        let base = tempfile::tempdir().expect("temp dir");
+        let link = base.path().join("vault-link");
+        std::os::unix::fs::symlink(guard.path(), &link).expect("symlink");
+        let linked = VaultSession::plaintext(crate::vault::Vault::new(&link));
+        assert!(in_vault(&linked, &link.join("README.md")));
+        assert!(in_vault(&session, &link.join("README.md")));
     }
 
     #[cfg(unix)]
@@ -387,10 +483,36 @@ mod tests {
         #[test]
         fn a_plaintext_note_file_is_not_a_note_of_an_encrypted_vault_yet() {
             let fixture = encrypted_vault();
-            write_note(&fixture.session, &format!("{ULID}-plan.md"), NOTE);
+            let path = write_note(&fixture.session, &format!("{ULID}-plan.md"), NOTE);
             assert_eq!(
                 named(&fixture.session, &format!("{ULID}-plan.md")),
-                Named::NotANote
+                Named::WrongStorage(path)
+            );
+        }
+
+        #[test]
+        fn an_encrypted_vault_says_to_reconcile_a_plaintext_note() {
+            let fixture = encrypted_vault();
+            write_note(&fixture.session, &format!("{ULID}-plan.md"), NOTE);
+            let err = locate(&fixture.session, &format!("{ULID}-plan.md")).expect_err("plaintext");
+            assert_eq!(
+                err.to_string(),
+                format!(
+                    "`{ULID}-plan.md` is plaintext Markdown in an encrypted vault; \
+                     run `ntropy reconcile` to encrypt it"
+                )
+            );
+        }
+
+        #[test]
+        fn an_encrypted_vault_with_another_stray_extension_says_what_it_stores() {
+            let fixture = encrypted_vault();
+            let stray = write_note(&fixture.session, "notes.txt", "text");
+            let err = locate(&fixture.session, stray.to_str().expect("utf-8")).expect_err("txt");
+            assert!(
+                err.to_string()
+                    .ends_with("is not stored the way this vault stores notes (`.age`)"),
+                "{err}"
             );
         }
 

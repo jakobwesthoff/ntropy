@@ -35,8 +35,18 @@ its target by the same lookup.
   to. A symlink whose target is no such file is no note.
 - An existing file that is no note of the vault is an error that says so,
   instead of a query that matches nothing. That covers a file elsewhere in the
-  vault, such as a README or a template, a bare name found in the working
-  directory but not in `all-notes/`, and a file stored the other way.
+  vault, such as a README or a template, and a bare name that names a file in
+  the working directory when that file lies inside the vault, as the file
+  system resolves it, a symlinked vault root included. A bare name that names
+  a file outside the vault runs as a query: the rule for a bare name is
+  `all-notes/`, and a name that is missing there is a query word, so with a
+  default vault set, `ntropy search CHANGELOG.md` run in another project's
+  directory stays a text search.
+- A file directly in `all-notes/` that is stored the way the vault does not
+  store notes is an error that says so. In an encrypted vault a plaintext
+  `.md` file says that it is plaintext Markdown in an encrypted vault and that
+  `ntropy reconcile` encrypts it. Any other file says that it is not stored
+  the way the vault stores notes and names the extension that is.
 - The name of a note file, `<ulid>-<slug>.md` or `<ulid>.age`, whose file does
   not exist is an error, `no note <name> in the vault's all-notes/`. As a query
   it would match the notes that link to the old name, so a script with a stale
@@ -44,9 +54,12 @@ its target by the same lookup.
 - Any other `.md` or `.age` argument that names no file is a query, as is a
   path among several arguments.
 - A path selects exactly the file it names. The ULID of a note and a copy of it
-  selects both (ADR 0067); the path of the copy selects the copy.
-- A file directly in `all-notes/` that the scan skips selects no note, and the
-  scan's warning says why.
+  selects both (ADR 0067); the path of the copy selects the copy. Two names of
+  one file, as a hard link makes them, are a note and a copy to the scan, and
+  the name that was typed picks the one that is selected.
+- A note file directly in `all-notes/`, in the vault's note extension, that the
+  scan skips, malformed or badly named, selects no note, and the scan's warning
+  says why.
 - Resolving a name reads no note, so a locked vault tells a file that is no
   note from one that is; reading the selected note needs the key.
 

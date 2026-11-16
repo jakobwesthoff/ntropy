@@ -131,7 +131,7 @@ pub enum Command {
         /// selects that note. A file that is no note of the vault is an error, and so is
         /// the name of a note file that does not exist. Any other argument ending in
         /// `.md` or `.age` is a query.
-        #[arg(value_name = "ID|QUERY")]
+        #[arg(value_name = "ID|PATH|QUERY")]
         query: Vec<String>,
         /// Print the selected note's path instead of opening the editor.
         // `--no-edit` is accepted as a hidden alias for consistency with
@@ -188,7 +188,7 @@ pub enum Command {
         /// selects that note. A file that is no note of the vault is an error, and so is
         /// the name of a note file that does not exist. Any other argument ending in
         /// `.md` or `.age` is a query.
-        #[arg(required = true, value_name = "ID|QUERY")]
+        #[arg(required = true, value_name = "ID|PATH|QUERY")]
         selector: Vec<String>,
         /// Skip the confirmation prompt.
         #[arg(short = 'f', long)]
@@ -221,7 +221,7 @@ pub enum Command {
         /// selects that note. A file that is no note of the vault is an error, and so is
         /// the name of a note file that does not exist. Any other argument ending in
         /// `.md` or `.age` is a query.
-        #[arg(value_name = "ID|QUERY")]
+        #[arg(value_name = "ID|PATH|QUERY")]
         selector: Vec<String>,
         /// The output format: `pdf` (default), `typst`, `html`, or `ansi`.
         #[arg(long, value_name = "FORMAT", default_value = ntropy::render::DEFAULT_FORMAT)]
@@ -270,7 +270,7 @@ pub enum Command {
         /// selects that note. A file that is no note of the vault is an error, and so is
         /// the name of a note file that does not exist. Any other argument ending in
         /// `.md` or `.age` is a query.
-        #[arg(value_name = "ID|QUERY")]
+        #[arg(value_name = "ID|PATH|QUERY")]
         selector: Vec<String>,
         /// Lay the note out at this many columns instead of the terminal's
         /// width (80 without a terminal).

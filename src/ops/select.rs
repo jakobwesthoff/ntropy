@@ -142,11 +142,18 @@ pub fn resolve_selection(session: &VaultSession, selector: &Selector) -> Result<
         match locate::name_file(session, argument) {
             Named::Note(path) => return matches_for_file(session, &path),
             Named::NotANote => return Err(TargetError::OutsideVault(argument.to_string()).into()),
+            Named::WrongStorage(real) => {
+                return Err(locate::storage_error(session, argument, &real).into());
+            }
             Named::Missing => {
-                // A bare name is looked up in `all-notes/` only, so a file of
-                // that name beside the working directory is a file of the
-                // vault's neighbourhood that is no note.
-                if !locate::has_separator(argument) && Path::new(argument).is_file() {
+                // A bare name is looked up in `all-notes/` only. A file of that
+                // name in the working directory is the vault's own when the
+                // directory lies in the vault: it is a file that is no note.
+                // Elsewhere, with a default vault set, the name is a query word.
+                if !locate::has_separator(argument)
+                    && Path::new(argument).is_file()
+                    && locate::in_vault(session, Path::new(argument))
+                {
                     return Err(TargetError::OutsideVault(argument.to_string()).into());
                 }
                 if locate::is_note_file_name(argument) {
@@ -180,6 +187,27 @@ pub fn resolve_selection(session: &VaultSession, selector: &Selector) -> Result<
     }
 }
 
+/// The note among `same_file`, which are one file under several names, that
+/// the name of `path` picks: the same name, else the same name in other ASCII
+/// letter case, else the first.
+///
+/// Two names of one file are a note and its copy to the scan, as a hard link
+/// is one. The path that was typed names the one that is meant.
+fn pick_named(same_file: Vec<Note>, path: &Path) -> Option<Note> {
+    let typed = path.file_name()?;
+    let name_of = |note: &Note| note.path.file_name().map(|name| name.to_owned());
+    let exact = same_file
+        .iter()
+        .position(|note| name_of(note).as_deref() == Some(typed));
+    let folded = || {
+        same_file
+            .iter()
+            .position(|note| name_of(note).is_some_and(|name| name.eq_ignore_ascii_case(typed)))
+    };
+    let chosen = exact.or_else(folded).unwrap_or(0);
+    same_file.into_iter().nth(chosen)
+}
+
 /// The note stored in `path`, a file directly in `all-notes/`.
 ///
 /// The note is found by file identity, so a path spelled in other letter case
@@ -200,11 +228,13 @@ fn matches_for_file(session: &VaultSession, path: &Path) -> Result<Matches> {
         .into_iter()
         .chain(scan.duplicates.into_iter().map(|duplicate| duplicate.note));
     let notes = match (id, wanted) {
-        (Some(id), Some(wanted)) => candidates
-            .filter(|note| note.id == id)
-            .find(|note| fsutil::file_id(&note.path) == Some(wanted))
-            .into_iter()
-            .collect(),
+        (Some(id), Some(wanted)) => {
+            let same_file: Vec<Note> = candidates
+                .filter(|note| note.id == id)
+                .filter(|note| fsutil::file_id(&note.path) == Some(wanted))
+                .collect();
+            pick_named(same_file, path).into_iter().collect()
+        }
         _ => Vec::new(),
     };
     Ok(Matches {
@@ -512,15 +542,48 @@ mod tests {
     }
 
     #[test]
-    fn a_bare_name_that_exists_beside_the_working_directory_is_no_note() {
-        // The tests run in the package directory, which holds `Cargo.toml`
-        // and `README.md`.
+    fn a_hard_linked_note_is_picked_by_the_name_that_was_typed() {
+        // Two names of one file: the scan sees a note and a copy, the file
+        // system one file. The path typed is the one selected.
         let (_g, v) = temp_vault();
-        let err = resolve_selection(&v, &args(&["README.md"])).expect_err("no note");
-        assert!(matches!(
-            err,
-            crate::error::Error::Target(TargetError::OutsideVault(_))
-        ));
+        write(&v, ULID_A, "plan", "---\ntitle: Plan\n---\n");
+        std::fs::hard_link(
+            note_path(&v, ULID_A, "plan"),
+            note_path(&v, ULID_A, "plan-b"),
+        )
+        .expect("hard link");
+        for slug in ["plan", "plan-b"] {
+            let m = resolve_selection(&v, &args(&[&note_path(&v, ULID_A, slug)])).expect("resolve");
+            assert_eq!(m.notes.len(), 1);
+            assert_eq!(
+                m.notes[0].path.file_name().expect("name").to_string_lossy(),
+                format!("{ULID_A}-{slug}.md")
+            );
+        }
+    }
+
+    #[test]
+    fn a_hard_linked_note_typed_in_other_letter_case_picks_the_closest_name() {
+        let names = ["plan", "plan-b"];
+        let (_g, v) = temp_vault();
+        write(&v, ULID_A, "plan", "---\ntitle: Plan\n---\n");
+        std::fs::hard_link(
+            note_path(&v, ULID_A, names[0]),
+            note_path(&v, ULID_A, names[1]),
+        )
+        .expect("hard link");
+        let m = pick_named(
+            resolve_selection(&v, &Selector::from(ULID_A))
+                .expect("resolve")
+                .notes,
+            Path::new(&format!("{ULID_A}-PLAN-B.md")),
+        )
+        .expect("a note");
+        assert!(
+            m.path.ends_with(format!("{ULID_A}-plan-b.md")),
+            "{:?}",
+            m.path
+        );
     }
 
     #[test]

@@ -179,10 +179,13 @@ mod tests {
         std::fs::write(&stray, "not a note").expect("write");
         let err = write_note(&session, stray.to_str().expect("utf-8"), NOTE)
             .expect_err("wrong storage form");
-        assert!(matches!(
-            err,
-            crate::error::Error::Target(TargetError::OutsideVault(_))
-        ));
+        assert!(
+            matches!(
+                err,
+                crate::error::Error::Target(TargetError::WrongStorage(_, _))
+            ),
+            "{err:?}"
+        );
         assert_eq!(std::fs::read_to_string(&stray).expect("read"), "not a note");
     }
 

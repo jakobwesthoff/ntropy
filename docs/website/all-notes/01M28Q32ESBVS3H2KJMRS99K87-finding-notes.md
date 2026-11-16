@@ -17,7 +17,7 @@ ntropy search                                # every note
 ntropy search tag:work and not status:done   # the notes a query matches
 ntropy search 01J8ZA2…                       # one note by its full ULID
 ntropy search 01J8ZA2…-plan.md               # one note by its file name
-ntropy search by-tag/work/plan.md            # one note by a view entry
+ntropy search by-tag/work/2026-06-24-plan.md   # one note by a view entry
 ```
 
 A selector is a path when it is a single argument that ends in `.md` or

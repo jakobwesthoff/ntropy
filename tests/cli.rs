@@ -1768,6 +1768,68 @@ fn a_file_in_the_vault_but_outside_all_notes_is_not_a_note() {
 }
 
 #[test]
+fn a_bare_name_of_a_file_outside_the_vault_is_a_query() {
+    // With a global default vault the working directory is anywhere. A file
+    // there that shares the name of a query word must not turn the word into
+    // an error.
+    let vault = vault_of_two_notes();
+    write_note(
+        vault.path(),
+        ULID_B,
+        "mention",
+        "---\ntitle: Mention\n---\nsee CHANGELOG.md for details\n",
+    );
+    let elsewhere = tempfile::tempdir().expect("temp dir");
+    fs::write(elsewhere.path().join("CHANGELOG.md"), "# Changes\n").expect("write file");
+
+    let mut cmd = ntropy_bin(elsewhere.path());
+    cmd.env("EDITOR", "true");
+    cmd.arg("--vault").arg(vault.path());
+    cmd.args(["search", "-n", "--id", "CHANGELOG.md"]);
+    let out = cmd.output().expect("run ntropy");
+    assert_prints(&out, &format!("{ULID_B}\n"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_bare_name_found_in_the_working_directory_of_a_symlinked_vault_root_is_no_note() {
+    let base = tempfile::tempdir().expect("temp dir");
+    let real = base.path().join("real");
+    scaffold_vault(&real);
+    fs::write(real.join("README.md"), "# About\n").expect("write readme");
+    let link = base.path().join("link");
+    std::os::unix::fs::symlink(&real, &link).expect("symlink");
+
+    let out = run_in(&link, &["search", "-n", "README.md"]);
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("is not a note in the vault's `all-notes/`"),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn the_path_typed_for_a_hard_linked_note_is_the_file_that_is_deleted() {
+    // Two names of one inode are two files for the scan, a note and a copy,
+    // and one file for the file system. The name that was typed is the one
+    // that goes.
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "plan", "---\ntitle: Plan\n---\n");
+    fs::hard_link(
+        note_file(dir.path(), ULID_A, "plan"),
+        note_file(dir.path(), ULID_A, "plan-b"),
+    )
+    .expect("hard link");
+
+    let copy = format!("{ULID_A}-plan-b.md");
+    let out = run_in(dir.path(), &["delete", "-n", "-f", &copy]);
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(!note_file(dir.path(), ULID_A, "plan-b").exists());
+    assert!(note_file(dir.path(), ULID_A, "plan").exists());
+}
+
+#[test]
 fn a_markdown_name_without_a_file_runs_as_a_query() {
     // Guard: unchanged behaviour. A word that ends in `.md` and names no file
     // is text to search for.
@@ -1955,7 +2017,7 @@ fn write_to_a_path_that_does_not_exist_outside_all_notes_is_not_found() {
 }
 
 #[test]
-fn a_note_extension_the_vault_does_not_use_is_not_a_note() {
+fn a_note_file_stored_the_way_a_plaintext_vault_does_not_store_notes_is_refused() {
     // A `.age` file in a plaintext vault is no note, and the scan ignores it.
     let dir = setup_vault();
     fs::write(
@@ -1964,6 +2026,22 @@ fn a_note_extension_the_vault_does_not_use_is_not_a_note() {
     )
     .expect("write stray file");
     let name = format!("{ULID_A}.age");
+    let out = run_in(dir.path(), &["search", "-n", "-P", &name]);
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains(&format!(
+            "`{name}` is not stored the way this vault stores notes (`.md`)"
+        )),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn a_wrong_extension_file_outside_all_notes_is_the_plain_error() {
+    let dir = setup_vault();
+    fs::write(dir.path().join(format!("{ULID_A}.age")), "not a note").expect("write file");
+    let name = format!("./{ULID_A}.age");
     let out = run_in(dir.path(), &["search", "-n", "-P", &name]);
     assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
     assert!(
@@ -8412,8 +8490,10 @@ mod encrypted {
             .expect("run search");
         assert_eq!(out.status.code(), Some(1), "{}", super::rendered(&out));
         assert!(
-            String::from_utf8_lossy(&out.stderr)
-                .contains("is not a note in the vault's `all-notes/`"),
+            String::from_utf8_lossy(&out.stderr).contains(&format!(
+                "`{stray}` is plaintext Markdown in an encrypted vault; \
+                 run `ntropy reconcile` to encrypt it"
+            )),
             "{}",
             super::rendered(&out)
         );
