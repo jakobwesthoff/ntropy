@@ -11,6 +11,7 @@ use std::process::{Command, ExitCode, Stdio};
 
 use anyhow::{Context, Result, bail};
 
+use ntropy::ops::Selector;
 use ntropy::render::ansi::{self, AnsiOptions, DEFAULT_WIDTH, Form};
 use ntropy::session::VaultSession;
 
@@ -32,7 +33,7 @@ const SHELL: &str = "/bin/sh";
 pub fn cmd_show(
     global: &GlobalArgs,
     session: &VaultSession,
-    selector: String,
+    selector: Selector,
     width_flag: Option<u16>,
     interactive: bool,
 ) -> Result<ExitCode> {

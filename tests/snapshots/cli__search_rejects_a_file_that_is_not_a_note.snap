@@ -1,0 +1,10 @@
+---
+source: tests/cli.rs
+expression: rendered(&out)
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while resolving the selector: `[VAULT]/elsewhere.md` is not a note in the vault's `all-notes/`

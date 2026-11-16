@@ -6,16 +6,16 @@
 //! ADR 0037).
 //!
 //! `render` and `show` act on exactly one note. A blank selector browses the
-//! whole vault as `search` does; anything else resolves as a full ULID or a
-//! DSL query. Several matches open the picker interactively and are an error
-//! under `-n`.
+//! whole vault as `search` does; anything else resolves as a full ULID, a
+//! note's filename or path, or a DSL query (ADR 0091). Several matches open
+//! the picker interactively and are an error under `-n`.
 
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
 
 use ntropy::note::Note;
-use ntropy::ops;
+use ntropy::ops::{self, Selector};
 use ntropy::scan::ScanWarning;
 use ntropy::session::VaultSession;
 
@@ -38,14 +38,14 @@ pub(super) enum Selection {
 /// "rendering needs a selector".
 pub(super) fn select_one(
     session: &VaultSession,
-    selector: &str,
+    selector: &Selector,
     interactive: bool,
     print: bool,
     verb: &str,
 ) -> Result<(Selection, Vec<ScanWarning>)> {
-    let selector = super::optional(selector).map(str::to_string);
-    let matches = match selector.as_deref() {
-        Some(selector) => {
+    let typed = super::optional(selector.query()).map(|_| selector.shown());
+    let matches = match typed {
+        Some(_) => {
             ops::resolve_selection(session, selector).context("while resolving the selector")?
         }
         None => ops::search(session, None).context("while listing notes")?,
@@ -56,7 +56,7 @@ pub(super) fn select_one(
     // resolved set by id, since the command needs its body.
     let selection = match matches.notes.as_slice() {
         [] => {
-            match &selector {
+            match typed {
                 Some(selector) => eprintln!("error: no note matches `{selector}`"),
                 None => eprintln!("No notes matched your search criteria."),
             }
@@ -78,7 +78,7 @@ pub(super) fn select_one(
                     None => Selection::Exit(ExitCode::SUCCESS),
                 }
             } else {
-                match &selector {
+                match typed {
                     Some(selector) => report_ambiguous(selector, notes)?,
                     // Without a picker there is nothing to narrow a bare
                     // invocation with, so it asks for a selector instead of

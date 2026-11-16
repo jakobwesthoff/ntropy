@@ -14,116 +14,14 @@
 //! every note, which on an encrypted vault needs the key; resolving
 //! `<ulid>-<slug>.md` or `<ulid>.age` from the directory listing needs nothing,
 //! so a locked vault can still be written to just as it can still be created in
-//! (ADR 0041).
-
-use std::path::{Path, PathBuf};
+//! (ADR 0041). The names `write` accepts are resolved by `ops::locate`,
+//! which the selector of `search` and the commands built on it share
+//! (ADR 0091).
 
 use crate::error::Result;
-use crate::id::{Id, ULID_LEN};
-use crate::note::{Note, filename};
+use crate::note::Note;
+use crate::ops::locate::locate;
 use crate::session::VaultSession;
-
-/// Why a write could not be directed at a note.
-#[derive(Debug, thiserror::Error)]
-pub enum WriteError {
-    #[error("no note `{0}` in the vault's `all-notes/`")]
-    NotFound(String),
-    #[error("`{0}` is not a note in the vault's `all-notes/`")]
-    OutsideVault(String),
-    #[error("`{0}` names {1} files; pass the full filename of the one you mean")]
-    Ambiguous(String, usize),
-}
-
-/// Resolve `target` to the note file it names, without reading any note.
-///
-/// Three shapes are accepted, in this order:
-///
-/// - a bare 26-character ULID, matched against the identity every note filename
-///   starts with;
-/// - a filename inside the vault's `all-notes/`;
-/// - a path, which must point into that same `all-notes/`.
-///
-/// The file must already exist. Allocating a new identity belongs to `new`,
-/// which is what keeps a caller from inventing a ULID (ADR 0004).
-pub fn locate(session: &VaultSession, target: &str) -> Result<PathBuf> {
-    let all_notes = session.layout().all_notes();
-
-    if let Some(id) = as_ulid(target) {
-        return locate_by_id(&all_notes, target, &id);
-    }
-
-    // A separator makes it a path; anything else names a file directly in the
-    // canonical store. Both end at the same place, which is what lets the path
-    // `new --print` hands back be passed straight through.
-    let path = if has_separator(target) {
-        let path = PathBuf::from(target);
-        if !in_all_notes(&path, &all_notes) {
-            return Err(WriteError::OutsideVault(target.to_string()).into());
-        }
-        path
-    } else {
-        all_notes.join(target)
-    };
-
-    if !path.is_file() {
-        return Err(WriteError::NotFound(target.to_string()).into());
-    }
-    Ok(path)
-}
-
-/// Find the one file in `all_notes` whose name carries `id`.
-///
-/// Both storage forms are recognized, so the same ULID resolves in a plaintext
-/// and an encrypted vault alike. Duplicates are reported rather than picked
-/// between: two files claiming one identity is a vault to repair, not a choice
-/// to guess at.
-fn locate_by_id(all_notes: &Path, target: &str, id: &Id) -> Result<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(all_notes) else {
-        return Err(WriteError::NotFound(target.to_string()).into());
-    };
-
-    let mut found: Vec<PathBuf> = Vec::new();
-    for entry in entries.flatten() {
-        let name = entry.file_name();
-        let Some(name) = name.to_str() else { continue };
-        if filename::parse_any(name).is_ok_and(|parsed| &parsed.id == id) {
-            found.push(entry.path());
-        }
-    }
-
-    match found.len() {
-        0 => Err(WriteError::NotFound(target.to_string()).into()),
-        1 => Ok(found.remove(0)),
-        n => Err(WriteError::Ambiguous(target.to_string(), n).into()),
-    }
-}
-
-/// Parse `target` as a full ULID, or `None` if it is not one.
-fn as_ulid(target: &str) -> Option<Id> {
-    if target.len() == ULID_LEN {
-        target.parse::<Id>().ok()
-    } else {
-        None
-    }
-}
-
-/// Whether `target` names a path rather than a bare filename.
-fn has_separator(target: &str) -> bool {
-    Path::new(target).components().count() > 1
-}
-
-/// Whether `path` sits directly in `all_notes`.
-///
-/// Compared through the resolved parent directory so that `.`, `..` and a
-/// symlinked vault root all land on the same answer as a plain path would.
-fn in_all_notes(path: &Path, all_notes: &Path) -> bool {
-    let Some(parent) = path.parent() else {
-        return false;
-    };
-    let parent = std::fs::canonicalize(parent);
-    let all_notes = std::fs::canonicalize(all_notes);
-    matches!((parent, all_notes), (Ok(p), Ok(a)) if p == a)
-}
 
 /// Replace the content of the note `target` names with `content`.
 ///
@@ -149,7 +47,7 @@ pub fn write_note(session: &VaultSession, target: &str, content: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ops::{create_empty_note, create_note};
+    use crate::ops::{TargetError, create_empty_note, create_note};
     use crate::vault::Vault;
 
     const NOTE: &str = "---\ntitle: Written\ntags: [written]\n---\n# Written\n\nBody.\n";
@@ -249,13 +147,62 @@ mod tests {
             .expect_err("outside the vault");
         assert!(matches!(
             err,
-            crate::error::Error::Write(WriteError::OutsideVault(_))
+            crate::error::Error::Target(TargetError::OutsideVault(_))
         ));
         // The file it pointed at is untouched.
         assert!(
             std::fs::read_to_string(&outside)
                 .expect("read")
                 .contains("Elsewhere")
+        );
+    }
+
+    #[test]
+    fn a_nonexistent_path_outside_all_notes_is_not_found() {
+        let (guard, session) = temp_vault();
+        let missing = guard.path().join("nowhere/elsewhere.md");
+        let err =
+            write_note(&session, missing.to_str().expect("utf-8"), NOTE).expect_err("no such file");
+        assert!(matches!(
+            err,
+            crate::error::Error::Target(TargetError::NotFound(_))
+        ));
+    }
+
+    #[test]
+    fn a_file_stored_the_way_the_vault_does_not_store_notes_is_refused() {
+        let (guard, session) = temp_vault();
+        let stray = guard
+            .path()
+            .join("all-notes/01KWVBW61WHJY7K27WNETSF641.age");
+        std::fs::create_dir_all(guard.path().join("all-notes")).expect("all-notes");
+        std::fs::write(&stray, "not a note").expect("write");
+        let err = write_note(&session, stray.to_str().expect("utf-8"), NOTE)
+            .expect_err("wrong storage form");
+        assert!(matches!(
+            err,
+            crate::error::Error::Target(TargetError::OutsideVault(_))
+        ));
+        assert_eq!(std::fs::read_to_string(&stray).expect("read"), "not a note");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_to_a_note_writes_the_note_and_leaves_the_link() {
+        let (guard, session) = temp_vault();
+        let created = create_note(&session, "Linked", None).expect("create");
+        let link = guard.path().join("shortcut.md");
+        std::os::unix::fs::symlink(&created.path, &link).expect("symlink");
+
+        let note = write_note(&session, link.to_str().expect("utf-8"), NOTE).expect("write");
+        assert_eq!(note.path, created.path);
+        assert_eq!(std::fs::read_to_string(&created.path).expect("read"), NOTE);
+        assert!(
+            std::fs::symlink_metadata(&link)
+                .expect("stat")
+                .file_type()
+                .is_symlink(),
+            "the link must stay a link"
         );
     }
 
@@ -271,7 +218,7 @@ mod tests {
         ] {
             let err = write_note(&session, target, NOTE).expect_err("missing note");
             assert!(
-                matches!(err, crate::error::Error::Write(WriteError::NotFound(_))),
+                matches!(err, crate::error::Error::Target(TargetError::NotFound(_))),
                 "{target} produced {err:?}"
             );
         }
@@ -291,7 +238,7 @@ mod tests {
         let err = write_note(&session, &created.id.to_string(), NOTE).expect_err("ambiguous");
         assert!(matches!(
             err,
-            crate::error::Error::Write(WriteError::Ambiguous(_, 2))
+            crate::error::Error::Target(TargetError::Ambiguous(_, 2))
         ));
     }
 

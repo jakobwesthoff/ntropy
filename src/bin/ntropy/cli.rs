@@ -9,7 +9,8 @@
 //! which the `run` layer joins with spaces. `search`, `delete`, `render`,
 //! `show` and `site` take a query or selector as repeated positional
 //! arguments, each read on its own by `ntropy::query::from_arguments`
-//! (ADR 0076). `edit` is a hidden alias of `search` (ADR 0031). `search`,
+//! (ADR 0076); a lone argument naming a note's file is a path (ADR 0091).
+//! `edit` is a hidden alias of `search` (ADR 0031). `search`,
 //! `new` and `today` take `--id` beside `-p` to print a note's ULID instead of
 //! its path (ADR 0090). A bare `ntropy` prints help.
 
@@ -119,9 +120,17 @@ pub enum Command {
     /// hidden alias for this command (ADR 0031).
     #[command(visible_alias = "list", alias = "edit")]
     Search {
-        /// A full ULID or a query DSL expression, as trailing arguments that are
-        /// each read on their own; words in one argument form a phrase
+        /// A full ULID, a note's filename or path, or a query DSL expression,
+        /// as trailing arguments that are each read on their own; words in one
+        /// argument form a phrase
         /// (omitted = all notes).
+        ///
+        /// A lone argument that ends in `.md` or `.age` and names an existing file
+        /// selects the note in it: a bare filename is looked up in `all-notes/`, any
+        /// other path is taken as given, and a symlink to a note, such as a view entry,
+        /// selects that note. A file that is no note of the vault is an error, and so is
+        /// the name of a note file that does not exist. Any other argument ending in
+        /// `.md` or `.age` is a query.
         #[arg(value_name = "ID|QUERY")]
         query: Vec<String>,
         /// Print the selected note's path instead of opening the editor.
@@ -144,9 +153,9 @@ pub enum Command {
     /// Replace one note's content with text read from stdin.
     ///
     /// The note is named, never searched for: a full ULID, the note's filename,
-    /// or its path in `all-notes/`. Nothing is prompted for and no picker opens,
-    /// so this composes into a pipeline; a target that names no note, or more
-    /// than one, is an error. The text must be a well-formed note (frontmatter
+    /// its path in `all-notes/`, or a symlink to it such as a view entry.
+    /// Nothing is prompted for and no picker opens, so this composes into a
+    /// pipeline; a target that names no note, or more than one, is an error. The text must be a well-formed note (frontmatter
     /// block with a `title`) or it is refused before anything is written.
     ///
     /// Works on an encrypted vault, including a locked one, which is what makes
@@ -169,8 +178,16 @@ pub enum Command {
     ///
     /// An empty selector is refused instead of matching every note.
     Delete {
-        /// A full ULID or a query DSL expression, as trailing arguments that are
-        /// each read on their own; words in one argument form a phrase.
+        /// A full ULID, a note's filename or path, or a query DSL expression,
+        /// as trailing arguments that are each read on their own; words in one
+        /// argument form a phrase.
+        ///
+        /// A lone argument that ends in `.md` or `.age` and names an existing file
+        /// selects the note in it: a bare filename is looked up in `all-notes/`, any
+        /// other path is taken as given, and a symlink to a note, such as a view entry,
+        /// selects that note. A file that is no note of the vault is an error, and so is
+        /// the name of a note file that does not exist. Any other argument ending in
+        /// `.md` or `.age` is a query.
         #[arg(required = true, value_name = "ID|QUERY")]
         selector: Vec<String>,
         /// Skip the confirmation prompt.
@@ -193,9 +210,17 @@ pub enum Command {
     /// for `html`. `--theme` overrides it for one invocation. `ansi` takes no
     /// theme.
     Render {
-        /// A full ULID or a query DSL expression, as trailing arguments that are
-        /// each read on their own; words in one argument form a phrase
+        /// A full ULID, a note's filename or path, or a query DSL expression,
+        /// as trailing arguments that are each read on their own; words in one
+        /// argument form a phrase
         /// (omitted = choose from all notes).
+        ///
+        /// A lone argument that ends in `.md` or `.age` and names an existing file
+        /// selects the note in it: a bare filename is looked up in `all-notes/`, any
+        /// other path is taken as given, and a symlink to a note, such as a view entry,
+        /// selects that note. A file that is no note of the vault is an error, and so is
+        /// the name of a note file that does not exist. Any other argument ending in
+        /// `.md` or `.age` is a query.
         #[arg(value_name = "ID|QUERY")]
         selector: Vec<String>,
         /// The output format: `pdf` (default), `typst`, `html`, or `ansi`.
@@ -234,9 +259,17 @@ pub enum Command {
     /// `NO_COLOR` leaves out the colours. Must resolve to exactly one note,
     /// like `render`.
     Show {
-        /// A full ULID or a query DSL expression, as trailing arguments that are
-        /// each read on their own; words in one argument form a phrase
+        /// A full ULID, a note's filename or path, or a query DSL expression,
+        /// as trailing arguments that are each read on their own; words in one
+        /// argument form a phrase
         /// (omitted = choose from all notes).
+        ///
+        /// A lone argument that ends in `.md` or `.age` and names an existing file
+        /// selects the note in it: a bare filename is looked up in `all-notes/`, any
+        /// other path is taken as given, and a symlink to a note, such as a view entry,
+        /// selects that note. A file that is no note of the vault is an error, and so is
+        /// the name of a note file that does not exist. Any other argument ending in
+        /// `.md` or `.age` is a query.
         #[arg(value_name = "ID|QUERY")]
         selector: Vec<String>,
         /// Lay the note out at this many columns instead of the terminal's

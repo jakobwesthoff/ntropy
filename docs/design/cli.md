@@ -137,12 +137,37 @@ title, the newest is opened. Shares `--print`/`-p` and `--id` with `new`:
 and opens no editor. The template must exist; a vault predating it must
 re-run `init`.
 
-### `search [id|query]`
+### `search [id|path|query]`
 
 The single browse / filter / full-text / open entry point (visible alias:
 `list`; hidden alias: `edit`). The selector is optional: omitted means all
-notes; a full 26-char ULID resolves directly to that note; anything else is a
-DSL expression (the id-or-query rule shared with `delete`).
+notes; a full 26-char ULID resolves directly to that note; a note's filename or
+path selects that note (below); anything else is a DSL expression (the
+id-or-query-or-path rule shared with `delete`, `render` and `show`, ADR 0091).
+
+A selector is a path when it is the whole selector (one argument, as a ULID
+is), ends in `.md` or `.age` and names an existing file. A bare filename is
+looked up in `all-notes/`, and anything else is taken as given, relative to the
+working directory or absolute. The file must resolve to a file directly in
+`all-notes/` that is stored the way the vault stores its notes, `.md` in a
+plaintext vault and `.age` in an encrypted one. A symlink to such a file
+selects that note, which makes the entries of a view directory selectors too.
+
+- A path selects exactly that file. Unlike the ULID, which names a note and
+  every copy of it (ADR 0067), the path of a copy selects the copy alone.
+- An existing file that is no note of the vault is an error, `` `<selector>`
+  is not a note in the vault's `all-notes/` ``, instead of a query that matches
+  nothing. A bare name missing from `all-notes/` that exists in the working
+  directory is that error too.
+- The name of a note file, `<ulid>-<slug>.md` or `<ulid>.age`, whose file does
+  not exist is an error, `` no note `<selector>` in the vault's `all-notes/` ``.
+  As a query it would match the notes that link to the old name.
+- Any other `.md` or `.age` argument whose file does not exist is a query, as
+  is a path beside other arguments.
+- A file directly in `all-notes/` that the scan skips selects no note, and the
+  scan's warning says why.
+- Resolving the name reads no note, so a locked vault still tells a file that
+  is no note from one that is; reading the note itself needs the key.
 
 - Interactive: a single match opens directly in the editor; several launch the
   interactive picker pre-filtered to them, and Enter opens the selection. The
@@ -215,10 +240,10 @@ in an encrypted vault is ciphertext, while `--print-content` reads through the
 vault's cipher and therefore produces the same bytes whichever way the vault
 stores its notes.
 
-### `delete <id|query>`
+### `delete <id|path|query>`
 
 Remove a note (its canonical file) and refresh the views. The selector follows
-the same id-or-query rule as `search`. Deletion prompts for confirmation unless
+the same id-or-path-or-query rule as `search`. Deletion prompts for confirmation unless
 `--force`/`-f` is given; the prompt goes through the controlling terminal, so
 redirected streams can neither swallow the question nor feed the answer
 (ADR 0036). Unlike `search`, `delete` must resolve to exactly one note: an
@@ -228,7 +253,7 @@ is required, since there is no prompt. An empty selector (no argument text, or
 the empty term `""`) is refused with an error before any lookup, so it neither
 matches every note nor opens the picker.
 
-### `render [id|query]`
+### `render [id|path|query]`
 
 Turn one note into a document artifact: `pdf` (the default, compiled by the
 external `typst` binary, the one tool that must be on `PATH`), `typst`, the
@@ -239,7 +264,7 @@ terminal at 80 columns ([ansi-engine.md](ansi-engine.md),
 three need no external tool. An
 engine whose tool is missing is an error naming what to install, never a
 silent fall-back. The
-selector follows the same id-or-query rule as `search`
+selector follows the same id-or-path-or-query rule as `search`
 and, like `search`, is optional: omitted, every note feeds the picker for
 fuzzy selection. Like `delete`, `render` must resolve to exactly one note:
 several matches open the picker pre-filtered interactively; under `-n` an
@@ -295,7 +320,7 @@ Examples:
     open "$(ntropy render -p 'text:"quarterly"')"    # render, then open the PDF
     ntropy render 01ARZ3NDEKTSV4RRFFQ69G5FAV -o report.pdf
 
-### `show [id|query]`
+### `show [id|path|query]`
 
 Print one note drawn for the terminal by the ansi engine
 ([ansi-engine.md](ansi-engine.md), ADR 0083): its frontmatter block, then
@@ -381,9 +406,10 @@ Replace one note's content with text read from stdin (ADR 0043). This is how a
 note is authored without an editor, and the only way to author one in an
 encrypted vault.
 
-The target is named, not searched for: a full ULID, the note's filename, or a
-path into `all-notes/`. It must exist, and a ULID matching more than one file is
-an error. Resolution reads the directory listing and no note, so a locked
+The target is named, not searched for: a full ULID, the note's filename, a
+path into `all-notes/`, or a symlink to such a file, a view entry for one. The
+name is resolved the way a path selector of `search` is (ADR 0091). It must
+exist, and a ULID matching more than one file is an error. Resolution reads the directory listing and no note, so a locked
 encrypted vault still accepts a write; encrypting needs only the public
 recipient (ADR 0041).
 

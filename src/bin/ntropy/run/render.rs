@@ -7,7 +7,7 @@
 //!
 //! The library owns the engine abstraction and performs no ambient effect
 //! itself (ADR 0013). This module supplies the two things it deliberately does
-//! not: the selector-to-single-note resolution shared with `delete`, and the
+//! not: the selector-to-single-note resolution shared with `show`, and the
 //! production [`RenderContext`] that stages files in a temporary directory and
 //! spawns tools through `std::process::Command`.
 
@@ -19,7 +19,7 @@ use std::process::{Command, ExitCode, Stdio};
 use anyhow::{Context, Result, bail};
 
 use ntropy::link;
-use ntropy::ops;
+use ntropy::ops::{self, Selector};
 use ntropy::render::{Invocation, Registry, RenderContext, RenderError, ToolOutput, prepare};
 use ntropy::session::VaultSession;
 use ntropy::text::escape_controls;
@@ -46,7 +46,7 @@ use super::{exit_for_warnings, output};
 pub fn cmd_render(
     global: &GlobalArgs,
     session: &VaultSession,
-    selector: String,
+    selector: Selector,
     to: String,
     engine: Option<String>,
     output: Option<PathBuf>,

@@ -16,6 +16,8 @@ The tab-separated plain table format is superseded by
 space-aligned and the `awk`/`cut` positional contract is retired. The selector
 id-or-query rule and the ordering decision still stand.
 
+Amended 2026-11-16 by [ADR 0091](0091-a-notes-filename-or-path-selects-it.md).
+
 ## Context
 
 The non-interactive output format, default result ordering, and the behavior of

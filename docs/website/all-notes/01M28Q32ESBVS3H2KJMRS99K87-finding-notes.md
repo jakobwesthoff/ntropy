@@ -16,7 +16,17 @@ it opens, and reading a note in the terminal.
 ntropy search                                # every note
 ntropy search tag:work and not status:done   # the notes a query matches
 ntropy search 01J8ZA2…                       # one note by its full ULID
+ntropy search 01J8ZA2…-plan.md               # one note by its file name
+ntropy search by-tag/work/plan.md            # one note by a view entry
 ```
+
+A selector is a path when it is a single argument that ends in `.md` or
+`.age` and names an existing file. A bare file name is looked up in
+`all-notes/`, any other path is taken as given, and a view entry selects the
+note it links to. `delete`, `render` and `show` take the same selector. A
+file that is no note of the vault is an error, and so is the file name of a
+note that no longer exists, as a query for it would find the notes that link
+to it. Any other word ending in `.md` is a query.
 
 `search` has the alias `list`. A single match opens in your editor, and
 several open the picker. Queries combine tags, fields and words with

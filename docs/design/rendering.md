@@ -25,11 +25,11 @@ model.
 
 ## CLI surface
 
-    ntropy render [id|query] [--to <format>] [--engine <name>] [-o <path>] [-p]
+    ntropy render [id|path|query] [--to <format>] [--engine <name>] [-o <path>] [-p]
 
-- The selector follows the id-or-query rule shared with `search` and
-  `delete`: a full 26-char ULID resolves directly to that note, anything
-  else runs as a DSL query. Like `search`, it is optional: omitted, every
+- The selector follows the rule shared with `search`, `delete` and `show`
+  (ADR 0091): a full 26-char ULID resolves directly to that note, so does a
+  note's filename or path, anything else runs as a DSL query. Like `search`, it is optional: omitted, every
   note feeds the picker for fuzzy selection.
 - Like `delete`, `render` must resolve to exactly one note: several
   matches open the picker pre-filtered interactively; under `-n` an
@@ -258,8 +258,9 @@ tools installed:
   (`src/bin/ntropy/run/show.rs`), which draws a note with the ansi engine
   and writes it to stdout or a pager.
 
-The selector plumbing is reused as-is: `ops::resolve_selection` and the
-generic picker already serve `search` and `delete` unchanged.
+The selector plumbing is reused as-is: `ops::resolve_selection`, which takes
+an `ops::Selector`, and the generic picker serve `search` and `delete`
+unchanged.
 
 ## Configuration
 

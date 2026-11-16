@@ -36,7 +36,7 @@ use anyhow::{Context, Result, anyhow, bail};
 use clap::CommandFactory;
 
 use ntropy::config::global;
-use ntropy::ops;
+use ntropy::ops::{self, Selector};
 use ntropy::reconcile;
 use ntropy::scan::ScanWarning;
 use ntropy::session::VaultSession;
@@ -106,7 +106,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         } => cmd_search(
             &cli.global,
             &session,
-            ntropy::query::from_arguments(&query),
+            Selector::from_arguments(&query),
             output::print_form(print, id),
             print_content,
             interactive,
@@ -132,7 +132,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Command::Reconcile => cmd_reconcile(&cli.global, &session),
         Command::Delete { selector, force } => cmd_delete(
             &session,
-            ntropy::query::from_arguments(&selector),
+            Selector::from_arguments(&selector),
             force,
             interactive,
         ),
@@ -147,7 +147,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         } => render::cmd_render(
             &cli.global,
             &session,
-            ntropy::query::from_arguments(&selector),
+            Selector::from_arguments(&selector),
             to,
             engine,
             output,
@@ -159,7 +159,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Command::Show { selector, width } => show::cmd_show(
             &cli.global,
             &session,
-            ntropy::query::from_arguments(&selector),
+            Selector::from_arguments(&selector),
             width,
             interactive,
         ),
@@ -451,18 +451,18 @@ fn selection_action(
 fn cmd_search(
     global: &GlobalArgs,
     session: &VaultSession,
-    selector: String,
+    selector: Selector,
     form: Option<NoteRef>,
     print_content: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
     // A bare invocation browses the whole vault; a selector resolves a full ULID
-    // directly or otherwise runs as a DSL query (the id-or-query rule of ADR
-    // 0025). Both feed one presentation path, which `edit` shares verbatim as a
-    // hidden alias (ADR 0031).
-    let mut matches = match optional(&selector) {
-        Some(selector) => {
-            ops::resolve_selection(session, selector).context("while resolving the selector")?
+    // or a note's filename or path directly and otherwise runs as a DSL query
+    // (the id-or-query rule of ADR 0025, ADR 0091). Both feed one presentation
+    // path, which `edit` shares verbatim as a hidden alias (ADR 0031).
+    let mut matches = match optional(selector.query()) {
+        Some(_) => {
+            ops::resolve_selection(session, &selector).context("while resolving the selector")?
         }
         None => ops::search(session, None).context("while listing notes")?,
     };
@@ -499,7 +499,7 @@ fn cmd_search(
             Ok(ExitCode::SUCCESS)
         }
         notes if print_content && !interactive => {
-            report_ambiguous(&selector, notes)?;
+            report_ambiguous(selector.shown(), notes)?;
             Ok(ExitCode::FAILURE)
         }
         notes => {
@@ -741,7 +741,7 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
 
 fn cmd_delete(
     session: &VaultSession,
-    selector: String,
+    selector: Selector,
     force: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
@@ -750,10 +750,10 @@ fn cmd_delete(
     // (`ntropy delete -f "$ID"`), so it is refused before any lookup or picker.
     // A parse error is left to `resolve_selection` to report.
     let is_empty_text_term = matches!(
-        ntropy::query::parse(&selector),
+        ntropy::query::parse(selector.query()),
         Ok(ntropy::query::Query::Text(pattern)) if pattern.is_empty()
     );
-    if selector.trim().is_empty() || is_empty_text_term {
+    if selector.query().trim().is_empty() || is_empty_text_term {
         bail!("the selector is empty");
     }
 
@@ -765,7 +765,7 @@ fn cmd_delete(
     // ambiguity rule shared with `edit` (ADR 0025).
     let target = match matches.notes.as_slice() {
         [] => {
-            eprintln!("error: no note matches `{selector}`");
+            eprintln!("error: no note matches `{}`", selector.shown());
             return Ok(ExitCode::FAILURE);
         }
         [note] => (note.path.clone(), output::note_reference(note)?),
@@ -785,7 +785,7 @@ fn cmd_delete(
                     None => return Ok(ExitCode::SUCCESS),
                 }
             } else {
-                report_ambiguous(&selector, notes)?;
+                report_ambiguous(selector.shown(), notes)?;
                 return Ok(ExitCode::FAILURE);
             }
         }
@@ -971,7 +971,7 @@ fn report_ambiguous(selector: &str, notes: &[ntropy::note::Note]) -> Result<()> 
     for note in notes {
         eprintln!("  {}", output::note_reference(note)?);
     }
-    eprintln!("refine the query or pass a full ULID");
+    eprintln!("refine the query, or pass a full ULID or the note's path");
     Ok(())
 }
 

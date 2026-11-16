@@ -145,6 +145,14 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault's storage or manage its key. Rewrites every note, so pass `-y` to skip the confirmation; `--resume` finishes an interrupted run. |
 | `ntropy lsp` | Language server for editors (link/tag completion, go-to-definition); not used from scripts. Editor setup lives in the ntropy README. |
 
+`search`, `delete`, `render` and `show` also take a note's filename or path
+as the one selector, and `write` does too. A lone argument that ends in `.md`
+or `.age` and names an existing file selects that note: a bare filename is
+looked up in `all-notes/`, any other path is taken as given, and a symlink to a
+note, such as a view entry, selects the note it points to. A file that is no
+note of the vault is an error, and so is the filename of a note that no longer
+exists. Any other `.md` word is a query.
+
 Global flags on every command: `--vault <path>`, `-n`/`--non-interactive`,
 `--strict` (malformed notes and skipped views become errors instead of
 skip-warnings),

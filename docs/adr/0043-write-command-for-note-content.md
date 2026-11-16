@@ -15,6 +15,8 @@ Departs from
 [ADR 0036](0036-interactivity-keyed-to-the-controlling-terminal.md) for this one
 command: it behaves the same whether or not a controlling terminal exists.
 
+Amended 2026-11-16 by [ADR 0091](0091-a-notes-filename-or-path-selects-it.md).
+
 ## Context
 
 Nothing writes a note's content except an editor. In a plaintext vault a caller

@@ -19,6 +19,14 @@ own:
 
 - **omitted** — all notes
 - **a full 26-character ULID** — exactly that note
+- **a note's filename or path** — exactly that note: one argument ending in
+  `.md` or `.age` that names an existing file. A bare filename is looked up in
+  `all-notes/`, any other path is taken as given, and a symlink to a note, such
+  as an entry of a view directory, selects the note it points to. The path of
+  a copy that shares another note's ULID selects the copy alone. A file that is
+  no note of the vault is an error, and so is the filename of a note whose file
+  no longer exists (as a query it would match the notes linking to it), so a
+  stale name fails. Any other word ending in `.md` is a query.
 - **anything else** — a query expression
 
 ## The query language

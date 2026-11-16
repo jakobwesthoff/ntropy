@@ -61,7 +61,7 @@ ntropy write /vault/all-notes/01J8ZA2ABCDEFGHJKMNPQRSTVW-q3-planning.md < note.m
 ```
 
 The note must already exist, and a path must point into the vault's
-`all-notes/`. Nothing is prompted for and no picker opens, so `write` is safe in
+`all-notes/`, directly or through a symlink such as a view entry. Nothing is prompted for and no picker opens, so `write` is safe in
 a pipeline; a target naming no note, or more than one, is an error.
 
 **Feed it the whole note, not a fragment.** The text you pipe in becomes the

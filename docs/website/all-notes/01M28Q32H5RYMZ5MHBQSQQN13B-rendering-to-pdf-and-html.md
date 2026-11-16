@@ -38,8 +38,8 @@ makes `open "$(ntropy render -p ...)"` work.
 
 ## Choosing the note
 
-`render` takes the selector `search` takes: a full ULID, or a query. It
-has to end up with exactly one note. Several matches open the picker,
+`render` takes the selector `search` takes: a full ULID, a note's filename
+or path, or a query. It has to end up with exactly one note. Several matches open the picker,
 narrowed to them; under `-n` an ambiguous selector is an error listing
 the candidates. With no selector at all, every note feeds the picker;
 under `-n` that is an error asking for a selector.

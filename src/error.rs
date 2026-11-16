@@ -18,7 +18,7 @@ use crate::datetime::DateError;
 use crate::fsutil::FsError;
 use crate::id::IdError;
 use crate::note::NoteError;
-use crate::ops::{ViewAdminError, WriteError};
+use crate::ops::{TargetError, ViewAdminError};
 use crate::query::QueryError;
 use crate::render::RenderError;
 use crate::scan::ScanError;
@@ -80,9 +80,9 @@ pub enum Error {
     #[error(transparent)]
     Frontend(#[from] crate::site::frontend::GrammarError),
 
-    /// A write could not be directed at a note.
+    /// A name could not be directed at a note.
     #[error(transparent)]
-    Write(#[from] WriteError),
+    Target(#[from] TargetError),
 
     /// A note could not be read from or written to its storage form.
     #[error(transparent)]

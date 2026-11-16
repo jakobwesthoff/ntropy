@@ -23,6 +23,25 @@ change in any release
   [ADR 0090](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0090-id-flag-prints-a-notes-ulid.md)
   records the rule.
 
+### Changed
+
+- `search`, `delete`, `render` and `show` take a note's filename or path in
+  place of a full ULID or a query, and `write` resolves its target the same
+  way. A lone argument that ends in `.md` or `.age` and names an existing file
+  selects that note. A bare filename is looked up in `all-notes/`, any other
+  path is taken as given, and a symlink to a note, such as an entry of a view
+  directory, selects the note it points to, so `write` accepts view paths now.
+  The path of a copy that shares another note's ULID selects the copy alone.
+  A file that is no note of the vault is an error, and so is the filename of a
+  note whose file does not exist. Before, such a name ran as a query and
+  matched the notes that link to it, so `delete -f` on a stale name removed
+  one of them. Any other word ending in `.md` is still a query. A `write` to a
+  path that does not exist outside the vault reports that no such note
+  exists, not that the file is outside it, and a file stored the way the vault
+  does not store notes is refused.
+  [ADR 0091](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0091-a-notes-filename-or-path-selects-it.md)
+  records the rule.
+
 ## v2.10.0 - 2026-11-02
 
 ### Changed

@@ -18,4 +18,4 @@ exit_code: 1
 error: `tag:work` is ambiguous (2 matches):
   [DATE....]  Beta  [work]  ([ULID....................])
   [DATE....]  Alpha  [work]  ([ULID....................])
-refine the query or pass a full ULID
+refine the query, or pass a full ULID or the note's path

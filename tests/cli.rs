@@ -1515,6 +1515,520 @@ fn id_is_not_offered_where_the_print_flag_names_a_file() {
     }
 }
 
+// =============================================================================
+// A note's filename or path as selector
+// =============================================================================
+
+const PATH_NOTE: &str = "---\ntitle: Pathfinder\ntags: [work]\n---\nbody line\n";
+
+/// The path of `all-notes/<ulid>-<slug>.md` in `vault`.
+fn note_file(vault: &Path, ulid: &str, slug: &str) -> PathBuf {
+    vault.join("all-notes").join(format!("{ulid}-{slug}.md"))
+}
+
+/// A vault holding `PATH_NOTE` as `ULID_A` and a second note as `ULID_B`.
+fn vault_of_two_notes() -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "pathfinder", PATH_NOTE);
+    write_note(
+        dir.path(),
+        ULID_B,
+        "bystander",
+        "---\ntitle: Bystander\n---\nother\n",
+    );
+    dir
+}
+
+/// Build the view links, so `by-tag/work/` holds a symlink to `ULID_A`.
+fn build_views(vault: &Path) -> PathBuf {
+    let out = run_in(vault, &["-n", "reconcile"]);
+    assert!(out.status.success(), "{}", rendered(&out));
+    let view_dir = vault.join("by-tag/work");
+    let entry = fs::read_dir(&view_dir)
+        .expect("the view holds the tag's directory")
+        .next()
+        .expect("a link")
+        .expect("entry");
+    entry.path()
+}
+
+#[test]
+fn search_reads_a_note_named_by_its_absolute_path() {
+    let dir = vault_of_two_notes();
+    let path = note_file(dir.path(), ULID_A, "pathfinder");
+    let out = run_in(
+        dir.path(),
+        &["search", "-n", "-P", path.to_str().expect("utf-8")],
+    );
+    assert_prints(&out, PATH_NOTE);
+}
+
+#[test]
+fn search_reads_a_note_named_by_its_bare_filename() {
+    let dir = vault_of_two_notes();
+    let name = format!("{ULID_A}-pathfinder.md");
+    let out = run_in(dir.path(), &["search", "-n", "-P", &name]);
+    assert_prints(&out, PATH_NOTE);
+}
+
+#[test]
+fn search_reads_a_note_named_by_a_path_relative_to_the_working_directory() {
+    let dir = vault_of_two_notes();
+    let relative = format!("all-notes/{ULID_A}-pathfinder.md");
+    let out = run_in(dir.path(), &["search", "-n", "-P", &relative]);
+    assert_prints(&out, PATH_NOTE);
+}
+
+#[test]
+fn search_prints_the_id_of_a_note_named_by_its_path() {
+    let dir = vault_of_two_notes();
+    let name = format!("{ULID_A}-pathfinder.md");
+    let out = run_in(dir.path(), &["search", "-n", "--id", &name]);
+    assert_prints(&out, &format!("{ULID_A}\n"));
+}
+
+#[test]
+fn the_aliases_take_a_path_too() {
+    let dir = vault_of_two_notes();
+    let name = format!("{ULID_A}-pathfinder.md");
+    for alias in ["list", "edit"] {
+        let out = run_in(dir.path(), &[alias, "-n", "--id", &name]);
+        assert_prints(&out, &format!("{ULID_A}\n"));
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn search_reads_a_note_named_through_a_view() {
+    let dir = vault_of_two_notes();
+    let link = build_views(dir.path());
+    let out = run_in(
+        dir.path(),
+        &["search", "-n", "-P", link.to_str().expect("utf-8")],
+    );
+    assert_prints(&out, PATH_NOTE);
+}
+
+#[cfg(unix)]
+#[test]
+fn print_gives_the_path_in_all_notes_for_a_note_named_through_a_view() {
+    let dir = vault_of_two_notes();
+    let link = build_views(dir.path());
+    let out = run_in(
+        dir.path(),
+        &["search", "-n", "-p", link.to_str().expect("utf-8")],
+    );
+    assert!(out.status.success(), "{}", rendered(&out));
+    let printed = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        printed
+            .trim_end()
+            .ends_with(&format!("all-notes/{ULID_A}-pathfinder.md")),
+        "{printed}"
+    );
+}
+
+#[test]
+fn delete_removes_the_note_a_path_names() {
+    let dir = vault_of_two_notes();
+    let path = note_file(dir.path(), ULID_A, "pathfinder");
+    let out = run_in(
+        dir.path(),
+        &["delete", "-n", "-f", path.to_str().expect("utf-8")],
+    );
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(!path.exists());
+    assert!(note_file(dir.path(), ULID_B, "bystander").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn delete_removes_the_note_a_view_path_names() {
+    let dir = vault_of_two_notes();
+    let link = build_views(dir.path());
+    let out = run_in(
+        dir.path(),
+        &["delete", "-n", "-f", link.to_str().expect("utf-8")],
+    );
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(!note_file(dir.path(), ULID_A, "pathfinder").exists());
+    assert!(note_file(dir.path(), ULID_B, "bystander").exists());
+}
+
+#[test]
+fn the_ulid_of_a_copied_note_is_ambiguous_and_the_path_of_the_copy_is_not() {
+    let dir = setup_vault();
+    copied_note(dir.path());
+
+    let by_ulid = run_in(dir.path(), &["delete", "-n", "-f", ULID_A]);
+    assert_eq!(by_ulid.status.code(), Some(1), "{}", rendered(&by_ulid));
+    assert!(
+        String::from_utf8_lossy(&by_ulid.stderr)
+            .contains("refine the query, or pass a full ULID or the note's path"),
+        "{}",
+        rendered(&by_ulid)
+    );
+
+    let copy = format!("{ULID_A}-plan-b.md");
+    let by_path = run_in(dir.path(), &["delete", "-n", "-f", &copy]);
+    assert!(by_path.status.success(), "{}", rendered(&by_path));
+    assert!(!note_file(dir.path(), ULID_A, "plan-b").exists());
+    assert!(note_file(dir.path(), ULID_A, "plan").exists());
+}
+
+#[test]
+fn render_draws_the_note_a_path_names() {
+    let dir = vault_of_two_notes();
+    let path = note_file(dir.path(), ULID_A, "pathfinder");
+    let artifact = dir.path().join("out.ansi");
+    let out = run_in(
+        dir.path(),
+        &[
+            "render",
+            "-n",
+            "--to",
+            "ansi",
+            path.to_str().expect("utf-8"),
+            "-o",
+            artifact.to_str().expect("utf-8"),
+        ],
+    );
+    assert!(out.status.success(), "{}", rendered(&out));
+    let drawn = fs::read_to_string(&artifact).expect("the artifact");
+    assert!(drawn.contains("body line"), "{drawn}");
+    assert!(!drawn.contains("other"), "{drawn}");
+}
+
+#[test]
+fn show_draws_the_note_a_path_names() {
+    let dir = vault_of_two_notes();
+    let name = format!("{ULID_A}-pathfinder.md");
+    let out = run_in(dir.path(), &["show", "-n", &name]);
+    assert!(out.status.success(), "{}", rendered(&out));
+    let drawn = String::from_utf8_lossy(&out.stdout);
+    assert!(drawn.contains("body line"), "{drawn}");
+}
+
+/// What a file that is not a note of the vault draws from each command: the
+/// error, nothing on stdout, and the file untouched.
+#[test]
+fn a_file_that_is_not_a_note_of_the_vault_is_an_error_for_every_command() {
+    let dir = vault_of_two_notes();
+    let outside = dir.path().join("elsewhere.md");
+    fs::write(&outside, "---\ntitle: Elsewhere\n---\nbody line\n").expect("write outside");
+    let target = outside.to_str().expect("utf-8");
+
+    for args in [
+        vec!["search", "-n", "-P", target],
+        vec!["delete", "-n", "-f", target],
+        vec!["render", "-n", "--to", "ansi", target],
+        vec!["show", "-n", target],
+    ] {
+        let out = run_in(dir.path(), &args);
+        assert_eq!(out.status.code(), Some(1), "{args:?}: {}", rendered(&out));
+        assert!(out.stdout.is_empty(), "{args:?}: {}", rendered(&out));
+        assert!(
+            String::from_utf8_lossy(&out.stderr)
+                .contains("is not a note in the vault's `all-notes/`"),
+            "{args:?}: {}",
+            rendered(&out)
+        );
+    }
+    assert!(outside.exists());
+}
+
+#[test]
+fn the_error_for_a_file_that_is_not_a_note_names_the_selector() {
+    let dir = vault_of_two_notes();
+    let outside = dir.path().join("elsewhere.md");
+    fs::write(&outside, "---\ntitle: Elsewhere\n---\n").expect("write outside");
+    let out = run_in(
+        dir.path(),
+        &["search", "-n", "-P", outside.to_str().expect("utf-8")],
+    );
+    redacted(dir.path()).bind(|| {
+        insta::assert_snapshot!("search_rejects_a_file_that_is_not_a_note", rendered(&out));
+    });
+}
+
+#[test]
+fn a_file_in_the_vault_but_outside_all_notes_is_not_a_note() {
+    let dir = vault_of_two_notes();
+    fs::write(dir.path().join("README.md"), "# About this vault\n").expect("write readme");
+    let out = run_in(dir.path(), &["delete", "-n", "-f", "README.md"]);
+    // A bare name is looked up in `all-notes/` first, then in the working
+    // directory, which is the vault root here.
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("is not a note in the vault's `all-notes/`"),
+        "{}",
+        rendered(&out)
+    );
+    assert!(note_file(dir.path(), ULID_A, "pathfinder").exists());
+}
+
+#[test]
+fn a_markdown_name_without_a_file_runs_as_a_query() {
+    // Guard: unchanged behaviour. A word that ends in `.md` and names no file
+    // is text to search for.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "mention",
+        "---\ntitle: Mention\n---\nsee notes-2026.md for details\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "other",
+        "---\ntitle: Other\n---\nnothing\n",
+    );
+
+    let found = run_in(dir.path(), &["search", "-n", "--id", "notes-2026.md"]);
+    assert_prints(&found, &format!("{ULID_A}\n"));
+
+    let none = run_in(dir.path(), &["search", "-n", "--id", "absent.md"]);
+    assert_eq!(none.status.code(), Some(1), "{}", rendered(&none));
+}
+
+#[test]
+fn a_word_that_names_a_file_without_a_note_suffix_is_a_query() {
+    // Guard: only `.md` and `.age` make an argument a file. A stray file of
+    // the word's name in `all-notes/` does not turn the word into a path.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "mention",
+        "---\ntitle: Mention\n---\nthe Draftsman wrote this\n",
+    );
+    fs::write(dir.path().join("all-notes/Draftsman"), "stray").expect("write stray file");
+    let out = run_in(dir.path(), &["search", "-n", "--id", "Draftsman"]);
+    assert_prints(&out, &format!("{ULID_A}\n"));
+}
+
+#[test]
+fn a_stale_note_filename_selects_no_note() {
+    // A note's file name changes with its title, and other notes keep
+    // linking to the name they knew. As a query the stale name would match
+    // the linking note's body, and `delete -f` would remove that note.
+    let dir = setup_vault();
+    let stale = format!("{ULID_A}-old-title.md");
+    write_note(
+        dir.path(),
+        ULID_B,
+        "linker",
+        &format!("---\ntitle: Linker\n---\nsee [the old one]({stale})\n"),
+    );
+
+    for args in [
+        vec!["delete", "-n", "-f", stale.as_str()],
+        vec!["search", "-n", "-P", stale.as_str()],
+        vec!["show", "-n", stale.as_str()],
+        vec!["render", "-n", "--to", "ansi", stale.as_str()],
+    ] {
+        let out = run_in(dir.path(), &args);
+        assert_eq!(out.status.code(), Some(1), "{args:?}: {}", rendered(&out));
+        assert!(out.stdout.is_empty(), "{args:?}: {}", rendered(&out));
+        assert!(
+            String::from_utf8_lossy(&out.stderr)
+                .contains(&format!("no note `{stale}` in the vault's `all-notes/`")),
+            "{args:?}: {}",
+            rendered(&out)
+        );
+    }
+    assert!(
+        note_file(dir.path(), ULID_B, "linker").exists(),
+        "the linking note must survive"
+    );
+}
+
+#[test]
+fn a_stale_encrypted_note_filename_selects_no_note() {
+    let dir = setup_vault();
+    let out = run_in(
+        dir.path(),
+        &["search", "-n", "--id", &format!("{ULID_A}.age")],
+    );
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains(&format!(
+            "no note `{ULID_A}.age` in the vault's `all-notes/`"
+        )),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn a_stale_note_path_selects_no_note() {
+    let dir = setup_vault();
+    let path = note_file(dir.path(), ULID_A, "gone");
+    let out = run_in(
+        dir.path(),
+        &["search", "-n", "--id", path.to_str().expect("utf-8")],
+    );
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("in the vault's `all-notes/`"),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn a_path_beside_other_arguments_is_a_query_term() {
+    // Guard: only a lone argument is read as a path. Beside another argument
+    // the same text is a term of the query, which no note body contains.
+    let dir = vault_of_two_notes();
+    let name = format!("{ULID_A}-pathfinder.md");
+    let out = run_in(dir.path(), &["search", "-n", "-P", &name, "tag:work"]);
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(out.stdout.is_empty(), "{}", rendered(&out));
+}
+
+#[test]
+fn a_path_with_a_space_selects_its_note() {
+    let base = tempfile::tempdir().expect("temp dir");
+    let vault = base.path().join("My Vault");
+    scaffold_vault(&vault);
+    write_note(&vault, ULID_A, "pathfinder", PATH_NOTE);
+    let path = note_file(&vault, ULID_A, "pathfinder");
+    let out = run_in(
+        &vault,
+        &["search", "-n", "-P", path.to_str().expect("utf-8")],
+    );
+    assert_prints(&out, PATH_NOTE);
+}
+
+#[test]
+fn a_missing_path_is_echoed_as_typed() {
+    let base = tempfile::tempdir().expect("temp dir");
+    let vault = base.path().join("My Vault");
+    scaffold_vault(&vault);
+    let out = run_in(&vault, &["show", "-n", "My Vault/gone.md"]);
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("error: no note matches `My Vault/gone.md`"),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn write_fills_a_note_named_through_a_view() {
+    let dir = vault_of_two_notes();
+    let link = if cfg!(unix) {
+        build_views(dir.path())
+    } else {
+        return;
+    };
+    let replacement = "---\ntitle: Pathfinder\ntags: [work]\n---\nnew text\n";
+    let out = run_write(dir.path(), &[link.to_str().expect("utf-8")], replacement);
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert_eq!(
+        fs::read_to_string(note_file(dir.path(), ULID_A, "pathfinder")).expect("read"),
+        replacement
+    );
+    assert!(
+        fs::symlink_metadata(&link)
+            .expect("the view entry")
+            .file_type()
+            .is_symlink(),
+        "the view link stays a link"
+    );
+}
+
+#[test]
+fn write_to_a_path_that_does_not_exist_outside_all_notes_is_not_found() {
+    let dir = setup_vault();
+    let missing = dir.path().join("nowhere/elsewhere.md");
+    let out = run_write(dir.path(), &[missing.to_str().expect("utf-8")], WRITTEN);
+    assert!(!out.status.success());
+    redacted(dir.path()).bind(|| {
+        insta::assert_snapshot!(
+            "write_rejects_nonexistent_path_outside_all_notes",
+            rendered(&out)
+        );
+    });
+}
+
+#[test]
+fn a_note_extension_the_vault_does_not_use_is_not_a_note() {
+    // A `.age` file in a plaintext vault is no note, and the scan ignores it.
+    let dir = setup_vault();
+    fs::write(
+        dir.path().join("all-notes").join(format!("{ULID_A}.age")),
+        "not a note",
+    )
+    .expect("write stray file");
+    let name = format!("{ULID_A}.age");
+    let out = run_in(dir.path(), &["search", "-n", "-P", &name]);
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("is not a note in the vault's `all-notes/`"),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_to_a_note_selects_that_note() {
+    let dir = vault_of_two_notes();
+    let elsewhere = tempfile::tempdir().expect("temp dir");
+    let link = elsewhere.path().join("shortcut.md");
+    std::os::unix::fs::symlink(note_file(dir.path(), ULID_A, "pathfinder"), &link)
+        .expect("symlink");
+    let out = run_in(
+        dir.path(),
+        &["search", "-n", "--id", link.to_str().expect("utf-8")],
+    );
+    assert_prints(&out, &format!("{ULID_A}\n"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_that_leaves_all_notes_is_not_a_note() {
+    let dir = vault_of_two_notes();
+    let outside = tempfile::tempdir().expect("temp dir");
+    let target = outside.path().join("target.md");
+    fs::write(&target, "---\ntitle: Target\n---\n").expect("write target");
+    let link = dir.path().join("by-tag").join("leaving.md");
+    fs::create_dir_all(link.parent().expect("parent")).expect("by-tag");
+    std::os::unix::fs::symlink(&target, &link).expect("symlink");
+    let out = run_in(
+        dir.path(),
+        &["search", "-n", "-P", link.to_str().expect("utf-8")],
+    );
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("is not a note in the vault's `all-notes/`"),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn the_selector_commands_document_the_path_rule() {
+    let dir = setup_vault();
+    for command in ["search", "delete", "render", "show"] {
+        let help = run_in(dir.path(), &[command, "--help"]);
+        let text = String::from_utf8_lossy(&help.stdout);
+        assert!(
+            text.contains("a note's filename or path"),
+            "{command} --help: {text}"
+        );
+    }
+    let write_help = run_in(dir.path(), &["write", "--help"]);
+    assert!(
+        String::from_utf8_lossy(&write_help.stdout).contains("symlink"),
+        "{}",
+        rendered(&write_help)
+    );
+}
+
 #[test]
 fn search_empty_vault_exits_nonzero() {
     // An empty result, even a bare listing of an empty vault, exits non-zero
@@ -7861,6 +8375,81 @@ mod encrypted {
                 .is_file()
         );
         dir
+    }
+
+    #[test]
+    fn search_reads_an_encrypted_note_named_by_its_path_or_filename() {
+        let note = "---\ntitle: Shared\ntags: [work]\n---\nbody line\n";
+        let dir = encrypted_vault_holding(note);
+        let vault = dir.path();
+        let path = vault.join("all-notes").join(format!("{ULID_A}.age"));
+        let name = format!("{ULID_A}.age");
+
+        for selector in [path.to_str().expect("utf-8"), name.as_str()] {
+            let out = ntropy_encrypted(vault)
+                .args(["search", "-P", selector])
+                .output()
+                .expect("run search");
+            assert!(out.status.success(), "{}", super::rendered(&out));
+            assert_eq!(String::from_utf8_lossy(&out.stdout), note);
+        }
+    }
+
+    #[test]
+    fn a_plaintext_note_file_in_an_encrypted_vault_is_not_a_note_yet() {
+        // Until `reconcile` adopts it, the stray file is not stored encrypted.
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let stray = format!("{ULID_A}-stray.md");
+        fs::write(
+            vault.join("all-notes").join(&stray),
+            "---\ntitle: Stray\n---\n",
+        )
+        .expect("stray plaintext note");
+        let out = ntropy_encrypted(vault)
+            .args(["search", "-P", &stray])
+            .output()
+            .expect("run search");
+        assert_eq!(out.status.code(), Some(1), "{}", super::rendered(&out));
+        assert!(
+            String::from_utf8_lossy(&out.stderr)
+                .contains("is not a note in the vault's `all-notes/`"),
+            "{}",
+            super::rendered(&out)
+        );
+    }
+
+    #[test]
+    fn a_file_outside_all_notes_is_refused_on_a_locked_vault() {
+        // The lookup reads no note, so it needs no key to refuse.
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        fs::write(vault.join("elsewhere.md"), "# not a note\n").expect("write outside");
+        let mut cmd = ntropy(vault);
+        cmd.env_remove("NTROPY_IDENTITY");
+        cmd.args(["-n", "search", "-P", "elsewhere.md"]);
+        let out = cmd.output().expect("run search");
+        assert_eq!(out.status.code(), Some(1), "{}", super::rendered(&out));
+        assert!(
+            String::from_utf8_lossy(&out.stderr)
+                .contains("is not a note in the vault's `all-notes/`"),
+            "{}",
+            super::rendered(&out)
+        );
+    }
+
+    #[test]
+    fn a_note_path_on_a_locked_vault_errors_naming_unlock() {
+        let note = "---\ntitle: Shared\n---\nbody\n";
+        let dir = encrypted_vault_holding(note);
+        let vault = dir.path();
+        let name = format!("{ULID_A}.age");
+        let mut cmd = ntropy(vault);
+        cmd.env_remove("NTROPY_IDENTITY");
+        cmd.args(["-n", "search", "-P", &name]);
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(cmd);
+        });
     }
 
     #[test]

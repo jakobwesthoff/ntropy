@@ -723,6 +723,59 @@ fn id_prints_under_a_hostile_vault_root() {
     }
 }
 
+/// A file that is no note is named back in an error, which escapes it.
+#[test]
+fn a_hostile_path_that_is_no_note_is_escaped_in_the_error() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    let hostile = format!("elsewhere{RETITLE}.md");
+    fs::write(vault.join(&hostile), "---\ntitle: Elsewhere\n---\n").expect("write outside");
+
+    // Once as a bare name found beside the working directory, once as a path.
+    let as_path = format!("./{hostile}");
+    for (args, selector) in [
+        (vec!["search", "-P"], &hostile),
+        (vec!["delete", "-f"], &hostile),
+        (vec!["search", "-P"], &as_path),
+        (vec!["delete", "-f"], &as_path),
+    ] {
+        let output = run(ntropy(&vault).args(&args).arg(selector));
+        assert_eq!(
+            output.status.code(),
+            Some(1),
+            "{args:?}: {}",
+            stderr(&output)
+        );
+        assert_no_raw_controls(&output);
+        assert!(
+            stderr(&output).contains(&format!(
+                "elsewhere{RETITLE_SHOWN}.md` is not a note in the vault's `all-notes/`"
+            )),
+            "{args:?}: {}",
+            stderr(&output)
+        );
+    }
+}
+
+/// A stale note file name with a hostile slug is escaped like any error.
+#[test]
+fn a_missing_hostile_note_filename_is_escaped_in_the_error() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    let hostile = format!("{ULID_A}-{RETITLE}.md");
+
+    let output = run(ntropy(&vault).args(["search", "-P"]).arg(&hostile));
+    assert_eq!(output.status.code(), Some(1), "{}", stderr(&output));
+    assert_no_raw_controls(&output);
+    assert!(
+        stderr(&output).contains(&format!(
+            "no note `{ULID_A}-{RETITLE_SHOWN}.md` in the vault's `all-notes/`"
+        )),
+        "{}",
+        stderr(&output)
+    );
+}
+
 /// Each `-p` path that holds the vault's root, from a vault whose directory
 /// name needs escaping.
 #[test]

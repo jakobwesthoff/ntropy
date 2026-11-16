@@ -42,7 +42,8 @@ EOF
 
 `write` takes the whole note, frontmatter first, and refuses text that is
 not a well-formed note. It names its target, a full ULID, the note's file
-name, or its path in `all-notes/`, and never searches for it, so it opens
+name, its path in `all-notes/`, or a view entry that links to it, and never
+searches for it, so it opens
 no picker and asks no question. Until frontmatter lands in an `--empty`
 file, the file is not a well-formed note, and ntropy skips it with a
 warning. `--template` is refused alongside `--empty`.
@@ -94,6 +95,13 @@ path `-p` refuses.
 id=$(ntropy new --id Quarterly review)   # create a note, keep its ULID
 ntropy render -n "$id" -o review.pdf     # the ULID names only this note
 ```
+
+A note's file name or path is a selector too, for `search`, `delete`,
+`render` and `show`: `ntropy delete -n -f "$note"` removes the note a path
+printed by `new -p` names, and the path of one copy of a note whose ULID two
+files share selects that copy alone. A file name that has no file is an error
+when it is a note's name, so a script holding a stale name fails instead of
+acting on a different note.
 
 To read a note rather than locate it, `search -P` (`--print-content`)
 writes its text to stdout, for exactly one note. It reads the same in an
