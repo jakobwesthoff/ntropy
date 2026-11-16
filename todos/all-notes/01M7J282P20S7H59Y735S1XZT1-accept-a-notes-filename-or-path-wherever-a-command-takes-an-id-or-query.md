@@ -37,7 +37,3 @@ place both use.
   `.md` suffix, or a leading `./`, `/` or `~`.
 - Whether a filename alone (no separator) is accepted, as `write` does,
   or only a full path.
-
-## Relations
-
-- Relates to: [Print only a note's ULID for scripts](01M7J27KXTM8N1042S8BW6H5TC-print-only-a-notes-ulid-for-scripts.md), the same request from the other side

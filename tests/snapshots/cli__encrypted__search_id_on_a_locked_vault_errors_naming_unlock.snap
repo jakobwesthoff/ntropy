@@ -1,0 +1,18 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - search
+    - "-n"
+    - "--id"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while listing notes: this vault is locked; run `ntropy unlock`

@@ -94,10 +94,10 @@ pub fn create_note(session: &VaultSession, title: &str, template: Option<&str>) 
 ///
 /// The file is not a well-formed note until the caller writes frontmatter into
 /// it, so until then it is skipped with a warning like any other malformed file
-/// (ADR 0019). Returns the path rather than a [`Note`] because there is no note
-/// to parse yet.
-pub fn create_empty_note(session: &VaultSession, title: &str) -> Result<std::path::PathBuf> {
-    let (_id, path) = place(session, title);
+/// (ADR 0019). Returns the identity and the path rather than a [`Note`] because
+/// there is no note to parse yet.
+pub fn create_empty_note(session: &VaultSession, title: &str) -> Result<(Id, std::path::PathBuf)> {
+    let (id, path) = place(session, title);
 
     // Writing through the cipher keeps an encrypted vault's `<ulid>.age` file a
     // valid age container that decrypts to the empty string, rather than a
@@ -106,7 +106,7 @@ pub fn create_empty_note(session: &VaultSession, title: &str) -> Result<std::pat
     fsutil::create_dir_all(&session.layout().all_notes())?;
     session.cipher().write(&path, "")?;
 
-    Ok(path)
+    Ok((id, path))
 }
 
 /// The outcome of resolving today's note: the note plus whether it was created.
@@ -306,7 +306,7 @@ mod tests {
     #[test]
     fn empty_note_gets_the_canonical_name_and_no_content() {
         let (_guard, session) = temp_vault();
-        let path = create_empty_note(&session, "My First Note").expect("create");
+        let (_id, path) = create_empty_note(&session, "My First Note").expect("create");
 
         let name = path.file_name().unwrap().to_string_lossy();
         assert!(name.ends_with("-my-first-note.md"));
@@ -327,7 +327,7 @@ mod tests {
         )
         .expect("write template");
 
-        let path = create_empty_note(&session, "Unaffected").expect("create");
+        let (_id, path) = create_empty_note(&session, "Unaffected").expect("create");
         assert_eq!(std::fs::read_to_string(&path).expect("read"), "");
     }
 
@@ -337,7 +337,7 @@ mod tests {
         // rules (ADR 0019) rather than a special case: warned about and left out
         // of results until content arrives.
         let (_guard, session) = temp_vault();
-        let path = create_empty_note(&session, "Filled Later").expect("create");
+        let (_id, path) = create_empty_note(&session, "Filled Later").expect("create");
 
         let before = crate::ops::search(&session, None).expect("search");
         assert!(before.notes.is_empty(), "an empty file is not yet a note");
@@ -362,8 +362,9 @@ mod tests {
         // The identity the caller cannot invent is handed over in the filename
         // and is unchanged by whatever the caller writes into the file.
         let (_guard, session) = temp_vault();
-        let path = create_empty_note(&session, "Identity Holder").expect("create");
+        let (id, path) = create_empty_note(&session, "Identity Holder").expect("create");
         let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        assert_eq!(id.to_string(), name[..26]);
 
         std::fs::write(
             &path,
@@ -377,7 +378,7 @@ mod tests {
     #[test]
     fn empty_note_falls_back_to_untitled() {
         let (_guard, session) = temp_vault();
-        let path = create_empty_note(&session, "???").expect("create");
+        let (_id, path) = create_empty_note(&session, "???").expect("create");
         assert!(
             path.file_name()
                 .unwrap()
@@ -429,7 +430,7 @@ mod tests {
     fn create_empty_note_is_durable() {
         let (guard, session) = temp_vault();
 
-        let (path, events) = crate::fsutil::trace::capture(guard.path(), || {
+        let ((_id, path), events) = crate::fsutil::trace::capture(guard.path(), || {
             create_empty_note(&session, "Durable").expect("create")
         });
 
@@ -486,13 +487,14 @@ mod tests {
         #[test]
         fn an_empty_note_is_named_by_its_identity_alone() {
             let fixture = encrypted_vault();
-            let path = create_empty_note(&fixture.session, "Quarterly Review").expect("create");
+            let (id, path) =
+                create_empty_note(&fixture.session, "Quarterly Review").expect("create");
             let name = path
                 .file_name()
                 .expect("name")
                 .to_string_lossy()
                 .into_owned();
-            assert!(name.ends_with(".age"));
+            assert_eq!(name, format!("{id}.age"));
             assert!(
                 !name.contains("quarterly"),
                 "nothing title-derived may reach the filename: {name}"
@@ -504,7 +506,8 @@ mod tests {
             // Not a zero-byte file: the cipher writes a real age container, so
             // the vault's own reader can open it like any other note.
             let fixture = encrypted_vault();
-            let path = create_empty_note(&fixture.session, "Nothing Inside").expect("create");
+            let (_id, path) =
+                create_empty_note(&fixture.session, "Nothing Inside").expect("create");
             assert_ne!(std::fs::metadata(&path).expect("stat").len(), 0);
             assert_eq!(fixture.session.cipher().read(&path).expect("read"), "");
         }
@@ -517,7 +520,7 @@ mod tests {
             let locked = fixture.locked();
             assert!(!locked.is_unlocked());
 
-            let path = create_empty_note(&locked, "Written While Locked").expect("create");
+            let (_id, path) = create_empty_note(&locked, "Written While Locked").expect("create");
             assert!(path.is_file());
             assert_eq!(fixture.session.cipher().read(&path).expect("read"), "");
         }

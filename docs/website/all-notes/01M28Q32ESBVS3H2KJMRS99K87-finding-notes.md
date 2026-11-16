@@ -78,6 +78,6 @@ another. A note longer than the screen opens in your `$PAGER`, or in
 lose the colours.
 
 In a script, `-n` turns off the picker and the editor, `-p` prints a
-path, and `-P` prints a note's text, so nothing waits on a terminal.
+path, `--id` a ULID, and `-P` a note's text, so nothing waits on a terminal.
 [Scripting and the shell](01M28Q32N56MS70ETPES4794HJ-scripting-and-the-shell.md)
 has the details.

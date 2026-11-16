@@ -11,6 +11,8 @@ Adds a second creation mode to the new-note flow of
 mechanism of [ADR 0017](0017-note-templates-with-placeholder-substitution.md)
 is unchanged; the new mode does not consult it.
 
+Amended 2026-11-16 by [ADR 0090](0090-id-flag-prints-a-notes-ulid.md).
+
 ## Context
 
 Every `new` stamps a template. A caller that already knows the whole note it

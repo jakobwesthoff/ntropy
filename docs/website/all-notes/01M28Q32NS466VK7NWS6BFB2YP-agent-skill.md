@@ -42,9 +42,9 @@ settings, site themes, and document themes.
 
 The rules are the part an agent gets wrong on its own:
 
-- Always pass `-n`, and `--print` on `new` and `today`. Without them
-  ntropy opens a picker or the editor and blocks whenever a terminal
-  exists; capturing the output does not prevent that.
+- Always pass `-n`, and `--print` (or `--id`) on `new` and `today`.
+  Without them ntropy opens a picker or the editor and blocks whenever a
+  terminal exists; capturing the output does not prevent that.
 - Never hand-create files in `all-notes/`. ntropy allocates the ULID,
   the location, and the file name; only the content is the agent's.
 - Author a note with `ntropy new --empty -p <title>` followed by

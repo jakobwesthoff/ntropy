@@ -16,6 +16,8 @@ a picker, `--print` prints every match one path per line instead of leaving
 the table unchanged, and interactivity itself keys off the controlling
 terminal rather than stdout.
 
+Amended 2026-11-16 by [ADR 0090](0090-id-flag-prints-a-notes-ulid.md).
+
 ## Context
 
 `new` and `today` suppressed the editor with `--no-edit`, which carried

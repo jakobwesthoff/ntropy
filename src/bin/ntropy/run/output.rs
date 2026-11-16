@@ -20,6 +20,7 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 use ntropy::config::ViewConfig;
+use ntropy::id::Id;
 use ntropy::note::Note;
 use ntropy::ops::{TagCount, VaultStats};
 use ntropy::reconcile::{Realignment, Reassignment, Rename};
@@ -249,6 +250,39 @@ pub fn checked_path(path: &Path, note: bool) -> Result<&Path> {
         bail!("`{escaped}` holds control or bidi characters, so it is not printed{hint}");
     }
     Ok(path)
+}
+
+/// What a note is printed as for a script: its path (`-p`) or its ULID
+/// (`--id`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoteRef {
+    Path,
+    Id,
+}
+
+/// The form the `-p` and `--id` flags of one invocation ask for, or `None`
+/// when neither does. clap rejects both together, so `id` winning over `print`
+/// never decides a real invocation.
+pub fn print_form(print: bool, id: bool) -> Option<NoteRef> {
+    if id {
+        Some(NoteRef::Id)
+    } else if print {
+        Some(NoteRef::Path)
+    } else {
+        None
+    }
+}
+
+/// The one line `form` prints for a note, whose ULID is `id` and whose file is
+/// `path`.
+///
+/// `note` is as for [`checked_path`]. A path may be refused (ADR 0071); an id
+/// is ntropy's own canonical ULID and always prints.
+pub fn note_ref(form: NoteRef, id: Id, path: &Path, note: bool) -> Result<String> {
+    match form {
+        NoteRef::Path => Ok(checked_path(path, note)?.display().to_string()),
+        NoteRef::Id => Ok(id.to_string()),
+    }
 }
 
 /// A path for a line meant for a human, escaped (ADR 0071).
@@ -764,6 +798,48 @@ mod tests {
             error.to_string(),
             "`/v\\u{1b}/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-plan.md` holds control or bidi \
              characters, so it is not printed"
+        );
+    }
+
+    const ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+
+    fn id() -> Id {
+        ID.parse().expect("a well-formed ULID")
+    }
+
+    #[test]
+    fn print_form_follows_the_flags() {
+        assert_eq!(print_form(false, false), None);
+        assert_eq!(print_form(true, false), Some(NoteRef::Path));
+        assert_eq!(print_form(false, true), Some(NoteRef::Id));
+        assert_eq!(print_form(true, true), Some(NoteRef::Id));
+    }
+
+    #[test]
+    fn a_note_prints_as_its_bare_ulid() {
+        let path = Path::new("/v/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-plan.md");
+        assert_eq!(
+            note_ref(NoteRef::Id, id(), path, true).expect("an id prints"),
+            ID
+        );
+    }
+
+    #[test]
+    fn an_id_prints_for_a_path_that_is_refused() {
+        let path = Path::new("/v/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-\u{1b}x.md");
+        assert_eq!(
+            note_ref(NoteRef::Id, id(), path, true).expect("an id prints"),
+            ID
+        );
+        assert!(note_ref(NoteRef::Path, id(), path, true).is_err());
+    }
+
+    #[test]
+    fn a_note_prints_as_its_path() {
+        let path = Path::new("/v/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-plan.md");
+        assert_eq!(
+            note_ref(NoteRef::Path, id(), path, true).expect("a clean path prints"),
+            "/v/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-plan.md"
         );
     }
 }

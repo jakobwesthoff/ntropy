@@ -97,8 +97,16 @@ spaces stay parseable:
 ntropy search -n tag:work | tail -n +2 | awk '{print $1}'
 ```
 
-For file paths, skip the table entirely: `--print`/`-p` prints one path per
-line and nothing else, so no parsing is needed:
+Without parsing, `--id` prints one ULID per line, newest first, and nothing
+else. A note and its copies share one ULID, which prints once:
+
+```bash
+# All matching IDs:
+ntropy search -n --id tag:work
+```
+
+For file paths, `--print`/`-p` prints one path per line and nothing else, so
+no parsing is needed either:
 
 ```bash
 # The file path of one note by ULID:

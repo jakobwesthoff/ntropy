@@ -662,6 +662,67 @@ fn render_print_refuses_a_hostile_default_path() {
     );
 }
 
+/// `--id` prints the ULID of a note whose file name `-p` refuses, since an id
+/// holds no character that needs escaping.
+#[test]
+fn search_id_prints_the_note_of_a_hostile_file_name() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-{RETITLE}.md"),
+        "---\ntitle: Hostile\n---\n",
+    );
+    note(
+        &vault,
+        &format!("{ULID_B}-clean.md"),
+        "---\ntitle: Clean\n---\n",
+    );
+
+    let output = run(ntropy(&vault).args(["search", "--id"]));
+    assert_eq!(output.status.code(), Some(0), "{}", stderr(&output));
+    assert_no_raw_controls(&output);
+    assert_eq!(stdout(&output), format!("{ULID_B}\n{ULID_A}\n"));
+}
+
+/// `--id` prints under a vault root `-p` refuses, for each command that takes
+/// it.
+#[test]
+fn id_prints_under_a_hostile_vault_root() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), &format!("vault{RETITLE}"));
+    note(
+        &vault,
+        &format!("{ULID_A}-plan.md"),
+        "---\ntitle: Plan\n---\n",
+    );
+
+    for (what, mut cmd) in [
+        ("search", {
+            let mut cmd = ntropy(&vault);
+            cmd.args(["search", "--id", ULID_A]);
+            cmd
+        }),
+        ("new", {
+            let mut cmd = ntropy(&vault);
+            cmd.args(["new", "--id", "Fresh"]);
+            cmd
+        }),
+        ("today", {
+            let mut cmd = ntropy(&vault);
+            cmd.args(["today", "--id"]);
+            cmd
+        }),
+    ] {
+        let output = run(&mut cmd);
+        assert_eq!(output.status.code(), Some(0), "{what}: {}", stderr(&output));
+        assert_no_raw_controls(&output);
+        let printed = stdout(&output);
+        assert_eq!(printed.len(), 27, "{what}: {printed}");
+        assert!(printed.ends_with('\n'), "{what}: {printed}");
+    }
+}
+
 /// Each `-p` path that holds the vault's root, from a vault whose directory
 /// name needs escaping.
 #[test]

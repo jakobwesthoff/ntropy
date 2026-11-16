@@ -23,9 +23,9 @@ language for filtering, and materialized symlink views for filesystem browsing.
 ## Golden rules for agents
 
 1. **ALWAYS run non-interactively.** Pass `-n` on every command and
-   `--print` on `new`/`today`. Without them ntropy opens an interactive fuzzy
-   picker or the user's `$VISUAL`/`$EDITOR` and blocks whenever a controlling
-   terminal exists — piping or capturing the output does NOT prevent that, so
+   `--print` (or `--id`) on `new`/`today`. Without them ntropy opens an
+   interactive fuzzy picker or the user's `$VISUAL`/`$EDITOR` and blocks
+   whenever a controlling terminal exists — piping or capturing the output does NOT prevent that, so
    `$(ntropy search …)` without `-n` hangs waiting for keys.
 2. **NEVER hand-create files in `all-notes/`.** You would have to invent a
    ULID: a wrong one corrupts note identity, and a file carrying another
@@ -129,10 +129,10 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | Command | Purpose |
 |---------|---------|
 | `ntropy init [path]` | Scaffold or complete a vault; idempotent. `--set-default` records it as the global default. |
-| `ntropy new --print <title…>` | Create a note from a template, print its path. `-t <name>` picks `.ntropy/templates/<name>.md`. `--empty` creates the file with no content instead, for when you write the whole note yourself (conflicts with `-t`). |
-| `ntropy today --print` | Print today's daily note path, creating it on first use each day. |
+| `ntropy new --print <title…>` | Create a note from a template, print its path. `-t <name>` picks `.ntropy/templates/<name>.md`. `--empty` creates the file with no content instead, for when you write the whole note yourself (conflicts with `-t`). `--id` replaces `--print` and prints the ULID of the note it created. |
+| `ntropy today --print` | Print today's daily note path, creating it on first use each day. `--id` prints its ULID instead. |
 | `ntropy write <id\|filename\|path>` | Replace that note's content with the whole note text read from stdin, then realign the filename and refresh views. Names its target, never searches: a full ULID, the filename, or the path. Refuses text that is not a well-formed note. Prints the resulting path. |
-| `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, or `-P` to print one note's text. |
+| `ntropy search -n [id\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, `--id` to print matching ULIDs the same way, or `-P` to print one note's text. |
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
 | `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`), `typst` for the emitted document, `html` for a web page with a `<stem>_files/` directory beside it, or `ansi` for the note drawn for a terminal (no theme); the last three need no external tool. Resolves to exactly one note; `-p` prints the artifact path; an existing artifact is refused without `--force`; a default name from a file name with control or bidi characters, or a leading `-`, is refused (run `ntropy reconcile` or pass `-o`). |
 | `ntropy show -n <id>` | Print one note drawn for a terminal: frontmatter block, then the styled Markdown, GitHub alerts as callouts. Into a pipe it is plain text laid out at 80 columns (`--width` changes that), not the note's source, so read a note's exact text with `search -n -P`. Interactively a long note opens in `$PAGER` or `less -R`; `-n` never pages. Resolves to exactly one note, like `render`. |
@@ -239,6 +239,7 @@ Frontmatter rules in full, plus tags, inter-note links, and template authoring:
 ntropy search -n 'tag:work and not status:done'    # table: ID DATE TITLE TAGS PATH
 ntropy search -n 01KWVBW61WHJY7K27WNETSF641        # one note by ULID
 note=$(ntropy search -n -p 01KWVBW61WHJY7K27WNETSF641)   # just the file path
+ntropy search -n --id 'tag:work and not status:done'     # just the ULIDs
 ```
 
 Full query language (`tag:`, `field:`, `text:`, `and`/`or`/`not`), output

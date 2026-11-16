@@ -1264,6 +1264,257 @@ fn search_no_edit_is_a_hidden_alias_of_print() {
     );
 }
 
+// =============================================================================
+// `--id`: print a note's ULID instead of its path
+// =============================================================================
+
+/// Run `ntropy <args>` in `vault`.
+fn run_in(vault: &Path, args: &[&str]) -> std::process::Output {
+    ntropy(vault).args(args).output().expect("run ntropy")
+}
+
+/// Assert a successful run whose stdout is exactly `expected`.
+fn assert_prints(out: &std::process::Output, expected: &str) {
+    assert!(out.status.success(), "{}", rendered(out));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        expected,
+        "{}",
+        rendered(out)
+    );
+}
+
+/// Assert clap refused the invocation because two of its flags conflict.
+fn assert_flags_conflict(out: &std::process::Output) {
+    assert_eq!(out.status.code(), Some(2), "{}", rendered(out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("cannot be used with"),
+        "{}",
+        rendered(out)
+    );
+    assert!(out.stdout.is_empty(), "{}", rendered(out));
+}
+
+/// The ULID prefix of the one file in the vault's `all-notes/`.
+fn ulid_of_the_only_note(vault: &Path) -> String {
+    let names: Vec<String> = fs::read_dir(vault.join("all-notes"))
+        .expect("read all-notes")
+        .map(|entry| {
+            entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
+    assert_eq!(names.len(), 1, "expected one note, got {names:?}");
+    names[0][..26].to_string()
+}
+
+/// A `today` template, which `setup_vault` does not seed.
+fn write_today_template(vault: &Path) {
+    let templates = vault.join(".ntropy/templates");
+    fs::create_dir_all(&templates).expect("templates dir");
+    fs::write(
+        templates.join("today.md"),
+        "---\ntitle: {{date}}\ntags: [daily]\n---\n# {{date}}\n",
+    )
+    .expect("write today template");
+}
+
+#[test]
+fn search_id_prints_the_ulid_of_one_note() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "wanted",
+        "---\ntitle: Wanted\n---\nbody\n",
+    );
+    let out = run_in(dir.path(), &["search", "-n", "--id", ULID_A]);
+    assert_prints(&out, &format!("{ULID_A}\n"));
+}
+
+#[test]
+fn search_id_prints_every_match_newest_first() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "older",
+        "---\ntitle: Older\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "newer",
+        "---\ntitle: Newer\n---\nbody\n",
+    );
+    let out = run_in(dir.path(), &["search", "-n", "--id"]);
+    assert_prints(&out, &format!("{ULID_B}\n{ULID_A}\n"));
+}
+
+#[test]
+fn search_id_prints_the_ulid_of_a_query_match() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "a",
+        "---\ntitle: A\ntags: [work]\n---\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "b",
+        "---\ntitle: B\ntags: [home]\n---\n",
+    );
+    let out = run_in(dir.path(), &["search", "-n", "--id", "tag:work"]);
+    assert_prints(&out, &format!("{ULID_A}\n"));
+}
+
+#[test]
+fn search_id_without_a_match_exits_nonzero() {
+    let dir = setup_vault();
+    let out = run_in(dir.path(), &["search", "-n", "--id", ULID_A]);
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(out.stdout.is_empty(), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("No notes matched your search criteria."),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn search_id_conflicts_with_print() {
+    let dir = setup_vault();
+    assert_flags_conflict(&run_in(dir.path(), &["search", "-n", "--id", "-p"]));
+}
+
+#[test]
+fn search_id_conflicts_with_print_content() {
+    let dir = setup_vault();
+    assert_flags_conflict(&run_in(dir.path(), &["search", "-n", "--id", "-P"]));
+}
+
+#[test]
+fn search_id_prints_a_copied_note_once() {
+    // A note and its copies share one ULID (ADR 0067), so a full-ULID
+    // selector matches every one of them, and each match has the same id.
+    let dir = setup_vault();
+    copied_note(dir.path());
+    let out = run_in(dir.path(), &["search", "-n", "--id", ULID_A]);
+    assert_prints(&out, &format!("{ULID_A}\n"));
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains(&format!("skipped `{ULID_A}-plan-b.md`")),
+        "the copy is still reported: {}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn search_id_of_a_copied_note_still_fails_under_strict() {
+    let dir = setup_vault();
+    copied_note(dir.path());
+    let out = run_in(dir.path(), &["search", "-n", "--strict", "--id", ULID_A]);
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        format!("{ULID_A}\n"),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn new_id_prints_the_ulid_of_the_created_note() {
+    let dir = setup_vault();
+    let out = run_in(dir.path(), &["new", "--id", "Fresh Idea"]);
+    assert!(out.status.success(), "{}", rendered(&out));
+    let ulid = ulid_of_the_only_note(dir.path());
+    assert_eq!(String::from_utf8_lossy(&out.stdout), format!("{ulid}\n"));
+}
+
+#[test]
+fn new_id_conflicts_with_print() {
+    let dir = setup_vault();
+    assert_flags_conflict(&run_in(dir.path(), &["new", "--id", "-p", "Fresh Idea"]));
+}
+
+#[test]
+fn new_id_with_empty_leaves_the_file_empty() {
+    let dir = setup_vault();
+    let out = run_in(dir.path(), &["new", "--empty", "--id", "Fresh Idea"]);
+    assert!(out.status.success(), "{}", rendered(&out));
+    let ulid = ulid_of_the_only_note(dir.path());
+    assert_eq!(String::from_utf8_lossy(&out.stdout), format!("{ulid}\n"));
+    let file = fs::read_dir(dir.path().join("all-notes"))
+        .expect("read all-notes")
+        .next()
+        .expect("one note")
+        .expect("entry")
+        .path();
+    assert_eq!(fs::read_to_string(file).expect("read"), "");
+}
+
+#[test]
+fn today_id_prints_the_ulid_and_reuses_the_note() {
+    let dir = setup_vault();
+    write_today_template(dir.path());
+    let first = run_in(dir.path(), &["today", "--id"]);
+    assert!(first.status.success(), "{}", rendered(&first));
+    let ulid = ulid_of_the_only_note(dir.path());
+    assert_eq!(String::from_utf8_lossy(&first.stdout), format!("{ulid}\n"));
+
+    let again = run_in(dir.path(), &["today", "--id"]);
+    assert_prints(&again, &format!("{ulid}\n"));
+    assert_eq!(ulid_of_the_only_note(dir.path()), ulid);
+}
+
+#[test]
+fn today_id_conflicts_with_print() {
+    let dir = setup_vault();
+    write_today_template(dir.path());
+    assert_flags_conflict(&run_in(dir.path(), &["today", "--id", "-p"]));
+}
+
+/// Whether `--help` output lists the `--id` flag itself. A substring test
+/// would also match the global `--identity`.
+fn help_lists_id(help: &std::process::Output) -> bool {
+    String::from_utf8_lossy(&help.stdout)
+        .split(|c: char| !(c.is_alphanumeric() || c == '-'))
+        .any(|word| word == "--id")
+}
+
+#[test]
+fn id_is_documented_on_the_commands_that_take_it() {
+    let dir = setup_vault();
+    for command in ["search", "new", "today"] {
+        let help = run_in(dir.path(), &[command, "--help"]);
+        assert!(
+            help_lists_id(&help),
+            "{command} --help: {}",
+            rendered(&help)
+        );
+    }
+}
+
+#[test]
+fn id_is_not_offered_where_the_print_flag_names_a_file() {
+    // `render -p` and `site -p` print the path of the artifact they write,
+    // which has no ULID to print instead.
+    let dir = setup_vault();
+    for command in ["render", "site"] {
+        let help = run_in(dir.path(), &[command, "--help"]);
+        assert!(
+            !help_lists_id(&help),
+            "{command} --help: {}",
+            rendered(&help)
+        );
+    }
+}
+
 #[test]
 fn search_empty_vault_exits_nonzero() {
     // An empty result, even a bare listing of an empty vault, exits non-zero
@@ -6618,6 +6869,70 @@ done
     }
 
     #[test]
+    fn new_id_does_not_open_the_editor_on_a_terminal() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        let stub = write_stub_editor(vault);
+
+        let mut cmd = ntropy(vault);
+        cmd.env("EDITOR", &stub)
+            .args(["new", "--id", "Editor Test"]);
+        let output = run_on_own_terminal(&mut cmd).output;
+
+        assert!(output.status.success(), "{}", rendered(&output));
+        let ulid = ulid_of_the_only_note(vault);
+        assert_eq!(String::from_utf8_lossy(&output.stdout), format!("{ulid}\n"));
+        assert!(
+            !vault.join(STUB_BIN).join("editor-args").exists(),
+            "the editor must not run under --id"
+        );
+    }
+
+    #[test]
+    fn today_id_does_not_open_the_editor_on_a_terminal() {
+        let dir = setup_vault();
+        let vault = dir.path();
+        write_today_template(vault);
+        let stub = write_stub_editor(vault);
+
+        let mut cmd = ntropy(vault);
+        cmd.env("EDITOR", &stub).args(["today", "--id"]);
+        let output = run_on_own_terminal(&mut cmd).output;
+
+        assert!(output.status.success(), "{}", rendered(&output));
+        let ulid = ulid_of_the_only_note(vault);
+        assert_eq!(String::from_utf8_lossy(&output.stdout), format!("{ulid}\n"));
+        assert!(
+            !vault.join(STUB_BIN).join("editor-args").exists(),
+            "the editor must not run under --id"
+        );
+    }
+
+    #[test]
+    fn search_id_takes_a_lone_match_on_a_terminal() {
+        // A lone match is chosen without the picker, which would wait for keys
+        // the test never sends.
+        let dir = setup_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "wanted", "---\ntitle: Wanted\n---\nbody\n");
+        let stub = write_stub_editor(vault);
+
+        let mut cmd = ntropy(vault);
+        cmd.env("EDITOR", &stub).args(["search", "--id", ULID_A]);
+        let output = run_on_own_terminal(&mut cmd).output;
+
+        assert!(output.status.success(), "{}", rendered(&output));
+        assert_eq!(
+            String::from_utf8_lossy(&output.stdout),
+            format!("{ULID_A}\n")
+        );
+        assert!(
+            !vault.join(STUB_BIN).join("editor-args").exists(),
+            "the editor must not run under --id"
+        );
+    }
+
+    #[test]
     fn today_reports_a_copied_note_after_the_editor() {
         // The editor round trip refreshes the views like `--print` does, so
         // it reports the copy the refresh left out the same way.
@@ -7282,6 +7597,83 @@ mod encrypted {
         let mut cmd = ntropy(vault);
         cmd.env_remove("NTROPY_IDENTITY");
         cmd.args(["search", "-n", "-p"]);
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(cmd);
+        });
+    }
+
+    /// The ULID in the name of the one note file in an encrypted vault.
+    fn encrypted_note_ulid(vault: &Path) -> String {
+        let names: Vec<String> = fs::read_dir(vault.join("all-notes"))
+            .expect("read all-notes")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        assert_eq!(names.len(), 1, "expected one note, got {names:?}");
+        assert!(names[0].ends_with(".age"), "got {names:?}");
+        names[0][..26].to_string()
+    }
+
+    #[test]
+    fn new_id_in_an_encrypted_vault_prints_the_ulid_of_the_age_file() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let out = ntropy_encrypted(vault)
+            .args(["new", "--id", "Quarterly Review"])
+            .output()
+            .expect("run new");
+        assert!(out.status.success(), "{}", super::rendered(&out));
+        let ulid = encrypted_note_ulid(vault);
+        assert_eq!(String::from_utf8_lossy(&out.stdout), format!("{ulid}\n"));
+    }
+
+    #[test]
+    fn search_id_in_an_encrypted_vault_prints_the_ulid() {
+        // `-p` names a ciphertext file here, while the id is the same
+        // whichever way the vault stores its notes.
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        ntropy_encrypted(vault)
+            .args(["new", "-p", "Quarterly Review"])
+            .output()
+            .expect("run new");
+        let ulid = encrypted_note_ulid(vault);
+
+        let out = ntropy_encrypted(vault)
+            .args(["search", "--id", "quarterly"])
+            .output()
+            .expect("run search");
+        assert!(out.status.success(), "{}", super::rendered(&out));
+        assert_eq!(String::from_utf8_lossy(&out.stdout), format!("{ulid}\n"));
+    }
+
+    #[test]
+    fn new_empty_id_works_on_a_locked_vault() {
+        // Encrypting needs only the public recipient, so a machine without the
+        // key can still create a note and learn its id.
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let mut cmd = ntropy(vault);
+        cmd.env_remove("NTROPY_IDENTITY");
+        cmd.args(["-n", "new", "--empty", "--id", "Written Note"]);
+        let out = cmd.output().expect("run new");
+        assert!(out.status.success(), "{}", super::rendered(&out));
+        let ulid = encrypted_note_ulid(vault);
+        assert_eq!(String::from_utf8_lossy(&out.stdout), format!("{ulid}\n"));
+    }
+
+    #[test]
+    fn search_id_on_a_locked_vault_errors_naming_unlock() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let mut cmd = ntropy(vault);
+        cmd.env_remove("NTROPY_IDENTITY");
+        cmd.args(["search", "-n", "--id"]);
         redacted(vault).bind(|| {
             assert_cmd_snapshot!(cmd);
         });

@@ -45,7 +45,8 @@ and the query DSL in [query-and-search.md](query-and-search.md).
   printed for a script (`-p`, `write`) is exact, and one that would need
   escaping is not printed: a single one is an error, and `search -n -p`
   leaves it out with a warning and exits non-zero. `--print-content` prints
-  the note unchanged.
+  the note unchanged. A ULID printed by `--id` never needs escaping, so it
+  prints for a note whose file name or vault path `-p` refuses.
 - **Durability:** a write into the vault is on stable storage when the command
   returns. `reconcile` and the `vault` conversions flush once at the end of the
   run instead of once per note (ADR 0079).
@@ -110,6 +111,9 @@ substituted), then open it in the editor.
   falls back to the embedded template when `default.md` is absent.
 - `--print` / `-p`: create and print the path only (no editor). `--no-edit`
   is a hidden alias (ADR 0035).
+- `--id`: create the note and print its bare ULID only (no editor), the way
+  `-p` prints the path. The script gets the ULID of the note it just created
+  in the same call. It conflicts with `-p` (ADR 0090).
 - `--empty`: write the file with no content at all, for a caller that authors
   the note itself (ADR 0042). No template is read, so `--template` is rejected
   alongside it. The file is not a well-formed note until frontmatter is written
@@ -128,8 +132,10 @@ Open today's note, the daily-note convenience. The note is identified by its
 title being today's local date; if one exists it is opened, otherwise it is
 created from `.ntropy/templates/today.md` (which `init` seeds and titles by
 `{{date}}` with a `daily` tag). When several notes share today's date as their
-title, the newest is opened. Shares `--print`/`-p` with `new`. The
-template must exist; a vault predating it must re-run `init`.
+title, the newest is opened. Shares `--print`/`-p` and `--id` with `new`:
+`--id` prints today's note's ULID, creating the note first when it is absent,
+and opens no editor. The template must exist; a vault predating it must
+re-run `init`.
 
 ### `search [id|query]`
 
@@ -147,6 +153,10 @@ DSL expression (the id-or-query rule shared with `delete`).
   cancelled picker exits non-zero. With `-n` (or no controlling terminal)
   every match prints, one path per line, newest first. `--no-edit` is a
   hidden alias (ADR 0035).
+- `--id`: the same as `-p`, printing each note's bare ULID instead of its
+  path (ADR 0090), through the selection and the picker `search` already
+  has. A note and its copies share one ULID (ADR 0067), which prints once.
+  It conflicts with `-p` and `-P`.
 - `-n` (or no controlling terminal): prints the matching notes as the plain
   table (one row for a single match, the full table for several). The editor
   never opens, mirroring `new`/`today` (ADR 0015).
@@ -191,6 +201,8 @@ Examples:
     ntropy search "borrow checker"      # a phrase
     ntropy search 'text:"deadline"'     # quote for the shell when the query has quotes
     ntropy search tag:work -n           # print, don't pick
+    ntropy search -n --id tag:work      # the ULIDs of the matches, one per line
+    id=$(ntropy new --id Quarterly review)      # create a note, keep its ULID
     ntropy edit 01ARZ3NDEKTSV4RRFFQ69G5FAV      # `edit` is a hidden alias
 
 `--print-content` / `-P` writes the note's text to stdout instead of opening

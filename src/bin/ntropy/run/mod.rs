@@ -46,6 +46,7 @@ use ntropy::view::SkippedView;
 
 use crate::cli::{Cli, Command, GlobalArgs, SiteCommand, VaultCommand, ViewCommand, join};
 
+use output::NoteRef;
 pub(crate) use output::error_message;
 
 /// Run the parsed CLI to completion, returning the process exit code.
@@ -100,12 +101,13 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         Command::Search {
             query,
             print,
+            id,
             print_content,
         } => cmd_search(
             &cli.global,
             &session,
             ntropy::query::from_arguments(&query),
-            print,
+            output::print_form(print, id),
             print_content,
             interactive,
         ),
@@ -114,8 +116,18 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             template,
             empty,
             print,
-        } => cmd_new(&session, join(&title), template, empty, print, interactive),
-        Command::Today { print } => cmd_today(&session, print, interactive),
+            id,
+        } => cmd_new(
+            &session,
+            join(&title),
+            template,
+            empty,
+            output::print_form(print, id),
+            interactive,
+        ),
+        Command::Today { print, id } => {
+            cmd_today(&session, output::print_form(print, id), interactive)
+        }
         Command::Write { target } => cmd_write(&cli.global, &session, &target),
         Command::Reconcile => cmd_reconcile(&cli.global, &session),
         Command::Delete { selector, force } => cmd_delete(
@@ -412,20 +424,25 @@ const SEARCH_KEYS: [picker::AcceptKey<()>; 1] = [picker::AcceptKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SelectionAction {
     Open,
-    PrintPath,
+    Print(NoteRef),
     PrintContent,
 }
 
 /// The [`SelectionAction`] for a chosen note. The print-path key always prints
-/// the path, whatever the flags say; otherwise `--print-content` and `--print`
-/// decide, and without either the note opens in the editor.
-fn selection_action(print: bool, print_content: bool, print_path_key: bool) -> SelectionAction {
+/// the path, whatever the flags say (ADR 0060); otherwise `--print-content`,
+/// `--print` and `--id` decide, and without any of them the note opens in the
+/// editor.
+fn selection_action(
+    form: Option<NoteRef>,
+    print_content: bool,
+    print_path_key: bool,
+) -> SelectionAction {
     if print_path_key {
-        SelectionAction::PrintPath
+        SelectionAction::Print(NoteRef::Path)
     } else if print_content {
         SelectionAction::PrintContent
-    } else if print {
-        SelectionAction::PrintPath
+    } else if let Some(form) = form {
+        SelectionAction::Print(form)
     } else {
         SelectionAction::Open
     }
@@ -435,7 +452,7 @@ fn cmd_search(
     global: &GlobalArgs,
     session: &VaultSession,
     selector: String,
-    print: bool,
+    form: Option<NoteRef>,
     print_content: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
@@ -443,13 +460,21 @@ fn cmd_search(
     // directly or otherwise runs as a DSL query (the id-or-query rule of ADR
     // 0025). Both feed one presentation path, which `edit` shares verbatim as a
     // hidden alias (ADR 0031).
-    let matches = match optional(&selector) {
+    let mut matches = match optional(&selector) {
         Some(selector) => {
             ops::resolve_selection(session, selector).context("while resolving the selector")?
         }
         None => ops::search(session, None).context("while listing notes")?,
     };
     output::print_warnings(&matches.warnings);
+
+    // A note and the copies of it share one ULID (ADR 0067), and a full ULID
+    // selects all of them. Their paths differ, but an id says nothing more
+    // than once, so equal ids collapse into one match. Only a full-ULID
+    // selector yields equal ids, and then every match carries it.
+    if form == Some(NoteRef::Id) {
+        matches.notes.dedup_by_key(|note| note.id);
+    }
 
     match matches.notes.as_slice() {
         // A no-match, including an empty-vault listing, is a non-zero exit so
@@ -482,15 +507,15 @@ fn cmd_search(
                 // On a TTY a lone match is selected straight away; several open
                 // the picker pre-filtered to them.
                 let selected = if let [note] = notes {
-                    Some((note.path.clone(), false))
+                    Some((note.id, note.path.clone(), false))
                 } else {
                     let candidates = ops::to_candidates(notes)?;
                     picker::pick_with_keys(candidates, picker::align_candidates, &SEARCH_KEYS)?
-                        .map(|(s, key)| (s.path, key.is_some()))
+                        .map(|(s, key)| (s.id, s.path, key.is_some()))
                 };
                 match selected {
-                    Some((path, print_path_key)) => {
-                        match selection_action(print, print_content, print_path_key) {
+                    Some((id, path, print_path_key)) => {
+                        match selection_action(form, print_content, print_path_key) {
                             // `--print-content` writes the note itself,
                             // decrypting where the vault requires it, so the
                             // output is the same whichever way the vault
@@ -504,33 +529,34 @@ fn cmd_search(
                                         .context("while reading the note")?
                                 );
                             }
-                            // `--print` writes the selection's path to stdout
-                            // instead of opening the editor (ADR 0035).
-                            // Nothing was edited, so no realign or view
-                            // refresh is needed.
-                            SelectionAction::PrintPath => {
-                                println!("{}", output::checked_path(&path, true)?.display())
+                            // `--print` writes the selection's path and `--id`
+                            // its ULID to stdout instead of opening the
+                            // editor (ADR 0035). Nothing was edited, so no
+                            // realign or view refresh is needed.
+                            SelectionAction::Print(form) => {
+                                println!("{}", output::note_ref(form, id, &path, true)?)
                             }
                             SelectionAction::Open => open_and_refresh(session, &path)?,
                         }
                     }
-                    // A cancelled picker produced no path, so under `--print`
-                    // the command fails and `p=$(ntropy search -p ...)`
-                    // branches correctly; without `--print` a cancel stays a
-                    // successful no-op.
-                    None if print || print_content => return Ok(ExitCode::FAILURE),
+                    // A cancelled picker produced nothing to print, so under
+                    // `--print` or `--id` the command fails and
+                    // `p=$(ntropy search -p ...)` branches correctly; without
+                    // them a cancel stays a successful no-op.
+                    None if form.is_some() || print_content => return Ok(ExitCode::FAILURE),
                     None => {}
                 }
-            } else if print {
-                // With no picker to choose one note, `--print` covers every
-                // match: one path per line, in the table's newest-first order,
-                // ready for `xargs` and friends. A path that cannot be printed
-                // as it is is left out with a warning (ADR 0071), and the run
-                // fails so a script does not take the list for complete.
+            } else if let Some(form) = form {
+                // With no picker to choose one note, `--print` and `--id`
+                // cover every match: one path or ULID per line, in the
+                // table's newest-first order, ready for `xargs` and friends.
+                // A path that cannot be printed as it is is left out with a
+                // warning (ADR 0071), and the run fails so a script does not
+                // take the list for complete.
                 let mut withheld = false;
                 for note in notes {
-                    match output::checked_path(&note.path, true) {
-                        Ok(path) => println!("{}", path.display()),
+                    match output::note_ref(form, note.id, &note.path, true) {
+                        Ok(line) => println!("{line}"),
                         Err(error) => {
                             output::warn(&error.to_string());
                             withheld = true;
@@ -555,31 +581,32 @@ fn cmd_new(
     title: String,
     template: Option<String>,
     empty: bool,
-    print: bool,
+    form: Option<NoteRef>,
     interactive: bool,
 ) -> Result<ExitCode> {
     // The two creation modes differ only in what lands in the file. Both know
     // their content without reading it back, which is what keeps the tail below
     // shared and an encrypted vault from having to decrypt a file written
     // moments earlier.
-    let (path, initial) = if empty {
-        let path =
+    let (id, path, initial) = if empty {
+        let (id, path) =
             ops::create_empty_note(session, &title).context("while creating the empty note")?;
-        (path, String::new())
+        (id, path, String::new())
     } else {
         let note = ops::create_note(session, &title, template.as_deref())
             .context("while creating the note")?;
         let initial = format!("{}{}", note.raw_header, note.body);
-        (note.path, initial)
+        (note.id, note.path, initial)
     };
 
     // Open the editor only when interactive and not explicitly suppressed;
     // otherwise create-and-print for scripting (ADR 0015).
-    if !print && interactive {
+    if form.is_none() && interactive {
         open_and_refresh_from(session, &path, Some(&initial), CopyWarnings::Print)?;
     } else {
         refresh_views(session, CopyWarnings::Print)?;
-        println!("{}", output::checked_path(&path, false)?.display());
+        let form = form.unwrap_or(NoteRef::Path);
+        println!("{}", output::note_ref(form, id, &path, false)?);
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -616,12 +643,12 @@ fn cmd_write(global: &GlobalArgs, session: &VaultSession, target: &str) -> Resul
     ))
 }
 
-fn cmd_today(session: &VaultSession, print: bool, interactive: bool) -> Result<ExitCode> {
+fn cmd_today(session: &VaultSession, form: Option<NoteRef>, interactive: bool) -> Result<ExitCode> {
     let outcome = ops::today_note(session).context("while preparing today's note")?;
 
     // Mirror `new`: open interactively unless suppressed, otherwise refresh views
     // and print the path for scripting (ADR 0015).
-    if !print && interactive {
+    if form.is_none() && interactive {
         // A freshly created note is handed its own content; an existing one is
         // read through the vault's cipher like any other edit.
         let initial = outcome
@@ -635,9 +662,10 @@ fn cmd_today(session: &VaultSession, print: bool, interactive: bool) -> Result<E
         )?;
     } else {
         refresh_views(session, CopyWarnings::Print)?;
+        let form = form.unwrap_or(NoteRef::Path);
         println!(
             "{}",
-            output::checked_path(&outcome.note.path, false)?.display()
+            output::note_ref(form, outcome.note.id, &outcome.note.path, false)?
         );
     }
     Ok(ExitCode::SUCCESS)
@@ -1035,28 +1063,37 @@ mod tests {
 
     #[test]
     fn enter_opens_the_note_without_a_print_flag() {
-        assert_eq!(selection_action(false, false, false), SelectionAction::Open);
+        assert_eq!(selection_action(None, false, false), SelectionAction::Open);
     }
 
     #[test]
     fn enter_follows_the_print_flags() {
         assert_eq!(
-            selection_action(true, false, false),
-            SelectionAction::PrintPath
+            selection_action(Some(NoteRef::Path), false, false),
+            SelectionAction::Print(NoteRef::Path)
         );
         assert_eq!(
-            selection_action(false, true, false),
+            selection_action(Some(NoteRef::Id), false, false),
+            SelectionAction::Print(NoteRef::Id)
+        );
+        assert_eq!(
+            selection_action(None, true, false),
             SelectionAction::PrintContent
         );
     }
 
     #[test]
     fn the_print_path_key_always_prints_the_path() {
-        for (print, print_content) in [(false, false), (true, false), (false, true)] {
+        for (form, print_content) in [
+            (None, false),
+            (Some(NoteRef::Path), false),
+            (Some(NoteRef::Id), false),
+            (None, true),
+        ] {
             assert_eq!(
-                selection_action(print, print_content, true),
-                SelectionAction::PrintPath,
-                "print: {print}, print_content: {print_content}"
+                selection_action(form, print_content, true),
+                SelectionAction::Print(NoteRef::Path),
+                "form: {form:?}, print_content: {print_content}"
             );
         }
     }

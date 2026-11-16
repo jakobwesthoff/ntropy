@@ -9,8 +9,9 @@
 //! which the `run` layer joins with spaces. `search`, `delete`, `render`,
 //! `show` and `site` take a query or selector as repeated positional
 //! arguments, each read on its own by `ntropy::query::from_arguments`
-//! (ADR 0076). `edit` is a hidden alias of `search` (ADR 0031). A bare
-//! `ntropy` prints help.
+//! (ADR 0076). `edit` is a hidden alias of `search` (ADR 0031). `search`,
+//! `new` and `today` take `--id` beside `-p` to print a note's ULID instead of
+//! its path (ADR 0090). A bare `ntropy` prints help.
 
 use std::path::PathBuf;
 
@@ -94,6 +95,9 @@ pub enum Command {
         // backward compatibility (ADR 0035).
         #[arg(short = 'p', long, alias = "no-edit")]
         print: bool,
+        /// Create and print the ULID only; do not open the editor.
+        #[arg(long, conflicts_with = "print")]
+        id: bool,
     },
 
     /// Open today's note, creating it from the `today` template if absent.
@@ -103,6 +107,10 @@ pub enum Command {
         // backward compatibility (ADR 0035).
         #[arg(short = 'p', long, alias = "no-edit")]
         print: bool,
+        /// Find or create today's note and print its ULID only; do not open
+        /// the editor.
+        #[arg(long, conflicts_with = "print")]
+        id: bool,
     },
 
     /// Browse, filter, full-text search, or open a note by id or query.
@@ -121,6 +129,9 @@ pub enum Command {
         // `new`/`today` (ADR 0035).
         #[arg(short = 'p', long, alias = "no-edit")]
         print: bool,
+        /// Print the selected note's ULID instead of opening the editor.
+        #[arg(long, conflicts_with_all = ["print", "print_content"])]
+        id: bool,
         /// Print the note's content to stdout instead of opening the editor.
         ///
         /// Must resolve to exactly one note. Reads identically whether or not

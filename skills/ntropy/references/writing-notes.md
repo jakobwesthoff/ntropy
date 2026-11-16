@@ -40,8 +40,10 @@ That is the whole flow. No read-back, no template to work around, no
 plaintext one.
 
 `--print` (short form `-p`) makes `new` print the path instead of opening an
-editor. `--empty` makes it stamp no template; `--template` is rejected alongside
-it, since one stamps content and the other writes none.
+editor. `--id` does the same and prints the new note's ULID, for a script that
+refers to the note by it (`id=$(ntropy new --id Quarterly review)`); it
+conflicts with `-p`. `--empty` makes it stamp no template; `--template` is
+rejected alongside it, since one stamps content and the other writes none.
 
 **FORBIDDEN: hand-creating files in `all-notes/`.** You would have to invent a
 ULID; a wrong one corrupts note identity, and a file carrying another note's
@@ -252,7 +254,8 @@ title creates immediate slug drift that the next reconcile has to rename away.
 
 `ntropy today --print` prints the path of today's note, creating it from
 `.ntropy/templates/today.md` on first use each day (the note is identified by
-its title being today's date). Shape daily notes by editing that template. It
+its title being today's date). `ntropy today --id` prints its ULID instead.
+Shape daily notes by editing that template. It
 must exist; a vault predating it just needs `ntropy init <vault>` re-run, which
 seeds missing pieces without touching existing ones.
 

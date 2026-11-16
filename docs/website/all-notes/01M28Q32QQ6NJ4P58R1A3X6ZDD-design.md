@@ -116,3 +116,4 @@ made.
 - [0087. Heading ids avoid the ids of the page](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0087-heading-ids-avoid-the-ids-of-the-page.md)
 - [0088. Links to a note's own headings resolve in its PDF](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0088-links-to-a-notes-own-headings-resolve-in-its-pdf.md)
 - [0089. Previous and next run through the whole sidebar](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0089-previous-and-next-run-through-the-whole-sidebar.md)
+- [0090. `--id` prints a note's ULID](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0090-id-flag-prints-a-notes-ulid.md)

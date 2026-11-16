@@ -166,7 +166,7 @@ mod tests {
         // The flow the command exists for: `new --empty` allocates, `write`
         // fills, and what comes back is a well-formed note.
         let (_guard, session) = temp_vault();
-        let path = create_empty_note(&session, "Written").expect("create");
+        let (_id, path) = create_empty_note(&session, "Written").expect("create");
 
         let note = write_note(&session, path.to_str().expect("utf-8"), NOTE).expect("write");
         assert_eq!(note.title, "Written");
@@ -385,7 +385,8 @@ mod tests {
             // name reads no note, and encrypting needs only the public
             // recipient, so a machine without the key can still author.
             let fixture = encrypted_vault();
-            let path = create_empty_note(&fixture.session, "Filled While Locked").expect("create");
+            let (_id, path) =
+                create_empty_note(&fixture.session, "Filled While Locked").expect("create");
             let locked = fixture.locked();
             assert!(!locked.is_unlocked());
 
@@ -402,7 +403,7 @@ mod tests {
         #[test]
         fn a_written_note_reads_back_through_a_scan() {
             let fixture = encrypted_vault();
-            let path = create_empty_note(&fixture.session, "Round Trip").expect("create");
+            let (_id, path) = create_empty_note(&fixture.session, "Round Trip").expect("create");
 
             write_note(&fixture.session, path.to_str().expect("utf-8"), NOTE).expect("write");
 

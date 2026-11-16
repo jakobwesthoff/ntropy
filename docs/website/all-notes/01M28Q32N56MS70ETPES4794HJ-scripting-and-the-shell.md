@@ -82,6 +82,19 @@ all. A command that prints one path fails instead. `search -n -p` leaves
 such a path out with a warning, prints the rest and exits non-zero.
 `ntropy reconcile` renames such a note to its canonical name.
 
+To refer to a note by its ULID, `--id` prints it in place of the path, on
+`search`, `new` and `today`, and conflicts with `-p`. `search -n --id`
+prints every match as one ULID per line, newest first. `new --id` creates
+the note and prints its ULID, and `today --id` prints the ULID of today's
+note. None of them opens the editor. A note and its copies share one ULID,
+which prints once. A ULID needs no escaping, so it prints for a note whose
+path `-p` refuses.
+
+```bash
+id=$(ntropy new --id Quarterly review)   # create a note, keep its ULID
+ntropy render -n "$id" -o review.pdf     # the ULID names only this note
+```
+
 To read a note rather than locate it, `search -P` (`--print-content`)
 writes its text to stdout, for exactly one note. It reads the same in an
 encrypted vault, where `-p` names the ciphertext file; see
@@ -90,7 +103,7 @@ also covers `--identity` and `--passphrase-file` for scripts.
 
 ```bash
 ntropy search -n -P 01J8Z9K…            # the note, either kind of vault
-for id in $(ntropy search -n tag:work | tail -n +2 | awk '{print $1}'); do
+for id in $(ntropy search -n --id tag:work); do
     ntropy search -n -P "$id"
 done
 ```

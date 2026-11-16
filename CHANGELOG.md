@@ -9,6 +9,20 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Added
+
+- `search`, `new` and `today` take `--id`, which prints a note's bare ULID
+  where `-p` prints its path. `search -n --id` prints one ULID per line,
+  newest first, and `new --id` and `today --id` create the note, or for
+  `today` find it, and print its ULID without opening the editor. A note and
+  its copies share one ULID, which prints once. `--id` conflicts with `-p`,
+  and on `search` with `-P`. It prints for a note whose file name or vault
+  path `-p` refuses to print, as a ULID needs no escaping.
+  [ADR 0090](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0090-id-flag-prints-a-notes-ulid.md)
+  records the rule.
+
 ## v2.10.0 - 2026-11-02
 
 ### Changed
