@@ -407,7 +407,7 @@ Facts that bear on every variant:
   skips images (`src/link/mod.rs:73-75`), so `rewrite_links` does not reach
   asset links today. The 2026-11-02 incident was a `reconcile` that renamed 20
   notes while the asset folders of two kept their old names (todo
-  [01M6E0CWM5KS1FRX3DTB3VREB7](../../../todos/all-notes/01M6E0CWM5KS1FRX3DTB3VREB7-give-each-note-an-asset-folder-that-ntropy-manages.md)).
+  01M6E0CWM5KS1FRX3DTB3VREB7).
 - A link into a renamed folder does not resolve by ULID today, as a note link
   does. A rename of the folder leaves its links broken until they are rewritten.
 - In an encrypted vault the note file is `<ULID>.age`, the slug is dropped on

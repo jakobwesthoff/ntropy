@@ -2,8 +2,13 @@
 
 Research on how ntropy should store, name, check, render and encrypt the files
 that belong to a note (images, PDFs, transcripts, archives). Started
-2026-11-17. The todo that carries the matter is
-[Give each note an asset folder that ntropy manages](../../../todos/all-notes/01M6E0CWM5KS1FRX3DTB3VREB7-give-each-note-an-asset-folder-that-ntropy-manages.md).
+2026-11-17. The first asset release implemented the decisions of rounds 1 to 5
+in [decisions.md](decisions.md). They are recorded in ADRs 0097 to 0105 and in
+the design docs `vault-layout-and-views.md`, `cli.md`, `encryption.md`,
+`rendering.md`, `typst-engine.md`, `html-engine.md` and `site-export.md` under
+`docs/design/`. Asset encryption (todo 01KZ9ZN4GKF9XCT143E1W5YSEJ) and the
+clickable attachment annotation of the PDF (todo 01M7MSGRW32068M8DK5E10WMGX)
+stay open in their todos.
 
 The facts about the code are checked against `main` at commit `ed914a3`
 (release v2.11.0).
@@ -23,7 +28,7 @@ The facts about the code are checked against `main` at commit `ed914a3`
 
 The research is done. The decisions are taken with the user, working
 through [open-questions.md](open-questions.md), and recorded in
-[decisions.md](decisions.md). Rounds 1 to 4 (2026-11-17) decided the
+[decisions.md](decisions.md). Rounds 1 to 5 (2026-11-17) decided the
 design except asset encryption, which waits until the layout has been
 used for a while. Where a decision differs from a recommendation or a
 "settled" point in [options.md](options.md), decisions.md wins: the asset
@@ -58,8 +63,9 @@ and [percent-encoded paths](../../../todos/all-notes/01M7MP0N1Y3Z331VHFKSVRJMXQ-
    user's assumptions.
 3. Read the recommendation and the settled points at the end of
    [options.md](options.md).
-4. Take the questions in [open-questions.md](open-questions.md) with the
-   user. Record each answer in the todo above, then write the ADR.
+4. Asset encryption is the open matter: questions 3 to 5 of
+   [open-questions.md](open-questions.md), carried by todo
+   01KZ9ZN4GKF9XCT143E1W5YSEJ.
 
 ## Evidence
 

@@ -2,7 +2,6 @@
 title: "Make a PDF attachment clickable with a paperclip annotation on the page"
 kind: feature
 component: render
-status: blocked
 horizon: someday
 origin: discussion
 ---
@@ -42,7 +41,3 @@ Found on 2026-11-17 while answering whether the link opens the attachment:
 
 The asset layout has shipped and attachments are in use, or typst gains
 file attachment annotations.
-
-## Relations
-
-- Depends on: [Give each note an asset folder that ntropy manages](01M6E0CWM5KS1FRX3DTB3VREB7-give-each-note-an-asset-folder-that-ntropy-manages.md)

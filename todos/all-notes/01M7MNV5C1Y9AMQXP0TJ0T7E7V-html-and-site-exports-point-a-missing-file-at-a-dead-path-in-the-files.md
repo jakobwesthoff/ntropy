@@ -12,7 +12,7 @@ rewritten to `<stem>_files/files/<vault path>` in `render --to html`, a
 path that does not exist in the output. `docs/design/html-engine.md` says
 such a file "is a warning and stays unresolved", which is what happens to a
 file outside the vault. Found on 2026-11-17 during the asset-handling
-research (todo 01M6E0CWM5KS1FRX3DTB3VREB7).
+research.
 
 ## Problem
 
@@ -37,7 +37,3 @@ behaves the same; not checked.
 Decide which is right, the code or the design doc. Leaving a missing
 file's target as written matches the doc and the outside-the-vault case,
 and keeps the link working if the file turns up beside the output.
-
-## Relations
-
-- Relates to: [Give each note an asset folder that ntropy manages](01M6E0CWM5KS1FRX3DTB3VREB7-give-each-note-an-asset-folder-that-ntropy-manages.md), how exports treat asset links

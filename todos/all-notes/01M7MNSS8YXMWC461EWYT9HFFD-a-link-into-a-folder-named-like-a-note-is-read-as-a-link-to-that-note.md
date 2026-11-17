@@ -10,7 +10,7 @@ Link extraction counts a link to a file inside a folder that is named like
 a note basename as a link to that note. After a retitle, `reconcile` then
 rewrites the link to point at the note itself, and the link to the file is
 lost without a warning. Found on 2026-11-17 during the asset-handling
-research (todo 01M6E0CWM5KS1FRX3DTB3VREB7).
+research.
 
 ## Problem
 
@@ -44,7 +44,3 @@ ULID (`<ULID>/transcript.md`) is not affected, since its rest starts with
 Refuse a target whose name part contains a path separator in `parse_name`,
 with tests for a slash after the ULID, after the slug, and a percent-encoded
 slash, and a reconcile test that leaves such a link alone.
-
-## Relations
-
-- Relates to: [Give each note an asset folder that ntropy manages](01M6E0CWM5KS1FRX3DTB3VREB7-give-each-note-an-asset-folder-that-ntropy-manages.md), any per-note asset folder directly in `all-notes/` needs this fixed first

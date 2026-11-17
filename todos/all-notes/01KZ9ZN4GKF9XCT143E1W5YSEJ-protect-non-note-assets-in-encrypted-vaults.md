@@ -58,12 +58,14 @@ which is the party the threat model exists to defend against. An image named
 ## Decisions
 
 - 2026-11-17, user: not in the first asset release. The user wants to work
-  with the asset layout (todo 01M6E0CWM5KS1FRX3DTB3VREB7) before deciding
-  how to encrypt assets, does not use vault encryption today, and is
+  with the asset layout before deciding how to encrypt assets, does not use vault encryption today, and is
   considering removing vault encryption altogether (todo
   01M7MQZS5C380J2V8S7PJFSNA2). The research in
   `docs/research/asset-handling/` holds the options found so far
   (`options.md`, questions 3 to 5 of `open-questions.md`).
+- 2026-11-17: the first asset release takes no assets in an encrypted vault.
+  `vault encrypt` refuses while `all-notes/_assets/` holds a file, and the
+  asset commands refuse to work in an encrypted vault (ADR 0103).
 
 ## Revisit when
 

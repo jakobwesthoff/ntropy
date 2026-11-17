@@ -10,7 +10,7 @@ A note that links a vault file with a space in its name the usual Markdown
 way, `![enc](my%20pic.png)`, does not get the file in its outputs. The
 HTML export looks for a file literally named `my%20pic.png`, warns, and
 writes a dead link; the PDF render fails. Found on 2026-11-17 during the
-asset-handling research (todo 01M6E0CWM5KS1FRX3DTB3VREB7).
+asset-handling research.
 
 ## Problem
 
