@@ -15,6 +15,29 @@ change in any release
 
 - Dependencies updated to their latest compatible releases: `clap` 4.6.8,
   `toml` 1.2.1.
+- Site page templates are rendered with minijinja 3.1.0. The built-in theme
+  and the project's own site export byte for byte as before. A custom theme's
+  templates
+  ([ADR 0058](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0058-theme-templates-overriding-the-built-in-ones-by-name.md))
+  render differently where minijinja 3.1 follows Jinja2 more closely:
+  - Booleans compare, sort and hash like `0` and `1`.
+  - `max` and `groupby` return the first of several equal items instead of
+    the last.
+  - `~` and `+` no longer double escape a safe string or leave an unsafe one
+    unescaped when auto escaping is on.
+  - `first`, `last`, `length`, `count`, `items`, `reverse`, `join` and
+    `groupby` treat `none` and undefined values as Jinja2 does.
+  - `upper`, `lower`, `capitalize` and `title` apply final sigma, titlecase
+    and special case mappings.
+  - `reverse` reverses maps and other reversible iterables, and `last` works
+    on a map.
+  - Repeating a string or a sequence a negative number of times gives an
+    empty result instead of failing.
+  - `split(none, n)` no longer returns trailing whitespace as an extra item.
+
+  The rest is in minijinja's
+  [CHANGELOG.md](https://github.com/mitsuhiko/minijinja/blob/3.1.0/CHANGELOG.md)
+  ([ADR 0085](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0085-page-templates-render-with-minijinja-3.md)).
 
 ### Fixed
 
