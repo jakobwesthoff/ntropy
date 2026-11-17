@@ -105,7 +105,8 @@ pub enum AssetCommand {
     /// them.
     ///
     /// A file the note links in its folder and the folder lacks is listed as
-    /// `broken`. Hidden files are left out.
+    /// `broken`. Hidden files are listed; only operating-system metadata such as
+    /// `.DS_Store` is left out.
     List {
         /// Print only the folder's path, also when it does not exist yet.
         #[arg(long)]

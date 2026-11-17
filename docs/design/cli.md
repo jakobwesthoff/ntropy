@@ -503,7 +503,9 @@ created the folder or placed a file; a refresh that fails is a `warning:` printe
 after the links and counts for `--strict`.
 
 `asset list [--path] <note>` prints a `FILE SIZE LINKED` table of the files in
-the folder at any depth, hidden entries left out, with `yes` or `no` for whether
+the folder at any depth, with hidden files listed and only operating-system
+metadata (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`) left out, the set
+`delete` leaves out of its count, with `yes` or `no` for whether
 the note links the file and `broken`, with size `-`, for a link into the note's
 own folder whose file is missing. A note without files prints `no assets` on
 stderr. `--path` prints the folder's absolute path, also when it does not exist,

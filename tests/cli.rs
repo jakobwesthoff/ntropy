@@ -8319,6 +8319,29 @@ fn asset_add_moving_out_of_another_notes_folder_warns_and_strict_fails() {
 }
 
 #[test]
+fn asset_list_shows_a_hidden_file_that_delete_would_count() {
+    let dir = vault_for_assets();
+    let secret = incoming(dir.path(), "secrets.env", b"x");
+    let add = ntropy(dir.path())
+        .args(["-n", "asset", "add", "--as", ".env", ULID_A])
+        .arg(&secret)
+        .output()
+        .expect("run");
+    assert!(add.status.success(), "{}", rendered(&add));
+    fs::write(asset_folder_of_a(dir.path()).join(".DS_Store"), b"x").expect("metadata");
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "list", ULID_A])
+        .output()
+        .expect("run");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains(".env"), "{stdout}");
+    assert!(!stdout.contains(".DS_Store"), "{stdout}");
+}
+
+#[test]
 fn asset_add_as_stores_the_file_under_another_name_and_move_removes_the_source() {
     let dir = vault_for_assets();
     let file = incoming(dir.path(), "IMG_4711.png", b"png");

@@ -19,7 +19,9 @@ use crate::id::Id;
 use crate::note::Note;
 use crate::vault::layout::{ALL_NOTES_DIR, ASSETS_DIR, Layout};
 
-use super::{FolderChoice, Place, choose_folder, local_links, owner, place, read_folders};
+use super::{
+    FolderChoice, Place, choose_folder, is_system_metadata, local_links, owner, place, read_folders,
+};
 
 /// Why an asset could not be added or listed.
 #[derive(Debug, thiserror::Error)]
@@ -610,8 +612,9 @@ pub struct Listing {
     pub files: Vec<ListedFile>,
 }
 
-/// The files in the folder of `note`, hidden entries left out, and whether the
-/// note links each. A file the note links in its own folder and the folder
+/// The files in the folder of `note`, operating-system metadata left out, and
+/// whether the note links each. Hidden files are listed: `delete` counts and
+/// removes them, so the listing names what a deletion would take. A file the note links in its own folder and the folder
 /// lacks is listed too, as missing. A symlink is listed with its own size and
 /// is never followed.
 pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
@@ -625,7 +628,7 @@ pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
                 .file_name()
                 .map(|name| name.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            if name.starts_with('.') {
+            if is_system_metadata(&path) {
                 continue;
             }
             let relative = format!("{prefix}{name}");
@@ -1844,6 +1847,30 @@ mod tests {
             ]
         );
         assert_eq!(listing.folder, folder);
+    }
+
+    #[test]
+    fn the_listing_shows_hidden_files_and_leaves_out_only_system_metadata() {
+        // `delete` counts a `.env` and removes it, so the listing names it.
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let folder = session.layout().asset_folder(FOLDER);
+        std::fs::create_dir_all(&folder).expect("folder");
+        for name in [
+            ".env",
+            ".DS_Store",
+            "._shot.png",
+            "Thumbs.db",
+            "desktop.ini",
+            "a.pdf",
+        ] {
+            std::fs::write(folder.join(name), b"x").expect("file");
+        }
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        let names: Vec<&str> = listing.files.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, [".env", "a.pdf"]);
     }
 
     #[test]

@@ -66,8 +66,9 @@ a symlink where the note's folder belongs, is refused too by both commands: the
 entry is one ntropy leaves alone (ADR 0098), and a file added or listed through
 it would belong to another note or to a place outside the vault.
 
-`asset list` prints the files of the folder with their size and whether the note
-links each, and a file the note links in its own folder and the folder lacks as
+`asset list` prints the files of the folder with their size, hidden files
+included and operating-system metadata left out as `delete` leaves it out, and
+whether the note links each, and a file the note links in its own folder and the folder lacks as
 `broken`. `--path` prints only the folder, also when it does not exist yet. The
 unlinked files of a folder show in `asset list` only (ADR 0099).
 
