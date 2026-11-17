@@ -104,3 +104,23 @@ where the user gave one. A decision lands here only after the user gave it.
 
 With round 4 the design is decided except for asset encryption (questions 3
 to 5), which waits until the asset layout has been used for a while.
+
+## Round 5, 2026-11-17 (asqr session `01M7MSYH3JGC2YKMB4PSPH3P11`)
+
+- **Links to files outside every `_assets/` folder keep working and are
+  warned about.** A link to a file beside the notes or in a vault-root
+  folder such as `assets/<topic>/` still renders and exports as before,
+  and `reconcile` warns about it; under `--strict` that warning fails.
+- **Old structures get no report of their own.** Folders such as
+  `all-notes/assets/<ULID>-<slug>/` or `all-notes/images/` are unmanaged
+  files like any other; their links fall under the warning above.
+- **The asset commands refuse to work in an encrypted vault** in the first
+  asset release, with an error saying that asset encryption is not
+  supported yet, so plaintext files do not pile up beside encrypted notes.
+- **Orphans are reported, nothing is deleted.** `reconcile` warns about an
+  `_assets/` folder whose note is gone; a file in a note's folder that the
+  note does not link shows in `asset list` only.
+- **`--strict` fails on** a link to a file missing from the note's own
+  folder, a link into another note's folder, and an orphan folder. A
+  folder name that is stale between an edit and the next `reconcile` does
+  not fail it.
