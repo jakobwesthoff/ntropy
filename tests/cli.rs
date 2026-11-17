@@ -1726,6 +1726,47 @@ fn the_hint_for_a_shared_ulid_names_the_path_and_reconcile() {
 }
 
 #[test]
+fn the_list_for_a_shared_ulid_shows_the_path_of_each_file() {
+    // The hint says to pass the path of one file, so the list has to show them.
+    // Only the vault-relative tail is compared, as the temporary directory may
+    // be spelled through a symlink.
+    let dir = setup_vault();
+    copied_note(dir.path());
+
+    let out = run_in(dir.path(), &["delete", "-n", "-f", ULID_A]);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    for slug in ["plan", "plan-b"] {
+        let tail = format!("/all-notes/{ULID_A}-{slug}.md");
+        assert!(
+            stderr
+                .lines()
+                .any(|line| line.starts_with("  ") && line.ends_with(&tail)),
+            "the path of {slug} is not listed: {}",
+            rendered(&out)
+        );
+    }
+}
+
+#[test]
+fn the_list_for_other_ambiguous_matches_stays_without_paths() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_A, "a", "---\ntitle: A\n---\nborrow\n");
+    write_note(dir.path(), ULID_B, "b", "---\ntitle: B\n---\nborrow\n");
+
+    let out = run_in(dir.path(), &["delete", "-n", "-f", "borrow"]);
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains("is ambiguous (2 matches)"),
+        "{}",
+        rendered(&out)
+    );
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains(".md"),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
 fn the_hint_for_a_shared_ulid_does_not_ask_for_a_full_ulid() {
     let dir = setup_vault();
     copied_note(dir.path());

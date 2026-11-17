@@ -35,5 +35,7 @@ holds for those warnings, and no longer for a copy's.
 
 When every match of an ambiguous selector carries one ULID, the error's hint
 reads "these files share one ULID; pass the path of one, or run `ntropy
-reconcile` to give the copies new ULIDs". Any other ambiguous selector keeps
-"refine the query, or pass a full ULID or the note's path".
+reconcile` to give the copies new ULIDs", and the list of matches shows the
+path of each file after its reference, as the files read alike otherwise. Any
+other ambiguous selector keeps "refine the query, or pass a full ULID or the
+note's path" and a list without paths.

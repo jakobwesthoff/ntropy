@@ -976,22 +976,34 @@ fn report_ambiguous(selector: &str, notes: &[ntropy::note::Note]) -> Result<()> 
         "error: `{selector}` is ambiguous ({} matches):",
         notes.len()
     );
+    // Files that share a ULID read alike in every other field, so the path is
+    // what tells them apart, and what the hint asks the user to pass.
+    let with_paths = share_one_ulid(notes);
     for note in notes {
-        eprintln!("  {}", output::note_reference(note)?);
+        let reference = output::note_reference(note)?;
+        if with_paths {
+            eprintln!("  {reference}  {}", output::shown_path(&note.path));
+        } else {
+            eprintln!("  {reference}");
+        }
     }
     eprintln!("{}", ambiguity_hint(notes));
     Ok(())
 }
 
+/// Whether the matches are a note and its copies: two or more files carrying
+/// one ULID, which only a full ULID selector returns (ADR 0067).
+fn share_one_ulid(notes: &[ntropy::note::Note]) -> bool {
+    notes.len() > 1 && notes.windows(2).all(|pair| pair[0].id == pair[1].id)
+}
+
 /// What to do about an ambiguous selector.
 ///
-/// Matches that all carry one ULID are a note and its copies, which only a
-/// full ULID selector returns (ADR 0067). Passing the ULID again changes
-/// nothing for them, so the hint names a path and `reconcile`, which gives
-/// the copies ULIDs of their own.
+/// Passing the ULID again changes nothing for a note and its copies, so their
+/// hint names a path and `reconcile`, which gives the copies ULIDs of their
+/// own.
 fn ambiguity_hint(notes: &[ntropy::note::Note]) -> &'static str {
-    let share_one_id = notes.windows(2).all(|pair| pair[0].id == pair[1].id);
-    if notes.len() > 1 && share_one_id {
+    if share_one_ulid(notes) {
         "these files share one ULID; pass the path of one, or run `ntropy reconcile` to give the copies new ULIDs"
     } else {
         "refine the query, or pass a full ULID or the note's path"

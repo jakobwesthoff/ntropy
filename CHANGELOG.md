@@ -52,7 +52,8 @@ change in any release
 - The error for a full ULID that a note and its copy share, such as in
   `delete <ULID>`, told the user to "pass a full ULID or the note's path".
   It now says the files share one ULID and names a path or `ntropy
-  reconcile`, which gives the copies new ULIDs. The scan warning for a copy
+  reconcile`, which gives the copies new ULIDs, and the list of matches
+  shows the path of each file. The scan warning for a copy
   read `skipped <copy>` although `search <ULID>` lists it; it now reads
   `<copy> shares its id with <keeper>`.
   [ADR 0096](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0096-a-copys-warning-names-the-shared-ulid.md)
