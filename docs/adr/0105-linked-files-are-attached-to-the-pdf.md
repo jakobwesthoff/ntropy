@@ -59,3 +59,10 @@ own, since typst fails the whole compile on either.
 
 The attachment's name in the viewer is the file's path from the vault root, such
 as `all-notes/_assets/<stem>/minutes.pdf`.
+
+The host approves a file's path and size when the emitter asks, and typst reads
+the file later, when it compiles. A process that can write into the vault between
+the two can replace the file with a symlink to another file, or grow it beyond
+`attach_max`, and typst attaches what it then finds. The vault is trusted for
+writes during a render: a render of a vault that others can write to while it
+runs is not covered.
