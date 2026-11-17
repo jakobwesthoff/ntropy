@@ -165,16 +165,14 @@ struct Search<'a> {
 
 /// The warning about the installed copies of the skill that are older than
 /// this ntropy, searched from `start`, the directory the run starts in, up
-/// to its git root, and in the global directories of `HOME` and the
-/// variables that move them.
-pub fn outdated_copies(start: &Path) -> Option<Outdated> {
-    let home = std::env::var_os("HOME")
-        .filter(|home| !home.is_empty())
-        .map(PathBuf::from);
+/// to its git root, and in the global directories of `home` and the
+/// variables that move them. The caller says which home counts, so a test
+/// can run without the host's.
+pub fn outdated_copies(start: &Path, home: Option<&Path>) -> Option<Outdated> {
     let stop = git_root(start, None);
     check(&Search {
         cwd: start,
-        home: home.as_deref(),
+        home,
         global: GLOBAL_DIRS,
         variable: &|name| std::env::var_os(name),
         stop: stop.as_deref(),
@@ -782,6 +780,29 @@ mod tests {
         let hint = run(project.path(), None, Some(project.path()));
 
         assert_eq!(hint.as_deref(), Some(ONE_OLD_COPY));
+    }
+
+    #[test]
+    fn the_public_search_looks_in_the_home_it_is_given_and_in_no_other() {
+        let root = temp();
+        let work = root.path().join("work");
+        std::fs::create_dir_all(work.join(".git")).expect("a creatable directory");
+        let home = root.path().join("home");
+        put(&home, ".claude/skills", Some("0.1.0"));
+
+        let given = outdated_copies(&work, Some(&home));
+        let none = outdated_copies(&work, None);
+
+        assert!(
+            given.is_some_and(|found| found.message.contains("~/.claude/skills/ntropy")),
+            "a copy in the given home is found"
+        );
+        // The variables that move a skills directory are still the host's,
+        // so only a copy of the given home is excluded here.
+        assert!(
+            none.is_none_or(|found| !found.message.contains("~/.claude/skills/ntropy")),
+            "a run without a home looks in none"
+        );
     }
 
     // =====================================================================

@@ -6,7 +6,7 @@
 //! or installed into a skills directory (ADR 0092). It needs no vault.
 
 use std::io::Write;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use anyhow::{Context, Result};
@@ -54,7 +54,10 @@ pub fn warn_of_outdated_skill() {
     let Ok(start) = std::env::current_dir() else {
         return;
     };
-    if let Some(outdated) = skill::age::outdated_copies(&start) {
+    let home = std::env::var_os("HOME")
+        .filter(|home| !home.is_empty())
+        .map(PathBuf::from);
+    if let Some(outdated) = skill::age::outdated_copies(&start, home.as_deref()) {
         output::warn(&format!("{}. {}", outdated.message, outdated.fix));
     }
 }

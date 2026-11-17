@@ -36,13 +36,30 @@ fn empty_dir() -> tempfile::TempDir {
     tempfile::tempdir().expect("the temp dir is writable")
 }
 
-/// `ntropy` run in `cwd`, isolated from the host's vault selection and
-/// global config.
+/// Cuts `cmd` off from the host: its vault selection, its global config, and
+/// every place the skills of whoever runs the tests could be found, the home
+/// directory and the variables that move a skills directory. `HOME` is
+/// removed, not set, since insta-cmd records every variable a command sets in
+/// the snapshot, and a test that needs a home sets its own after this.
+fn isolate(cmd: &mut Command) {
+    cmd.env_remove("NTROPY_VAULT");
+    cmd.env("NTROPY_CONFIG_DIR", NO_CONFIG_DIR);
+    for variable in [
+        "HOME",
+        "CLAUDE_CONFIG_DIR",
+        "CODEX_HOME",
+        "COPILOT_HOME",
+        "GEMINI_CLI_HOME",
+    ] {
+        cmd.env_remove(variable);
+    }
+}
+
+/// `ntropy` run in `cwd`, isolated from the host (see [`isolate`]).
 fn ntropy(cwd: &Path) -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_ntropy"));
     cmd.current_dir(cwd);
-    cmd.env_remove("NTROPY_VAULT");
-    cmd.env("NTROPY_CONFIG_DIR", NO_CONFIG_DIR);
+    isolate(&mut cmd);
     cmd
 }
 
@@ -227,14 +244,6 @@ impl Scene {
     fn ntropy(&self) -> Command {
         let mut cmd = ntropy(&self.project());
         cmd.env("HOME", self.home());
-        for variable in [
-            "CLAUDE_CONFIG_DIR",
-            "CODEX_HOME",
-            "COPILOT_HOME",
-            "GEMINI_CLI_HOME",
-        ] {
-            cmd.env_remove(variable);
-        }
         cmd
     }
 
@@ -412,7 +421,8 @@ fn another_command_gives_no_warning() {
         .output()
         .expect("a run");
 
-    assert!(!String::from_utf8_lossy(&output.stderr).contains("skill"));
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
 }
 
 #[test]
@@ -452,16 +462,16 @@ fn version_in_a_removed_directory_prints_the_version_and_no_warning() {
 
     // The directory the process starts in is removed before ntropy runs, so
     // the current directory cannot be read.
-    let output = Command::new("sh")
+    let mut shell = Command::new("sh");
+    isolate(&mut shell);
+    shell
         .arg("-c")
         .arg(r#"cd "$1" && rmdir "$1" && exec "$2" --version"#)
         .arg("sh")
         .arg(&gone)
         .arg(env!("CARGO_BIN_EXE_ntropy"))
-        .env("HOME", scene.home())
-        .env("NTROPY_CONFIG_DIR", NO_CONFIG_DIR)
-        .output()
-        .expect("a run");
+        .env("HOME", scene.home());
+    let output = shell.output().expect("a run");
 
     assert!(output.status.success());
     assert_eq!(
