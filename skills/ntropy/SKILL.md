@@ -4,7 +4,7 @@ description: >-
   Work with ntropy, a Markdown note-taking CLI whose notes live in a vault: create, search, edit and delete notes, keep views, render a note to PDF, HTML or terminal text, export a vault as a static website, write site or document themes, work in an encrypted vault, and script against any of it. Use for any task involving ntropy, a note vault, .ntropy-vault files or `ntropy` commands, and read this first: ntropy blocks on a terminal unless it is run with `-n`.
 metadata:
   tags: ntropy, notes, markdown, vault, cli, site, website, html
-  ntropy-version: "2.12.0"
+  ntropy-version: "2.13.0"
 ---
 
 Read this file to its last line before you run ntropy. The last line is
