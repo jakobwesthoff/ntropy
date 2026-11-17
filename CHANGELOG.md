@@ -44,7 +44,8 @@ change in any release
   into another note's asset folder. `pdf` and `typst` show the link text or the
   alt text instead, `html` and `site` do not copy the file, each with a warning
   that fails `--strict`. A linked directory no longer carries `all-notes/_assets/`
-  into an export. Links to files outside `all-notes/_assets/` render and
+  into an export, and a symlink in a note's own folder that leads into another
+  note's folder is left out of one, with a warning. Links to files outside `all-notes/_assets/` render and
   export as before.
   [ADR 0101](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0101-renders-and-exports-serve-only-a-notes-own-assets.md)
   records the rule.

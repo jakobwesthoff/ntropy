@@ -7651,6 +7651,58 @@ fn render_to_html_of_a_linked_notes_directory_leaves_the_asset_folders_out() {
     );
 }
 
+/// The two-note vault with a link to the own folder as a directory, and a
+/// symlink in that folder to a file in the other note's folder.
+fn vault_with_a_borrowing_symlink() -> tempfile::TempDir {
+    let dir = vault_with_two_notes_and_assets(&format!("[all my files](_assets/{ULID_A}-reader/)"));
+    std::os::unix::fs::symlink(
+        format!("../{ULID_B}-owner/chart.png"),
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-reader/borrowed.png")),
+    )
+    .expect("symlink");
+    dir
+}
+
+#[test]
+fn site_leaves_out_a_symlink_that_borrows_another_notes_file_from_a_linked_folder() {
+    let dir = vault_with_a_borrowing_symlink();
+
+    let output = site(dir.path(), &["-o", "out", "--strict"]);
+
+    let own = dir
+        .path()
+        .join(format!("out/files/all-notes/_assets/{ULID_A}-reader"));
+    assert!(own.join("chart.png").is_file());
+    assert!(!own.join("borrowed.png").exists());
+    assert!(!output.status.success(), "--strict fails on the warning");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("the asset folders of the notes"),
+        "{}",
+        rendered(&output)
+    );
+}
+
+#[test]
+fn render_to_html_leaves_out_a_symlink_that_borrows_another_notes_file() {
+    let dir = vault_with_a_borrowing_symlink();
+    let target = dir.path().join("rendered.html");
+
+    let out = ntropy(dir.path())
+        .args(["render", ULID_A, "--to", "html", "-n", "-o"])
+        .arg(&target)
+        .output()
+        .expect("run ntropy");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let own = dir.path().join(format!(
+        "rendered_files/files/all-notes/_assets/{ULID_A}-reader"
+    ));
+    assert!(own.join("chart.png").is_file());
+    assert!(!own.join("borrowed.png").exists());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("the asset folders of the notes"));
+}
+
 #[test]
 fn site_does_not_copy_a_file_from_another_notes_folder() {
     let dir = vault_with_two_notes_and_assets(&format!(

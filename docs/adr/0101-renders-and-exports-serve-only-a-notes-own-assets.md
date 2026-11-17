@@ -44,10 +44,14 @@ path as written, so such a symlink is not seen there. That is the class of
 symlinks that todo 01M66B2JM5XQDK7M3ZVKA1NZJV tracks for images in PDF renders,
 and it stays open.
 
-Links to files outside every `_assets/` folder, beside the notes or in a
+Links to files outside `all-notes/_assets/`, beside the notes or in a
 vault-root `assets/` folder, render and export as before.
 
 A linked directory that contains the vault's `all-notes/_assets/` does not
 mirror it: the walk leaves that directory out and the warning for the directory
-says so. A note's own folder is copied by linking the folder or a file in it,
+says so. A symlink the walk meets whose target lies in another folder of
+`_assets/` than the directory it stands in, or in any folder when it stands
+outside `_assets/`, is left out the same way: it would carry a file of another
+note's folder into the walk of a note's own folder. A symlink to a file in the
+same folder is copied. A note's own folder is copied by linking the folder or a file in it,
 which starts the walk below `_assets/`.

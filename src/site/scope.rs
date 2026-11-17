@@ -552,6 +552,28 @@ impl ExportScope {
         self.verdict(&self.vault_path(&path)).ok().map(|()| path)
     }
 
+    /// The folder of `_assets/` that `path`, resolved, lies in, `None` when it
+    /// lies elsewhere or the vault has no `_assets/`.
+    fn asset_folder_of(&self, path: &Path) -> Option<OsString> {
+        let assets = self.assets_resolved.as_ref()?;
+        let resolved = std::fs::canonicalize(path).ok()?;
+        let below = resolved.strip_prefix(assets).ok()?;
+        below
+            .components()
+            .next()
+            .map(|component| component.as_os_str().to_os_string())
+    }
+
+    /// Whether the symlink target `resolved`, met while walking `dir`, lies in
+    /// a folder of `_assets/` that `dir` does not: another note's folder, or
+    /// any folder when `dir` is outside `_assets/`.
+    fn leaves_its_asset_folder(&self, dir: &Path, resolved: &Path) -> bool {
+        match self.asset_folder_of(resolved) {
+            Some(target) => self.asset_folder_of(dir) != Some(target),
+            None => false,
+        }
+    }
+
     /// Every file below `dir` that may be copied, and what was left out.
     /// `dir` itself is judged by [`ExportScope::verdict`] first.
     pub fn walk(&self, dir: &Path) -> Result<Walk, FsError> {
@@ -608,6 +630,11 @@ impl ExportScope {
                 // there; one to a directory is not followed, which keeps a
                 // loop or a second path into the same tree out of the walk.
                 match self.resolve(&path) {
+                    // A note has only its own assets, and a symlink may not
+                    // carry a file of another note's folder into the walk.
+                    Ok(Some(resolved)) if self.leaves_its_asset_folder(dir, &resolved) => {
+                        walk.assets += 1;
+                    }
                     Err(Refusal::Listed(component)) => walk.left_out(component, relative),
                     Err(Refusal::Outside(_)) => walk.outside += 1,
                     Err(Refusal::Unexported { scanned }) => walk.unexported_note(scanned),
@@ -929,6 +956,58 @@ mod tests {
             walk.warning("referenced directory", "/").as_deref(),
             Some("referenced directory `/`: left out the asset folders of the notes, `_assets/`")
         );
+    }
+
+    #[test]
+    fn a_symlink_in_the_own_folder_into_another_notes_folder_is_left_out_of_a_walk() {
+        let vault = vault_with_assets();
+        let own = vault
+            .path()
+            .join(format!("all-notes/_assets/{NOTE_ID}-note"));
+        std::os::unix::fs::symlink(
+            format!("../{OTHER_ID}-note/c.png"),
+            own.join("borrowed.png"),
+        )
+        .expect("symlink");
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+
+        let walk = scope.walk(&own).expect("walk");
+
+        let files: Vec<&str> = walk.files.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(files, ["c.png"]);
+        assert_eq!(walk.assets, 1);
+    }
+
+    #[test]
+    fn a_symlink_from_a_directory_outside_the_assets_into_a_notes_folder_is_left_out() {
+        let vault = vault_with_assets();
+        std::fs::create_dir_all(vault.path().join("shared")).expect("directory");
+        std::os::unix::fs::symlink(
+            format!("../all-notes/_assets/{OTHER_ID}-note/c.png"),
+            vault.path().join("shared/pic.png"),
+        )
+        .expect("symlink");
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+
+        let walk = scope.walk(&vault.path().join("shared")).expect("walk");
+
+        assert!(walk.files.is_empty());
+        assert_eq!(walk.assets, 1);
+    }
+
+    #[test]
+    fn a_symlink_inside_one_folder_to_a_sibling_file_is_copied() {
+        let vault = vault_with_assets();
+        let own = vault
+            .path()
+            .join(format!("all-notes/_assets/{NOTE_ID}-note"));
+        std::os::unix::fs::symlink("c.png", own.join("alias.png")).expect("symlink");
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+
+        let walk = scope.walk(&own).expect("walk");
+
+        assert_eq!(walk.files.len(), 2);
+        assert_eq!(walk.assets, 0);
     }
 
     #[test]
