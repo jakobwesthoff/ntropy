@@ -9065,6 +9065,40 @@ mod encrypted {
     }
 
     #[test]
+    fn the_marker_records_its_start_as_an_rfc_3339_utc_instant() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "alpha", "---\ntitle: Alpha\n---\nbody\n");
+
+        ntropy_convert(vault)
+            .env("NTROPY_MIGRATION_FAIL_AFTER", "produce")
+            .args(["vault", "encrypt", "-y"])
+            .output()
+            .expect("interrupt");
+
+        let marker = fs::read_to_string(vault.join(".ntropy/migration.toml")).expect("marker");
+        let marker: toml::Table = marker.parse().expect("marker is TOML");
+        let started = marker["started"].as_str().expect("started is a string");
+
+        // The text is what jiff prints for a `Timestamp`: parsing it and
+        // printing it again must give it back unchanged, which also pins the
+        // trailing `Z` of a UTC instant.
+        let instant: jiff::Timestamp = started.parse().expect("started is RFC 3339");
+        assert_eq!(instant.to_string(), started);
+        assert!(started.ends_with('Z'), "not a UTC instant: {started}");
+
+        // And it is the moment of this run, not a fixed or default value.
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .expect("the clock is past the epoch")
+            .as_secs() as i64;
+        assert!(
+            (now - instant.as_second()).abs() < 300,
+            "started is not recent: {started}"
+        );
+    }
+
+    #[test]
     fn resume_finishes_an_interrupted_conversion() {
         let dir = convertible_vault();
         let vault = dir.path();
