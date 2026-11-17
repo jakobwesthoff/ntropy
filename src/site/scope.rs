@@ -1132,4 +1132,26 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn a_refusal_gives_its_reason_as_a_clause_after_the_path() {
+        let reasons: Vec<String> = [
+            Refusal::Listed(".ntropy".to_string()),
+            Refusal::Outside("the vault"),
+            Refusal::Unresolvable,
+            Refusal::Unexported { scanned: true },
+        ]
+        .iter()
+        .map(Refusal::reason)
+        .collect();
+        assert_eq!(
+            reasons,
+            [
+                "it is or lies inside `.ntropy`, which exports never copy",
+                "it resolves outside the vault",
+                "it cannot be resolved",
+                "it is a note, not an asset",
+            ]
+        );
+    }
 }

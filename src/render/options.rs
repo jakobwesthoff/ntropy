@@ -127,10 +127,6 @@ where
             f.write_str("a size in bytes or a size string such as \"25 MiB\"")
         }
 
-        fn visit_u64<E: Error>(self, bytes: u64) -> Result<u64, E> {
-            Ok(bytes)
-        }
-
         fn visit_i64<E: Error>(self, bytes: i64) -> Result<u64, E> {
             u64::try_from(bytes).map_err(|_| E::invalid_value(Unexpected::Signed(bytes), &self))
         }
