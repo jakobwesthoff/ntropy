@@ -121,7 +121,7 @@ and find the line that draws the title further down. Give it that colour:
 
 Render again, and the title is teal.
 
-![The rendered note with its title in teal, everything else in the built-in look](../assets/document-theme/step-1.png)
+![The rendered note with its title in teal, everything else in the built-in look](_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-1.png)
 
 ntropy places your theme after its own definitions, so your `note`
 replaces the built-in one. Everything the theme does not define keeps the
@@ -164,7 +164,7 @@ paper = "a5"
 Render again. The note now fills two A5 pages, each with its page number
 at the bottom, and the second page carries the title in its header.
 
-![Two A5 pages side by side, page numbers at the bottom, the title in the header of the second page](../assets/document-theme/step-2.png)
+![Two A5 pages side by side, page numbers at the bottom, the title in the header of the second page](_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-2.png)
 
 > [!NOTE]
 > Keep `paper: paper`. It is how the `paper` setting of
@@ -209,7 +209,7 @@ The list includes `IBM Plex Sans`. Now change the line
 
 Render again, and the text is set in Plex.
 
-![The note set in IBM Plex Sans](../assets/document-theme/step-3.png)
+![The note set in IBM Plex Sans](_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-3.png)
 
 > [!WARNING]
 > A font name typst does not find is replaced by the default font. The
@@ -253,7 +253,7 @@ And links take the accent colour too:
 
 Render again.
 
-![Teal headings and unjustified paragraphs](../assets/document-theme/step-4.png)
+![Teal headings and unjustified paragraphs](_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-4.png)
 
 > [!TIP]
 > `set heading(numbering: "1.1")` numbers headings by their Markdown
@@ -311,7 +311,7 @@ end. Put this in their place:
 
 Render again.
 
-![The title on the left with the logo on the right, the author and a DRAFT badge below it, the tags gone](../assets/document-theme/step-5.png)
+![The title on the left with the logo on the right, the author and a DRAFT badge below it, the tags gone](_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-5.png)
 
 `note` receives four things. `title` is the note's title. `frontmatter`
 is the note's whole frontmatter as Typst values, `title` and `tags`
@@ -370,7 +370,7 @@ add them at the end of `handout.typ`, after the `}` that closes `note`.
 `important`, `warning` and `caution`. Render again: the callouts are tinted
 boxes with a small label, and a done task has a filled box.
 
-![Callouts as tinted boxes labelled TIP and WARNING, the done task with a filled box](../assets/document-theme/step-6.png)
+![Callouts as tinted boxes labelled TIP and WARNING, the done task with a filled box](_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-6.png)
 
 The sample note links to no other note. In one that does, the link now
 shows the other note's title in the accent colour with an arrow after it,
@@ -406,7 +406,7 @@ Below the line `set line(stroke: 0.6pt + luma(190))`, style the footnotes:
 
 Render again. That is the finished `handout`.
 
-![The finished theme: table header tinted, code block with a teal bar, a teal rule above the footnote](../assets/document-theme/step-7.png)
+![The finished theme: table header tinted, code block with a teal bar, a teal rule above the footnote](_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-7.png)
 
 [Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md#what-the-body-is-made-of)
 lists the element each Markdown construct becomes.

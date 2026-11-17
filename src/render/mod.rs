@@ -431,6 +431,18 @@ mod tests {
         assert_eq!(ctx.warnings, ["left out 1 hidden entry"]);
     }
 
+    #[test]
+    fn a_context_that_cannot_judge_files_reports_every_attachment_as_absent() {
+        let mut ctx = WarningsOnly {
+            warnings: Vec::new(),
+        };
+        let owner = "01ARZ3NDEKTSV4RRFFQ69G5FAV".parse().expect("a valid ULID");
+        assert_eq!(
+            ctx.attachment(Path::new("/vault"), owner, "/all-notes/_assets/x/m.pdf"),
+            Attachment::Absent
+        );
+    }
+
     /// Every [`RenderError`] Display string is user-facing, so each is pinned.
     #[test]
     fn unknown_format_message() {

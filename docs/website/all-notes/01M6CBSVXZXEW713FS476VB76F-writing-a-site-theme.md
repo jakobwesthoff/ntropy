@@ -66,7 +66,7 @@ header's switch for the light scheme: the square before the site name, the
 date, the rule under the title, and the current entry of the outline are
 teal now.
 
-![A note page of the built-in theme with a teal accent](../assets/site-theme/01-quick-start.png)
+![A note page of the built-in theme with a teal accent](_assets/01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme/01-quick-start.png)
 
 That is the whole loop: edit the theme, export, reload. Every step below
 repeats it.
@@ -153,11 +153,11 @@ together at the end of the file, ready to carry over to a fresh copy:
 Export and reload. With the sun picked, the page is a cool grey with teal
 links:
 
-![The harbor palette in the light scheme](../assets/site-theme/02-colours-light.png)
+![The harbor palette in the light scheme](_assets/01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme/02-colours-light.png)
 
 Click the moon, and the page turns blue-black with a bright teal accent:
 
-![The harbor palette in the dark scheme](../assets/site-theme/03-colours-dark.png)
+![The harbor palette in the dark scheme](_assets/01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme/03-colours-dark.png)
 
 > [!NOTE]
 > A property you leave out of the dark blocks keeps its built-in dark value,
@@ -314,7 +314,7 @@ rules as specific as itself or less, so harbor names both.
 
 Export and reload:
 
-![Harbor's callouts, the tip with the anchor icon](../assets/site-theme/04-callouts.png)
+![Harbor's callouts, the tip with the anchor icon](_assets/01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme/04-callouts.png)
 
 ## Step 6: Tables
 
@@ -337,7 +337,7 @@ Export and reload: header cells are teal on a light teal ground.
 > The built-in stylesheet does this once the note column is narrower than
 > 32rem.
 
-![A two-column table as cards at 390 pixels](../assets/site-theme/05-tables-phone.png)
+![A two-column table as cards at 390 pixels](_assets/01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme/05-tables-phone.png)
 
 > [!WARNING]
 > The card view needs `.layout > main` to be a container
@@ -418,7 +418,7 @@ The links need a few lines of CSS at the end of `style.css`:
 Export and reload: the header holds Home and Tags beside the search, and
 every page ends with the footer.
 
-![The header links](../assets/site-theme/06-header.png)
+![The header links](_assets/01M6CBSVXZXEW713FS476VB76F-writing-a-site-theme/06-header.png)
 
 > [!NOTE]
 > On a phone the header row has room for the menu button, the site name,

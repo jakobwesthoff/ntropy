@@ -21,4 +21,4 @@ Inline HTML: press <kbd>Ctrl</kbd> + <kbd>K</kbd> to search, a
 
 An image from the web:
 
-![The first step of the document theme guide](https://ntropy.westhoffswelt.de/files/assets/document-theme/step-1.png)
+![The first step of the document theme guide](https://ntropy.westhoffswelt.de/files/all-notes/_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-1.png)
