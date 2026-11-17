@@ -10819,3 +10819,47 @@ fn a_pdf_attaches_the_files_within_the_limit_and_names_the_rest_in_its_badges() 
         .arg(out_dir.join("attachments"))
         .status();
 }
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_theme_that_defines_only_note_still_compiles_a_note_with_an_attachment() {
+    // A theme is spliced after the prelude and replaces only what it defines,
+    // so a theme written before the attachment badges existed finds
+    // `attachbadge` and `attachbadge-off` defined by the prelude.
+    let dir = vault_with_two_notes_and_assets(&format!(
+        "[minutes](_assets/{ULID_A}-reader/minutes.pdf) [call](_assets/{ULID_A}-reader/call.m4a)"
+    ));
+    let folder = dir
+        .path()
+        .join(format!("all-notes/_assets/{ULID_A}-reader"));
+    fs::write(folder.join("minutes.pdf"), b"minutes").expect("small file");
+    fs::write(folder.join("call.m4a"), vec![b'x'; 2048]).expect("large file");
+    let themes = dir.path().join(".ntropy/themes/typst");
+    fs::create_dir_all(&themes).expect("themes dir");
+    fs::write(
+        themes.join("plain.typ"),
+        "#let note(title: none, frontmatter: (:), paper: \"a4\", body) = body\n",
+    )
+    .expect("theme");
+    fs::write(
+        dir.path().join(".ntropy/config.toml"),
+        "[render]\ntheme = \"plain\"\nattach_max = \"1 KiB\"\n",
+    )
+    .expect("config");
+
+    let pdf = dir.path().join("themed.pdf");
+    let out = ntropy(dir.path())
+        .args(["render", ULID_A, "-n", "--force", "-o"])
+        .arg(&pdf)
+        .output()
+        .expect("run render to pdf");
+    assert!(out.status.success(), "{}", rendered(&out));
+
+    // `pdfdetach` is optional: without it the compile above is the check.
+    let Ok(listing) = Command::new("pdfdetach").arg("-list").arg(&pdf).output() else {
+        return;
+    };
+    let listing = String::from_utf8_lossy(&listing.stdout).into_owned();
+    assert!(listing.starts_with("1 embedded file"), "{listing}");
+    assert!(listing.contains("minutes.pdf"), "{listing}");
+}
