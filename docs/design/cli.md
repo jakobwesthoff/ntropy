@@ -479,6 +479,13 @@ the note is in the way stays as it is and counts as a warning. The links are
 found by the ULID in the folder name, so a run that stopped after the rename
 finishes the rewrite on the next one.
 
+It then warns about asset links and about `_assets/` (ADR 0099): a link to a
+file missing from the note's own folder, a link into another note's folder, a
+link to a file outside every `_assets/` folder, an entry of `_assets/` that no
+valid note owns, and a symlinked `_assets/` or entry. Each is one `warning:`
+line on stderr, counts in the summary and fails `--strict`. Nothing is deleted,
+and a folder that is stale before the run is renamed first and not reported.
+
 Links inside code are not note links. Code is what the renderer's Markdown
 parser reports as code, parsed with the renderer's own options: inline code
 spans, which may continue over a line break, fenced code blocks and indented

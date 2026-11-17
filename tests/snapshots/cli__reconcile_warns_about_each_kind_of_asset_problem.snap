@@ -1,0 +1,22 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - reconcile
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+Reconciling vault at [VAULT]...
+ignored /by-tag/
+Scanned 2 notes, reassigned 0 notes, renamed 0 files, relinked 0 links, synced 1 view, ignored 1 entry, unignored 0 entries, 4 warnings.
+
+----- stderr -----
+warning: `_assets/[ULID....................]-gone` belongs to no note: no valid note carries its ULID
+warning: [ULID....................]-note.md: `_assets/[ULID....................]-note/missing.png` is linked but is not in the note's asset folder
+warning: [ULID....................]-note.md: `_assets/[ULID....................]-other/chart.png` is in another note's asset folder, and a note has only its own assets
+warning: [ULID....................]-note.md: `transcript.txt` is outside every `_assets/` folder, so ntropy does not manage it

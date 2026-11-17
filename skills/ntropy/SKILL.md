@@ -169,7 +169,7 @@ encrypted vaults.
 | `ntropy render -n -p <id>` | Render one note: `--to pdf` (default), `typst`, `html` or `ansi`; `-o` names the artifact, `--force` replaces one, `--theme` overrides the theme. Read `ntropy skill rendering`. |
 | `ntropy show -n <id>` | Print one note drawn for a terminal; into a pipe it is plain text, so read exact text with `search -n -P`. |
 | `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `site theme init <name>` copies the built-in theme into the vault; `--strict` fails on its warnings. Read `ntropy skill site`. |
-| `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, rename asset folders with their notes, re-sync views and `.gitignore`. |
+| `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, rename asset folders with their notes and warn about broken or unmanaged asset links (`--strict` fails on them), re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. Read `ntropy skill views`. |
 | `ntropy tags -n` | Every tag with its note count; check it before inventing a tag. |
 | `ntropy info` | The active vault and how it resolved, the global default, vault statistics; `-p` prints the vault's absolute path alone. |

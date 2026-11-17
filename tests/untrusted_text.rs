@@ -360,6 +360,31 @@ fn reconcile_reports_a_hostile_asset_folder_name_escaped() {
 }
 
 #[test]
+fn reconcile_reports_hostile_asset_names_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-note.md"),
+        &format!("---\ntitle: Note\n---\n[x](<{RETITLE}.txt>)\n"),
+    );
+    let orphan = vault.join(format!("all-notes/_assets/{RETITLE}"));
+    fs::create_dir_all(&orphan).expect("orphan folder");
+
+    let output = run(ntropy(&vault).arg("reconcile"));
+    assert_no_raw_controls(&output);
+    let shown = stderr(&output);
+    assert!(
+        shown.contains(&format!("`_assets/{RETITLE_SHOWN}` belongs to no note")),
+        "{shown}"
+    );
+    assert!(
+        shown.contains(&format!("`{RETITLE_SHOWN}.txt` is outside every")),
+        "{shown}"
+    );
+}
+
+#[test]
 fn reconcile_reports_a_hostile_link_target_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");

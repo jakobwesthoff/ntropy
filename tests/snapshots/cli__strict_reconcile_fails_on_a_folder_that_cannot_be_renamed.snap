@@ -1,0 +1,20 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - reconcile
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+Reconciling vault at [VAULT]...
+renamed [ULID....................]-old.md -> [ULID....................]-brand-new.md
+ignored /by-tag/
+Scanned 1 note, reassigned 0 notes, renamed 1 file, relinked 0 links, synced 1 view, ignored 1 entry, unignored 0 entries, 1 warning.
+
+----- stderr -----
+warning: did not rename `_assets/[ULID....................]-old/` to `_assets/[ULID....................]-brand-new/`: another folder of this note is in the way

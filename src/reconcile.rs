@@ -18,7 +18,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
-use crate::asset::{self, AssetSync};
+use crate::asset::{self, AssetIssue, AssetSync};
 use crate::config::PerVaultConfig;
 use crate::error::Result;
 use crate::fsutil;
@@ -81,6 +81,9 @@ pub struct ReconcileReport {
     /// Asset folders renamed with their notes, the links into them rewritten,
     /// and the renames refused. Empty in an encrypted vault.
     pub assets: AssetSync,
+    /// What is wrong with asset links and with `_assets/`; each counts as a
+    /// warning. Empty in an encrypted vault.
+    pub asset_issues: Vec<AssetIssue>,
     /// Plaintext notes encrypted in place in an encrypted vault.
     pub adopted: Vec<Adopted>,
     /// `.gitignore` entries added to match the configured views.
@@ -242,6 +245,15 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
     };
     flush.finish()?;
 
+    // The links are judged after the rewrite, on the bodies as they are now,
+    // and the folders after the renames, so a folder or link that this run
+    // mended is not reported.
+    let asset_issues = if session.is_encrypted() {
+        Vec::new()
+    } else {
+        asset::check(session.layout(), &notes)?
+    };
+
     // A note dropped into an encrypted vault as plaintext is the one thing the
     // vault exists to prevent, so `reconcile` folds it in rather than leaving
     // it to be warned about forever.
@@ -283,6 +295,7 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
         refused,
         links_rewritten,
         assets,
+        asset_issues,
         adopted,
         gitignore_added: gitignore.added,
         gitignore_removed: gitignore.removed,
@@ -1660,6 +1673,91 @@ mod tests {
         }
 
         #[test]
+        fn a_file_in_the_way_of_the_new_name_refuses_the_rename() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-old"));
+            // Only directories count as folders, so the planned rename runs
+            // into a file of the new name and the move itself is refused.
+            std::fs::write(
+                session.layout().asset_folder(&format!("{ULID}-new-title")),
+                b"x",
+            )
+            .expect("a file of the new name");
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert!(report.assets.renamed.is_empty());
+            assert_eq!(report.assets.refused.len(), 1);
+            assert!(
+                session
+                    .layout()
+                    .asset_folder(&format!("{ULID}-old"))
+                    .is_dir()
+            );
+        }
+
+        #[test]
+        fn a_rename_that_fails_for_another_reason_is_an_error() {
+            use std::os::unix::fs::PermissionsExt;
+
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-old"));
+            let assets = session.layout().assets_dir();
+            std::fs::set_permissions(&assets, std::fs::Permissions::from_mode(0o555))
+                .expect("chmod");
+
+            let result = reconcile(&session);
+
+            std::fs::set_permissions(&assets, std::fs::Permissions::from_mode(0o755))
+                .expect("restore permissions for cleanup");
+            // As root the permission does not stop the rename.
+            if let Err(error) = result {
+                assert!(error.to_string().contains("renaming"), "{error}");
+            }
+        }
+
+        #[test]
+        fn links_that_are_not_into_assets_are_left_as_they_are() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "[t](transcript.txt)\n");
+            plant_folder(&session, &format!("{ULID}-old"));
+
+            reconcile(&session).expect("reconcile");
+
+            assert!(
+                body_of(&session, &format!("{ULID}-new-title.md")).contains("(transcript.txt)")
+            );
+        }
+
+        #[test]
+        fn the_report_carries_what_is_wrong_with_the_assets() {
+            let (_guard, session) = vault_with_view();
+            write_note(
+                &session,
+                &format!("{ULID}-note.md"),
+                &format!("---\ntitle: Note\n---\n![c](_assets/{ULID}-note/c.png) [t](t.txt)\n"),
+            );
+            plant_folder(&session, &format!("{OTHER}-gone"));
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert_eq!(report.asset_issues.len(), 3, "{:?}", report.asset_issues);
+        }
+
+        #[test]
+        fn a_folder_mended_by_the_run_is_not_reported() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-old"));
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert_eq!(report.asset_issues, []);
+        }
+
+        #[test]
         fn realign_leaves_the_folder_and_the_links() {
             let (_guard, session) = vault_with_view();
             let path = drifted_note(&session, "");
@@ -1707,6 +1805,7 @@ mod tests {
             assert!(report.renamed.is_empty());
             assert!(report.links_rewritten.is_empty());
             assert_eq!(report.assets, AssetSync::default());
+            assert_eq!(report.asset_issues, []);
             assert_eq!(report.views_synced, 0);
             assert_eq!(std::fs::read(&a).expect("read"), before);
             assert_eq!(std::fs::metadata(&a).expect("meta").modified().ok(), mtime);

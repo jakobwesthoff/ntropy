@@ -19,7 +19,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use ntropy::asset::FolderMove;
+use ntropy::asset::{AssetIssue, FolderMove};
 use ntropy::config::ViewConfig;
 use ntropy::id::Id;
 use ntropy::note::Note;
@@ -342,6 +342,13 @@ pub fn file_name(path: &Path) -> String {
 /// for a message (ADR 0071).
 pub fn asset_folder(path: &Path) -> String {
     format!("{}/{}/", layout::ASSETS_DIR, file_name(path))
+}
+
+/// One warning line for each finding about asset links and folders.
+pub fn print_asset_issues(issues: &[AssetIssue]) {
+    for issue in issues {
+        warn(&escape_controls(&issue.message()));
+    }
 }
 
 /// The warning for an asset folder that `reconcile` did not rename.

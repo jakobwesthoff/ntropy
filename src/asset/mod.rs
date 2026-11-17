@@ -15,9 +15,11 @@
 //! This module is pure: it classifies paths and names. Reading folders from
 //! disk, and everything that changes them, builds on it.
 
+mod check;
 mod links;
 mod sync;
 
+pub use check::{AssetIssue, check};
 pub use links::{LocalLink, local_links, relink_folder};
 pub use sync::{AssetSync, FolderMove, Relink, plan_renames, read_folders, stale_names, sync};
 

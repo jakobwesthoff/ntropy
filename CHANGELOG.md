@@ -21,6 +21,15 @@ change in any release
   `reconcile`, and `write` and the editor leave it alone. A folder that cannot
   be renamed because another folder of the note is in the way stays as it is and
   counts as a warning. An encrypted vault is not touched.
+- `reconcile` warns about a link to a file missing from the note's own asset
+  folder, a link into another note's folder, a link to a file outside every
+  `_assets/` folder (beside the notes, or in a vault-root `assets/` folder; such
+  a file still renders and exports as before) and an entry of `_assets/` that no
+  note owns, such as the folder of a deleted note. Nothing is deleted.
+  `--strict` fails on each of them, and not on a folder name that is stale
+  before the run renames it.
+  [ADR 0099](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0099-reconcile-checks-asset-links-and-the-assets-directory.md)
+  records the checks.
   [ADR 0098](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
   records the layout and
   [ADR 0097](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)

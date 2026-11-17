@@ -688,6 +688,7 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
     output::print_warnings(&report.warnings);
     output::print_refused_renames(&report.refused);
     output::print_refused_asset_renames(&report.assets.refused);
+    output::print_asset_issues(&report.asset_issues);
     print_skipped_views(&report.skipped_views);
     for reassignment in &report.reassigned {
         println!("{}", output::reassignment(reassignment));
@@ -743,8 +744,10 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
         );
         return Ok(ExitCode::SUCCESS);
     }
-    let extra_warnings =
-        report.refused.len() + report.assets.refused.len() + report.skipped_views.len();
+    let extra_warnings = report.refused.len()
+        + report.assets.refused.len()
+        + report.asset_issues.len()
+        + report.skipped_views.len();
     // A summary always prints, so even a no-op run confirms what happened.
     // Asset folders are named only when one moved, so a vault without them
     // reads as before.

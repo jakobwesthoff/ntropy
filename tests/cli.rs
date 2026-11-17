@@ -7381,6 +7381,113 @@ fn reconcile_renames_an_asset_folder_with_its_note() {
     assert!(note.contains(&format!("_assets/{ULID_A}-brand-new/chart.png")));
 }
 
+/// Plant one note with `body` and, when given, one folder in `_assets/` with a
+/// file of its own.
+fn plant_asset_case(vault: &Path, body: &str, folder: Option<&str>) {
+    write_note(
+        vault,
+        ULID_A,
+        "note",
+        &format!("---\ntitle: Note\n---\n{body}\n"),
+    );
+    if let Some(folder) = folder {
+        let folder = vault.join("all-notes/_assets").join(folder);
+        fs::create_dir_all(&folder).expect("asset folder");
+        fs::write(folder.join("chart.png"), b"png").expect("asset");
+    }
+}
+
+/// Run `reconcile` with and without `--strict` and return both exit states.
+fn strict_and_plain(vault: &Path) -> (bool, bool) {
+    let plain = ntropy(vault).arg("reconcile").output().expect("run");
+    let strict = ntropy(vault)
+        .args(["--strict", "reconcile"])
+        .output()
+        .expect("run");
+    (plain.status.success(), strict.status.success())
+}
+
+#[test]
+fn reconcile_warns_about_each_kind_of_asset_problem() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_B, "other", "---\ntitle: Other\n---\n");
+    plant_asset_case(
+        dir.path(),
+        &format!(
+            "![mine](_assets/{ULID_A}-note/missing.png)\n![theirs](_assets/{ULID_B}-other/chart.png)\n[beside](transcript.txt)"
+        ),
+        Some(&format!("{ULID_B}-other")),
+    );
+    fs::create_dir_all(dir.path().join(format!("all-notes/_assets/{ULID_C}-gone")))
+        .expect("orphan");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("reconcile");
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn strict_reconcile_fails_on_a_link_to_a_file_missing_from_the_own_folder() {
+    let dir = setup_vault();
+    plant_asset_case(
+        dir.path(),
+        &format!("![c](_assets/{ULID_A}-note/missing.png)"),
+        Some(&format!("{ULID_A}-note")),
+    );
+    assert_eq!(strict_and_plain(dir.path()), (true, false));
+}
+
+#[test]
+fn strict_reconcile_fails_on_a_link_into_another_notes_folder() {
+    let dir = setup_vault();
+    write_note(dir.path(), ULID_B, "other", "---\ntitle: Other\n---\n");
+    plant_asset_case(
+        dir.path(),
+        &format!("![c](_assets/{ULID_B}-other/chart.png)"),
+        Some(&format!("{ULID_B}-other")),
+    );
+    assert_eq!(strict_and_plain(dir.path()), (true, false));
+}
+
+#[test]
+fn strict_reconcile_fails_on_an_orphan_folder() {
+    let dir = setup_vault();
+    plant_asset_case(dir.path(), "body", Some(&format!("{ULID_C}-gone")));
+    assert_eq!(strict_and_plain(dir.path()), (true, false));
+}
+
+#[test]
+fn strict_reconcile_fails_on_a_link_outside_every_assets_folder() {
+    let dir = setup_vault();
+    plant_asset_case(dir.path(), "[beside](transcript.txt)", None);
+    assert_eq!(strict_and_plain(dir.path()), (true, false));
+}
+
+#[test]
+fn strict_reconcile_passes_when_it_renames_a_stale_folder_itself() {
+    let dir = setup_vault();
+    plant_note_with_assets(dir.path());
+    assert_eq!(strict_and_plain(dir.path()), (true, true));
+}
+
+#[test]
+fn strict_reconcile_fails_on_a_folder_that_cannot_be_renamed() {
+    let dir = setup_vault();
+    plant_note_with_assets(dir.path());
+    fs::create_dir_all(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-brand-new")),
+    )
+    .expect("the folder of the new name");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("reconcile");
+        assert_cmd_snapshot!(cmd);
+    });
+    assert_eq!(strict_and_plain(dir.path()), (true, false));
+}
+
 #[test]
 fn a_write_that_retitles_a_note_leaves_its_asset_folder_for_reconcile() {
     let dir = setup_vault();
