@@ -48,6 +48,12 @@ pub enum AssetError {
     )]
     SameFile { given: PathBuf, target: PathBuf },
 
+    #[error(
+        "`{first}` differs only in case from `{second}`; names that differ only in case are one \
+         file on some filesystems"
+    )]
+    CaseClash { first: String, second: String },
+
     #[error("`--as` names one file, but {0} files were given")]
     RenameNeedsOneFile(usize),
 
@@ -171,8 +177,9 @@ fn link_for(folder: &str, name: &str) -> Result<String, AssetError> {
 ///
 /// Everything is checked before the first file is touched: that each source is
 /// a file, that it is not already the file it would be stored as, that each
-/// name can be linked, that no two files would be stored under one name and,
-/// without `force`, that no file of that name is there.
+/// name can be linked, that no two names differ only in case, from each other
+/// or from a file of the folder, and, without `force`, that no file of that
+/// name is there.
 /// A symlink as a source is followed for a copy. A move of one copies what it
 /// points to and then removes the link itself, never its target, since moving
 /// the link would put a symlink into the folder.
@@ -190,6 +197,13 @@ pub fn add(
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())
         .unwrap_or_default();
+
+    // The entries a name may fold onto, read once: a file of this folder is
+    // replaced by `--force` only under exactly its own spelling.
+    let present: Vec<String> = fsutil::read_dir_entries(&folder)?
+        .into_iter()
+        .filter_map(|(path, _)| Some(path.file_name()?.to_str()?.to_owned()))
+        .collect();
 
     let mut planned: Vec<(PathBuf, String, String)> = Vec::new();
     for source in files {
@@ -219,6 +233,18 @@ pub fn add(
         if planned.iter().any(|(_, taken, _)| *taken == name) {
             return Err(AssetError::StoredTwice(name));
         }
+        let folded = fold(&name);
+        let clashing = planned
+            .iter()
+            .map(|(_, taken, _)| taken)
+            .chain(present.iter())
+            .find(|other| **other != name && fold(other) == folded);
+        if let Some(other) = clashing {
+            return Err(AssetError::CaseClash {
+                first: other.clone(),
+                second: name,
+            });
+        }
         if !options.force && std::fs::symlink_metadata(folder.join(&name)).is_ok() {
             return Err(AssetError::Exists(name));
         }
@@ -227,12 +253,59 @@ pub fn add(
 
     fsutil::create_dir_all(&folder)?;
     let mut added = Vec::new();
+    let mut placed: BTreeMap<Identity, String> = BTreeMap::new();
     for (source, name, link) in planned {
         let path = folder.join(&name);
+        // A name the checks above told apart can still be one entry on this
+        // filesystem. A forced placement would replace the file this run has
+        // just stored under the other spelling, so it stops instead.
+        if let Some(first) = placed_earlier(&placed, &path) {
+            return Err(AssetError::CaseClash {
+                first,
+                second: name,
+            });
+        }
         transfer(&source, &path, &folder, options)?;
+        if let Some(identity) = identity_of(&path) {
+            placed.insert(identity, name);
+        }
         added.push(Added { path, link });
     }
     Ok(added)
+}
+
+/// The name as a filesystem that folds case would compare it.
+///
+/// Every character goes to upper case and back to lower case, so `ſ` and `s`,
+/// `µ` and `μ`, `ς` and `σ`, and `ß` and `ss` meet, which `str::to_lowercase`
+/// misses: it depends on the context of a final sigma and leaves the rest
+/// alone. That is a superset of simple case folding. Canonically equivalent
+/// spellings (an accent as one character or as two) are not folded here; the
+/// check at transfer time catches them on the filesystems that treat them as
+/// one name.
+fn fold(name: &str) -> String {
+    name.chars()
+        .flat_map(char::to_uppercase)
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
+/// The entry identity of a file this run placed: device and inode.
+type Identity = (u64, u64);
+
+/// The entry identity of the directory entry at `path`, not following a symlink.
+fn identity_of(path: &Path) -> Option<Identity> {
+    let metadata = std::fs::symlink_metadata(path).ok()?;
+    Some((metadata.dev(), metadata.ino()))
+}
+
+/// The name of the file placed earlier in this run that `target` is, if any.
+///
+/// Whatever the filesystem folds or normalizes, two names that are one entry
+/// have one identity, so a forced placement can refuse to replace a file this
+/// run has just stored.
+fn placed_earlier(placed: &BTreeMap<Identity, String>, target: &Path) -> Option<String> {
+    placed.get(&identity_of(target)?).cloned()
 }
 
 /// Whether `source` is the entry at `target` or a way to reach its file.
@@ -883,6 +956,157 @@ mod tests {
         }
 
         assert_same_file_refused(&session, &note, &path, "Chart.pdf");
+    }
+
+    // ---- Names that differ only in case ----
+
+    /// A source file `name` in the directory `incoming/<sub>/`.
+    fn source_in(session: &VaultSession, sub: &str, name: &str, content: &[u8]) -> PathBuf {
+        let dir = session.root().join("incoming").join(sub);
+        std::fs::create_dir_all(&dir).expect("source directory");
+        let path = dir.join(name);
+        std::fs::write(&path, content).expect("source");
+        path
+    }
+
+    fn clash_options(move_files: bool, force: bool) -> AddOptions {
+        AddOptions {
+            move_files,
+            force,
+            ..opts()
+        }
+    }
+
+    /// Two sources in different directories, so the test runs on any
+    /// filesystem, stored under names that fold to one.
+    fn assert_two_names_clash(first: &str, second: &str) {
+        for (move_files, force) in [(false, false), (false, true), (true, false), (true, true)] {
+            let (_g, session) = vault_with_view();
+            let note = note_with(&session, "body");
+            let a = source_in(&session, "x", first, b"first");
+            let b = source_in(&session, "y", second, b"second");
+
+            let err = add(
+                session.layout(),
+                &note,
+                &[a.clone(), b.clone()],
+                &clash_options(move_files, force),
+            )
+            .expect_err("two names that fold to one are refused");
+
+            assert!(
+                matches!(err, AssetError::CaseClash { .. }),
+                "{first} / {second} move={move_files} force={force}: {err:?}"
+            );
+            assert!(a.exists() && b.exists(), "nothing was moved");
+            assert!(
+                std::fs::read_dir(session.layout().asset_folder(FOLDER)).is_err(),
+                "nothing was created"
+            );
+        }
+    }
+
+    #[test]
+    fn two_sources_differing_only_in_case_are_refused() {
+        assert_two_names_clash("shot.pdf", "Shot.pdf");
+    }
+
+    #[test]
+    fn names_a_filesystem_folds_beyond_ascii_are_refused() {
+        assert_two_names_clash("\u{17f}hot.pdf", "shot.pdf");
+        assert_two_names_clash("Ma\u{df}.pdf", "MASS.pdf");
+        assert_two_names_clash(
+            "\u{39f}\u{394}\u{39f}\u{3a3}.pdf",
+            "\u{3bf}\u{3b4}\u{3bf}\u{3c3}.pdf",
+        );
+    }
+
+    #[test]
+    fn a_source_differing_only_in_case_from_a_stored_file_is_refused_even_with_force() {
+        for force in [false, true] {
+            let (_g, session) = vault_with_view();
+            let note = note_with(&session, "body");
+            let (_, path) = stored(&session, "shot.pdf", b"keep");
+            let file = source(&session, "Shot.pdf", b"new");
+
+            let err = add(
+                session.layout(),
+                &note,
+                std::slice::from_ref(&file),
+                &clash_options(false, force),
+            )
+            .expect_err("a differently cased name is another spelling of the file");
+
+            assert!(matches!(err, AssetError::CaseClash { .. }), "{err:?}");
+            assert_eq!(std::fs::read(&path).expect("read"), b"keep");
+        }
+    }
+
+    #[test]
+    fn a_case_only_rename_next_to_the_stored_file_is_refused_on_every_filesystem() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (_, path) = stored(&session, "chart.pdf", b"keep");
+        let file = source(&session, "x.pdf", b"new");
+        let options = AddOptions {
+            rename: Some("Chart.pdf".to_string()),
+            force: true,
+            ..opts()
+        };
+
+        let err = add(session.layout(), &note, &[file], &options).expect_err("case clash");
+
+        assert!(matches!(err, AssetError::CaseClash { .. }), "{err:?}");
+        assert_eq!(std::fs::read(&path).expect("read"), b"keep");
+    }
+
+    #[test]
+    fn a_target_placed_earlier_in_the_run_is_recognised_by_its_entry() {
+        let (_g, session) = vault_with_view();
+        let (folder, path) = stored(&session, "a.pdf", b"first");
+        let hard = folder.join("hard.pdf");
+        std::fs::hard_link(&path, &hard).expect("hard link");
+        let via = session.root().join("via");
+        std::os::unix::fs::symlink(&folder, &via).expect("symlink");
+        let mut placed = BTreeMap::new();
+        placed.insert(identity_of(&path).expect("identity"), "a.pdf".to_string());
+
+        assert_eq!(placed_earlier(&placed, &hard), Some("a.pdf".to_string()));
+        assert_eq!(
+            placed_earlier(&placed, &via.join("a.pdf")),
+            Some("a.pdf".to_string())
+        );
+        assert_eq!(placed_earlier(&placed, &folder.join("absent.pdf")), None);
+    }
+
+    #[test]
+    fn a_forced_placement_never_replaces_a_file_this_run_placed() {
+        // Canonically equivalent spellings are one name on APFS, which the
+        // up-front check does not fold; the second placement would replace the
+        // first file there. Skipped where the filesystem keeps them apart.
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let nfc = "\u{e9}.pdf";
+        let nfd = "e\u{301}.pdf";
+        let probe = session.root().join(nfc);
+        std::fs::write(&probe, b"x").expect("probe");
+        if !session.root().join(nfd).exists() {
+            return;
+        }
+        let a = source_in(&session, "x", nfc, b"first");
+        let b = source_in(&session, "y", nfd, b"second");
+
+        let err = add(session.layout(), &note, &[a, b], &clash_options(true, true))
+            .expect_err("the second spelling is the first file");
+
+        assert!(matches!(err, AssetError::CaseClash { .. }), "{err:?}");
+        let folder = session.layout().asset_folder(FOLDER);
+        let stored: Vec<_> = std::fs::read_dir(&folder).expect("folder").collect();
+        assert_eq!(stored.len(), 1);
+        assert_eq!(
+            std::fs::read(stored[0].as_ref().expect("entry").path()).expect("read"),
+            b"first"
+        );
     }
 
     #[test]

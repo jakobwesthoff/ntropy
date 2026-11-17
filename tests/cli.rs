@@ -7962,9 +7962,8 @@ fn vault_for_assets() -> tempfile::TempDir {
 
 /// Put a file called `name` into `<vault>/incoming/` and return its path.
 fn incoming(vault: &Path, name: &str, content: &[u8]) -> PathBuf {
-    let dir = vault.join("incoming");
-    fs::create_dir_all(&dir).expect("incoming");
-    let path = dir.join(name);
+    let path = vault.join("incoming").join(name);
+    fs::create_dir_all(path.parent().expect("a parent")).expect("incoming");
     fs::write(&path, content).expect("incoming file");
     path
 }
@@ -8116,6 +8115,29 @@ fn asset_add_refuses_a_file_that_is_already_in_the_folder_and_keeps_it() {
         "the message names source and target: {stderr}"
     );
     assert_eq!(fs::read(&stored).expect("the file is still there"), b"png");
+}
+
+#[test]
+fn asset_add_refuses_two_files_whose_names_differ_only_in_case_and_changes_nothing() {
+    let dir = vault_for_assets();
+    let first = incoming(dir.path(), "x/shot.pdf", b"first");
+    let second = incoming(dir.path(), "y/Shot.pdf", b"second");
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "add", "--move", "--force", ULID_A])
+        .arg(&first)
+        .arg(&second)
+        .output()
+        .expect("run");
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("differs only in case"), "{stderr}");
+    assert!(first.exists() && second.exists(), "nothing was moved");
+    assert!(
+        !asset_folder_of_a(dir.path()).exists(),
+        "nothing was created"
+    );
 }
 
 #[test]

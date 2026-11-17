@@ -37,7 +37,15 @@ is otherwise refused. Nothing is added unless every file can be. A file that is
 already the file it would be stored as, reached by the same path, through a
 symlinked directory such as a view's `_assets` link, by a hard link or as a
 symlink to it, is refused, since the move or the forced copy would remove the
-only copy. A name whose
+only copy. Names are compared without regard to case, since a vault moves
+between case-sensitive and case-insensitive filesystems: two files that would be
+stored under names that differ only in case, and a file whose name differs only
+in case from one already in the folder, are refused, also with `--force`, which
+replaces exactly the file of that name. The comparison folds each character to
+upper case and back to lower case, so `ß` and `ss` or `ς` and `σ` meet.
+Spellings that differ only in canonical equivalence (an accent as one character
+or as two) are caught at transfer time: the copy stops instead of replacing a
+file this run has just stored. A name whose
 link the Markdown parser of ADR 0097 would not read back as the file is refused
 with the hint to use `--as`.
 

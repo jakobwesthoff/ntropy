@@ -476,7 +476,13 @@ source must be a file and not the file it would be stored as (the same
 directory entry reached through a symlinked directory such as a view's `_assets`
 link, a hard link of it, or a symlink to it: a move or a forced copy would remove
 the only copy), two files may not be stored under one name, and a file of
-that name in the folder is refused unless `--force` replaces it. A copy streams
+that name in the folder is refused unless `--force` replaces it. Names are
+compared without regard to case (each character folded to upper case and back
+to lower case): two files whose names differ only in case, and a file whose name
+differs only in case from one in the folder, are refused with a case clash, also
+with `--force`, which replaces exactly the file of that name. A forced placement
+also never replaces a file this run has just stored, which catches names that
+are one entry only on some filesystems, such as canonically equivalent accents. A copy streams
 through a hidden temp file in the folder and is renamed into place. `--move`
 renames on one device, and copies and removes the source across devices; a
 symlink as the source is copied by what it points to and the link itself is
