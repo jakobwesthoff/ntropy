@@ -19,7 +19,7 @@ pub mod view_admin;
 pub mod write;
 
 pub use create::{TodayOutcome, create_empty_note, create_note, today_note};
-pub use delete::delete_note;
+pub use delete::{AssetFolder, DeletePlan, delete_note, plan_delete};
 pub use info::{VaultStats, vault_stats};
 pub use init::{InitOptions, InitReport, init_vault, init_vault_with};
 pub use locate::{TargetError, locate};

@@ -23,7 +23,7 @@ use ntropy::asset::{AssetIssue, FolderMove};
 use ntropy::config::ViewConfig;
 use ntropy::id::Id;
 use ntropy::note::Note;
-use ntropy::ops::{TagCount, VaultStats};
+use ntropy::ops::{DeletePlan, TagCount, VaultStats};
 use ntropy::reconcile::{Realignment, Reassignment, Rename};
 use ntropy::scan::{ScanWarning, WarningKind};
 use ntropy::text::escape_controls;
@@ -344,6 +344,33 @@ pub fn asset_folder(path: &Path) -> String {
     format!("{}/{}/", layout::ASSETS_DIR, file_name(path))
 }
 
+/// The confirmation question of `delete`. `assets` is the number of files
+/// and their size when the note's asset folder goes with it.
+pub fn delete_prompt(reference: &str, assets: Option<(usize, u64)>) -> String {
+    match assets {
+        None => format!("Delete {reference}? [y/N] "),
+        Some((files, bytes)) => format!(
+            "Delete {reference} and its {} ({})? [y/N] ",
+            super::plural(files, "asset", "assets"),
+            human_size(bytes)
+        ),
+    }
+}
+
+/// The warning for each asset folder `delete` keeps because other notes link
+/// into it.
+pub fn print_kept_assets(plan: &DeletePlan) {
+    let referrers: Vec<String> = plan.referrers.iter().map(|path| file_name(path)).collect();
+    for folder in &plan.folders {
+        warn(&format!(
+            "keeping `{}` ({}), linked by {}; pass --remove-assets to remove it",
+            asset_folder(&folder.path),
+            super::plural(folder.files, "file", "files"),
+            referrers.join(", ")
+        ));
+    }
+}
+
 /// One warning line for each finding about asset links and folders.
 pub fn print_asset_issues(issues: &[AssetIssue]) {
     for issue in issues {
@@ -454,6 +481,23 @@ mod tests {
     use super::*;
 
     const ULID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+
+    #[test]
+    fn the_prompt_names_the_note() {
+        assert_eq!(delete_prompt("a note", None), "Delete a note? [y/N] ");
+    }
+
+    #[test]
+    fn the_prompt_names_the_assets_that_go_with_the_note() {
+        assert_eq!(
+            delete_prompt("a note", Some((3, 1_363_148))),
+            "Delete a note and its 3 assets (1.3 MiB)? [y/N] "
+        );
+        assert_eq!(
+            delete_prompt("a note", Some((1, 12))),
+            "Delete a note and its 1 asset (12 B)? [y/N] "
+        );
+    }
 
     #[test]
     fn human_size_picks_the_binary_unit() {

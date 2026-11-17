@@ -451,6 +451,20 @@ command only under `--strict`.
     ntropy write "$note" < note.md
     ntropy search -n -P <ulid> | rewrite | ntropy write <ulid>
 
+### `delete`
+
+Removes the note's file, then the asset folder the note owns, and syncs the
+views (ADR 0102). The folder is found by the ULID in its name, so a folder with
+a stale slug goes too. The confirmation names it: `Delete <note> and its 3
+assets (1.3 MiB)? [y/N]`, and the run prints `Deleted 3 assets (1.3 MiB)`
+after the note's own line. When another note links a file in the folder, the
+folder stays: a `warning:` line on stderr names the folder, its file count and
+the notes that link it, and `--remove-assets` removes it anyway. `--force`
+keeps its one meaning, skipping the confirmation. The note goes first, so a
+crash leaves a folder that `reconcile` reports and never a note whose links
+point nowhere. A symlink in the folder is removed as a link and never
+followed, and an encrypted vault has no asset folders to remove.
+
 ### `reconcile`
 
 Give copied notes ULIDs of their own, realign filenames whose slugs drifted
@@ -497,7 +511,7 @@ and completion all use this mask.
 
 The `.gitignore` sync adds an entry for every configured view and prunes the
 entries of views removed from config, leaving user-authored lines untouched.
-ntropy never deletes a directory, so a removed view's directory stays on disk;
+ntropy never deletes a view's directory, so a removed view's directory stays on disk;
 because its ignore entry is gone it becomes visible to git, which the run
 reports so the user can delete it.
 
@@ -537,7 +551,7 @@ edit` in v1; editing a view is remove + add.
   `.gitignore` (ADR 0032).
 - `view remove <name>` — delete a view definition and prune its `.gitignore`
   entry. It takes any configured name, valid or not. The view's directory is
-  left on disk (ntropy never deletes a directory) and, for a valid name,
+  left on disk (ntropy never deletes a view's directory) and, for a valid name,
   reported so you can remove it yourself.
 
 `view add` and `view remove` warn about every other configured view they skip

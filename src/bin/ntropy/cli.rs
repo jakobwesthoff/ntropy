@@ -171,13 +171,17 @@ pub enum Command {
     ///
     /// Brings the root `.gitignore` in line with the configured views, adding
     /// missing entries and pruning those for views you have removed. ntropy
-    /// never deletes a directory, so a removed view's directory is left in place
+    /// never deletes a view's directory, so a removed view's directory is left in place
     /// and reported for you to delete.
     Reconcile,
 
     /// Delete a note by id or query.
     ///
-    /// An empty selector is refused instead of matching every note.
+    /// An empty selector is refused instead of matching every note. The
+    /// note's asset folder, `all-notes/_assets/<note file name>/`, is removed
+    /// with it, and the confirmation says so. When another note links a file
+    /// in the folder, the folder stays, the notes that link it are named, and
+    /// `--remove-assets` removes it anyway.
     Delete {
         /// A full ULID, a note's filename or path, or a query DSL expression,
         /// as trailing arguments that are each read on their own; words in one
@@ -194,6 +198,11 @@ pub enum Command {
         /// Skip the confirmation prompt.
         #[arg(short = 'f', long)]
         force: bool,
+        /// Remove the note's asset folder even when other notes link a file
+        /// in it. Without the flag such a folder stays and the notes that
+        /// link it are named.
+        #[arg(long)]
+        remove_assets: bool,
     },
 
     /// Render a note to a document artifact.
@@ -449,7 +458,7 @@ pub enum ViewCommand {
     },
     /// Remove a view definition and prune its `.gitignore` entry.
     ///
-    /// The view's directory is left on disk (ntropy never deletes a directory)
+    /// The view's directory is left on disk (ntropy never deletes a view's directory)
     /// and reported so you can remove it yourself.
     Remove {
         /// The view name to remove.

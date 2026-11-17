@@ -1,0 +1,20 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - delete
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - "-f"
+    - "-n"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+Deleted [DATE....]  Doomed  ([ULID....................])
+
+----- stderr -----
+warning: keeping `_assets/[ULID....................]-doomed/` (3 files), linked by [ULID....................]-keeper.md; pass --remove-assets to remove it

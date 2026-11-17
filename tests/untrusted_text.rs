@@ -407,6 +407,38 @@ fn a_render_reports_a_hostile_foreign_asset_path_escaped() {
 }
 
 #[test]
+fn delete_names_hostile_referrers_and_a_hostile_folder_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-doomed.md"),
+        "---\ntitle: Doomed\n---\n",
+    );
+    note(
+        &vault,
+        &format!("{ULID_B}-{RETITLE}.md"),
+        &format!("---\ntitle: Keeper\n---\n![x](_assets/{ULID_A}-doomed/x.png)\n"),
+    );
+    let folder = vault.join(format!("all-notes/_assets/{ULID_A}-{RETITLE}"));
+    fs::create_dir_all(&folder).expect("asset folder");
+    fs::write(folder.join("x.png"), b"png").expect("asset");
+
+    let output = run(ntropy(&vault).args(["delete", ULID_A, "-f"]));
+
+    assert_no_raw_controls(&output);
+    let shown = stderr(&output);
+    assert!(
+        shown.contains(&format!("keeping `_assets/{ULID_A}-{RETITLE_SHOWN}/`")),
+        "{shown}"
+    );
+    assert!(
+        shown.contains(&format!("{ULID_B}-{RETITLE_SHOWN}.md")),
+        "{shown}"
+    );
+}
+
+#[test]
 fn reconcile_reports_a_hostile_link_target_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");

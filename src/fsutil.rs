@@ -399,12 +399,12 @@ impl Drop for FlushScope {
 
 /// Remove `dir` and everything under it.
 ///
-/// The one place ntropy deletes a directory tree: a conversion to encrypted
-/// storage removes the materialized views, which an encrypted vault cannot
-/// have. Elsewhere ntropy removes only directories it has just emptied, with
-/// [`remove_dir_if_empty`], and leaves any other directory for the user
-/// (ADR 0018).
-#[cfg(feature = "encryption")]
+/// Where ntropy deletes a directory tree: a conversion to encrypted storage
+/// removes the materialized views, which an encrypted vault cannot have, and
+/// `delete` removes the asset folder of the note it deletes (ADR 0102).
+/// Elsewhere ntropy removes only directories it has just emptied, with
+/// [`remove_dir_if_empty`], and leaves any other directory for the user.
+/// A symlink in the tree is removed as a link and never followed.
 pub fn remove_dir_all(dir: &Path) -> Result<()> {
     std::fs::remove_dir_all(dir).map_err(|e| FsError::new("removing directory tree", dir, e))
 }

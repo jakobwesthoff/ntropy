@@ -7664,6 +7664,117 @@ fn site_does_not_copy_a_file_from_another_notes_folder() {
     );
 }
 
+/// A vault with the note A and three files in its asset folder, and the note
+/// B, which links `link` when it is not empty.
+fn vault_for_deleting_assets(link: &str) -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "doomed",
+        "---\ntitle: Doomed\n---\nbody\n",
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "keeper",
+        &format!("---\ntitle: Keeper\n---\n{link}\n"),
+    );
+    let folder = dir
+        .path()
+        .join(format!("all-notes/_assets/{ULID_A}-doomed"));
+    fs::create_dir_all(&folder).expect("asset folder");
+    for name in ["a.png", "b.png", "c.pdf"] {
+        fs::write(folder.join(name), vec![b'x'; 1024]).expect("asset");
+    }
+    dir
+}
+
+#[test]
+fn delete_removes_the_notes_asset_folder_with_it_and_says_so() {
+    let dir = vault_for_deleting_assets("");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["delete", ULID_A, "-f", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(
+        !dir.path()
+            .join(format!("all-notes/{ULID_A}-doomed.md"))
+            .exists()
+    );
+    assert!(
+        !dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-doomed"))
+            .exists()
+    );
+}
+
+#[test]
+fn delete_keeps_the_asset_folder_another_note_links_and_names_that_note() {
+    let dir = vault_for_deleting_assets(&format!("![c](_assets/{ULID_A}-doomed/a.png)"));
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["delete", ULID_A, "-f", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(
+        !dir.path()
+            .join(format!("all-notes/{ULID_A}-doomed.md"))
+            .exists()
+    );
+    assert!(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-doomed/a.png"))
+            .exists()
+    );
+}
+
+#[test]
+fn delete_with_remove_assets_removes_a_folder_another_note_links() {
+    let dir = vault_for_deleting_assets(&format!("![c](_assets/{ULID_A}-doomed/a.png)"));
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["delete", ULID_A, "-f", "-n", "--remove-assets"]);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(
+        !dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-doomed"))
+            .exists()
+    );
+}
+
+#[test]
+fn delete_without_force_and_without_a_terminal_refuses_before_touching_the_folder() {
+    let dir = vault_for_deleting_assets("");
+    let out = ntropy(dir.path())
+        .args(["delete", ULID_A, "-n"])
+        .output()
+        .expect("run ntropy");
+    assert!(!out.status.success());
+    assert!(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-doomed/a.png"))
+            .exists()
+    );
+}
+
+#[test]
+fn a_reconcile_after_a_delete_that_kept_the_folder_reports_it_as_an_orphan() {
+    let dir = vault_for_deleting_assets(&format!("![c](_assets/{ULID_A}-doomed/a.png)"));
+    let deleted = ntropy(dir.path())
+        .args(["delete", ULID_A, "-f", "-n"])
+        .output()
+        .expect("run ntropy");
+    assert!(deleted.status.success());
+
+    let out = ntropy(dir.path()).arg("reconcile").output().expect("run");
+
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("belongs to no note"), "{stderr}");
+}
+
 #[test]
 fn edit_no_match_exits_nonzero() {
     // A selector matching nothing prints the no-match message and exits

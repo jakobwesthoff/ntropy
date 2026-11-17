@@ -43,6 +43,12 @@ change in any release
   export as before.
   [ADR 0101](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0101-renders-and-exports-serve-only-a-notes-own-assets.md)
   records the rule.
+- `delete` removes the note's asset folder with the note, and its confirmation
+  says so with the number of files and their size. When another note links a
+  file in the folder, the folder stays, the notes that link it are named, and
+  the new `--remove-assets` removes it anyway.
+  [ADR 0102](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0102-delete-removes-the-notes-asset-folder.md)
+  records the behaviour.
   [ADR 0098](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
   records the layout and
   [ADR 0097](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)

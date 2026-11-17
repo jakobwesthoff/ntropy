@@ -300,7 +300,7 @@ own entries are ever pruned. A view skipped for an invalid name keeps the entry
 it already has, and none is added for it, so its old directory stays ignored
 and the invalid name is never written into the file.
 
-ntropy never deletes a directory. Removing a view (whether by `view remove` or by
+ntropy never deletes a view's directory. Removing a view (whether by `view remove` or by
 editing config and reconciling) prunes the ignore entry but leaves the view's
 now-stale directory on disk; the command reports it so the user can delete it.
 Because its ignore entry is gone, that directory becomes visible to git.

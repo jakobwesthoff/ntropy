@@ -137,10 +137,15 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         }
         Command::Write { target } => cmd_write(&cli.global, &session, &target),
         Command::Reconcile => cmd_reconcile(&cli.global, &session),
-        Command::Delete { selector, force } => cmd_delete(
+        Command::Delete {
+            selector,
+            force,
+            remove_assets,
+        } => cmd_delete(
             &session,
             Selector::from_arguments(&selector),
             force,
+            remove_assets,
             interactive,
         ),
         Command::Render {
@@ -781,6 +786,7 @@ fn cmd_delete(
     session: &VaultSession,
     selector: Selector,
     force: bool,
+    remove_assets: bool,
     interactive: bool,
 ) -> Result<ExitCode> {
     // An empty selector matches every note, and a vault of one note would
@@ -806,7 +812,7 @@ fn cmd_delete(
             eprintln!("error: no note matches `{}`", selector.shown());
             return Ok(ExitCode::FAILURE);
         }
-        [note] => (note.path.clone(), output::note_reference(note)?),
+        [note] => (note.id, note.path.clone(), output::note_reference(note)?),
         notes => {
             if interactive {
                 let candidates = ops::to_candidates(notes)?;
@@ -818,7 +824,7 @@ fn cmd_delete(
                             &selected.title,
                             &selected.tags,
                         );
-                        (selected.path, reference)
+                        (selected.id, selected.path, reference)
                     }
                     None => return Ok(ExitCode::SUCCESS),
                 }
@@ -828,13 +834,31 @@ fn cmd_delete(
             }
         }
     };
-    let (path, reference) = target;
+    let (id, path, reference) = target;
+
+    // The asset folder goes with the note unless another note links a file in
+    // it. The plan is made before the prompt so the question can say what
+    // goes.
+    let plan = ops::plan_delete(session, id).context("while planning the deletion")?;
+    let keep_folders = !plan.referrers.is_empty() && !remove_assets;
+    if keep_folders {
+        output::print_kept_assets(&plan);
+    }
+    let removed: Vec<PathBuf> = if keep_folders {
+        Vec::new()
+    } else {
+        plan.folders
+            .iter()
+            .map(|folder| folder.path.clone())
+            .collect()
+    };
+    let removing = (!removed.is_empty()).then(|| (plan.files(), plan.bytes()));
 
     if !force {
         if !interactive {
             bail!("refusing to delete {reference} without --force in non-interactive mode");
         }
-        if !confirm(&format!("Delete {reference}? [y/N] "))? {
+        if !confirm(&output::delete_prompt(&reference, removing))? {
             println!("Aborted.");
             return Ok(ExitCode::SUCCESS);
         }
@@ -844,9 +868,16 @@ fn cmd_delete(
     // scans the same vault, so its scan warnings are discarded to avoid
     // printing each one twice. Skipped views come from the config, which
     // nothing above reported on.
-    let refresh = ops::delete_note(session, &path).context("while deleting the note")?;
+    let refresh = ops::delete_note(session, &path, &removed).context("while deleting the note")?;
     print_skipped_views(&refresh.skipped_views);
     println!("Deleted {reference}");
+    if let Some((files, bytes)) = removing {
+        println!(
+            "Deleted {} ({})",
+            plural(files, "asset", "assets"),
+            output::human_size(bytes)
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 
@@ -865,7 +896,7 @@ fn cmd_view(session: &VaultSession, sub: ViewCommand) -> Result<ExitCode> {
             let sync = ops::remove_view(session, &name).context("while removing the view")?;
             println!("Removed view `{name}`.");
             print_skipped_views(&sync.skipped_views);
-            // ntropy never deletes the directory; tell the user it remains so
+            // ntropy never deletes a view's directory; tell the user it remains so
             // they can clean up the now-stale (and no longer ignored) tree.
             // An invalid name never becomes a path, so its directory is not
             // looked up (ADR 0064).
@@ -1090,7 +1121,7 @@ pub(super) fn plural(count: usize, singular: &str, plural: &str) -> String {
 /// Report `.gitignore` changes, one line per entry.
 ///
 /// A pruned entry also warns that the view's directory was *not* removed —
-/// ntropy never deletes directories — so the user can clean it up themselves.
+/// ntropy never deletes a view's directory — so the user can clean it up themselves.
 fn report_gitignore_changes(added: &[String], removed: &[String]) {
     for entry in added {
         println!("ignored {entry}");

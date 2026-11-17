@@ -165,7 +165,7 @@ encrypted vaults.
 | `ntropy today -n -p` | Print today's daily note path, creating it on first use each day; `--id` prints the ULID. |
 | `ntropy write <id\|filename\|path>` | Replace one note with the whole text on stdin, realign its filename and refresh views. It names its target, never searches. Refuses text that is not a well-formed note. Prints the path. |
 | `ntropy search -n [selector…]` | List notes as a plain table, newest first (alias `list`); `-p`, `--id`, `-P` as in rule 8. Query language: [references/querying.md](references/querying.md), or `ntropy skill querying`. |
-| `ntropy delete -n -f <id>` | Delete one note and refresh views. |
+| `ntropy delete -n -f <id>` | Delete one note, its asset folder (kept when another note links it; `--remove-assets` removes it anyway) and refresh views. |
 | `ntropy render -n -p <id>` | Render one note: `--to pdf` (default), `typst`, `html` or `ansi`; `-o` names the artifact, `--force` replaces one, `--theme` overrides the theme. Read `ntropy skill rendering`. |
 | `ntropy show -n <id>` | Print one note drawn for a terminal; into a pipe it is plain text, so read exact text with `search -n -P`. |
 | `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `site theme init <name>` copies the built-in theme into the vault; `--strict` fails on its warnings. Read `ntropy skill site`. |

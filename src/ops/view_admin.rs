@@ -138,7 +138,7 @@ pub fn add_view(session: &VaultSession, name: &str, field: &str) -> Result<ViewC
 /// name is cleaned up.
 ///
 /// The view's directory is intentionally left on disk; ntropy never deletes a
-/// directory. The returned report names the pruned entry so the caller can tell
+/// view's directory. The returned report names the pruned entry so the caller can tell
 /// the user the directory remains.
 pub fn remove_view(vault: &Vault, name: &str) -> Result<ViewConfigSync> {
     let config_path = vault.layout().config_file();
@@ -443,7 +443,7 @@ mod tests {
 
         let report = remove_view(&v, "by-tag").expect("remove");
         assert!(list_views(&v).expect("list").is_empty());
-        // ntropy never deletes the directory; the stale tree is left in place.
+        // ntropy never deletes a view's directory; the stale tree is left in place.
         assert!(v.root().join("by-tag").exists());
         // Only the managed ignore entry is pruned.
         assert_eq!(report.gitignore.removed, ["/by-tag/"]);
