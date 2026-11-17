@@ -77,12 +77,9 @@ There are no comparison operators (`>`, `<`, date ranges) in the language.
 
 ## Non-interactive output
 
-ALWAYS pass `-n`. Piping or capturing the output does NOT suppress the picker
-or the editor: ntropy stays interactive whenever a controlling terminal
-exists, so an un-flagged command inside `$(...)` or a pipeline blocks waiting
-for keys. Only `-n` guarantees plain behavior. The plain table is one note per
-line, newest first, space-aligned columns padded to the widest cell, with an
-uppercase header row:
+With `-n` (the core's first rule) the plain table is one note per line, newest
+first, space-aligned columns padded to the widest cell, with an uppercase
+header row:
 
 ```
 ID                          DATE        TITLE                TAGS                   PATH
@@ -119,22 +116,29 @@ ntropy search -n -p tag:work
 
 `tags` and `view list` print the same style of headed, space-aligned table.
 
-## Exit codes
+## Exit codes and stderr
 
-A `search` that matches nothing prints `No notes matched your search criteria.`
-to stderr and exits non-zero; matches exit zero. Branch on existence without
-parsing anything:
+`search` exits 1 in three situations that differ only on stderr:
+
+| Situation | stderr | stdout |
+|-----------|--------|--------|
+| nothing matched, an empty vault included | `No notes matched your search criteria.` | nothing |
+| an error: an unresolvable vault, an invalid query or regex, an ambiguous `-P` | a line that starts `error:` | nothing |
+| `--strict` and a warning, such as a malformed note | `warning: ...` lines | the notes that matched still print |
+
+Matches exit 0 without `--strict`. Judge a search by its stderr as well as its
+exit code, or an error reads as "nothing matched":
 
 ```bash
-if ntropy search -n tag:urgent > /dev/null 2>&1; then
-  echo "something is on fire"
+err=$(mktemp)
+if ids=$(ntropy search -n --id tag:urgent 2>"$err"); then
+  echo "found: $ids"
+elif grep -q '^No notes matched' "$err"; then
+  echo "nothing is urgent"
+else
+  cat "$err" >&2     # error: or a --strict warning
 fi
 ```
-
-This includes the no-selector form: listing an empty vault exits non-zero too.
-Treat exit 1 from `search` as "nothing matched", not as a command failure;
-genuine failures (unresolvable vault, invalid query/regex) print an `error:`
-line to stderr instead of the no-match message.
 
 ## Deleting
 
@@ -143,14 +147,13 @@ ntropy delete -n -f 01KWVBW61WHJY7K27WNETSF641
 ```
 
 `delete` must resolve to **exactly one** note: an ambiguous query fails with
-the candidate list and a non-zero exit. Non-interactive deletion requires
-`--force`/`-f` (there is no prompt to answer), so the safe agent pattern is:
-`search -n` first, confirm the single intended ULID, then `delete -n -f
-<ulid>`. NEVER delete by a broad query; pass the ULID.
-
-`delete` refuses an empty selector with `error: the selector is empty`, with
-no lookup and no picker. An unset shell variable (`delete -n -f "$ID"`)
-therefore cannot delete a note.
+the candidate list and a non-zero exit, and nothing is deleted. A ULID that a
+copy of the note shares is ambiguous too: run `ntropy reconcile`, which gives
+the copy its own ULID, or select the note by its filename or path. `delete` does
+not see a malformed note (it answers `no note matches`); `write` it into shape
+first. `delete` refuses an empty selector with `error: the selector is empty`,
+with no lookup and no picker, so an unset shell variable
+(`delete -n -f "$ID"`) cannot delete a note.
 
 Deleting removes the canonical file and refreshes the views.
 

@@ -8,54 +8,34 @@ identity; the slug is a readable echo of the title. Filing happens through
 metadata, not folders: put a note's dimensions (tags, status, project, …) in
 frontmatter and let queries and views do the organizing.
 
-## Creating a note (the only correct way)
+## Creating a note
 
-ntropy owns the parts you must not invent: the ULID, the location and the
-filename. You own the content. `new` hands you the first, and `write` takes the
-second:
+The core's rules 3 and 4 are the whole flow: `new --empty -p`, then `write` the
+whole note. This section holds what they leave out.
 
-```bash
-note=$(ntropy new --empty -p Refactor the parser)   # trailing args join into the title
-ntropy write "$note" <<'EOF'
----
-title: Refactor the parser
-tags: [engineering, refactor]
-status: in progress
----
-# Refactor the parser
-
-Why, and what changes.
-EOF
-```
-
-That is the whole flow. No read-back, no template to work around, no
-`reconcile` afterwards, and it is the same in an encrypted vault as in a
-plaintext one.
-
-`--print` (short form `-p`) makes `new` print the path instead of opening an
-editor. `--id` does the same and prints the new note's ULID, for a script that
-refers to the note by it (`id=$(ntropy new --id Quarterly review)`); it
-conflicts with `-p`. `--empty` makes it stamp no template; `--template` is
-rejected alongside it, since one stamps content and the other writes none.
-
-**FORBIDDEN: hand-creating files in `all-notes/`.** You would have to invent a
-ULID; a wrong one corrupts note identity, and a file carrying another note's
-ULID, such as a copy, is skipped by every command with a warning until
-`ntropy reconcile` gives it a ULID of its own.
+Trailing arguments of `new` join into the title. `--print` (short form `-p`)
+makes `new` print the path instead of opening an editor. `--id` prints the new
+note's ULID instead, for a script that refers to the note by it
+(`id=$(ntropy new -n --id -- "Quarterly review")`); it conflicts with `-p`.
+`--empty` makes it stamp no template; `--template` is rejected alongside it,
+since one stamps content and the other writes none.
 
 ### What `write` accepts
 
 The target is named, never searched for. All three of these reach the same note:
 
 ```bash
-ntropy write 01J8ZA2ABCDEFGHJKMNPQRSTVW < note.md              # full ULID
-ntropy write 01J8ZA2ABCDEFGHJKMNPQRSTVW-q3-planning.md < note.md   # filename
-ntropy write /vault/all-notes/01J8ZA2ABCDEFGHJKMNPQRSTVW-q3-planning.md < note.md
+ntropy write -n 01J8ZA2ABCDEFGHJKMNPQRSTVW < note.md              # full ULID
+ntropy write -n 01J8ZA2ABCDEFGHJKMNPQRSTVW-q3-planning.md < note.md   # filename
+ntropy write -n /vault/all-notes/01J8ZA2ABCDEFGHJKMNPQRSTVW-q3-planning.md < note.md
 ```
 
 The note must already exist, and a path must point into the vault's
-`all-notes/`, directly or through a symlink such as a view entry. Nothing is prompted for and no picker opens, so `write` is safe in
-a pipeline; a target naming no note, or more than one, is an error.
+`all-notes/`, directly or through a symlink such as a view entry. Nothing is
+prompted for and no picker opens, so `write` is safe in a pipeline. A target
+naming no note is an error, and so is one naming more than one: a ULID that a
+copy shares names both files, so pass the filename of the one you mean (or run
+`ntropy reconcile` first, as the core's rule on copies says).
 
 **Feed it the whole note, not a fragment.** The text you pipe in becomes the
 file, so the "Frontmatter rules" below are your contract:
@@ -71,10 +51,6 @@ file, so the "Frontmatter rules" below are your contract:
   syntax.
 - Then the Markdown body, conventionally opening with `# <title>`.
 
-**Never leave an `--empty` note unwritten.** Until frontmatter lands in it,
-every ntropy command warns about it (`--strict` fails outright) and no search
-returns it. Write it in the same step you created it.
-
 ### Rewriting an existing note
 
 `search -P` and `write` are inverses, and both behave the same whether or not
@@ -83,7 +59,7 @@ the vault is encrypted:
 ```bash
 ntropy search -n -P 01J8ZA2ABCDEFGHJKMNPQRSTVW > /tmp/note.md
 # edit /tmp/note.md
-ntropy write 01J8ZA2ABCDEFGHJKMNPQRSTVW < /tmp/note.md
+ntropy write -n 01J8ZA2ABCDEFGHJKMNPQRSTVW < /tmp/note.md
 ```
 
 `write` replaces the note's entire content, so send back the whole file, not
@@ -95,41 +71,36 @@ When you want the vault's own skeleton — a meeting note whose shape the user
 defined — create from the template and edit the file directly:
 
 ```bash
-note=$(ntropy new --print -t meeting Standup)
+note=$(ntropy new -n --print -t meeting Standup)
 # edit "$note" with your file tools
-ntropy reconcile
+ntropy reconcile -n
 ```
 
-**MUST run `ntropy reconcile` after directly editing a note's frontmatter or
-title.** ntropy realigns automatically when it launched the editor itself and
-when you go through `ntropy write`. After any other out-of-band edit the
-filename slug can drift from the title and the materialized views go stale until
-reconcile runs. It is cheap and idempotent; when in doubt, run it.
+The reconcile is the core's rule on direct edits: after this edit the filename slug can drift from
+the title and the materialized views go stale until it runs.
 
 ### YAML-special titles
 
 `ntropy new` quotes or escapes the title as needed when it substitutes into
 the template's `title: {{title}}` line, so a title with `: ` inside it or a
-leading YAML syntax character (`[`, `{`, `#`, `-`, `&`, `*`, `"`, `'`) creates
+leading YAML syntax character (`[`, `{`, `#`, `&`, `*`, `"`, `'`) creates
 successfully:
 
 ```bash
-ntropy new --print "Q3: Planning kickoff"   # OK: frontmatter is quoted
-ntropy new --print "[draft] roadmap"        # OK: frontmatter is quoted
+ntropy new -n --print "Q3: Planning kickoff"   # OK: frontmatter is quoted
+ntropy new -n --print "[draft] roadmap"        # OK: frontmatter is quoted
 ```
+
+A title that starts with `-` is read by the command line as a flag, and `new`
+fails before it creates anything: put `--` before the title
+(`ntropy new -n -p -- "-1 day"`); the quoting in the frontmatter is then
+automatic.
 
 This covers template placeholder substitution into frontmatter. When you
 write frontmatter by hand — a custom field in a note, or a template of your
 own — the usual YAML rule applies: quote any value that contains `: ` or
 starts with YAML syntax. Interior quotes in an otherwise plain value
 (`He said "go"`) are fine unquoted.
-
-### Retitling a note
-
-Never rename the file. Edit the frontmatter `title`, then run
-`ntropy reconcile`: it renames the file to the new slug (the ULID stays, so
-identity and inbound links survive) and rewrites the slug portion of links in
-other notes.
 
 ## Frontmatter rules
 
@@ -187,16 +158,17 @@ See [the Q3 plan](01j8za2abcdefghjkmnpqrstvw-q3-planning.md) for the numbers.
 
 To link a heading of the other note, add its id after a `#`:
 `[Inside tmux](01j8za2abcdefghjkmnpqrstvw-q3-planning.md#inside-tmux)`. The id
-is the heading in lowercase with spaces as hyphens and punctuation dropped; a
-repeated heading gets `-1`, `-2`. `reconcile` keeps the `#...` part, and
-`ntropy site` warns when no heading has that id.
+follows GitHub's rule: lowercase, each space a hyphen (not collapsed, so
+`Pros & Cons` is `pros--cons`), punctuation other than `-` and `_` dropped,
+letters of any script kept (`Über` is `über`, not the filename's `ueber`); a
+repeated heading gets `-1`, `-2`. When unsure, export with `ntropy site`: it
+warns when no heading has the id. `reconcile` keeps the `#...` part.
 
 Get the filename from a search (`ntropy search -n tag:planning`, PATH column)
 and use its basename. A link is recognized by its leading 26-character ULID, so
 it survives retitles: `ntropy reconcile` rewrites the slug portion of stale
 link targets after a rename (links inside code, whether inline, fenced or
-indented, are left alone). DO NOT link by title or by relative folder paths
-into views.
+indented, are left alone).
 
 ## Templates
 
@@ -206,8 +178,8 @@ Name template files with a lowercase `.md`: `ntropy info` lists no other file
 as a template, and `new --template` opens `<name>.md`:
 
 ```bash
-ntropy new --print Standup --template meeting   # uses .ntropy/templates/meeting.md
-ntropy new --print Some thought                 # uses default.md
+ntropy new -n --print Standup --template meeting   # uses .ntropy/templates/meeting.md
+ntropy new -n --print Some thought                 # uses default.md
 ```
 
 A named template that does not exist is an error, never a silent fallback.
@@ -245,9 +217,9 @@ title creates immediate slug drift that the next reconcile has to rename away.
 
 ## Daily notes
 
-`ntropy today --print` prints the path of today's note, creating it from
+`ntropy today -n --print` prints the path of today's note, creating it from
 `.ntropy/templates/today.md` on first use each day (the note is identified by
-its title being today's date). `ntropy today --id` prints its ULID instead.
+its title being today's date). `ntropy today -n --id` prints its ULID instead.
 Shape daily notes by editing that template. It
 must exist; a vault predating it just needs `ntropy init <vault>` re-run, which
 seeds missing pieces without touching existing ones.
@@ -272,18 +244,5 @@ dropped, capped near 72 characters, and `untitled` when nothing survives. The
 full title always remains in frontmatter, so never shorten a title for the
 filename's sake. Because the millisecond-precise ULID leads every filename, a
 plain lexical sort of `all-notes/` is chronological.
-
-## Well-behaved note checklist
-
-- Created via `ntropy new`, never hand-placed in `all-notes/`.
-- Content supplied through `ntropy write`, or edited in the file and followed by
-  `ntropy reconcile`.
-- No file left empty: an `--empty` note is written in the same step it is created.
-- Frontmatter has `title`; `tags` is a flat string list; no `id`/date fields.
-- YAML values containing `: ` or starting with YAML syntax are quoted.
-- Field names and values reused consistently with the rest of the vault.
-- Links target `<ulid>-<slug>.md` filenames.
-- `ntropy reconcile` run after any direct edit to frontmatter or title (`write`
-  does this itself).
 
 End of references/writing-notes.md.
