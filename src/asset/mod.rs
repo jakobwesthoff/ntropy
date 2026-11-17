@@ -16,8 +16,10 @@
 //! disk, and everything that changes them, builds on it.
 
 mod links;
+mod sync;
 
 pub use links::{LocalLink, local_links, relink_folder};
+pub use sync::{AssetSync, FolderMove, Relink, plan_renames, read_folders, stale_names, sync};
 
 use crate::id::{Id, ULID_LEN};
 use crate::render::markdown::resolve_root_relative;
@@ -239,6 +241,11 @@ mod tests {
     #[test]
     fn a_vault_root_assets_directory_is_unmanaged() {
         assert_eq!(place("/all-notes", "../assets/logo.svg"), Place::Unmanaged);
+    }
+
+    #[test]
+    fn an_assets_directory_elsewhere_without_a_folder_is_unmanaged() {
+        assert_eq!(place("/all-notes", "../projects/_assets"), Place::Unmanaged);
     }
 
     #[test]

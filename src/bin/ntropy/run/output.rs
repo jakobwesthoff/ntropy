@@ -19,6 +19,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
+use ntropy::asset::FolderMove;
 use ntropy::config::ViewConfig;
 use ntropy::id::Id;
 use ntropy::note::Note;
@@ -26,6 +27,7 @@ use ntropy::ops::{TagCount, VaultStats};
 use ntropy::reconcile::{Realignment, Reassignment, Rename};
 use ntropy::scan::{ScanWarning, WarningKind};
 use ntropy::text::escape_controls;
+use ntropy::vault::layout;
 use ntropy::vault::{ResolveSource, Vault};
 use unicode_width::UnicodeWidthStr;
 
@@ -334,6 +336,23 @@ pub fn file_name(path: &Path) -> String {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| path.display().to_string());
     escape_controls(&name).into_owned()
+}
+
+/// An asset folder as a report names it, `_assets/<name>/`, the name escaped
+/// for a message (ADR 0071).
+pub fn asset_folder(path: &Path) -> String {
+    format!("{}/{}/", layout::ASSETS_DIR, file_name(path))
+}
+
+/// The warning for an asset folder that `reconcile` did not rename.
+pub fn print_refused_asset_renames(refused: &[FolderMove]) {
+    for rename in refused {
+        eprintln!(
+            "warning: did not rename `{}` to `{}`: another folder of this note is in the way",
+            asset_folder(&rename.from),
+            asset_folder(&rename.to)
+        );
+    }
 }
 
 /// A byte count as a short human-readable figure: whole bytes below a KiB,

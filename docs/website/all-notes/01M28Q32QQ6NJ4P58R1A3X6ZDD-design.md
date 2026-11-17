@@ -124,3 +124,4 @@ made.
 - [0095. Title and tags reach a Typst theme as text](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0095-title-and-tags-reach-a-typst-theme-as-text.md)
 - [0096. A copy's warning names the shared ULID](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0096-a-copys-warning-names-the-shared-ulid.md)
 - [0097. Asset links are found with the Markdown parser](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)
+- [0098. A note's assets live in a folder named like the note](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)

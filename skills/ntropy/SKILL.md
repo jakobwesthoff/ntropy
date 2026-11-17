@@ -99,11 +99,13 @@ materialized symlink **views** make a field browsable as folders.
 5. **Run `ntropy reconcile` after editing a note file directly**, for example
    one you started with `new -n -p -t <name>`. The filename slug and the views
    drift from the file until you do. `write` and ntropy's own editor realign
-   both themselves, so never reconcile after them. Reconcile is cheap and
+   both themselves, so never reconcile after them, except to move a retitled
+   note's asset folder, which only reconcile renames. Reconcile is cheap and
    idempotent.
 6. **Retitle by editing the frontmatter `title`, then reconcile; never rename
-   the file.** Reconcile renames the file to the new slug, keeps the ULID and
-   rewrites the slug in links of other notes.
+   the file.** Reconcile renames the file to the new slug, keeps the ULID,
+   rewrites the slug in links of other notes and renames the note's asset
+   folder `all-notes/_assets/<file name>/` with the links into it.
 7. **Link by filename**: `[Title](<ulid>-<slug>.md)`, taking the filename from
    `ntropy search -n -p <query>`. Never link by title or by a path into a
    view. A link survives retitles because it is recognized by its ULID.
@@ -167,7 +169,7 @@ encrypted vaults.
 | `ntropy render -n -p <id>` | Render one note: `--to pdf` (default), `typst`, `html` or `ansi`; `-o` names the artifact, `--force` replaces one, `--theme` overrides the theme. Read `ntropy skill rendering`. |
 | `ntropy show -n <id>` | Print one note drawn for a terminal; into a pipe it is plain text, so read exact text with `search -n -P`. |
 | `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `site theme init <name>` copies the built-in theme into the vault; `--strict` fails on its warnings. Read `ntropy skill site`. |
-| `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
+| `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, rename asset folders with their notes, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. Read `ntropy skill views`. |
 | `ntropy tags -n` | Every tag with its note count; check it before inventing a tag. |
 | `ntropy info` | The active vault and how it resolved, the global default, vault statistics; `-p` prints the vault's absolute path alone. |

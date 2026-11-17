@@ -7353,6 +7353,69 @@ fn reconcile_noop_prints_summary() {
     });
 }
 
+/// Plant a note whose file slug `old` no longer matches its title, with one
+/// picture in the asset folder named after the old file and a link to it.
+fn plant_note_with_assets(vault: &Path) {
+    write_note(
+        vault,
+        ULID_A,
+        "old",
+        &format!("---\ntitle: Brand New\n---\n![chart](_assets/{ULID_A}-old/chart.png)\n"),
+    );
+    let folder = vault.join(format!("all-notes/_assets/{ULID_A}-old"));
+    fs::create_dir_all(&folder).expect("asset folder");
+    fs::write(folder.join("chart.png"), b"png").expect("asset");
+}
+
+#[test]
+fn reconcile_renames_an_asset_folder_with_its_note() {
+    let dir = setup_vault();
+    plant_note_with_assets(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("reconcile");
+        assert_cmd_snapshot!(cmd);
+    });
+    let note = fs::read_to_string(dir.path().join(format!("all-notes/{ULID_A}-brand-new.md")))
+        .expect("read note");
+    assert!(note.contains(&format!("_assets/{ULID_A}-brand-new/chart.png")));
+}
+
+#[test]
+fn a_write_that_retitles_a_note_leaves_its_asset_folder_for_reconcile() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "old",
+        &format!("---\ntitle: Old\n---\n![chart](_assets/{ULID_A}-old/chart.png)\n"),
+    );
+    let folder = dir.path().join(format!("all-notes/_assets/{ULID_A}-old"));
+    fs::create_dir_all(&folder).expect("asset folder");
+    fs::write(folder.join("chart.png"), b"png").expect("asset");
+
+    let retitled =
+        format!("---\ntitle: Brand New\n---\n![chart](_assets/{ULID_A}-old/chart.png)\n");
+    let written = run_write(dir.path(), &[ULID_A], &retitled);
+    assert!(written.status.success());
+
+    assert!(
+        folder.join("chart.png").exists(),
+        "the folder keeps its name"
+    );
+    let note = fs::read_to_string(dir.path().join(format!("all-notes/{ULID_A}-brand-new.md")))
+        .expect("read note");
+    assert!(note.contains(&format!("_assets/{ULID_A}-old/chart.png")));
+
+    let reconciled = ntropy(dir.path()).arg("reconcile").output().expect("run");
+    assert!(reconciled.status.success());
+    assert!(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-brand-new/chart.png"))
+            .exists()
+    );
+}
+
 #[test]
 fn edit_no_match_exits_nonzero() {
     // A selector matching nothing prints the no-match message and exits

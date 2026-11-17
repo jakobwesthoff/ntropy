@@ -335,6 +335,11 @@ mod tests {
     }
 
     #[test]
+    fn an_empty_folder_name_rewrites_nothing() {
+        assert_eq!(relink_folder("[a](_assets//a.png)", "", TO), None);
+    }
+
+    #[test]
     fn a_body_without_the_folder_is_not_rewritten() {
         assert_eq!(relinked("nothing to see"), None);
     }

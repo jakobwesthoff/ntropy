@@ -422,7 +422,10 @@ pub fn remove_dir_all(dir: &Path) -> Result<()> {
 /// it covers whatever the filesystem folds (case, Unicode normalization)
 /// and still refuses two hard links of one file, between which `rename(2)`
 /// would succeed without doing anything. A file that also has a hard link
-/// elsewhere has two links, so even its case-only rename is refused.
+/// elsewhere has two links, so even its case-only rename is refused. A
+/// directory has no hard links, and its link count is two plus its
+/// subdirectories, never one, so for a directory the same device and inode
+/// are enough.
 ///
 /// The check and the rename are two calls. A second process creating that
 /// exact name in between is not guarded against. An atomic no-replace rename
@@ -484,7 +487,9 @@ fn is_same_entry(from: &Path, existing: &std::fs::Metadata) -> bool {
     use std::os::unix::fs::MetadataExt;
 
     std::fs::symlink_metadata(from).is_ok_and(|source| {
-        source.dev() == existing.dev() && source.ino() == existing.ino() && existing.nlink() == 1
+        source.dev() == existing.dev()
+            && source.ino() == existing.ino()
+            && (existing.is_dir() || existing.nlink() == 1)
     })
 }
 
@@ -988,6 +993,49 @@ mod tests {
             .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
             .collect();
         assert_eq!(names, ["NOTE.md"]);
+    }
+
+    #[test]
+    fn a_directory_is_the_same_entry_as_itself() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let folder = dir.path().join("folder");
+        std::fs::create_dir_all(folder.join("sub")).expect("subdirectory");
+        std::fs::write(folder.join("a.md"), b"x").expect("file");
+        let metadata = std::fs::symlink_metadata(&folder).expect("metadata");
+
+        assert!(is_same_entry(&folder, &metadata));
+    }
+
+    #[test]
+    fn a_directory_is_not_the_same_entry_as_another_directory() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let first = dir.path().join("first");
+        let second = dir.path().join("second");
+        std::fs::create_dir(&first).expect("first");
+        std::fs::create_dir(&second).expect("second");
+        let metadata = std::fs::symlink_metadata(&second).expect("metadata");
+
+        assert!(!is_same_entry(&first, &metadata));
+    }
+
+    #[test]
+    fn rename_changes_only_the_case_of_a_directory_holding_files() {
+        // The same case as for a file, with a directory's link count of two
+        // or more. On a case-sensitive filesystem it is an ordinary rename.
+        let dir = tempfile::tempdir().expect("temp dir");
+        let from = dir.path().join("folder");
+        let to = dir.path().join("FOLDER");
+        std::fs::create_dir_all(from.join("sub")).expect("subdirectory");
+        std::fs::write(from.join("a.md"), b"x").expect("file");
+
+        rename(&from, &to).expect("a case-only rename of a directory");
+
+        let names: Vec<String> = std::fs::read_dir(dir.path())
+            .expect("read dir")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(names, ["FOLDER"]);
+        assert!(to.join("a.md").exists());
     }
 
     #[test]

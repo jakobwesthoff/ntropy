@@ -469,6 +469,16 @@ points them at its name.
 After renaming, it rewrites stale link targets in note bodies so links keep
 resolving and stay clickable in plain Markdown viewers (ADR 0028).
 
+It renames each asset folder, `all-notes/_assets/<stem>/`, to the current stem
+of the note whose ULID leads its name, and rewrites the links into it in every
+note body (ADR 0098). Each rename prints `renamed _assets/<old>/ ->
+_assets/<new>/`, each note rewritten `relinked _assets/<old>/ -> _assets/<new>/
+in <note> (<n> links)`, and the summary line gains `moved <n> asset folders`
+when a folder moved. A folder that cannot be renamed because another folder of
+the note is in the way stays as it is and counts as a warning. The links are
+found by the ULID in the folder name, so a run that stopped after the rename
+finishes the rewrite on the next one.
+
 Links inside code are not note links. Code is what the renderer's Markdown
 parser reports as code, parsed with the renderer's own options: inline code
 spans, which may continue over a line break, fenced code blocks and indented

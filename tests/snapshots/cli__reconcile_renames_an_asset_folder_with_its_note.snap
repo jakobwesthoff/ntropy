@@ -1,0 +1,21 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - reconcile
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+Reconciling vault at [VAULT]...
+renamed [ULID....................]-old.md -> [ULID....................]-brand-new.md
+renamed _assets/[ULID....................]-old/ -> _assets/[ULID....................]-brand-new/
+relinked _assets/[ULID....................]-old/ -> _assets/[ULID....................]-brand-new/ in [ULID....................]-brand-new.md (1 link)
+ignored /by-tag/
+Scanned 1 note, reassigned 0 notes, renamed 1 file, relinked 0 links, moved 1 asset folder, synced 1 view, ignored 1 entry, unignored 0 entries, 0 warnings.
+
+----- stderr -----

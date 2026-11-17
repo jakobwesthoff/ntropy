@@ -11,6 +11,21 @@ change in any release
 
 ## Unreleased
 
+### Added
+
+- A note's assets live in `all-notes/_assets/<note file name without
+  extension>/` and are linked as `_assets/<note file name>/<file>`. `reconcile`
+  renames the folder together with the note, rewrites the links into it in every
+  note and prints the old and the new folder name; the summary names the asset
+  folders moved. A folder keeps its old name between an edit and the next
+  `reconcile`, and `write` and the editor leave it alone. A folder that cannot
+  be renamed because another folder of the note is in the way stays as it is and
+  counts as a warning. An encrypted vault is not touched.
+  [ADR 0098](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
+  records the layout and
+  [ADR 0097](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)
+  how asset links are found.
+
 ### Changed
 
 - Dependencies updated to their latest compatible releases: `clap` 4.6.8,

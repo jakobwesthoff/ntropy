@@ -18,6 +18,7 @@
 use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
+use crate::asset::{self, AssetSync};
 use crate::config::PerVaultConfig;
 use crate::error::Result;
 use crate::fsutil;
@@ -77,6 +78,9 @@ pub struct ReconcileReport {
     pub refused: Vec<Rename>,
     /// Link targets refreshed to point at their notes' current filenames.
     pub links_rewritten: Vec<LinkRewrite>,
+    /// Asset folders renamed with their notes, the links into them rewritten,
+    /// and the renames refused. Empty in an encrypted vault.
+    pub assets: AssetSync,
     /// Plaintext notes encrypted in place in an encrypted vault.
     pub adopted: Vec<Adopted>,
     /// `.gitignore` entries added to match the configured views.
@@ -218,10 +222,23 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
     // each note's current title, and rewriting one would mean re-encrypting
     // the whole note — a fresh ciphertext and a new mtime for a body that did
     // not change, which a sync provider would dutifully upload.
-    let links_rewritten = if session.is_encrypted() {
-        Vec::new()
+    //
+    // The asset folders follow their notes in the same pass, and the links
+    // into them are rewritten in the note bodies in memory. `rewrite_links`
+    // then writes each changed note once, so the rewrite of note links cannot
+    // undo that of asset links, or the other way round. An encrypted vault
+    // has no plaintext bodies to rewrite and its assets are not managed yet.
+    let (assets, links_rewritten) = if session.is_encrypted() {
+        (AssetSync::default(), Vec::new())
     } else {
-        rewrite_links(&notes)?
+        let assets = asset::sync(session.layout(), &mut notes)?;
+        let relinked: HashSet<PathBuf> = assets
+            .relinked
+            .iter()
+            .map(|relink| relink.note.clone())
+            .collect();
+        let rewritten = rewrite_links(&notes, &relinked)?;
+        (assets, rewritten)
     };
     flush.finish()?;
 
@@ -265,6 +282,7 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
         renamed,
         refused,
         links_rewritten,
+        assets,
         adopted,
         gitignore_added: gitignore.added,
         gitignore_removed: gitignore.removed,
@@ -393,20 +411,26 @@ fn reassign(note: &mut Note, keeper: PathBuf, taken: &mut HashSet<Id>) -> Result
 /// drifted, so an up-to-date note is never rewritten. The file is rebuilt from
 /// the note's retained `raw_header` and rewritten body, preserving the
 /// frontmatter byte-for-byte without re-reading from disk.
-fn rewrite_links(notes: &[Note]) -> Result<Vec<LinkRewrite>> {
+///
+/// A note in `changed` already holds a body that differs from the file, such
+/// as one whose asset links were rewritten, and is written even when none of
+/// its note links drifted.
+fn rewrite_links(notes: &[Note], changed: &HashSet<PathBuf>) -> Result<Vec<LinkRewrite>> {
     // Build the id index once: every note's body resolves its link targets
     // against it in O(1), instead of rescanning the whole slice per link.
     let index = link::index(notes);
     let mut rewritten = Vec::new();
     for note in notes {
-        let Some(rewrite) = link::rewrite_body(&note.body, &index) else {
+        let rewrite = link::rewrite_body(&note.body, &index);
+        if rewrite.is_none() && !changed.contains(&note.path) {
             continue;
-        };
-        let mut updated = String::with_capacity(note.raw_header.len() + rewrite.body.len());
+        }
+        let body = rewrite.as_ref().map_or(note.body.as_str(), |r| &r.body);
+        let mut updated = String::with_capacity(note.raw_header.len() + body.len());
         updated.push_str(&note.raw_header);
-        updated.push_str(&rewrite.body);
+        updated.push_str(body);
         fsutil::atomic_write(&note.path, updated.as_bytes())?;
-        for change in rewrite.rewrites {
+        for change in rewrite.into_iter().flat_map(|rewrite| rewrite.rewrites) {
             rewritten.push(LinkRewrite {
                 note: note.path.clone(),
                 from: change.from,
@@ -1425,6 +1449,235 @@ mod tests {
         assert!(report.gitignore_removed.is_empty());
     }
 
+    /// Reconcile with notes that keep files in `_assets/<stem>/`.
+    mod assets {
+        use super::*;
+
+        const OTHER: &str = "01BRZ3NDEKTSV4RRFFQ69G5FAV";
+
+        /// A note whose file has the slug `old` and whose title says `New
+        /// Title`, linking a picture in the folder named after the old file.
+        fn drifted_note(session: &VaultSession, extra_body: &str) -> PathBuf {
+            write_note(
+                session,
+                &format!("{ULID}-old.md"),
+                &format!(
+                    "---\ntitle: New Title\n---\n![chart](_assets/{ULID}-old/chart.png)\n{extra_body}"
+                ),
+            )
+        }
+
+        fn plant_folder(session: &VaultSession, name: &str) -> PathBuf {
+            let folder = session.layout().asset_folder(name);
+            std::fs::create_dir_all(&folder).expect("asset folder");
+            std::fs::write(folder.join("chart.png"), b"png").expect("asset");
+            folder
+        }
+
+        fn body_of(session: &VaultSession, name: &str) -> String {
+            std::fs::read_to_string(session.layout().all_notes().join(name)).expect("read note")
+        }
+
+        #[test]
+        fn the_folder_follows_a_retitled_note() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-old"));
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert_eq!(report.assets.renamed.len(), 1);
+            let folder = session.layout().asset_folder(&format!("{ULID}-new-title"));
+            assert!(folder.join("chart.png").is_file());
+            assert!(
+                !session
+                    .layout()
+                    .asset_folder(&format!("{ULID}-old"))
+                    .exists()
+            );
+        }
+
+        #[test]
+        fn the_links_into_the_folder_are_rewritten_with_it() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-old"));
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert_eq!(
+                body_of(&session, &format!("{ULID}-new-title.md")),
+                format!(
+                    "---\ntitle: New Title\n---\n![chart](_assets/{ULID}-new-title/chart.png)\n"
+                )
+            );
+            assert_eq!(report.assets.relinked.len(), 1);
+            assert_eq!(report.assets.relinked[0].count, 1);
+        }
+
+        #[test]
+        fn a_link_in_another_note_follows_the_folder_too() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-old"));
+            write_note(
+                &session,
+                &format!("{OTHER}-reader.md"),
+                &format!("---\ntitle: Reader\n---\n[c](_assets/{ULID}-old/chart.png)\n"),
+            );
+
+            reconcile(&session).expect("reconcile");
+
+            assert!(
+                body_of(&session, &format!("{OTHER}-reader.md"))
+                    .contains(&format!("_assets/{ULID}-new-title/chart.png"))
+            );
+        }
+
+        #[test]
+        fn a_second_run_changes_nothing() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-old"));
+            reconcile(&session).expect("first run");
+
+            let report = reconcile(&session).expect("second run");
+
+            assert_eq!(report.assets, AssetSync::default());
+            assert!(report.links_rewritten.is_empty());
+        }
+
+        #[test]
+        fn links_are_repaired_after_a_crash_between_the_rename_and_the_rewrite() {
+            let (_guard, session) = vault_with_view();
+            // The folder already carries the new name, the body still the old.
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-new-title"));
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert!(report.assets.renamed.is_empty());
+            assert!(
+                body_of(&session, &format!("{ULID}-new-title.md"))
+                    .contains(&format!("_assets/{ULID}-new-title/chart.png"))
+            );
+        }
+
+        #[test]
+        fn a_note_with_stale_asset_and_note_links_ends_with_both_fixed() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, &format!("[T]({OTHER}-stale.md)\n"));
+            write_note(
+                &session,
+                &format!("{OTHER}-target.md"),
+                "---\ntitle: Target\n---\nbody\n",
+            );
+            plant_folder(&session, &format!("{ULID}-old"));
+
+            reconcile(&session).expect("reconcile");
+
+            let body = body_of(&session, &format!("{ULID}-new-title.md"));
+            assert!(
+                body.contains(&format!("_assets/{ULID}-new-title/chart.png")),
+                "{body}"
+            );
+            assert!(body.contains(&format!("({OTHER}-target.md)")), "{body}");
+            let second = reconcile(&session).expect("second run");
+            assert!(second.links_rewritten.is_empty() && second.assets.relinked.is_empty());
+        }
+
+        #[test]
+        fn a_folder_that_differs_only_in_case_is_renamed_and_relinked() {
+            let (_guard, session) = vault_with_view();
+            write_note(
+                &session,
+                &format!("{ULID}-new-title.md"),
+                &format!(
+                    "---\ntitle: New Title\n---\n![chart](_assets/{ULID}-New-Title/chart.png)\n"
+                ),
+            );
+            plant_folder(&session, &format!("{ULID}-New-Title"));
+
+            reconcile(&session).expect("reconcile");
+
+            let names = crate::asset::read_folders(session.layout()).expect("folders");
+            assert_eq!(names, [format!("{ULID}-new-title")]);
+            assert!(
+                body_of(&session, &format!("{ULID}-new-title.md"))
+                    .contains(&format!("_assets/{ULID}-new-title/chart.png"))
+            );
+        }
+
+        #[test]
+        fn a_second_folder_of_the_note_is_refused_and_both_stay() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-new-title"));
+            plant_folder(&session, &format!("{ULID}-old"));
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert!(report.assets.renamed.is_empty());
+            assert_eq!(report.assets.refused.len(), 1);
+            assert!(
+                session
+                    .layout()
+                    .asset_folder(&format!("{ULID}-old"))
+                    .is_dir()
+            );
+            assert!(body_of(&session, &format!("{ULID}-new-title.md")).contains("-old/chart.png"));
+        }
+
+        #[test]
+        fn a_folder_no_note_owns_is_left_alone() {
+            let (_guard, session) = vault_with_view();
+            plant_folder(&session, &format!("{OTHER}-gone"));
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert_eq!(report.assets, AssetSync::default());
+            assert!(
+                session
+                    .layout()
+                    .asset_folder(&format!("{OTHER}-gone"))
+                    .is_dir()
+            );
+        }
+
+        #[test]
+        fn a_symlinked_assets_directory_is_left_alone() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            let elsewhere = session.root().join("elsewhere");
+            let folder = elsewhere.join(format!("{ULID}-old"));
+            std::fs::create_dir_all(&folder).expect("folder");
+            std::os::unix::fs::symlink(&elsewhere, session.layout().assets_dir()).expect("symlink");
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert_eq!(report.assets, AssetSync::default());
+            assert!(folder.is_dir());
+        }
+
+        #[test]
+        fn realign_leaves_the_folder_and_the_links() {
+            let (_guard, session) = vault_with_view();
+            let path = drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-old"));
+
+            let realignment = realign(&session, &path).expect("realign");
+
+            assert!(realignment.renamed.is_some());
+            assert!(
+                session
+                    .layout()
+                    .asset_folder(&format!("{ULID}-old"))
+                    .is_dir()
+            );
+            assert!(body_of(&session, &format!("{ULID}-new-title.md")).contains("-old/chart.png"));
+        }
+    }
+
     /// Reconcile against a vault whose notes are encrypted.
     #[cfg(feature = "encryption")]
     mod encrypted {
@@ -1453,6 +1706,7 @@ mod tests {
             let report = reconcile(session).expect("reconcile");
             assert!(report.renamed.is_empty());
             assert!(report.links_rewritten.is_empty());
+            assert_eq!(report.assets, AssetSync::default());
             assert_eq!(report.views_synced, 0);
             assert_eq!(std::fs::read(&a).expect("read"), before);
             assert_eq!(std::fs::metadata(&a).expect("meta").modified().ok(), mtime);

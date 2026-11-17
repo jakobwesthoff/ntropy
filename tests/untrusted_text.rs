@@ -330,6 +330,36 @@ fn reconcile_reports_a_hostile_file_name_escaped() {
 }
 
 #[test]
+fn reconcile_reports_a_hostile_asset_folder_name_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-evil.md"),
+        &format!("---\ntitle: Evil\n---\n![x](<_assets/{ULID_A}-{RETITLE}/x.png>)\n"),
+    );
+    let folder = vault.join(format!("all-notes/_assets/{ULID_A}-{RETITLE}"));
+    fs::create_dir_all(&folder).expect("asset folder");
+    fs::write(folder.join("x.png"), b"png").expect("asset");
+
+    let output = run(ntropy(&vault).arg("reconcile"));
+    assert_no_raw_controls(&output);
+    let shown = stdout(&output);
+    assert!(
+        shown.contains(&format!(
+            "renamed _assets/{ULID_A}-{RETITLE_SHOWN}/ -> _assets/{ULID_A}-evil/"
+        )),
+        "{shown}"
+    );
+    assert!(
+        shown.contains(&format!(
+            "relinked _assets/{ULID_A}-{RETITLE_SHOWN}/ -> _assets/{ULID_A}-evil/ in {ULID_A}-evil.md"
+        )),
+        "{shown}"
+    );
+}
+
+#[test]
 fn reconcile_reports_a_hostile_link_target_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");

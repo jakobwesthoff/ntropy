@@ -59,6 +59,15 @@ own: the same time part, so its creation date stays, and a remainder derived
 from the old ULID and the copy's file name, so every machine syncing the vault
 computes the same one.
 
+A note's assets live in `all-notes/_assets/<stem>/`, `<stem>` being the note's
+file name without its extension, and are linked as `_assets/<stem>/<file>`
+(ADR 0098). `_assets` is a directory, so the scan ignores it like any other
+resource. A folder belongs to the note whose ULID leads its name, whatever slug
+follows. `reconcile` renames a folder whose name differs from its note's stem
+and rewrites the links into it; between an edit and the next `reconcile` the
+folder keeps its old name. In an encrypted vault `reconcile` leaves asset
+folders alone.
+
 The one file an encrypted vault does not ignore is a plaintext `.md`: it warns,
 naming `reconcile`, which encrypts such a file in place. A stray `.age` file in
 a plaintext vault stays a silent resource.

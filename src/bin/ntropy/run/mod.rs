@@ -687,6 +687,7 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
     let report = reconcile::reconcile(session).context("while reconciling")?;
     output::print_warnings(&report.warnings);
     output::print_refused_renames(&report.refused);
+    output::print_refused_asset_renames(&report.assets.refused);
     print_skipped_views(&report.skipped_views);
     for reassignment in &report.reassigned {
         println!("{}", output::reassignment(reassignment));
@@ -707,6 +708,24 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
             output::file_name(&rewrite.note)
         );
     }
+    for moved in &report.assets.renamed {
+        println!(
+            "renamed {} -> {}",
+            output::asset_folder(&moved.from),
+            output::asset_folder(&moved.to)
+        );
+    }
+    for relink in &report.assets.relinked {
+        println!(
+            "relinked {}/{}/ -> {}/{}/ in {} ({})",
+            layout::ASSETS_DIR,
+            escape_controls(&relink.from),
+            layout::ASSETS_DIR,
+            escape_controls(&relink.to),
+            output::file_name(&relink.note),
+            plural(relink.count, "link", "links")
+        );
+    }
     for adopted in &report.adopted {
         println!(
             "encrypted {} -> {}",
@@ -724,9 +743,17 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
         );
         return Ok(ExitCode::SUCCESS);
     }
+    let extra_warnings =
+        report.refused.len() + report.assets.refused.len() + report.skipped_views.len();
     // A summary always prints, so even a no-op run confirms what happened.
+    // Asset folders are named only when one moved, so a vault without them
+    // reads as before.
+    let moved_folders = match report.assets.renamed.len() {
+        0 => String::new(),
+        count => format!("moved {}, ", plural(count, "asset folder", "asset folders")),
+    };
     println!(
-        "Scanned {}, reassigned {}, renamed {}, relinked {}, synced {}, ignored {}, unignored {}, {}.",
+        "Scanned {}, reassigned {}, renamed {}, relinked {}, {moved_folders}synced {}, ignored {}, unignored {}, {}.",
         plural(report.notes_scanned, "note", "notes"),
         plural(report.reassigned.len(), "note", "notes"),
         plural(report.renamed.len(), "file", "files"),
@@ -735,7 +762,7 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
         plural(report.gitignore_added.len(), "entry", "entries"),
         plural(report.gitignore_removed.len(), "entry", "entries"),
         plural(
-            report.warnings.len() + report.refused.len() + report.skipped_views.len(),
+            report.warnings.len() + extra_warnings,
             "warning",
             "warnings"
         ),
@@ -743,7 +770,7 @@ fn cmd_reconcile(global: &GlobalArgs, session: &VaultSession) -> Result<ExitCode
     Ok(exit_for_warnings(
         global.strict,
         &report.warnings,
-        report.refused.len() + report.skipped_views.len(),
+        extra_warnings,
     ))
 }
 
