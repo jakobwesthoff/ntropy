@@ -30,19 +30,20 @@ They look in the skills directories of Claude Code, Codex, Gemini CLI, GitHub
 Copilot and Cursor: in the current project up to its git root, and in your
 home directory.
 
-The skill's description marks it as relevant to any task involving
-ntropy, a note vault, or `.ntropy-vault` files, so an agent with the
-skill installed picks it up on its own the moment a task touches one.
+The skill's description names the tasks it covers: notes in a vault,
+`.ntropy-vault` files, rendering, exporting a website, themes, encrypted
+vaults and scripts. An agent with the skill installed picks it up on its
+own the moment a task touches one.
 
 ## What the skill teaches
 
 [`skills/ntropy/`](https://github.com/jakobwesthoff/ntropy/tree/main/skills/ntropy)
-holds a `SKILL.md` with the vault model, rules for agents, a do/don't
-table, and a command reference. Beside it are reference docs on writing
-notes, querying, vaults, views, the website export with its navigation
-settings, site themes, and document themes. `ntropy skill <part>` prints
-one of them: `writing-notes`, `querying`, `vaults`, `views`, `site`,
-`site-themes` or `document-themes`.
+holds a `SKILL.md` with the vault model, the rules for every task, and
+a command reference. Beside it are reference docs on writing notes,
+querying, vaults, views, rendering and showing a note, the website export
+with its navigation settings, site themes, and document themes. `ntropy
+skill <part>` prints one of them: `writing-notes`, `querying`, `vaults`,
+`views`, `rendering`, `site`, `site-themes` or `document-themes`.
 
 The rules are the part an agent gets wrong on its own:
 

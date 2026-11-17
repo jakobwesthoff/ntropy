@@ -31,7 +31,7 @@ the flags that matter, then the flags every command accepts.
 | `unlock` / `lock` | Store or forget an encrypted vault's key, so ordinary commands need no passphrase. |
 | `vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault to encrypted storage and back, re-encrypt it to a fresh key, or change the passphrase. `encrypt`, `decrypt` and `rekey` rewrite every note and ask first; `-y` skips the question, and under `-n` it is required. `--resume` finishes an interrupted run. `rekey` and `passphrase` take `--new-passphrase-file`. |
 | `lsp` | Run the language server for your editor, over stdin and stdout. See [Language server](01M28Q32MG1WQ0BTSBGCER8A2R-language-server.md). |
-| `skill [part]` | Print the agent skill compiled into this ntropy, or one of its parts: `writing-notes`, `querying`, `vaults`, `views`, `site`, `site-themes` or `document-themes`. `--install <dir>` writes it to `<dir>/ntropy/` instead and names each file it writes. It needs no vault. Printing warns about an installed copy that is older than this ntropy, as `--version` does. See [Agent skill](01M28Q32NS466VK7NWS6BFB2YP-agent-skill.md). |
+| `skill [part]` | Print the agent skill compiled into this ntropy, or one of its parts: `writing-notes`, `querying`, `vaults`, `views`, `rendering`, `site`, `site-themes` or `document-themes`. `--install <dir>` writes it to `<dir>/ntropy/` instead and names each file it writes. It needs no vault. Printing warns about an installed copy that is older than this ntropy, as `--version` does. See [Agent skill](01M28Q32NS466VK7NWS6BFB2YP-agent-skill.md). |
 
 ## Global flags
 

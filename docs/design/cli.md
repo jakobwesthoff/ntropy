@@ -12,6 +12,7 @@ The command surface and its behavior. Consolidates
 [ADR 0083](../adr/0083-show-prints-a-note-drawn-for-the-terminal.md),
 [ADR 0092](../adr/0092-ship-the-agent-skill-in-the-binary-and-print-it-with-ntropy-skill.md),
 [ADR 0093](../adr/0093-warn-from-ntropy-skill-and-ntropy-version-when-an-installed-copy-of-the-skill-is-older.md),
+[ADR 0094](../adr/0094-cut-the-agent-skill-into-a-core-of-rules-and-eight-parts.md),
 and the query DSL in [query-and-search.md](query-and-search.md).
 
 ## Global behavior
@@ -585,9 +586,9 @@ editor setup are documented in
 
 Print the agent skill compiled into the binary (ADR 0092). Without an
 argument it prints the core, `SKILL.md`. A part name prints that part:
-`writing-notes`, `querying`, `vaults`, `views`, `site`, `site-themes` or
-`document-themes`, the file names under `skills/ntropy/references/` without
-`.md`. An unknown name is a usage error that lists them. The Markdown goes to
+`writing-notes`, `querying`, `vaults`, `views`, `rendering`, `site`,
+`site-themes` or `document-themes`, the file names under
+`skills/ntropy/references/` without `.md` (ADR 0094). An unknown name is a usage error that lists them. The Markdown goes to
 stdout as it is, unwrapped and uncoloured, also on a terminal.
 
 `--install <dir>` writes the skill to `<dir>/ntropy/` instead, for a skills

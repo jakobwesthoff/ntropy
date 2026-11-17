@@ -14,6 +14,6 @@ exit_code: 2
 
 ----- stderr -----
 error: invalid value 'no-such-part' for '[PART]'
-  [possible values: writing-notes, querying, vaults, views, site, site-themes, document-themes]
+  [possible values: writing-notes, querying, vaults, views, rendering, site, site-themes, document-themes]
 
 For more information, try '--help'.

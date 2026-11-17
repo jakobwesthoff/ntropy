@@ -3,10 +3,9 @@ Part of the ntropy skill. Read SKILL.md first, which holds the rules for every t
 # Publishing notes as a website
 
 `ntropy site` turns the vault into a directory of static pages that any file
-host serves and a browser opens straight from disk. `ntropy render --to html`
-produces the same page for one note, with a files directory beside it. The
-look comes from a site theme ([site-themes.md](site-themes.md), or `ntropy skill site-themes`); the
-structure comes from tags, views, and the `site` table in a note's
+host serves and a browser opens straight from disk. The look comes from a
+site theme ([site-themes.md](site-themes.md), or `ntropy skill site-themes`);
+the structure comes from tags, views, and the `site` table in a note's
 frontmatter, all described here.
 
 ## The site command
@@ -210,26 +209,11 @@ Steps.
 NOTE
 ```
 
-## Workflow: one note as a standalone page
+## One note as a standalone page
 
-```bash
-ntropy render -n -p 01ARZ3NDEKTSV4RRFFQ69G5FAV --to html -o report.html
-```
-
-writes `report.html` and `report_files/` beside it, the way a browser saves
-a page: the theme's stylesheet and fonts, the page script, the grammars the
-page's code needs, and the images and files the note references. Move or
-send the two together. The page keeps the header (titled after the note),
-the light/dark switch, and the outline; it has no sidebar, search,
-breadcrumbs, pager, or related notes, and its tags are plain text. Note
-links target `<slug>.html` beside the artifact, so a set of notes rendered
-into one directory cross-references itself. No external tool is needed.
-
-`render` refuses an existing artifact of any format, and a non-empty
-`<stem>_files/`, unless `--force` replaces them. Warnings are the export's
-(missing or out-of-vault files, links to files the export never copies, a
-fence language without a grammar). Metadata left out of a linked folder is
-a `note:` line, which `--strict` does not count.
+`ntropy render --to html` writes the page of one note with a `<slug>_files/`
+directory beside it. Its options, the files it needs, its warnings and its
+limits are in [rendering.md](rendering.md), or `ntropy skill rendering`.
 
 ## Do / don't
 

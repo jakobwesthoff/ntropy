@@ -16,11 +16,12 @@ use insta_cmd::assert_cmd_snapshot;
 
 /// The parts of the skill by the name `ntropy skill <part>` takes, each
 /// `references/<name>.md` beside `SKILL.md`.
-const PARTS: [&str; 7] = [
+const PARTS: [&str; 8] = [
     "writing-notes",
     "querying",
     "vaults",
     "views",
+    "rendering",
     "site",
     "site-themes",
     "document-themes",
@@ -137,6 +138,104 @@ fn a_part_and_install_together_are_a_usage_error() {
     let dir = empty_dir();
 
     assert_cmd_snapshot!(ntropy(dir.path()).args(["skill", "views", "--install", "skills-root"]));
+}
+
+// =========================================================
+// The command reference of the core
+// =========================================================
+
+/// The lines of the core's "Command reference" section, up to the next
+/// heading.
+fn command_reference() -> Vec<String> {
+    let core = repository_file("SKILL.md");
+    core.lines()
+        .skip_while(|line| *line != "## Command reference")
+        .skip(1)
+        .take_while(|line| !line.starts_with("## "))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// The commands `ntropy --help` lists, without `help`, which is clap's.
+fn listed_commands() -> Vec<String> {
+    let dir = empty_dir();
+    let output = ntropy(dir.path()).arg("--help").output().expect("a run");
+    let help = stdout_of(&output);
+    help.lines()
+        .skip_while(|line| *line != "Commands:")
+        .skip(1)
+        .take_while(|line| !line.is_empty())
+        .filter_map(|line| line.split_whitespace().next())
+        .filter(|name| *name != "help")
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Every command of the CLI has a row in the core's command reference, so
+/// an agent that reads only the core knows each exists. A row starts with the
+/// command in backticks.
+#[test]
+fn the_command_reference_has_a_row_for_every_command() {
+    let rows = command_reference();
+    let commands = listed_commands();
+    assert!(commands.len() >= 15, "parsed {commands:?}");
+
+    for command in commands {
+        let mention = format!("`ntropy {command}");
+        assert!(
+            rows.iter().any(|row| {
+                // The first cell of the table row names the command.
+                let first_cell = row.split('|').nth(1).unwrap_or("");
+                first_cell.match_indices(&mention).any(|(at, _)| {
+                    first_cell[at + mention.len()..]
+                        .chars()
+                        .next()
+                        .is_none_or(|next| matches!(next, ' ' | '`' | '\\'))
+                })
+            }),
+            "no row for `ntropy {command}`"
+        );
+    }
+}
+
+/// The subcommands of the groups are in their group's row, where an agent
+/// looks for them.
+#[test]
+fn the_command_reference_names_the_subcommands_of_the_groups() {
+    let rows = command_reference().join("\n");
+    for name in [
+        "site theme init",
+        "view list",
+        "view add",
+        "view remove",
+        "vault encrypt",
+        "vault decrypt",
+        "vault rekey",
+        "vault passphrase",
+    ] {
+        let words: Vec<&str> = name.split(' ').collect();
+        let (group, sub) = (words[0], words[words.len() - 1]);
+        assert!(
+            rows.contains(group) && rows.contains(sub),
+            "the command reference lacks {name}"
+        );
+    }
+}
+
+/// The global flags are named as flags, in backticks.
+#[test]
+fn the_core_names_the_global_flags() {
+    let core = repository_file("SKILL.md");
+    for flag in [
+        "`--vault",
+        "`-n`",
+        "`--strict`",
+        "`-i`",
+        "`--identity",
+        "`--passphrase-file",
+    ] {
+        assert!(core.contains(flag), "the core lacks {flag}");
+    }
 }
 
 // =========================================================

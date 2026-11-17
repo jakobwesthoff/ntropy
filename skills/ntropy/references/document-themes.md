@@ -2,14 +2,13 @@ Part of the ntropy skill. Read SKILL.md first, which holds the rules for every t
 
 # Document themes
 
-A document theme is one Typst file, `<vault>/.ntropy/themes/typst/<name>.typ`,
-selected by `[render] theme = "<name>"` in `.ntropy/config.toml` or by
-`--theme <name>` for one render. `--theme default` (or `theme = "default"`)
-is the built-in look. It applies to `render` with `--to pdf` (the default)
-and `--to typst`; `html` uses a site theme, `ansi` none. `ntropy init` does
-not create `.ntropy/themes/typst/`. A missing theme fails before the vault
-is scanned; a theme that does not compile fails the render. Neither falls
-back to the built-in look.
+A document theme is one Typst file, `<vault>/.ntropy/themes/typst/<name>.typ`.
+Which theme a render uses, `--theme` and the paper setting are in
+[rendering.md](rendering.md), or `ntropy skill rendering`. The file applies to
+`render` with `--to pdf` (the default) and `--to typst`; `html` uses a site
+theme, `ansi` none. `ntropy init` does not create `.ntropy/themes/typst/`. A
+missing theme fails before the vault is scanned; a theme that does not compile
+fails the render. Neither falls back to the built-in look.
 
 ## How a theme is applied
 

@@ -9,6 +9,9 @@ Accepted
 Amends [ADR 0018](0018-cli-command-surface.md), whose command surface gains
 `skill`.
 
+Amended 2026-11-17 by [ADR 0094](0094-cut-the-agent-skill-into-a-core-of-rules-and-eight-parts.md),
+which gives the skill eight parts.
+
 ## Context
 
 AI coding agents run ntropy for the people they work with. An agent needs to

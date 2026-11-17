@@ -43,6 +43,10 @@ pub const PARTS: &[(&str, &str)] = &[
         include_str!("../../skills/ntropy/references/views.md"),
     ),
     (
+        "rendering",
+        include_str!("../../skills/ntropy/references/rendering.md"),
+    ),
+    (
         "site",
         include_str!("../../skills/ntropy/references/site.md"),
     ),
@@ -166,6 +170,95 @@ mod tests {
         }
     }
 
+    /// What the core may take, chosen as the size of the finished core with
+    /// every rule stated once and a little slack. The rules come before the
+    /// command reference on purpose, so a reader cut off early still has
+    /// them.
+    const CORE_CAP: usize = 13_000;
+
+    /// A part must come back whole from a tool that returns up to roughly
+    /// 30,000 characters of a command's output inline.
+    const PART_CAP: usize = 30_000;
+
+    #[test]
+    fn the_core_fits_its_size_cap() {
+        assert!(
+            SKILL.len() <= CORE_CAP,
+            "the core is {} bytes, the cap {CORE_CAP}",
+            SKILL.len()
+        );
+    }
+
+    #[test]
+    fn every_part_fits_its_size_cap() {
+        for (name, text) in PARTS {
+            assert!(
+                text.len() <= PART_CAP,
+                "{name} is {} bytes, the cap {PART_CAP}",
+                text.len()
+            );
+        }
+    }
+
+    #[test]
+    fn the_core_pins_its_key_rules() {
+        // One short phrase per rule whose violation no ntropy check catches,
+        // so a later rewrite cannot drop a rule silently. Rewording around
+        // a phrase needs no change here.
+        let phrases = [
+            "Pass `-n` on every command",
+            "stop and ask",
+            "NEVER hand-create files in `all-notes/`",
+            "`new --empty -p`",
+            "the whole note",
+            "after editing a note file directly",
+            "never rename the file",
+            "`<ulid>-<slug>.md`",
+            "never by the code alone",
+            "`delete -n -f <ulid>`",
+            "NEVER write inside a view directory",
+            "`site` is a reserved frontmatter key",
+            "`--passphrase-file <file>`",
+            "`--` before",
+            "its own ULID",
+            "to drop an abandoned one `write` a minimal note",
+        ];
+        // A phrase may break across lines in the file.
+        let flat = SKILL.split_whitespace().collect::<Vec<_>>().join(" ");
+        for phrase in phrases {
+            assert!(flat.contains(phrase), "the core lost the rule: {phrase}");
+        }
+    }
+
+    #[test]
+    fn the_description_names_the_tasks_and_fits_the_format() {
+        let frontmatter = core_frontmatter();
+        let description = frontmatter["description"]
+            .as_str()
+            .expect("the core has a description");
+
+        // The Agent Skills specification allows at most 1,024 characters.
+        assert!(
+            description.len() <= 1024,
+            "{} characters",
+            description.len()
+        );
+        let lower = description.to_lowercase();
+        for word in [
+            ".ntropy-vault",
+            "vault",
+            "render",
+            "pdf",
+            "website",
+            "theme",
+            "encrypted",
+            "script",
+            "view",
+        ] {
+            assert!(lower.contains(word), "the description lacks {word}");
+        }
+    }
+
     #[test]
     fn the_core_names_every_part_by_file_and_by_command() {
         // A host that loads the skill directory follows the file; an agent
@@ -211,7 +304,12 @@ mod tests {
         // a part, in the core (`references/<part>.md`) and in a part
         // (`<part>.md`), also names the command that prints it, on the same
         // line or the next.
-        let mut checked = 0;
+        for (name, _) in PARTS {
+            assert!(
+                SKILL.contains(&format!("](references/{name}.md)")),
+                "the core does not link {name}"
+            );
+        }
         for (file, text) in std::iter::once(("SKILL.md", SKILL)).chain(PARTS.iter().copied()) {
             let prefix = if file == "SKILL.md" {
                 "references/"
@@ -227,11 +325,9 @@ mod tests {
                         two_lines.contains(&format!("`ntropy skill {name}`")),
                         "{file}: the link to {name} lacks its command: {two_lines:?}"
                     );
-                    checked += 1;
                 }
             }
         }
-        assert!(checked >= 15, "found only {checked} links to parts");
     }
 
     #[test]

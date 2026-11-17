@@ -1,11 +1,7 @@
 ---
 name: ntropy
 description: >-
-  Create, search, edit, delete, and render notes to PDF, HTML, or ANSI
-  terminal text in ntropy Markdown vaults; export a vault or a subset as a
-  static website with a configurable sidebar and theme; create and manage
-  vaults, views, and templates. Use for any task involving ntropy, a note
-  vault, or .ntropy-vault files.
+  Work with ntropy, a Markdown note-taking CLI whose notes live in a vault: create, search, edit and delete notes, keep views, render a note to PDF, HTML or terminal text, export a vault as a static website, write site or document themes, work in an encrypted vault, and script against any of it. Use for any task involving ntropy, a note vault, .ntropy-vault files or `ntropy` commands, and read this first: ntropy blocks on a terminal unless it is run with `-n`.
 metadata:
   tags: ntropy, notes, markdown, vault, cli, site, website, html
   ntropy-version: "2.11.0"
@@ -17,313 +13,167 @@ full, from its path or from the output of `ntropy skill`. Read a file under
 `references/` when a step below names it. Each ends with its own end line
 too.
 
-Seven files hold details for some tasks:
+Eight files hold details for some tasks:
 
-- `references/writing-notes.md`, or `ntropy skill writing-notes`: before you
-  author a note, and for frontmatter rules, tags, inter-note links, templates
-  and when to reconcile.
-- `references/querying.md`, or `ntropy skill querying`: for the full query
-  language, how `search` and `delete` select notes, output parsing and
-  exit-code recipes.
-- `references/vaults.md`, or `ntropy skill vaults`: for vault anatomy, how the
-  active vault is resolved, and creating global, project-local and custom
-  vaults.
-- `references/views.md`, or `ntropy skill views`: before you add or change a
-  view, and for drift and git rules.
-- `references/site.md`, or `ntropy skill site`: for `ntropy site`, the
-  standalone `render --to html` page, and the `[site]` and nav tables.
-- `references/site-themes.md`, or `ntropy skill site-themes`: before you write
-  or adapt a site theme.
-- `references/document-themes.md`, or `ntropy skill document-themes`: before
+- [references/writing-notes.md](references/writing-notes.md), or `ntropy skill writing-notes`: before you
+  author a note beyond the flow below: frontmatter rules, tags, links,
+  templates, daily notes, titles and slugs.
+- [references/querying.md](references/querying.md), or `ntropy skill querying`: before a search
+  beyond one tag or word: the query language, output parsing, exit codes,
+  deleting.
+- [references/vaults.md](references/vaults.md), or `ntropy skill vaults`: to create or locate a
+  vault, and for pointer files, encryption, the `vault` commands, git and
+  configuration.
+- [references/views.md](references/views.md), or `ntropy skill views`: before you add or change a
+  view.
+- [references/rendering.md](references/rendering.md), or `ntropy skill rendering`: before `render` or
+  `show`: formats, where the artifact goes, themes, paper, linked sets.
+- [references/site.md](references/site.md), or `ntropy skill site`: before `ntropy site`: the
+  website export, its `[site]` table and navigation.
+- [references/site-themes.md](references/site-themes.md), or `ntropy skill site-themes`: before you
+  write or adapt a site theme.
+- [references/document-themes.md](references/document-themes.md), or `ntropy skill document-themes`: before
   you write or adapt a document theme for PDF and Typst output.
 
 # Working with ntropy
 
-ntropy is a Markdown note-taking CLI where metadata, not folders, is the filing
-system. A **vault** is a plain directory; the notes in its `all-notes/`
-subdirectory are the entire database (no index, no hidden state). A note is a
-Markdown file named `<ulid>-<slug>.md` with YAML frontmatter; the 26-character
-ULID is its identity, `title` is required, and every frontmatter field is
-instantly filterable and browsable. Organization is derived on demand: a query
-language for filtering, and materialized symlink views for filesystem browsing.
+ntropy files notes by metadata, not folders. A **vault** is a plain
+directory; the notes in its `all-notes/` are the whole database, with no
+index and no hidden state. A note is a Markdown file named
+`<ulid>-<slug>.md` with YAML frontmatter. Its 26-character ULID is its
+identity and `title` is required. Every frontmatter field can be queried, and
+materialized symlink **views** make a field browsable as folders.
 
-## Golden rules for agents
+## Rules for every task
 
-1. **ALWAYS run non-interactively.** Pass `-n` on every command and
-   `--print` (or `--id`) on `new`/`today`. Without them ntropy opens an
-   interactive fuzzy picker or the user's `$VISUAL`/`$EDITOR` and blocks
-   whenever a controlling terminal exists — piping or capturing the output does NOT prevent that, so
-   `$(ntropy search …)` without `-n` hangs waiting for keys.
-2. **NEVER hand-create files in `all-notes/`.** You would have to invent a
-   ULID: a wrong one corrupts note identity, and a file carrying another
-   note's ULID, such as a copy, is skipped by every command with a warning
-   until `ntropy reconcile` gives it a ULID of its own. ntropy allocates the
-   identity, the location and the filename; only the content is yours.
-3. **Author a note with `new --empty` then `write`.** This is the path to
-   prefer whenever you already know what the note should say. `ntropy new
-   --empty -p <title>` prints the path of an empty file; `ntropy write <path>`
-   stores the text you feed it on stdin. Nothing is read back, no template gets
-   in the way, and it works the same in an encrypted vault. `write` realigns the
-   filename and refreshes the views itself, so no `reconcile` is needed after
-   it.
-4. **A file left by `--empty` is malformed until you write it.** Every ntropy
-   command warns about it, `--strict` fails on it, and it is in no search
-   result. Always `write` it in the same step you created it. What you write
-   must be a complete, well-formed note: see rule 5.
-5. **`write` takes a whole note, not a fragment.** Frontmatter block first with
-   at least `title:` (use the title you passed to `new`, since the filename slug
-   came from it), `tags:` as a flat list of strings if present, never `id:` or
-   dates, then the Markdown body. Anything that is not a well-formed note is
-   refused and nothing is written.
-6. **Run `ntropy reconcile` after editing a note file directly.** Editing the
-   file yourself instead of using `write` leaves the filename slug and the views
-   stale; reconcile realigns filenames, refreshes inter-note links, and re-syncs
-   views. It is cheap and idempotent. `write` does this for you.
-7. **Check the active vault before mutating.** `ntropy info` names the vault
-   and the rule that resolved it. When in doubt, pin the vault explicitly with
-   `--vault <path>`.
-8. **NEVER touch derived state.** Do not write inside `by-*/` view
-   directories, do not edit ntropy's managed `.gitignore` entries, and do not
-   store `id` or dates in frontmatter (identity lives in the filename).
-9. **Delete by ULID, with `-f`.** `delete` requires exactly one match and, in
-   non-interactive mode, `--force`. Search first, then
-   `ntropy delete -n -f <ulid>`.
-10. **`render` to PDF needs `typst` on `PATH`; `typst`, `html` and `ansi`
-   need no tool.** It resolves to exactly one note; pass `-p` to capture the
-   artifact path (`out=$(ntropy render -n -p <ulid>)`). `--to typst` emits
-   the Typst document. `--to html` writes the note as a web page,
-   `<stem>.html` plus a `<stem>_files/` directory beside it that the page
-   needs; move the two together ([references/site.md](references/site.md), or `ntropy skill site`).
-   `--to ansi` writes the note drawn for a terminal, with ANSI escape
-   sequences, at 80 columns; GitHub alerts are drawn as callouts.
-11. **The vault's theme is automatic; never pass `--theme` to get it.** Which
-   theme depends on the format: `pdf` and `typst` use `[render] theme` from
-   `.ntropy/themes/typst/`, `html` and `site` use `[site] theme`, a
-   directory in `.ntropy/themes/site/`. `--theme <name>` picks a different
-   one, `--theme default` forces ntropy's built-in look, and `site theme
-   init <name>` copies the built-in site theme out as a starting point. A
-   theme that is missing or broken fails the render rather than falling
-   back. `ansi` takes no theme: never pass `--theme` with `--to ansi`, it is
-   an error.
-12. **Rendering a linked set: no `-o`, one directory.** A note link becomes a
-   link to `<target-slug>.pdf` (or `.html`), the name `render` gives the
-   target's own artifact by default. Render each note from the same working
-   directory without `-o` and the cross-references find each other; rename
-   an artifact and its incoming links break. Rendering again over an
-   existing artifact needs `--force`; `render` never overwrites silently.
-   A note whose file name holds a control or bidi character, or whose slug
-   starts with `-`, has no default name: run `ntropy reconcile` first, or
-   pass `-o`.
-13. **`site` is a reserved frontmatter key.** A note's `site` table shapes
-   the exported website's navigation (`order`, `label`, `hidden`, `index`,
-   `listing`, `related`) and picks the theme template that renders the note
-   (`template`); it is hidden from the page. Never put content under it,
-   and never invent keys in it.
-14. **The site config names notes by ULID.** `[site] index` and every
-   `{ note = … }` item of a `[[site.nav]]` table take the full 26-character
-   ULID, never a title, slug, or path. Look it up with `ntropy search -n`
-   first.
-15. **Table cells and messages are display text.** Control characters and
-   bidi overrides in titles, names and paths are shown escaped (`\n`,
-   `\u{1b}`), so a title in the table can differ from the one in the file.
-   For a note's exact text use `-P`. A `-p` path is exact; a note whose file
-   name would need escaping has none, and `-p` fails or leaves it out with
-   a warning until `ntropy reconcile` renames it; `render` without `-o`
-   refuses it too.
+1. **Pass `-n` on every command**, and `--print` (`-p`) or `--id` on `new`
+   and `today`. Without them ntropy opens a fuzzy picker or `$VISUAL` and
+   `$EDITOR` and blocks whenever a controlling terminal exists. Capturing the
+   output does not prevent that, so `$(ntropy search …)` without `-n` hangs.
+   Put `--` before a title or selector that may start with `-`, which clap
+   would read as a flag: `ntropy new -n -p -- "$title"`.
+2. **Know which vault you hit.** `ntropy info` names the active vault and the
+   rule that chose it: `--vault <path>`, then `$NTROPY_VAULT`, then the
+   nearest ancestor of the current directory holding a `.ntropy-vault` pointer
+   file or a `.ntropy/` directory, then the global default. Pin it with
+   `--vault <path>` when it matters. If `info` shows no vault or an unexpected
+   one, stop and ask the user which vault to use. Never run `ntropy init` or
+   `init --set-default` on your own initiative: `--set-default` rewrites the
+   user's global config. A note made in the wrong vault is removed with
+   `delete -n -f <ulid>` under that vault's `--vault`.
+3. **NEVER hand-create files in `all-notes/`.** You would have to invent a
+   ULID, and a wrong one corrupts note identity. ntropy allocates the
+   identity, the location and the filename; the content is yours.
+4. **Author with `new --empty -p`, then `write` the whole note.**
+   `ntropy new -n --empty -p -- <title…>` prints the path of an empty file,
+   and `ntropy write -n <path|ulid|filename>` replaces the note with the text
+   on stdin. Nothing is read back, no template is in the way, no `reconcile`
+   follows, and it works the same in an encrypted vault:
 
-## Do / don't
+   ```bash
+   note=$(ntropy new -n --empty -p -- "Quarterly review")
+   ntropy write -n "$note" <<'EOF'
+   ---
+   title: Quarterly review
+   tags: [work, planning]
+   status: draft
+   ---
+   # Quarterly review
 
-| DON'T | DO |
-|-------|----|
-| `ntropy new My note` — blocks in an editor | `ntropy new --print My note` |
-| Write a new file into `all-notes/` yourself | `note=$(ntropy new --empty -p …)`, then `ntropy write "$note"` |
-| `ntropy new --empty -p …` and move on | `write` it in the same step; an unwritten note is malformed |
-| Feed `write` a body with no frontmatter | feed it the whole note, frontmatter block first |
-| `--empty --template meeting` — contradictory, refused | pick one: a template stamps content, `--empty` writes none |
-| Write into an encrypted vault's `-p` path | `ntropy write <id>` — the only way to author there |
-| `ntropy reconcile` after every `write` | nothing; `write` realigns and refreshes views itself |
-| Rename a note file to retitle it | edit the frontmatter `title`, then `ntropy reconcile` |
-| Put `id:` or `created:` in frontmatter | nothing — identity and date live in the filename ULID |
-| `ntropy delete -n -f tag:old` — broad query | `ntropy delete -n -f <full-26-char-ulid>` |
-| Create or edit files inside `by-*/` view directories | edit the canonical file in `all-notes/` |
-| Link notes by title or view path | `[Title](<ulid>-<slug>.md)` |
-| Edit a note's frontmatter and stop there | edit, then `ntropy reconcile` |
-| `ntropy site -o ./public` into a used directory | `--force`, on purpose, or a fresh directory |
-| `index = "Welcome"` in `[site]` | the note's ULID from `ntropy search -n` |
+   Body in ordinary Markdown.
+   EOF
+   ```
+
+   What you pipe becomes the file, so it must be a complete, well-formed
+   note: a frontmatter block first (`---` … `---`) with `title` (the one you
+   passed to `new`), `tags` a flat list of strings if present, never `id`,
+   `created` or `modified`, and every value that contains `: ` or starts with
+   YAML syntax quoted. A text that is no note is refused and nothing is
+   written, so fix it and `write` the same path again. Write in the same step
+   you create: until then the `--empty` file is malformed, every command
+   warns about it, `--strict` fails on it and no search returns it. `delete`
+   does not see a malformed note either, so to drop an abandoned one `write` a
+   minimal note (`---` / `title: x` / `---`) and then delete it. To rewrite a
+   note, read it with `search -n -P <ulid>`, change it, and `write` the whole
+   file back.
+5. **Run `ntropy reconcile` after editing a note file directly**, for example
+   one you started with `new -n -p -t <name>`. The filename slug and the views
+   drift from the file until you do. `write` and ntropy's own editor realign
+   both themselves, so never reconcile after them. Reconcile is cheap and
+   idempotent.
+6. **Retitle by editing the frontmatter `title`, then reconcile; never rename
+   the file.** Reconcile renames the file to the new slug, keeps the ULID and
+   rewrites the slug in links of other notes.
+7. **Link by filename**: `[Title](<ulid>-<slug>.md)`, taking the filename from
+   `ntropy search -n -p <query>`. Never link by title or by a path into a
+   view. A link survives retitles because it is recognized by its ULID.
+8. **Read with `search -n`**: no selector lists every note; a selector is a
+   full ULID, a note's filename or path, or a query (`tag:work and not
+   status:done`; two words side by side must both occur, one quoted argument is
+   a phrase). `-p` prints paths, `--id` ULIDs and `-P` one note's exact text,
+   each one per line and nothing else. `search` exits 1 when nothing matches,
+   and also on every error and on every warning under `--strict`, where
+   matching notes still print. Tell them apart by stderr (`No notes matched`,
+   `error:`, `warning:`), never by the code alone.
+9. **Delete one note by its ULID**: search first, confirm the single ULID,
+   then `delete -n -f <ulid>`; `-f` is required without a prompt, and a broad
+   query is never a selector for it. An empty selector is refused.
+10. **A note file that carries another note's ULID, such as a copy,** is
+    warned about and left out of queries, but a ULID selector names both
+    files, so `-P`, `write` and `delete` refuse it as ambiguous. Run
+    `ntropy reconcile`, which gives the copy its own ULID, or name the file.
+11. **Derived state is not yours.** NEVER write inside a view directory
+    (`by-*/`): its leaves are symlinks that the next sync prunes. Do not
+    commit view directories, do not edit ntropy's managed `.gitignore`
+    entries, and create no file or directory named `all-notes`, `.ntropy`,
+    `.gitignore`, `README.md` or `.ntropy-vault` yourself.
+12. **Displayed text is escaped.** Control and bidi characters in titles,
+    names and paths show as `\n`, `\u{1b}`, so a table cell can differ from the
+    file. Use `-P` for exact text. A `-p` path is exact; a note whose file name
+    would need escaping has none, and `-p` fails or leaves it out with a
+    warning until `ntropy reconcile` renames it.
+13. **`site` is a reserved frontmatter key.** A note's `site` table shapes the
+    exported website's navigation and picks the theme template for the note,
+    and is hidden from the page. Never put content under it and never invent
+    keys in it.
+14. **Encrypted vaults** (marked by `.ntropy/identity.pub`, notes stored as
+    `all-notes/<ulid>.age`): `new` and `write` work while locked; reading,
+    `today`, `render`, `show` and `site` need the key. Never read a `-p` path,
+    it is ciphertext: use `search -n -P <ulid>`. Views are disabled, so `view
+    add` is refused. Rendered and exported output is plaintext: write it
+    outside the vault. Headless, `--passphrase-file <file>` (the first line is
+    the passphrase) is enough; `--identity <file>` or `$NTROPY_IDENTITY` names
+    an unwrapped age secret key, never `.ntropy/identity.age`. With `-n`
+    nothing prompts. Details: `references/vaults.md`, or `ntropy skill vaults`.
+15. **`render` writes into the current directory** unless you pass `-o`, and
+    the default PDF needs `typst` on `PATH`. Read `ntropy skill rendering`
+    before a render and `ntropy skill site` before an export.
 
 ## Command reference
 
-| Command | Purpose |
-|---------|---------|
-| `ntropy init [path]` | Scaffold or complete a vault; idempotent. `--set-default` records it as the global default. |
-| `ntropy new --print <title…>` | Create a note from a template, print its path. `-t <name>` picks `.ntropy/templates/<name>.md`. `--empty` creates the file with no content instead, for when you write the whole note yourself (conflicts with `-t`). `--id` replaces `--print` and prints the ULID of the note it created. |
-| `ntropy today --print` | Print today's daily note path, creating it on first use each day. `--id` prints its ULID instead. |
-| `ntropy write <id\|filename\|path>` | Replace that note's content with the whole note text read from stdin, then realign the filename and refresh views. Names its target, never searches: a full ULID, the filename, or the path. Refuses text that is not a well-formed note. Prints the resulting path. |
-| `ntropy search -n [id\|path\|query]` | List/filter notes as a plain table (alias `list`). No selector = all notes. Exits non-zero on no match. Add `-p` to print matching paths, one per line, instead of the table, `--id` to print matching ULIDs the same way, or `-P` to print one note's text. |
-| `ntropy delete -n -f <id>` | Delete one note and refresh views. |
-| `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`), `typst` for the emitted document, `html` for a web page with a `<stem>_files/` directory beside it, or `ansi` for the note drawn for a terminal (no theme); the last three need no external tool. Resolves to exactly one note; `-p` prints the artifact path; an existing artifact is refused without `--force`; a default name from a file name with control or bidi characters, or a leading `-`, is refused (run `ntropy reconcile` or pass `-o`). |
-| `ntropy show -n <id>` | Print one note drawn for a terminal: frontmatter block, then the styled Markdown, GitHub alerts as callouts. Into a pipe it is plain text laid out at 80 columns (`--width` changes that), not the note's source, so read a note's exact text with `search -n -P`. Interactively a long note opens in `$PAGER` or `less -R`; `-n` never pages. Resolves to exactly one note, like `render`. |
-| `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website: a page per note, a tag tree, a page per view and group, a front page, sidebar, search, works from disk. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `--theme` overrides the site theme. `site theme init <name>` copies the built-in theme into the vault. Warnings name missing files, links to files an export never copies (`.ntropy`, `.git`, credentials and the like), links to notes outside the export, and unresolvable navigation; `--strict` fails on them. Hidden files and metadata left out of a linked folder are `note:` lines, which `--strict` does not count. Details: [references/site.md](references/site.md), or `ntropy skill site`. |
-| `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
-| `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
-| `ntropy tags -n` | Every tag with its note count — check this before inventing new tags. |
-| `ntropy info` | Active vault + how it resolved, global default, vault statistics. `-p`/`--print` prints the vault's absolute path alone, for scripts. |
-| `ntropy unlock` / `ntropy lock` | Store or forget an encrypted vault's key. |
-| `ntropy vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault's storage or manage its key. Rewrites every note, so pass `-y` to skip the confirmation; `--resume` finishes an interrupted run. |
-| `ntropy lsp` | Language server for editors (link/tag completion, go-to-definition); not used from scripts. Editor setup lives in the ntropy README. |
-| `ntropy skill [part]` | Print this skill, or one of its parts (`writing-notes`, `querying`, `vaults`, `views`, `site`, `site-themes`, `document-themes`). `--install <dir>` writes the skill to `<dir>/ntropy/`, for a skills directory such as `~/.claude/skills`, and replaces its `references/`. It needs no vault. |
-
-`search`, `delete`, `render` and `show` also take a note's filename or path
-as the one selector, and `write` does too. A lone argument that ends in `.md`
-or `.age` and names an existing file selects that note: a bare filename is
-looked up in `all-notes/`, any other path is taken as given, and a symlink to a
-note, such as a view entry, selects the note it points to. A file that is no
-note of the vault is an error, and so is the filename of a note that no longer
-exists. Any other `.md` word is a query.
-
 Global flags on every command: `--vault <path>`, `-n`/`--non-interactive`,
 `--strict` (malformed notes and skipped views become errors instead of
-skip-warnings),
-`-i`/`--identity <path>` and `--passphrase-file <path>` for encrypted vaults.
+warnings), `-i`/`--identity <path>` and `--passphrase-file <path>` for
+encrypted vaults.
 
-## Encrypted vaults
-
-A vault whose `.ntropy/identity.pub` exists stores its notes encrypted as
-`all-notes/<ulid>.age`. Everything above works there unchanged once the vault
-is unlocked; what differs for an agent:
-
-- **Never read a `-p` path directly.** In an encrypted vault it is the
-  ciphertext file. Use `ntropy search -n -P <id>` to get a note's text; it
-  reads the same in either kind of vault.
-- **Reading needs the key**, so a locked vault fails with a message naming
-  `ntropy unlock`. Creating does not: `ntropy new` works locked. `ntropy today`
-  does not, because it finds today's note by title.
-- **Author with `write`, never by writing the path.** The `-p` path is an age
-  container, so text written into it is not a note. `ntropy write <id>` stores
-  content through the vault's cipher and is what makes an encrypted vault
-  scriptable at all. `new --empty` plus `write` works here exactly as it does in
-  a plaintext vault.
-- **`write` works locked too**, like `new`: it resolves its target by name and
-  reads no note, and encrypting needs only the public recipient.
-- **Headless use** wants `--identity <path>` (or `$NTROPY_IDENTITY`) and
-  `--passphrase-file <path>`; with `-n` ntropy never prompts.
-- **Views do not exist** there, so `ntropy view add` is refused.
-- **A rendered PDF is plaintext.** Write it outside the vault.
-
-## Vault resolution (which vault will I hit?)
-
-`--vault` > `$NTROPY_VAULT` > walk-up to the nearest ancestor with a
-`.ntropy-vault` pointer file or `.ntropy/` directory (pointer wins) > the
-global default. A `.ntropy-vault` file is one line pointing at a vault
-elsewhere, which is how a project pins its own vault. Details and creation
-recipes for global, project-local, and custom vaults:
-[references/vaults.md](references/vaults.md), or `ntropy skill vaults`.
-
-## Core workflows
-
-**Author a note (the path to prefer):** `new --empty` allocates the identity,
-`write` supplies the content. Nothing is read back, and this is identical in a
-plaintext and an encrypted vault:
-
-```bash
-note=$(ntropy new --empty -p Quarterly review)
-ntropy write "$note" <<'EOF'
----
-title: Quarterly review
-tags: [work, planning]
-status: draft
----
-# Quarterly review
-
-Body in ordinary Markdown.
-EOF
-```
-
-No `ntropy reconcile` afterwards: `write` realigns the filename and refreshes
-views itself. What you feed it has to be a well-formed note, since nothing
-stamped a skeleton for you: a YAML frontmatter block first, `title` in it (the
-title you passed to `new`, so the filename slug matches), `tags` a flat list of
-strings if present, no `id`/`created`/`modified` fields, YAML-quoting for values
-with `: ` in them and for numbers whose spelling matters (`1.50` reads as
-`1.5`), then the Markdown body. Text that is not a well-formed note
-is refused and nothing is written.
-
-**Rewrite an existing note:** read it out, transform, write it back. `-P` and
-`write` are inverses and both read the same in either kind of vault:
-
-```bash
-ntropy search -n -P 01KWVBW61WHJY7K27WNETSF641 > /tmp/note.md
-# edit /tmp/note.md
-ntropy write 01KWVBW61WHJY7K27WNETSF641 < /tmp/note.md
-```
-
-**Start from a template instead:** when you want the vault's own skeleton, for
-example a meeting note whose shape the user defined:
-
-```bash
-note=$(ntropy new --print -t meeting Standup)
-# edit "$note" directly, then:
-ntropy reconcile
-```
-
-Frontmatter rules in full, plus tags, inter-note links, and template authoring:
-[references/writing-notes.md](references/writing-notes.md), or `ntropy skill writing-notes`.
-
-**Find and read notes:**
-
-```bash
-ntropy search -n 'tag:work and not status:done'    # table: ID DATE TITLE TAGS PATH
-ntropy search -n 01KWVBW61WHJY7K27WNETSF641        # one note by ULID
-note=$(ntropy search -n -p 01KWVBW61WHJY7K27WNETSF641)   # just the file path
-ntropy search -n --id 'tag:work and not status:done'     # just the ULIDs
-```
-
-Full query language (`tag:`, `field:`, `text:`, `and`/`or`/`not`), output
-parsing, and exit-code recipes:
-[references/querying.md](references/querying.md), or `ntropy skill querying`.
-
-**Set up a project vault:**
-
-```bash
-ntropy init myproject/notes
-echo "notes" > myproject/.ntropy-vault   # commands anywhere in the project now hit it
-```
-
-**Make a dimension browsable:**
-
-```bash
-ntropy view add by-status --field status
-```
-
-View semantics, drift, and git rules: [references/views.md](references/views.md), or `ntropy skill views`.
-
-**Publish a documentation subtree as a website:** tag the pages as a tree,
-give each section a landing note, order the pages through their `site`
-table, root the sidebar at the tree, and export:
-
-```bash
-note=$(ntropy new --empty -p Welcome)
-ntropy write "$note" <<'EOF'
----
-title: Welcome
-tags: [handbook/start]
-site: { index: true, label: Getting Started, order: 1 }
----
-# Welcome
-
-Where to begin.
-EOF
-# .ntropy/config.toml: [site] root = "tags/handbook", related = false,
-# index = "<ulid of the front page note>"
-ntropy site -n -o ./public --strict tag:handbook
-```
-
-The `[site]` table, the nav table, the `site` frontmatter keys, and the
-standalone `render --to html` page: [references/site.md](references/site.md), or `ntropy skill site`.
-Writing a theme: a site theme for `site` and `render --to html` (layout,
-tokens, fonts, icons, markup, templates, a front page) is
-[references/site-themes.md](references/site-themes.md), or `ntropy skill site-themes`; a document theme
-for PDF and Typst output (`note`, show rules, fonts, paper) is
-[references/document-themes.md](references/document-themes.md), or `ntropy skill document-themes`.
+| Command | Purpose |
+|---------|---------|
+| `ntropy init [path]` | Scaffold or complete a vault; idempotent. `--encrypted` makes an encrypted one. Rule 2 says when not to. |
+| `ntropy new -n -p <title…>` | Create a note from a template and print its path; `-t <name>` picks `.ntropy/templates/<name>.md`; `--empty` creates it with no content (conflicts with `-t`); `--id` prints the ULID instead of the path. |
+| `ntropy today -n -p` | Print today's daily note path, creating it on first use each day; `--id` prints the ULID. |
+| `ntropy write <id\|filename\|path>` | Replace one note with the whole text on stdin, realign its filename and refresh views. It names its target, never searches. Refuses text that is not a well-formed note. Prints the path. |
+| `ntropy search -n [selector…]` | List notes as a plain table, newest first (alias `list`); `-p`, `--id`, `-P` as in rule 8. Query language: [references/querying.md](references/querying.md), or `ntropy skill querying`. |
+| `ntropy delete -n -f <id>` | Delete one note and refresh views. |
+| `ntropy render -n -p <id>` | Render one note: `--to pdf` (default), `typst`, `html` or `ansi`; `-o` names the artifact, `--force` replaces one, `--theme` overrides the theme. Read `ntropy skill rendering`. |
+| `ntropy show -n <id>` | Print one note drawn for a terminal; into a pipe it is plain text, so read exact text with `search -n -P`. |
+| `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `site theme init <name>` copies the built-in theme into the vault; `--strict` fails on its warnings. Read `ntropy skill site`. |
+| `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
+| `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. Read `ntropy skill views`. |
+| `ntropy tags -n` | Every tag with its note count; check it before inventing a tag. |
+| `ntropy info` | The active vault and how it resolved, the global default, vault statistics; `-p` prints the vault's absolute path alone. |
+| `ntropy unlock` / `ntropy lock` | Store or forget an encrypted vault's key. |
+| `ntropy vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault's storage or manage its key; they rewrite every note and ask first (`-y` skips the question, `--resume` finishes an interrupted run). Read `ntropy skill vaults`. |
+| `ntropy lsp` | Language server for editors; not used from scripts. |
+| `ntropy skill [part]` | Print this skill or one of its parts; `--install <dir>` writes it to `<dir>/ntropy/`, replacing its `references/`. It needs no vault. |
 
 End of the ntropy skill.

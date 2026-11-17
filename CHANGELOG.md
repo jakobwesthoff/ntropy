@@ -15,15 +15,17 @@ change in any release
 
 - `ntropy skill` prints the agent skill compiled into the binary, so an agent
   reads the skill of the ntropy that runs. `ntropy skill <part>` prints one of
-  its parts (`writing-notes`, `querying`, `vaults`, `views`, `site`,
-  `site-themes`, `document-themes`), and `ntropy skill --install <dir>` writes
+  its parts (`writing-notes`, `querying`, `vaults`, `views`, `rendering`,
+  `site`, `site-themes`, `document-themes`), and `ntropy skill --install <dir>` writes
   the skill to `<dir>/ntropy/`, for a skills directory such as
   `~/.claude/skills`, and names each file it writes. It replaces the copy's
   `references/` directory and leaves any other file there alone. `SKILL.md`
   carries an `ntropy-version` stamp, and the published crate carries
   `skills/`. `skill` needs no vault.
   [ADR 0092](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0092-ship-the-agent-skill-in-the-binary-and-print-it-with-ntropy-skill.md)
-  records the command.
+  records the command and
+  [ADR 0094](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0094-cut-the-agent-skill-into-a-core-of-rules-and-eight-parts.md)
+  the split into a core and eight parts.
 - `ntropy skill` and `ntropy --version` warn on stderr when an installed copy
   of the skill is older than the running ntropy, or carries no
   `ntropy-version`. They look in the skills directories of Claude Code,

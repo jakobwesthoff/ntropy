@@ -118,3 +118,6 @@ made.
 - [0089. Previous and next run through the whole sidebar](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0089-previous-and-next-run-through-the-whole-sidebar.md)
 - [0090. `--id` prints a note's ULID](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0090-id-flag-prints-a-notes-ulid.md)
 - [0091. A note's filename or path selects it](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0091-a-notes-filename-or-path-selects-it.md)
+- [0092. Ship the agent skill in the binary and print it with ntropy skill](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0092-ship-the-agent-skill-in-the-binary-and-print-it-with-ntropy-skill.md)
+- [0093. Warn from ntropy skill and ntropy --version when an installed copy of the skill is older](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0093-warn-from-ntropy-skill-and-ntropy-version-when-an-installed-copy-of-the-skill-is-older.md)
+- [0094. Cut the agent skill into a core of rules and eight parts](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0094-cut-the-agent-skill-into-a-core-of-rules-and-eight-parts.md)

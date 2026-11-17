@@ -118,16 +118,39 @@ disabled: a symlink tree would spell out the tag taxonomy in plaintext names
 inside the synced directory. Both key files belong in version control — they
 *are* the vault, and the identity is useless without the passphrase.
 
-Reading requires the key; `ntropy unlock` puts it in the OS credential store
-and `ntropy lock` removes it. Writing does not, so `ntropy new` works on a
-locked vault. For scripts, `--identity <path>` (or `$NTROPY_IDENTITY`) and
-`--passphrase-file <path>` replace the credential store and the prompt.
+What differs for an agent:
+
+- **A `-p` path is ciphertext.** Never read it. `ntropy search -n -P <ulid>`
+  prints a note's text and reads the same in either kind of vault.
+- **Reading needs the key**: `search`, `show`, `render`, `site` and `today`
+  fail on a locked vault with a message naming `ntropy unlock`, which puts the
+  key in the OS credential store; `ntropy lock` removes it.
+- **Writing does not**: `ntropy new` and `ntropy write <id>` work on a locked
+  vault. `write` is also the only way to author a note there, since the `-p`
+  path is an age container and text written into it is not a note.
+- **Headless**, `--passphrase-file <file>` is enough: the first line of the
+  file is the vault's passphrase, and it unwraps `.ntropy/identity.age`.
+  `--identity <file>` (or `$NTROPY_IDENTITY`) is the alternative and takes an
+  unwrapped age secret key (an `AGE-SECRET-KEY-` line, as `age-keygen`
+  writes), never `.ntropy/identity.age`; the passphrase is then not used.
+  With `-n` ntropy never prompts.
+- **Views do not exist** there, so `ntropy view add` is refused.
+- **Rendered and exported output is plaintext.** Write it outside the vault
+  ([rendering.md](rendering.md), or `ntropy skill rendering`).
 
 Converting an existing vault is `ntropy vault encrypt` (and `vault decrypt`
 back). Both rewrite every note, ask first unless given `-y`, and are safe to
 interrupt: `--resume` finishes one that was. They refuse to start while two
 note files share a ULID or a file sits where a converted note would go; run
 `ntropy reconcile` first, or move the named files away.
+
+`ntropy vault passphrase` changes only the passphrase that wraps the
+identity: the current one comes from `--passphrase-file`, the new one from
+`--new-passphrase-file <file>`. `ntropy vault rekey` re-encrypts every note
+to a fresh key; the vault keeps its passphrase unless `--new-passphrase-file`
+gives a new one, and `--resume` finishes an interrupted run. With `-n` and
+no new-passphrase file a command that needs a new passphrase fails instead
+of prompting.
 
 ## Configuration files
 
