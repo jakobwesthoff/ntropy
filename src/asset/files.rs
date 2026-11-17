@@ -1520,6 +1520,36 @@ mod tests {
     }
 
     #[test]
+    fn a_move_whose_copy_fails_keeps_the_source_and_stores_nothing() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let folder = session.layout().asset_folder(FOLDER);
+        // A directory of the file's name: `--force` cannot replace it, and a
+        // forced move copies before it removes the source.
+        std::fs::create_dir_all(folder.join("a.pdf")).expect("directory");
+        let file = source(&session, "a.pdf", b"keep");
+        let options = AddOptions {
+            move_files: true,
+            force: true,
+            ..opts()
+        };
+
+        let report = super::add(
+            session.layout(),
+            &note,
+            std::slice::from_ref(&file),
+            &options,
+        );
+
+        assert!(report.added.is_empty(), "{report:?}");
+        assert!(
+            matches!(&report.error, Some(AssetError::Transfer { name, .. }) if name == "a.pdf"),
+            "{report:?}"
+        );
+        assert_eq!(std::fs::read(&file).expect("the source stays"), b"keep");
+    }
+
+    #[test]
     fn a_failed_check_places_nothing_and_touches_nothing() {
         let (_g, session) = vault_with_view();
         let note = note_with(&session, "body");
