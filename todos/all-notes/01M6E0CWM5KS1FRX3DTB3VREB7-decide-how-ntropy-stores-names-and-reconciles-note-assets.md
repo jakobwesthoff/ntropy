@@ -77,6 +77,18 @@ from `open-questions.md` there, which leads with the folder naming.
   leaves open, such as how a link resolves when the file becomes
   `<name>.age`.
 
+## Decisions
+
+- 2026-11-17, user (round 1, recorded in
+  `docs/research/asset-handling/decisions.md`): a note's asset folder is
+  `all-notes/assets/<note file name without extension>/`, renamed by
+  `reconcile` together with the note, which rewrites the links into it and
+  prints old and new path; in an encrypted vault the folder is bare
+  `<ULID>`, links keep their plaintext form and resolve by the ULID prefix.
+  Asset encryption is not part of the first asset release. Further rounds
+  (the `delete` default, PDF handling of non-image files, commands, links
+  into another note's folder) are still open.
+
 ## Relations
 
 - Relates to: [Protect non-note assets in encrypted vaults](01KZ9ZN4GKF9XCT143E1W5YSEJ-protect-non-note-assets-in-encrypted-vaults.md), encryption of the assets this todo gives a defined place

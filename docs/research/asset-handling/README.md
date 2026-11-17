@@ -17,11 +17,15 @@ The facts about the code are checked against `main` at commit `ed914a3`
 | [external.md](external.md) | How other note tools handle attachments, with what was and was not re-fetched. |
 | [options.md](options.md) | Every option considered, how each fares, why each was kept or rejected, the recommendation both researchers converged on, the technically settled points and the withdrawn ideas. |
 | [open-questions.md](open-questions.md) | The questions only the user can decide, and the measurements. |
+| [decisions.md](decisions.md) | The user's answers to the open questions, round by round. |
 
 ## State on 2026-11-17
 
-The research is done. No decision is taken. The decision is taken with the
-user, working through [open-questions.md](open-questions.md).
+The research is done. The decisions are taken with the user, working
+through [open-questions.md](open-questions.md), and recorded in
+[decisions.md](decisions.md). Round 1 (2026-11-17) settled the folder
+naming, its location and the link form in encrypted vaults, and deferred
+asset encryption. The questions from 6 on are open.
 
 Both researchers recommend one family of layout: a folder per note named by
 the note's bare ULID, `all-notes/assets/<ULID>/`, linked with plain relative
