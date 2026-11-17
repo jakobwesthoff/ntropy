@@ -17,6 +17,12 @@ Found on 2026-10-30 while adding the validation that keeps view names inside the
 
 For nested names, the parent view treats the child view's directory as foreign content inside its own tree, and the child view's sync then recreates it.
 
+The same removal hits a file saved inside a view tree after the view exists. Reproduced on 2026-11-17 in the final review of the asset system: a note opened through `by-tag/work/` and an editor that pastes an image next to it creates `by-tag/work/pasted-image.png`; the next `reconcile`, `new`, `write` or `asset add` deletes it without a warning, and `--strict` exits 0. The asset system keeps a real `_assets` directory in a view that holds files, because such a file may be the only copy (ADR 0100), and `vault encrypt` refuses while a view holds a file an editor saved through it (ADR 0103); a view sync deletes that same file in any other place of the tree before either gets to see it.
+
+## Suggested direction for the saved-file case
+
+Treat a regular file in a view tree like the kept `_assets` directory: leave it, report a warning that counts for `--strict`, and point to `asset add --move` to give it a home.
+
 ## Options
 
 - Refuse to take over a directory ntropy did not create: mark view directories (a marker file, or a record in `.ntropy/`) and skip a view whose directory exists without the mark, with a warning that `--strict` turns into a failure.
