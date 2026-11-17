@@ -46,8 +46,12 @@ Active vault:  /Users/you/project/notes (via pointer file /Users/you/project/.nt
 Default vault: /Users/you/notes
 ```
 
-Run `ntropy info` FIRST whenever it is unclear which vault a command will hit.
-Creating notes into the wrong vault is the main failure mode this prevents.
+Run `ntropy info` whenever it is unclear which vault a command will hit;
+creating notes into the wrong vault is the failure it prevents. When no vault
+resolves, commands fail with `no vault found; pass --vault, set $NTROPY_VAULT,
+run inside a vault, or set a default`. That is a question for the user, not a
+reason to run `ntropy init` or `init --set-default` yourself (the core's rule on
+choosing a vault).
 
 When a script needs the path rather than the report, `ntropy info --print`
 prints the active vault's absolute path alone and exits non-zero if none
@@ -168,17 +172,18 @@ Templates are plain files under `<vault>/.ntropy/templates/`, not config. See
 ## Reserved names
 
 Inside a vault, `all-notes`, `.ntropy`, `.gitignore`, and `README.md` are
-reserved, as is the directory of every configured view; no view name may
-start with a reserved name. `.ntropy-vault` is reserved as the pointer-file
-name. MUST NOT create your own files or directories under these names.
+reserved, as is the directory of every configured view, and a view name's first
+segment may not be one of them
+([views.md](views.md), or `ntropy skill views`). `.ntropy-vault` is reserved as
+the pointer-file name. ntropy owns these names: create no file or directory
+under them yourself.
 
 ## Vaults under git
 
 A vault is plain files, so version it directly: `git init` inside it and commit
 notes like any text. ntropy maintains the vault's root `.gitignore` so the
 derived view directories stay untracked; it marks its own entries with a
-comment and never touches lines you add yourself. DO NOT commit view
-directories and DO NOT remove the managed ignore entries.
+comment and never touches lines you add yourself.
 
 ## Strictness and malformed notes
 
@@ -191,7 +196,9 @@ skipped for an invalid name ([views.md](views.md), or `ntropy skill views`):
 ntropy search -n --strict > /dev/null   # exits non-zero if any note is malformed
 ```
 
-(An empty vault also exits non-zero, since a no-match listing does; check
-stderr for `error:` versus the no-match message when it matters.)
+Under `--strict` the matching notes still print and only the exit code and the
+`warning:` lines on stderr change. An empty vault also exits non-zero, since a
+no-match listing does: read stderr, not only the exit code
+([querying.md](querying.md), or `ntropy skill querying`).
 
 End of references/vaults.md.

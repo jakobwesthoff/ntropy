@@ -118,9 +118,9 @@ materialized symlink **views** make a field browsable as folders.
 9. **Delete one note by its ULID**: search first, confirm the single ULID,
    then `delete -n -f <ulid>`; `-f` is required without a prompt, and a broad
    query is never a selector for it. An empty selector is refused.
-10. **A note file that carries another note's ULID, such as a copy,** is
-    warned about and left out of queries, but a ULID selector names both
-    files, so `-P`, `write` and `delete` refuse it as ambiguous. Run
+10. **A note file that carries another note's ULID, such as a copy,** raises
+    a warning, and a ULID selector names both files, so the commands that take
+    one note (`-P`, `write`, `delete`) refuse it as ambiguous. Run
     `ntropy reconcile`, which gives the copy its own ULID, or name the file.
 11. **Derived state is not yours.** NEVER write inside a view directory
     (`by-*/`): its leaves are symlinks that the next sync prunes. Do not

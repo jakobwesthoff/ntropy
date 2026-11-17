@@ -49,29 +49,31 @@ case, so every note has its leaf on a case-insensitive filesystem too.
 
 ## Freshness and drift
 
-Views refresh automatically after every ntropy mutation (`new`, `delete`, edits
-made through ntropy's own editor flow). They do NOT see direct file edits: if
-you change a note's frontmatter with your own tools, run `ntropy reconcile` to
-re-sync every view (see [writing-notes.md](writing-notes.md), or `ntropy skill writing-notes`). If view contents
-look wrong, reconcile before investigating anything else.
+Views refresh automatically after every ntropy mutation: `new`, `today`,
+`write`, `delete`, `reconcile` and edits made through ntropy's own editor flow.
+They do NOT see direct file edits: if you change a note's frontmatter with your
+own tools, run `ntropy reconcile` to re-sync every view
+([writing-notes.md](writing-notes.md), or `ntropy skill writing-notes`). If view
+contents look wrong, reconcile before investigating anything else.
 
 ## Rules
 
-- **NEVER create, edit, or delete files inside a view directory.** The leaves
-  are derived symlinks; the canonical file lives in `all-notes/`. Anything you
-  place in a view tree can be pruned by the next sync.
-- **DO NOT commit view directories.** ntropy maintains the vault's root
-  `.gitignore` with one managed, comment-marked entry per view, added on
-  `view add` and pruned on `view remove`; your own lines are never touched.
+- A view directory is derived (the core's rule on derived state): the
+  canonical file lives in `all-notes/`, and anything you place in a view tree
+  can be pruned by the next sync.
+- ntropy maintains the vault's root `.gitignore` with one managed,
+  comment-marked entry per view, added on `view add` and pruned on `view
+  remove`; your own lines are never touched.
 - **`view remove` deletes no directory.** After it the stale tree
   stays on disk (and, no longer ignored, shows up in `git status`); the command
   reports it so you can `rm -r` it yourself.
 - A view name is lowercase letters, digits and single dashes, optionally
   nested with `/` (`by-status`, `area/work`), each part at most 72
-  characters. It must not start with a reserved name (`all-notes`, `.ntropy`,
-  `.gitignore`, `README.md`), no part may start with `.`, and it must not
-  repeat an existing view. `view add` refuses anything else and suggests a
-  valid name; use the suggestion.
+  characters. Its first part must not be a reserved name (`all-notes`,
+  `.ntropy`, `.gitignore`, `README.md`: `all-notes/x` is refused, `all-notes-x`
+  is fine), no part may start with `.`, and it must not repeat an existing
+  view. `view add` refuses anything else and suggests a valid name; use the
+  suggestion.
 - A configured view with an invalid name is skipped: commands that sync views
   print `warning: skipped view ...` on stderr, and `--strict` makes
   `reconcile` and `site` fail. Fix it with `ntropy view remove <name>`, then
