@@ -9,6 +9,20 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Changed
+
+- Dependencies updated to their latest compatible releases: `clap` 4.6.8,
+  `toml` 1.2.1.
+
+### Fixed
+
+- `async-executor` 1.14.0, which reaches ntropy transitively through the
+  Secret Service credential store (`zbus`) on Linux and other Unix systems
+  except macOS, was yanked from crates.io, so packaging v2.12.0 warned about
+  it. The lockfile moves to 1.14.1.
+
 ## v2.12.0 - 2026-11-17
 
 ### Added
