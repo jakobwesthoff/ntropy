@@ -473,7 +473,13 @@ the name holds anything but letters, digits, `.`, `_` and `-`. One `added <path>
 line per file goes to stderr. Every printed link is read back with the Markdown
 parser, and a name whose link would not read back as the file, one with `&amp;`
 in it, is refused with the hint to use `--as`; so are names with `#`, `\`, `/`,
-`<`, `>` or a control character. Every check runs before the first file is touched: a
+`<`, `>` or a control character. A source may not be a note of the vault, a
+`.md` or `.age` file directly in `all-notes/` reached by any spelling of its
+path or through a symlink such as a view's leaf. With `--move`, a source that
+lies in another note's asset folder (the entry the move removes, so a symlink
+standing there counts and one elsewhere that points into it does not) warns,
+naming the folder, since that note's links to it break; the move still happens and
+the warning counts for `--strict`. A folder no note owns gets no warning. Every check runs before the first file is touched: a
 source must be a file and not the file it would be stored as (the same
 directory entry reached through a symlinked directory such as a view's `_assets`
 link, a hard link of it, or a symlink to it: a move or a forced copy would remove

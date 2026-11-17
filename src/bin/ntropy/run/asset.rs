@@ -93,10 +93,14 @@ fn cmd_add(
         println!("{}", ntropy::text::escape_controls(&file.link));
     }
 
+    let mut extra = report.warnings.len();
+    for warning in &report.warnings {
+        output::warn(warning);
+    }
+
     // The views follow a folder that appeared or a file that arrived. A view
     // that cannot be refreshed is a warning, since the files are in place and
     // the links are printed.
-    let mut extra = 0;
     if report.touched {
         match reconcile::refresh_views(session) {
             Ok(refresh) => print_skipped_views(&refresh.skipped_views),

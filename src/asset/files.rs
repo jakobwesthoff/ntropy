@@ -15,6 +15,7 @@ use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use crate::fsutil::{self, FsError};
+use crate::id::Id;
 use crate::note::Note;
 use crate::vault::layout::{ALL_NOTES_DIR, ASSETS_DIR, Layout};
 
@@ -80,6 +81,9 @@ pub enum AssetError {
         cause: FsError,
     },
 
+    #[error("`{}` is a note of this vault", .0.display())]
+    NoteFile(PathBuf),
+
     #[error("`--as` names one file, but {0} files were given")]
     RenameNeedsOneFile(usize),
 
@@ -113,6 +117,8 @@ pub struct AddReport {
     /// Whether the folder was created or a file placed, so the views may need
     /// to follow.
     pub touched: bool,
+    /// What the caller should warn about: the run went on regardless.
+    pub warnings: Vec<String>,
     /// Why the command stopped before the last file.
     pub error: Option<AssetError>,
 }
@@ -245,15 +251,21 @@ pub fn add(layout: &Layout, note: &Note, files: &[PathBuf], options: &AddOptions
     let mut report = AddReport {
         added: Vec::new(),
         touched: false,
+        warnings: Vec::new(),
         error: None,
     };
-    let (folder, planned) = match plan(layout, note, files, options) {
-        Ok(planned) => planned,
+    let Plan {
+        folder,
+        files: planned,
+        warnings,
+    } = match plan(layout, note, files, options) {
+        Ok(plan) => plan,
         Err(error) => {
             report.error = Some(error);
             return report;
         }
     };
+    report.warnings = warnings;
     if let Err(error) = fsutil::create_dir_all(&folder) {
         report.error = Some(error.into());
         return report;
@@ -300,14 +312,20 @@ pub fn add(layout: &Layout, note: &Note, files: &[PathBuf], options: &AddOptions
 /// Per file, the source, the name it is stored under and its link.
 type Planned = Vec<(PathBuf, String, String)>;
 
-/// The folder and what goes into it, after every check that can run before a
-/// file is touched.
+/// What `add` will do, after every check that can run before a file is
+/// touched.
+struct Plan {
+    folder: PathBuf,
+    files: Planned,
+    warnings: Vec<String>,
+}
+
 fn plan(
     layout: &Layout,
     note: &Note,
     files: &[PathBuf],
     options: &AddOptions,
-) -> Result<(PathBuf, Planned), AssetError> {
+) -> Result<Plan, AssetError> {
     if options.rename.is_some() && files.len() != 1 {
         return Err(AssetError::RenameNeedsOneFile(files.len()));
     }
@@ -325,9 +343,18 @@ fn plan(
         .collect();
 
     let mut planned: Planned = Vec::new();
+    let mut warnings = Vec::new();
     for source in files {
         if !std::fs::metadata(source).is_ok_and(|metadata| metadata.is_file()) {
             return Err(AssetError::NotAFile(source.clone()));
+        }
+        if is_a_note_file(layout, source) {
+            return Err(AssetError::NoteFile(source.clone()));
+        }
+        if options.move_files
+            && let Some(warning) = leaves_another_notes_folder(layout, note.id, source)
+        {
+            warnings.push(warning);
         }
         let name = match &options.rename {
             Some(name) => name.clone(),
@@ -369,7 +396,11 @@ fn plan(
         }
         planned.push((source.clone(), name, link));
     }
-    Ok((folder, planned))
+    Ok(Plan {
+        folder,
+        files: planned,
+        warnings,
+    })
 }
 
 /// The name as a filesystem that folds case would compare it.
@@ -404,6 +435,84 @@ fn identity_of(path: &Path) -> Option<Identity> {
 /// run has just stored.
 fn placed_earlier(placed: &BTreeMap<Identity, String>, target: &Path) -> Option<String> {
     placed.get(&identity_of(target)?).cloned()
+}
+
+/// The directory entry `source` names, with the directories on the way
+/// resolved and the last component left as it is: the entry a move removes,
+/// which for a symlink is the link and not what it points to.
+fn entry_path(source: &Path) -> Option<PathBuf> {
+    let parent = source
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
+    Some(
+        std::fs::canonicalize(parent)
+            .ok()?
+            .join(source.file_name()?),
+    )
+}
+
+/// Whether `source` is a note of the vault: a `.md` or `.age` file directly in
+/// `all-notes/`.
+///
+/// It is judged by the entry the path names (the directories resolved, so a
+/// different spelling of `all-notes/` or a symlinked directory on the way is
+/// seen) and by the file it finally reaches (so a symlink standing for a note,
+/// such as a leaf of a view, is seen). A move of a note would take it out of
+/// the vault's notes, a copy would put its text into an asset folder.
+fn is_a_note_file(layout: &Layout, source: &Path) -> bool {
+    let Ok(notes) = std::fs::canonicalize(layout.all_notes()) else {
+        return false;
+    };
+    let is_note = |path: &Path| {
+        path.parent() == Some(notes.as_path())
+            && path
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| {
+                    extension.eq_ignore_ascii_case("md") || extension.eq_ignore_ascii_case("age")
+                })
+    };
+    entry_path(source).is_some_and(|entry| is_note(&entry))
+        || std::fs::canonicalize(source).is_ok_and(|reached| is_note(&reached))
+}
+
+/// The warning for a move that takes `source` out of the asset folder of
+/// another note, whose links to it break, `None` when it does not.
+///
+/// The entry a move removes is judged, so a symlink standing in another note's
+/// folder counts and a symlink elsewhere that points into it does not. A folder
+/// no note owns holds no links, so it gets no warning.
+fn leaves_another_notes_folder(layout: &Layout, note: Id, source: &Path) -> Option<String> {
+    let assets = std::fs::canonicalize(layout.assets_dir()).ok()?;
+    let entry = entry_path(source)?;
+    let folder = entry
+        .strip_prefix(&assets)
+        .ok()?
+        .components()
+        .next()?
+        .as_os_str()
+        .to_str()?
+        .to_owned();
+    let owner = owner(&folder).filter(|owner| *owner != note)?;
+    let prefix = owner.to_string();
+    let owner_exists = fsutil::read_dir_entries(&layout.all_notes())
+        .ok()?
+        .into_iter()
+        .any(|(path, _)| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| {
+                    name.starts_with(&prefix) && (name.ends_with(".md") || name.ends_with(".age"))
+                })
+        });
+    owner_exists.then(|| {
+        format!(
+            "moving `{}` out of the asset folder `{folder}` of another note breaks the links \
+             that note holds to it",
+            source.display()
+        )
+    })
 }
 
 /// Whether `source` is the entry at `target` or a way to reach its file.
@@ -1435,6 +1544,203 @@ mod tests {
             matches!(report.error, Some(AssetError::SourceKept { .. })),
             "{report:?}"
         );
+    }
+
+    // ---- Note files and another note's assets ----
+
+    /// A second note, `01BRZ..-other`, with a file in its asset folder.
+    fn other_note_with_asset(session: &VaultSession, name: &str) -> (String, PathBuf) {
+        let folder_name = "01BRZ3NDEKTSV4RRFFQ69G5FAV-other";
+        write_note(
+            session,
+            &format!("{folder_name}.md"),
+            "---\ntitle: Other\n---\nbody\n",
+        );
+        let folder = session.layout().asset_folder(folder_name);
+        std::fs::create_dir_all(&folder).expect("folder");
+        let path = folder.join(name);
+        std::fs::write(&path, b"theirs").expect("asset");
+        (folder_name.to_string(), path)
+    }
+
+    fn assert_note_refused(session: &VaultSession, note: &Note, given: &Path, note_path: &Path) {
+        for move_files in [false, true] {
+            let options = AddOptions {
+                move_files,
+                ..opts()
+            };
+            let report = super::add(session.layout(), note, &[given.to_path_buf()], &options);
+            assert!(
+                matches!(report.error, Some(AssetError::NoteFile(_))),
+                "move={move_files}: {report:?}"
+            );
+            assert!(report.added.is_empty());
+            assert!(given.exists() && note_path.exists(), "move={move_files}");
+        }
+    }
+
+    #[test]
+    fn a_note_file_of_the_vault_is_not_added_as_an_asset() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+
+        assert_note_refused(&session, &note, &note.path, &note.path);
+    }
+
+    #[test]
+    fn an_encrypted_note_file_name_is_refused_too() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let age = session
+            .layout()
+            .all_notes()
+            .join("01BRZ3NDEKTSV4RRFFQ69G5FAV-x.age");
+        std::fs::write(&age, b"ciphertext").expect("age file");
+
+        assert_note_refused(&session, &note, &age, &age);
+    }
+
+    #[test]
+    fn another_spelling_of_the_notes_directory_is_refused() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let spelled = session
+            .layout()
+            .all_notes()
+            .join("..")
+            .join("all-notes")
+            .join(note.path.file_name().expect("name"));
+
+        assert_note_refused(&session, &note, &spelled, &note.path);
+    }
+
+    #[test]
+    fn a_view_leaf_that_is_a_symlink_to_a_note_is_refused() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let leaf = session.root().join("leaf.md");
+        std::os::unix::fs::symlink(&note.path, &leaf).expect("symlink");
+
+        assert_note_refused(&session, &note, &leaf, &note.path);
+    }
+
+    #[test]
+    fn a_note_reached_through_a_symlinked_directory_is_refused() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let via = session.root().join("via");
+        std::os::unix::fs::symlink(session.layout().all_notes(), &via).expect("symlink");
+        let through = via.join(note.path.file_name().expect("name"));
+
+        assert_note_refused(&session, &note, &through, &note.path);
+    }
+
+    fn move_options() -> AddOptions {
+        AddOptions {
+            move_files: true,
+            ..opts()
+        }
+    }
+
+    #[test]
+    fn moving_a_file_out_of_another_notes_folder_warns_and_still_moves_it() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (folder_name, theirs) = other_note_with_asset(&session, "f.pdf");
+
+        let report = super::add(
+            session.layout(),
+            &note,
+            std::slice::from_ref(&theirs),
+            &move_options(),
+        );
+
+        assert!(report.error.is_none(), "{report:?}");
+        assert_eq!(report.added.len(), 1);
+        assert!(!theirs.exists(), "the move still happens");
+        assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+        assert!(
+            report.warnings[0].contains(&folder_name),
+            "{:?}",
+            report.warnings
+        );
+        assert!(
+            report.warnings[0].contains("another note"),
+            "{:?}",
+            report.warnings
+        );
+    }
+
+    #[test]
+    fn copying_a_file_of_another_notes_folder_does_not_warn() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (_, theirs) = other_note_with_asset(&session, "f.pdf");
+
+        let report = super::add(
+            session.layout(),
+            &note,
+            std::slice::from_ref(&theirs),
+            &opts(),
+        );
+
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        assert!(theirs.exists());
+    }
+
+    #[test]
+    fn a_folder_no_note_owns_gets_no_warning_when_a_file_is_moved_out() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let orphan = session
+            .layout()
+            .asset_folder("01CRZ3NDEKTSV4RRFFQ69G5FAV-gone");
+        std::fs::create_dir_all(&orphan).expect("orphan folder");
+        std::fs::write(orphan.join("f.pdf"), b"x").expect("file");
+
+        let report = super::add(
+            session.layout(),
+            &note,
+            &[orphan.join("f.pdf")],
+            &move_options(),
+        );
+
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+    }
+
+    #[test]
+    fn a_symlink_in_another_notes_folder_is_the_entry_a_move_removes() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (_, theirs) = other_note_with_asset(&session, "f.pdf");
+        let outside = source(&session, "outside.pdf", b"x");
+        let link = theirs.parent().expect("folder").join("link.pdf");
+        std::os::unix::fs::symlink(&outside, &link).expect("symlink");
+
+        let report = super::add(
+            session.layout(),
+            &note,
+            std::slice::from_ref(&link),
+            &move_options(),
+        );
+
+        assert_eq!(report.warnings.len(), 1, "{:?}", report.warnings);
+        assert!(!link.exists(), "only the link is removed");
+        assert!(outside.exists());
+    }
+
+    #[test]
+    fn a_symlink_outside_pointing_into_another_notes_folder_removes_no_file_of_it() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (_, theirs) = other_note_with_asset(&session, "f.pdf");
+        let link = session.root().join("link.pdf");
+        std::os::unix::fs::symlink(&theirs, &link).expect("symlink");
+
+        let report = super::add(session.layout(), &note, &[link], &move_options());
+
+        assert!(report.warnings.is_empty(), "{:?}", report.warnings);
+        assert!(theirs.exists(), "the other note's file stays");
     }
 
     #[test]

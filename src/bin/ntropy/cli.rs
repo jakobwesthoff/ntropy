@@ -76,7 +76,8 @@ pub enum AssetCommand {
     /// edited: place the links yourself. Every check runs before the first file
     /// is touched; an I/O failure during the transfer leaves the files already
     /// placed, which are named in the output. Two names that differ only in case, from each other or from a
-    /// file of the folder, are refused.
+    /// file of the folder, are refused, and so is a note of the vault. With
+    /// `--move`, taking a file out of another note's asset folder warns.
     Add {
         /// Move the files instead of copying them.
         #[arg(long = "move")]

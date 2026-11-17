@@ -39,7 +39,11 @@ prints the `added` line and the link of each of them, then the error, which name
 the file and the cause. A move whose copy succeeded and whose source could not be
 removed prints the file as stored and says it is now in both places. A view that
 cannot be refreshed after the files are in place is a warning that counts for
-`--strict`, printed after the links. A file that is
+`--strict`, printed after the links. A note of the vault (a `.md` or `.age`
+file directly in `all-notes/`, however its path is spelled or reached) is
+refused as a source. A move out of another note's asset folder warns, naming the
+folder, since the links that note holds to the file break; the move still
+happens, and the warning counts for `--strict`. A file that is
 already the file it would be stored as, reached by the same path, through a
 symlinked directory such as a view's `_assets` link, by a hard link or as a
 symlink to it, is refused, since the move or the forced copy would remove the

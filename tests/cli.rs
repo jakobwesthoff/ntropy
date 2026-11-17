@@ -8264,6 +8264,61 @@ fn asset_add_turns_a_failing_view_refresh_into_a_warning_after_the_links() {
 }
 
 #[test]
+fn asset_add_refuses_a_note_of_the_vault_and_moves_nothing() {
+    let dir = vault_for_assets();
+    let note_file = dir
+        .path()
+        .join(format!("all-notes/{ULID_A}-q3-planning.md"));
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "add", "--move", ULID_A])
+        .arg(&note_file)
+        .output()
+        .expect("run");
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("is a note of this vault"), "{stderr}");
+    assert!(note_file.exists(), "the note is still in all-notes/");
+}
+
+#[test]
+fn asset_add_moving_out_of_another_notes_folder_warns_and_strict_fails() {
+    let dir = vault_for_assets();
+    write_note(
+        dir.path(),
+        ULID_B,
+        "other",
+        "---\ntitle: Other\n---\n![x](_assets/01BRZ3NDEKTSV4RRFFQ69G5FAV-other/f.pdf)\n",
+    );
+    let theirs_folder = dir.path().join(format!("all-notes/_assets/{ULID_B}-other"));
+    fs::create_dir_all(&theirs_folder).expect("folder");
+    let theirs = theirs_folder.join("f.pdf");
+    fs::write(&theirs, b"theirs").expect("file");
+
+    let out = ntropy(dir.path())
+        .args(["-n", "--strict", "asset", "add", "--move", ULID_A])
+        .arg(&theirs)
+        .output()
+        .expect("run");
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "warning: moving `{}` out of the asset folder `{ULID_B}-other` of another note",
+            theirs.display()
+        )),
+        "{stderr}"
+    );
+    assert!(!theirs.exists(), "the move still happened");
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("[f.pdf](_assets/"),
+        "the link is printed"
+    );
+}
+
+#[test]
 fn asset_add_as_stores_the_file_under_another_name_and_move_removes_the_source() {
     let dir = vault_for_assets();
     let file = incoming(dir.path(), "IMG_4711.png", b"png");

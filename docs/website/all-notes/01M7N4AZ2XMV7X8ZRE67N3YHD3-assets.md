@@ -45,6 +45,7 @@ The note is a ULID, a file name or path, or a query that matches one note. Sever
 
 - `--move` moves the files instead of copying them.
 - `--as <name>` stores one file under another name.
+- Note files of the vault are refused as sources. With `--move`, taking a file out of another note's folder warns that the links of that note to it break; the move still happens, and `--strict` fails on the warning.
 - `--force` replaces a file of that name. Without it, a name that is already in the folder is an error and nothing is copied. A file that is already the file it would be stored as is refused with or without `--force`, whatever path you reach it by, since a move would remove the only copy. Names that differ only in case are one file on some filesystems, so `Shot.pdf` is refused next to `shot.pdf`, and two files with such names are refused in one run, also with `--force`.
 
 `ntropy asset list` shows what the folder holds:

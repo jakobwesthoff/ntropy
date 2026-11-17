@@ -584,6 +584,62 @@ fn asset_add_names_a_failed_transfer_in_a_hostile_vault_path_escaped() {
 }
 
 #[test]
+fn asset_add_names_a_hostile_path_to_a_note_it_refuses_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-note.md"),
+        "---\ntitle: Note\n---\n",
+    );
+    let via = vault.join(RETITLE);
+    std::os::unix::fs::symlink(vault.join("all-notes"), &via).expect("symlink");
+
+    let output = run(ntropy(&vault)
+        .args(["asset", "add", ULID_A])
+        .arg(via.join(format!("{ULID_A}-note.md"))));
+
+    assert_no_raw_controls(&output);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains(RETITLE_SHOWN),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
+fn asset_add_names_a_hostile_folder_it_warns_about_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-note.md"),
+        "---\ntitle: Note\n---\n",
+    );
+    note(
+        &vault,
+        &format!("{ULID_B}-{RETITLE}.md"),
+        "---\ntitle: Other\n---\n",
+    );
+    let folder = vault.join(format!("all-notes/_assets/{ULID_B}-{RETITLE}"));
+    fs::create_dir_all(&folder).expect("folder");
+    let theirs = folder.join("f.pdf");
+    fs::write(&theirs, b"x").expect("file");
+
+    let output = run(ntropy(&vault)
+        .args(["asset", "add", "--move", ULID_A])
+        .arg(&theirs));
+
+    assert_no_raw_controls(&output);
+    assert!(
+        stderr(&output).contains(&format!("`{ULID_B}-{RETITLE_SHOWN}`")),
+        "{}",
+        stderr(&output)
+    );
+}
+
+#[test]
 fn reconcile_reports_a_hostile_link_target_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");
