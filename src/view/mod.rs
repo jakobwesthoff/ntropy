@@ -73,6 +73,14 @@ pub enum SkipReason {
         path: PathBuf,
         source: std::io::Error,
     },
+    /// The view is synced, but a real `_assets` directory that holds files
+    /// stands where a link belongs and was left as it is (ADR 0100).
+    #[error(
+        "`{}` holds files, so it was left as it is and gets no `_assets` link; move the files \
+         into the note's asset folder with `ntropy asset add` and remove the directory",
+        .0.display()
+    )]
+    AssetsKept(PathBuf),
 }
 
 impl SkippedView {
@@ -81,6 +89,15 @@ impl SkippedView {
             name: name.to_string(),
             reason: SkipReason::InvalidName(reason),
             suggestion: ViewName::suggest(name),
+        }
+    }
+
+    /// A view synced except for one directory it left as it was.
+    pub fn assets_kept(name: &ViewName, dir: PathBuf) -> Self {
+        SkippedView {
+            name: name.to_string(),
+            reason: SkipReason::AssetsKept(dir),
+            suggestion: None,
         }
     }
 
@@ -154,9 +171,13 @@ impl fmt::Display for SkippedView {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // The configured name is untrusted and, being invalid, may carry
         // control characters; it is shown escaped.
+        let lead = match self.reason {
+            SkipReason::AssetsKept(_) => "view",
+            _ => "skipped view",
+        };
         write!(
             f,
-            "skipped view `{}`: {}",
+            "{lead} `{}`: {}",
             escape_controls(&self.name),
             self.reason
         )?;
@@ -194,12 +215,17 @@ pub fn parse_defs<'a>(
 /// links are touched, which is always correct and prunes stale links (ADR 0008).
 ///
 /// A view whose directory sits behind a symlink is skipped and returned, and
-/// the others are synced; any other failure stops the sync.
+/// the others are synced; any other failure stops the sync. A directory a view
+/// leaves as it is, a real `_assets` that holds files, is returned too, for
+/// the same warning.
 pub fn sync_all(vault: &Vault, views: &[ViewDef], notes: &[Note]) -> Result<Vec<SkippedView>> {
     let mut skipped = Vec::new();
     for view in views {
         match sync_view(vault, view, notes) {
-            Ok(()) => {}
+            Ok(kept) => skipped.extend(
+                kept.into_iter()
+                    .map(|dir| SkippedView::assets_kept(&view.name, dir)),
+            ),
             Err(Error::View(error @ ViewDirError::Symlinked(_))) => {
                 skipped.push(SkippedView::unsafe_dir(&view.name, error));
             }

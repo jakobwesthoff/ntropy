@@ -325,6 +325,7 @@ fn new_uses_named_template() {
     // The note was created from the meeting template.
     let created: Vec<_> = fs::read_dir(dir.path().join("all-notes"))
         .expect("read all-notes")
+        .filter(|entry| entry.as_ref().is_ok_and(|e| e.file_name() != "_assets"))
         .map(|e| e.expect("entry").path())
         .collect();
     assert_eq!(created.len(), 1);
@@ -345,6 +346,7 @@ fn new_empty_creates_a_file_with_no_content() {
     // The name is canonical, the file is there, and nothing is in it.
     let created: Vec<_> = fs::read_dir(dir.path().join("all-notes"))
         .expect("read all-notes")
+        .filter(|entry| entry.as_ref().is_ok_and(|e| e.file_name() != "_assets"))
         .map(|e| e.expect("entry").path())
         .collect();
     assert_eq!(created.len(), 1);
@@ -385,6 +387,7 @@ fn new_empty_rejects_a_template_selection() {
     assert_eq!(
         fs::read_dir(dir.path().join("all-notes"))
             .expect("read all-notes")
+            .filter(|entry| entry.as_ref().is_ok_and(|e| e.file_name() != "_assets"))
             .count(),
         0
     );
@@ -773,6 +776,7 @@ fn today_creates_then_reuses_the_daily_note() {
     assert_eq!(
         fs::read_dir(dir.path().join("all-notes"))
             .expect("read all-notes")
+            .filter(|entry| entry.as_ref().is_ok_and(|e| e.file_name() != "_assets"))
             .count(),
         1
     );
@@ -1307,6 +1311,7 @@ fn assert_flags_conflict(out: &std::process::Output) {
 fn ulid_of_the_only_note(vault: &Path) -> String {
     let names: Vec<String> = fs::read_dir(vault.join("all-notes"))
         .expect("read all-notes")
+        .filter(|entry| entry.as_ref().is_ok_and(|e| e.file_name() != "_assets"))
         .map(|entry| {
             entry
                 .expect("entry")
@@ -1483,10 +1488,9 @@ fn new_id_with_empty_leaves_the_file_empty() {
     assert_eq!(String::from_utf8_lossy(&out.stdout), format!("{ulid}\n"));
     let file = fs::read_dir(dir.path().join("all-notes"))
         .expect("read all-notes")
-        .next()
-        .expect("one note")
-        .expect("entry")
-        .path();
+        .map(|entry| entry.expect("entry").path())
+        .find(|path| path.file_name().is_some_and(|name| name != "_assets"))
+        .expect("one note");
     assert_eq!(fs::read_to_string(file).expect("read"), "");
 }
 
@@ -6748,6 +6752,7 @@ fn search_skips_a_copied_note_with_a_warning() {
 fn reassigned_files(vault: &Path) -> Vec<String> {
     fs::read_dir(vault.join("all-notes"))
         .expect("read all-notes")
+        .filter(|entry| entry.as_ref().is_ok_and(|e| e.file_name() != "_assets"))
         .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
         .filter(|name| name.starts_with(&ULID_A[..10]) && !name.starts_with(ULID_A))
         .collect()
@@ -7131,6 +7136,7 @@ fn a_view_leaf_is_named_after_the_replaced_slug() {
     stdout_of(ntropy(dir.path()).args(["-n", "reconcile"]));
     let leaves: Vec<String> = fs::read_dir(dir.path().join("by-tag/x"))
         .expect("group dir")
+        .filter(|entry| entry.as_ref().is_ok_and(|e| e.file_name() != "_assets"))
         .map(|entry| {
             entry
                 .expect("entry")
@@ -8079,7 +8085,6 @@ fn asset_add_as_with_two_files_fails_before_copying() {
 fn asset_add_makes_the_views_link_the_assets_directory() {
     let dir = vault_for_assets();
     ntropy(dir.path()).arg("reconcile").output().expect("run");
-    assert!(!dir.path().join("by-tag/meeting/_assets").exists());
     let file = incoming(dir.path(), "a.png", b"a");
 
     let out = ntropy(dir.path())
@@ -8094,6 +8099,28 @@ fn asset_add_makes_the_views_link_the_assets_directory() {
             .join(format!("by-tag/meeting/_assets/{ULID_A}-q3-planning/a.png"))
             .is_file()
     );
+}
+
+#[test]
+fn a_real_assets_directory_with_files_in_a_view_is_kept_and_reported() {
+    let dir = vault_for_assets();
+    ntropy(dir.path()).arg("reconcile").output().expect("run");
+    let saved = dir.path().join("by-tag/meeting/_assets/folder/saved.png");
+    fs::remove_file(dir.path().join("by-tag/meeting/_assets")).expect("the link");
+    fs::create_dir_all(saved.parent().expect("parent")).expect("directory");
+    fs::write(&saved, b"png").expect("a file saved through the view");
+
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.arg("reconcile");
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(saved.exists(), "the file is never deleted");
+    let strict = ntropy(dir.path())
+        .args(["--strict", "reconcile"])
+        .output()
+        .expect("run");
+    assert!(!strict.status.success());
 }
 
 #[test]
@@ -9221,6 +9248,7 @@ mod encrypted {
     fn encrypted_note_ulid(vault: &Path) -> String {
         let names: Vec<String> = fs::read_dir(vault.join("all-notes"))
             .expect("read all-notes")
+            .filter(|entry| entry.as_ref().is_ok_and(|e| e.file_name() != "_assets"))
             .map(|entry| {
                 entry
                     .expect("entry")
@@ -9858,6 +9886,30 @@ mod encrypted {
                 .join(format!("all-notes/{ULID_A}-plan-b.md"))
                 .is_file()
         );
+    }
+
+    #[test]
+    fn vault_encrypt_refuses_while_a_view_holds_a_saved_file_before_writing_a_key() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(
+            vault,
+            ULID_A,
+            "plan",
+            "---\ntitle: Plan\ntags: [work]\n---\nbody\n",
+        );
+        ntropy(vault)
+            .arg("reconcile")
+            .output()
+            .expect("sync the view");
+        fs::write(vault.join("by-tag/work/saved.png"), b"png").expect("a saved file");
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "encrypt", "-y"]));
+        });
+
+        assert!(!vault.join(".ntropy/identity.pub").exists());
+        assert!(vault.join("by-tag/work/saved.png").exists());
     }
 
     #[test]

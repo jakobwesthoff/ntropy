@@ -372,10 +372,9 @@ mod tests {
             crate::reconcile::refresh_views(&session).expect("refresh");
             let entry = std::fs::read_dir(guard.path().join("by-tag/work"))
                 .expect("the tag's directory")
-                .next()
-                .expect("a link")
-                .expect("entry")
-                .path();
+                .map(|e| e.expect("entry").path())
+                .find(|path| path.file_name().is_some_and(|name| name != "_assets"))
+                .expect("a link");
             assert!(
                 std::fs::symlink_metadata(&entry)
                     .expect("stat")

@@ -50,8 +50,11 @@ differ only in letter case, which macOS's default file system would
 treat as one file. The links are relative, so a moved or copied vault
 keeps working.
 
-While `all-notes/_assets/` exists, every directory of a view also holds an
-`_assets` symlink to it, so a note opened through a view shows its assets.
+Every directory of a view also holds an `_assets` symlink to
+`all-notes/_assets/`, so a note opened through a view shows its assets. A real
+`_assets` directory with files in it, such as one an editor made when it saved a
+file through a view, is never deleted: it stays, gets no link, and a warning
+names it.
 
 Because the leaves are symlinks to the canonical files, there is still
 exactly one copy of every note; the view is another door into it. `cd`

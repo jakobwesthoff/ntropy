@@ -45,15 +45,33 @@ type DirSet = BTreeSet<PathBuf>;
 /// rather than to the whole vault. The resulting tree is exactly what a
 /// from-scratch build would produce — stale and drifted links removed, emptied
 /// group directories pruned — but unchanged links keep their identity (ADR 0008).
-pub fn sync_view(vault: &Vault, view: &ViewDef, notes: &[Note]) -> Result<()> {
+///
+/// Every directory of the view gets an `_assets` link to `all-notes/_assets/`,
+/// which is created empty when it is missing so that the link never dangles
+/// (ADR 0100). Where a real `_assets` directory that holds files already
+/// stands, such as the one an editor makes when it saves a file relative to a
+/// note opened through the view, nothing is deleted and no link is made. The
+/// directories that kept their place are returned.
+pub fn sync_view(vault: &Vault, view: &ViewDef, notes: &[Note]) -> Result<Vec<PathBuf>> {
     let view_dir = super::contained_dir(vault.layout(), &view.name)?;
 
-    let mut desired = desired_links(&view_dir, view, notes)?;
     let assets_dir = vault.layout().assets_dir();
-    if assets_dir.exists() {
-        add_asset_links(&mut desired, &view_dir, &assets_dir);
-    }
+    fsutil::create_dir_all(&assets_dir)?;
+    let mut desired = desired_links(&view_dir, view, notes)?;
+    let asset_links = add_asset_links(&mut desired, &view_dir, &assets_dir);
     let (actual, dirs) = actual_state(&view_dir)?;
+
+    // A real directory where a link belongs that holds files keeps its place:
+    // the files may be the only copy of what someone saved through the view.
+    let kept: Vec<PathBuf> = asset_links
+        .into_iter()
+        .filter(|link| {
+            !actual.contains_key(link) && actual.keys().any(|path| path.starts_with(link))
+        })
+        .collect();
+    for link in &kept {
+        desired.remove(link);
+    }
 
     // A configured view always has a root directory, even with no matching notes.
     fsutil::create_dir_all(&view_dir)?;
@@ -63,6 +81,9 @@ pub fn sync_view(vault: &Vault, view: &ViewDef, notes: &[Note]) -> Result<()> {
     // any non-symlink file (`target` is `None`), which is never a correct leaf and
     // so is always removed — whether it sits at a desired path or a stray one.
     for (path, target) in &actual {
+        if kept.iter().any(|dir| path.starts_with(dir)) {
+            continue;
+        }
         let is_correct_leaf =
             matches!(target, Some(existing) if desired.get(path) == Some(existing));
         if !is_correct_leaf {
@@ -94,18 +115,22 @@ pub fn sync_view(vault: &Vault, view: &ViewDef, notes: &[Note]) -> Result<()> {
         }
     }
 
-    Ok(())
+    Ok(kept)
 }
 
 /// Add an `_assets` link to every directory of the view, the root and each
-/// group directory, pointing at `assets_dir`.
+/// group directory, pointing at `assets_dir`, and return the paths of the links.
 ///
 /// A note opened through a view resolves its relative links against the
 /// directory of the symlink it was opened by, so each directory that holds a
 /// leaf needs the link to make `_assets/<folder>/<file>` resolve. The group
 /// directories are slugs, which hold no underscore, so none is named
 /// `_assets`.
-fn add_asset_links(desired: &mut BTreeMap<PathBuf, PathBuf>, view_dir: &Path, assets_dir: &Path) {
+fn add_asset_links(
+    desired: &mut BTreeMap<PathBuf, PathBuf>,
+    view_dir: &Path,
+    assets_dir: &Path,
+) -> Vec<PathBuf> {
     let mut dirs: BTreeSet<PathBuf> = BTreeSet::from([view_dir.to_path_buf()]);
     for leaf in desired.keys() {
         let mut dir = leaf.parent();
@@ -114,10 +139,14 @@ fn add_asset_links(desired: &mut BTreeMap<PathBuf, PathBuf>, view_dir: &Path, as
             dir = parent.parent();
         }
     }
+    let mut links = Vec::new();
     for dir in dirs {
         let target = fsutil::relative_path(&dir, assets_dir);
-        desired.insert(dir.join(ASSETS_DIR), target);
+        let link = dir.join(ASSETS_DIR);
+        desired.insert(link.clone(), target);
+        links.push(link);
     }
+    links
 }
 
 /// The full set of links a view should contain: leaf path -> stored target.
@@ -341,12 +370,23 @@ mod sync_tests {
         session.root().join("by-tag").join(group)
     }
 
-    /// The single entry inside `dir` (panics unless there is exactly one).
-    fn only_entry(dir: &Path) -> PathBuf {
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)
+    /// The entries of `dir` that are leaves or groups, not the `_assets` link
+    /// every directory of a view holds.
+    fn view_entries(dir: &Path) -> Vec<PathBuf> {
+        std::fs::read_dir(dir)
             .expect("read dir")
             .map(|e| e.expect("entry").path())
-            .collect();
+            .filter(|path| path.file_name().is_some_and(|name| name != "_assets"))
+            .collect()
+    }
+
+    fn leaf_count(dir: &Path) -> usize {
+        view_entries(dir).len()
+    }
+
+    /// The single entry inside `dir` (panics unless there is exactly one).
+    fn only_entry(dir: &Path) -> PathBuf {
+        let mut entries: Vec<PathBuf> = view_entries(dir);
         assert_eq!(entries.len(), 1, "expected exactly one entry in {dir:?}");
         entries.pop().expect("one entry")
     }
@@ -596,9 +636,7 @@ mod sync_tests {
 
         assert!(!stray.exists(), "stray non-leaf file removed");
         assert_eq!(
-            std::fs::read_dir(group_dir(&session, "t"))
-                .expect("read")
-                .count(),
+            leaf_count(&group_dir(&session, "t")),
             1,
             "the real leaf survives"
         );
@@ -637,7 +675,7 @@ mod sync_tests {
         sync(&session);
 
         let group = group_dir(&session, "dup");
-        assert_eq!(std::fs::read_dir(&group).expect("read").count(), 2);
+        assert_eq!(leaf_count(&group), 2);
         assert!(leaf_containing(&group, "review-FAV").exists());
         assert!(leaf_containing(&group, "review-FBW").exists());
 
@@ -669,11 +707,7 @@ mod sync_tests {
 
         let root = session.root().join("by-tag");
         assert!(root.is_dir(), "view root exists");
-        assert_eq!(
-            std::fs::read_dir(&root).expect("read").count(),
-            0,
-            "but is empty"
-        );
+        assert_eq!(leaf_count(&root), 0, "but is empty");
     }
 
     /// Two notes titled `Review` on one day, and a third on that day whose
@@ -707,9 +741,7 @@ mod sync_tests {
         sync(&session);
 
         assert_eq!(
-            std::fs::read_dir(group_dir(&session, "t"))
-                .expect("read")
-                .count(),
+            leaf_count(&group_dir(&session, "t")),
             3,
             "every note has a leaf"
         );
@@ -726,9 +758,7 @@ mod sync_tests {
         sync(&session);
 
         assert_eq!(
-            std::fs::read_dir(group_dir(&session, "t"))
-                .expect("read")
-                .count(),
+            leaf_count(&group_dir(&session, "t")),
             3,
             "every note has a leaf"
         );
@@ -739,7 +769,8 @@ mod sync_tests {
         fn walk(dir: &Path, base: &Path, out: &mut Vec<String>) {
             for entry in std::fs::read_dir(dir).expect("read dir") {
                 let path = entry.expect("entry").path();
-                if path.is_dir() {
+                let is_link = path.file_name().is_some_and(|name| name == "_assets");
+                if path.is_dir() && !is_link {
                     out.push(
                         path.strip_prefix(base)
                             .expect("below the view")
@@ -852,9 +883,7 @@ mod sync_tests {
 
         sync(&session);
 
-        let entries = std::fs::read_dir(group_dir(&session, "node-js"))
-            .expect("read dir")
-            .count();
+        let entries = leaf_count(&group_dir(&session, "node-js"));
         assert_eq!(entries, 2, "both notes keep a leaf");
     }
 
@@ -922,14 +951,22 @@ mod sync_tests {
     }
 
     #[test]
-    fn a_vault_without_assets_gets_no_asset_links() {
+    fn a_vault_without_assets_gets_the_empty_directory_and_the_links() {
         let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         tagged_note(&session, "work");
+        assert!(!session.layout().assets_dir().exists());
 
         sync(&session);
 
-        assert!(!session.root().join("by-tag/_assets").exists());
-        assert!(std::fs::symlink_metadata(group_dir(&session, "work").join("_assets")).is_err());
+        assert!(session.layout().assets_dir().is_dir());
+        assert!(resolves_to_assets(
+            &session,
+            &session.root().join("by-tag/_assets")
+        ));
+        assert!(resolves_to_assets(
+            &session,
+            &group_dir(&session, "work").join("_assets")
+        ));
     }
 
     #[test]
@@ -992,7 +1029,7 @@ mod sync_tests {
     }
 
     #[test]
-    fn the_link_goes_with_the_assets_directory() {
+    fn the_assets_directory_is_made_again_and_the_link_keeps_resolving() {
         let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         tagged_note(&session, "work");
         plant_assets(&session, &format!("{ULID_A}-n"));
@@ -1001,8 +1038,11 @@ mod sync_tests {
 
         sync(&session);
 
-        assert!(std::fs::symlink_metadata(group_dir(&session, "work").join("_assets")).is_err());
-        assert!(std::fs::symlink_metadata(session.root().join("by-tag/_assets")).is_err());
+        assert!(session.layout().assets_dir().is_dir());
+        assert!(resolves_to_assets(
+            &session,
+            &group_dir(&session, "work").join("_assets")
+        ));
     }
 
     #[test]
@@ -1022,15 +1062,49 @@ mod sync_tests {
     }
 
     #[test]
-    fn a_real_directory_named_assets_is_replaced_by_the_link() {
+    fn a_real_assets_directory_that_holds_files_keeps_its_place() {
         // An editor that opened a note through the view and saved a file to
-        // `_assets/<folder>/` relative to it leaves exactly this behind.
+        // `_assets/<folder>/` relative to it leaves exactly this behind. The
+        // file may be the only copy, so nothing is deleted.
         let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
         tagged_note(&session, "work");
         plant_assets(&session, &format!("{ULID_A}-n"));
         let stray = group_dir(&session, "work").join("_assets/some-folder");
         std::fs::create_dir_all(&stray).expect("stray directory");
         std::fs::write(stray.join("saved.png"), b"x").expect("stray file");
+
+        let view = ViewDef::parse("by-tag", "tags").expect("valid view name");
+        let scan = scan::scan_notes_dir(
+            &session.layout().all_notes(),
+            &crate::cipher::PlaintextCipher,
+        )
+        .expect("scan");
+        let kept = sync_view(&session, &view, &scan.notes).expect("sync view");
+
+        assert_eq!(kept, [group_dir(&session, "work").join("_assets")]);
+        assert_eq!(std::fs::read(stray.join("saved.png")).expect("kept"), b"x");
+        let link = group_dir(&session, "work").join("_assets");
+        assert!(
+            !std::fs::symlink_metadata(&link)
+                .expect("entry")
+                .file_type()
+                .is_symlink(),
+            "no link where files stand"
+        );
+        // The other directories still get theirs.
+        assert!(resolves_to_assets(
+            &session,
+            &session.root().join("by-tag/_assets")
+        ));
+    }
+
+    #[test]
+    fn a_real_assets_directory_that_holds_no_file_is_replaced_by_the_link() {
+        let (_g, session) = vault_with_views(&[("by-tag", "tags")]);
+        tagged_note(&session, "work");
+        plant_assets(&session, &format!("{ULID_A}-n"));
+        std::fs::create_dir_all(group_dir(&session, "work").join("_assets/empty/deeper"))
+            .expect("empty directories");
 
         sync(&session);
 

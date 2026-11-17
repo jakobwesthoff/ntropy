@@ -28,6 +28,12 @@ An encrypted vault takes no assets in this release.
   encrypted notes. The check runs before the vault's key pair is written, as
   the check for copied notes does, so a refused vault is still a plaintext
   vault.
+- `vault encrypt` refuses to start while a view tree holds a regular file other
+  than operating-system metadata, naming it. The conversion removes the view
+  trees, and a file in one, such as a file an editor saved through the view or
+  a real `_assets` directory that kept its place (ADR 0100), would be deleted
+  with it. The leaf links and the `_assets` links of the views are symlinks and
+  do not count.
 - `reconcile` and `delete` do no asset work in an encrypted vault.
 
 The design for a later release keeps a bare `<ULID>` folder name in an

@@ -89,6 +89,11 @@ fn encrypt(
             Operation::Encrypt,
             &PlaintextCipher,
         )?;
+        if let Some(file) =
+            migrate::first_file_in_views(&vault).context("while checking the views")?
+        {
+            return Err(migrate::MigrateError::FileInView(file).into());
+        }
     }
     ask(yes, interactive, "Encrypt every note in this vault?")?;
 
@@ -181,6 +186,9 @@ fn blocking_views_message(blocking: &[SkippedView]) -> String {
                 "\n  view `{name}`: `{}` could not be inspected: {source}",
                 path.display()
             )),
+            // A view that syncs but keeps a directory is not one the
+            // conversion cannot remove, so the blocking list never holds it.
+            SkipReason::AssetsKept(_) => {}
         }
     }
     message

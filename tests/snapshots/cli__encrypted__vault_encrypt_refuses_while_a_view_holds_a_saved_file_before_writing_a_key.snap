@@ -1,0 +1,21 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - "--passphrase-file"
+    - test-passphrase.txt
+    - vault
+    - encrypt
+    - "-y"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: nothing was converted: `[VAULT]/by-tag/work/saved.png` is a file in a view directory, and the conversion removes the view trees; move it out of the view first

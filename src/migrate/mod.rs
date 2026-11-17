@@ -164,6 +164,15 @@ pub enum MigrateError {
     )]
     AssetsPresent(PathBuf),
 
+    /// A file sits in a view tree, which the conversion removes with the
+    /// view.
+    #[error(
+        "nothing was converted: `{}` is a file in a view directory, and the conversion removes \
+         the view trees; move it out of the view first",
+        .0.display()
+    )]
+    FileInView(PathBuf),
+
     /// Files sit where the conversion would write notes, and would be
     /// overwritten (ADR 0067).
     #[error(
@@ -175,6 +184,43 @@ pub enum MigrateError {
         operation: Operation,
         paths: Vec<PathBuf>,
     },
+}
+
+/// Refuse the conversion to encrypted storage while a view tree holds a file.
+fn reject_files_in_views(session: &VaultSession) -> Result<(), MigrateError> {
+    match first_file_in_views(session)? {
+        Some(file) => Err(MigrateError::FileInView(file)),
+        None => Ok(()),
+    }
+}
+
+/// The first regular file in a view tree that the conversion to encrypted
+/// storage would delete with it, or `None`.
+///
+/// A view holds only symlinks that ntropy made, so a regular file in one was
+/// put there by a person or a tool, such as a file an editor saved through the
+/// view; operating-system metadata does not count (ADR 0103). Symlinks are not
+/// followed. Views that cannot be removed are not looked at: they stay.
+pub fn first_file_in_views(vault: &Vault) -> Result<Option<PathBuf>, MigrateError> {
+    let (dirs, _) = removable_view_dirs(vault)?;
+    let mut found = BTreeSet::new();
+    for (_, dir) in dirs {
+        let mut pending = vec![dir];
+        while let Some(dir) = pending.pop() {
+            // A regular file where the view's path should lead is no tree.
+            if !std::fs::symlink_metadata(&dir).is_ok_and(|m| m.file_type().is_dir()) {
+                continue;
+            }
+            for (path, file_type) in fsutil::read_dir_entries(&dir)? {
+                if file_type.is_dir() {
+                    pending.push(path);
+                } else if file_type.is_file() && !crate::asset::is_system_metadata(&path) {
+                    found.insert(path);
+                }
+            }
+        }
+    }
+    Ok(found.into_iter().next())
 }
 
 /// `paths` as a comma-separated list of quoted file names.
@@ -352,6 +398,9 @@ pub fn run(
     // produced targets of its own, which the check would mistake for strays.
     if existing.is_none() {
         preflight(&all_notes, migration.operation, migration.source)?;
+        if migration.operation == Operation::Encrypt {
+            reject_files_in_views(session)?;
+        }
         marker::write_at(&marker_path, &migration.marker)?;
     }
 
@@ -838,6 +887,65 @@ mod tests {
         );
         assert_eq!(listing(&session), before, "nothing was converted");
         assert!(!session.layout().migration_file().exists());
+    }
+
+    /// A vault whose `by-tag` view is synced, so it holds links and, the
+    /// first time views sync, an empty `all-notes/_assets/`.
+    fn vault_with_a_synced_view() -> (tempfile::TempDir, VaultSession) {
+        let (guard, session) = plaintext_vault();
+        std::fs::write(
+            session
+                .layout()
+                .all_notes()
+                .join(format!("{ULID_A}-alpha.md")),
+            "---\ntitle: Alpha\ntags: [work]\n---\nfirst body\n",
+        )
+        .expect("tag a note");
+        configure_views(&session, &[("by-tag", "tags")]);
+        reconcile::refresh_views(&session).expect("sync the view");
+        (guard, session)
+    }
+
+    #[test]
+    fn encrypt_refuses_while_a_view_holds_a_file_someone_saved_there() {
+        let (_guard, session) = vault_with_a_synced_view();
+        let saved = session.root().join("by-tag/work/saved.png");
+        std::fs::write(&saved, b"png").expect("a file saved through the view");
+        let before = listing(&session);
+        let (_, target) = fresh_target();
+
+        let result = start(&session, Operation::Encrypt, &PlaintextCipher, &target);
+
+        let err = result.expect_err("the conversion would delete the file with the view");
+        assert!(err.to_string().contains("saved.png"), "{err}");
+        assert!(saved.exists());
+        assert_eq!(listing(&session), before, "nothing was converted");
+    }
+
+    #[test]
+    fn encrypt_refuses_while_a_real_assets_directory_in_a_view_holds_files() {
+        let (_guard, session) = vault_with_a_synced_view();
+        let kept = session.root().join("by-tag/work/_assets");
+        std::fs::remove_file(&kept).expect("the link");
+        std::fs::create_dir_all(kept.join("folder")).expect("directory");
+        std::fs::write(kept.join("folder/saved.png"), b"png").expect("file");
+        let (_, target) = fresh_target();
+
+        let result = start(&session, Operation::Encrypt, &PlaintextCipher, &target);
+
+        assert!(result.is_err());
+        assert!(kept.join("folder/saved.png").exists());
+    }
+
+    #[test]
+    fn encrypt_goes_ahead_when_the_views_hold_only_links_and_system_metadata() {
+        let (_guard, session) = vault_with_a_synced_view();
+        std::fs::write(session.root().join("by-tag/work/.DS_Store"), b"x").expect("metadata");
+        let (_, target) = fresh_target();
+
+        let result = start(&session, Operation::Encrypt, &PlaintextCipher, &target);
+
+        result.expect("links and metadata are removed with the view");
     }
 
     #[test]

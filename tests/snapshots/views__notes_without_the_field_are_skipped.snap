@@ -2,4 +2,6 @@
 source: tests/views.rs
 expression: tree
 ---
+_assets -> ../all-notes/_assets
 in-progress/[DATE]-has-status.md -> ../../all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-has-status.md
+in-progress/_assets -> ../../all-notes/_assets

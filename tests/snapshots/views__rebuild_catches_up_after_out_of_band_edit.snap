@@ -2,4 +2,6 @@
 source: tests/views.rs
 expression: tree
 ---
+_assets -> ../all-notes/_assets
 new/[DATE]-note.md -> ../../all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-note.md
+new/_assets -> ../../all-notes/_assets

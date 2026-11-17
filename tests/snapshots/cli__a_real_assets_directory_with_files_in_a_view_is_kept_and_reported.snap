@@ -1,0 +1,18 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - reconcile
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+Reconciling vault at [VAULT]...
+Scanned 1 note, reassigned 0 notes, renamed 0 files, relinked 0 links, synced 1 view, ignored 0 entries, unignored 0 entries, 1 warning.
+
+----- stderr -----
+warning: view `by-tag`: `[VAULT]/by-tag/meeting/_assets` holds files, so it was left as it is and gets no `_assets` link; move the files into the note's asset folder with `ntropy asset add` and remove the directory

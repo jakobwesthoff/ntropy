@@ -282,7 +282,12 @@ pub fn reconcile(session: &VaultSession) -> Result<ReconcileReport> {
     } else {
         let (gitignore, unsafe_views) =
             sync_views_and_gitignore(session, &views, &skipped_views, &notes)?;
-        let views_synced = views.len() - unsafe_views.len();
+        // A view that kept a directory was synced all the same.
+        let not_synced = unsafe_views
+            .iter()
+            .filter(|view| !matches!(view.reason, view::SkipReason::AssetsKept(_)))
+            .count();
+        let views_synced = views.len() - not_synced;
         skipped_views.extend(unsafe_views);
         (views_synced, gitignore, skipped_views)
     };
@@ -633,6 +638,7 @@ mod tests {
         let entries: Vec<_> = std::fs::read_dir(&link)
             .expect("read group dir")
             .map(|e| e.expect("entry").path())
+            .filter(|path| path.file_name().is_some_and(|name| name != "_assets"))
             .collect();
         assert_eq!(entries.len(), 1);
         assert!(entries[0].exists(), "symlink should resolve");
@@ -941,6 +947,7 @@ mod tests {
 
         let leaves = std::fs::read_dir(session.root().join("by-tag/t"))
             .expect("read the group")
+            .filter(|e| e.as_ref().is_ok_and(|e| e.file_name() != "_assets"))
             .count();
         assert_eq!(leaves, 2);
     }
@@ -1091,6 +1098,7 @@ mod tests {
         let names: Vec<String> = std::fs::read_dir(lowercase.parent().expect("all-notes"))
             .expect("read all-notes")
             .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .filter(|name| name != "_assets")
             .collect();
         assert_eq!(names, [format!("{ULID}-note.md")]);
     }

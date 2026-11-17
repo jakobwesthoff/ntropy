@@ -32,9 +32,12 @@ change in any release
   before the run renames it.
   [ADR 0099](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0099-reconcile-checks-asset-links-and-the-assets-directory.md)
   records the checks.
-- While `all-notes/_assets/` exists, every directory of a materialized view
-  holds an `_assets` symlink to it, so a note opened through a view shows its
-  assets.
+- Every directory of a materialized view holds an `_assets` symlink to
+  `all-notes/_assets/`, which a plaintext vault that syncs views creates empty
+  when it is missing, so a note opened through a view shows its assets. A real
+  `_assets` directory that holds files, such as one an editor made when it saved
+  a file through a view, is never deleted: it stays, that directory gets no link,
+  and a warning names it, which `--strict` counts like a skipped view.
   [ADR 0100](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0100-views-carry-an-assets-link.md)
   records the link.
 - A note has only its own assets: renders and exports refuse a link or image
@@ -58,7 +61,9 @@ change in any release
 - `vault encrypt` refuses to start while `all-notes/_assets/` holds a file or a
   symlink other than operating-system metadata, because asset encryption is not
   supported yet and the file would stay plaintext beside the encrypted notes.
-  It names the first such file. `reconcile` and `delete` do no asset work in an
+  It names the first such file. It also refuses while a view tree holds a
+  regular file other than operating-system metadata, since the conversion
+  removes the view trees. `reconcile` and `delete` do no asset work in an
   encrypted vault.
   [ADR 0103](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0103-encrypted-vaults-take-no-assets-yet.md)
   records the refusal.
