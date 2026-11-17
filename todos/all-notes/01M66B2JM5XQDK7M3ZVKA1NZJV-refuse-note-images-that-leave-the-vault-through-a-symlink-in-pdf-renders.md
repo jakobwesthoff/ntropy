@@ -34,10 +34,14 @@ user renders and passes on carry an image file from outside the vault.
 
 ## Suggested fix
 
-The emitter sees every local image path. Resolve each one before the compile
-and apply the rules of ADR 0073 to it: a path that resolves outside the vault,
-or matches the list of refused names, is left out with a warning, as in the
-html and site exports. Then amend ADR 0070's residual so it names only what
+Resolve every local image path in the typst engine before the compile,
+through `ExportScope` as the HTML engine already does
+(`src/render/html/engine.rs`, `src/site/scope.rs`), and apply the rules of
+ADR 0073 to it. The emitter itself is a pure function of the body and
+touches no file, so the check cannot live there; the engine's note that it
+touches no filesystem is amended instead. Under these rules a path that
+resolves outside the vault, or matches the list of refused names, is left
+out with a warning, as in the html and site exports. Then amend ADR 0070's residual so it names only what
 remains (Typst theme reads).
 
 ## Decisions
