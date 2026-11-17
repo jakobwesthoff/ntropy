@@ -65,6 +65,7 @@ pub mod gitignore;
 #[cfg(feature = "encryption")]
 pub mod migrate;
 
+pub mod asset;
 pub mod link;
 pub mod query;
 pub mod reconcile;

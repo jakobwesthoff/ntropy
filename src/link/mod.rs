@@ -18,6 +18,8 @@
 
 mod code;
 
+pub(crate) use code::{is_masked, masked_ranges};
+
 use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::LazyLock;
@@ -200,6 +202,12 @@ fn parse_target(target: &str) -> Option<(Id, usize, bool)> {
         return Some((id, hash, true));
     }
     parse_name(target).map(|id| (id, target.len(), false))
+}
+
+/// Whether `target` is the `<ulid>[-<slug>].md` form of a note link, with or
+/// without a heading anchor.
+pub(crate) fn is_note_target(target: &str) -> bool {
+    parse_target(target).is_some()
 }
 
 /// The percent-decoded form of a link anchor, the way a browser reads a URL

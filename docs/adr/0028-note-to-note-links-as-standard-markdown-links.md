@@ -8,6 +8,9 @@ Accepted
 
 Amended 2026-11-01 by [ADR 0086](0086-note-links-may-carry-a-heading-anchor.md).
 
+Amended 2026-11-17 by
+[ADR 0097](0097-asset-links-are-found-with-the-markdown-parser.md).
+
 ## Context
 
 ADR 0004 fixed note identity as the filename ULID and stated that links resolve

@@ -14,6 +14,9 @@ use super::ViewName;
 
 /// The canonical notes directory, the lossless source of truth.
 pub const ALL_NOTES_DIR: &str = "all-notes";
+/// The directory inside [`ALL_NOTES_DIR`] that holds one folder of assets per
+/// note.
+pub const ASSETS_DIR: &str = "_assets";
 /// The reserved per-vault configuration/templates directory.
 pub const NTROPY_DIR: &str = ".ntropy";
 /// The per-vault config file, inside [`NTROPY_DIR`].
@@ -83,6 +86,17 @@ impl Layout {
     /// `<root>/all-notes`.
     pub fn all_notes(&self) -> PathBuf {
         self.root.join(ALL_NOTES_DIR)
+    }
+
+    /// `<root>/all-notes/_assets`, the parent of every note's asset folder.
+    pub fn assets_dir(&self) -> PathBuf {
+        self.all_notes().join(ASSETS_DIR)
+    }
+
+    /// `<root>/all-notes/_assets/<stem>`, the asset folder of the note whose
+    /// file name without its extension is `stem`.
+    pub fn asset_folder(&self, stem: &str) -> PathBuf {
+        self.assets_dir().join(stem)
     }
 
     /// `<root>/.ntropy`.
@@ -245,6 +259,19 @@ mod tests {
         assert_eq!(layout.view_dir(&by_tag), PathBuf::from("/vault/by-tag"));
         assert_eq!(layout.gitignore_file(), PathBuf::from("/vault/.gitignore"));
         assert_eq!(layout.readme_file(), PathBuf::from("/vault/README.md"));
+    }
+
+    #[test]
+    fn asset_folders_sit_in_the_assets_directory_of_all_notes() {
+        let layout = Layout::new("/vault");
+        assert_eq!(
+            layout.assets_dir(),
+            PathBuf::from("/vault/all-notes/_assets")
+        );
+        assert_eq!(
+            layout.asset_folder("01ARZ3NDEKTSV4RRFFQ69G5FAV-q3-planning"),
+            PathBuf::from("/vault/all-notes/_assets/01ARZ3NDEKTSV4RRFFQ69G5FAV-q3-planning")
+        );
     }
 
     #[test]
