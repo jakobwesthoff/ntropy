@@ -523,15 +523,17 @@ of the note whose ULID leads its name, and rewrites the links into it in every
 note body (ADR 0098). Each rename prints `renamed _assets/<old>/ ->
 _assets/<new>/`, each note rewritten `relinked _assets/<old>/ -> _assets/<new>/
 in <note> (<n> links)`, and the summary line gains `moved <n> asset folders`
-when a folder moved. A folder that cannot be renamed because another folder of
-the note is in the way stays as it is and counts as a warning. The links are
+when a folder moved. A folder that cannot be renamed stays as it is and counts as a warning that
+names the reason: the note has several asset folders, a folder of the new name
+exists, or a file of that name is in the way. The links are
 found by the ULID in the folder name, so a run that stopped after the rename
 finishes the rewrite on the next one.
 
 It then warns about asset links and about `_assets/` (ADR 0099): a link to a
 file missing from the note's own folder, a link into another note's folder, a
-link to a file outside every `_assets/` folder, an entry of `_assets/` that no
-valid note owns, and a symlinked `_assets/` or entry. Each is one `warning:`
+raw HTML reference to such a folder, a link to a file outside
+`all-notes/_assets/`, a folder in `_assets/` that no valid note owns, a file
+directly in `_assets/`, and a symlinked `_assets/` or entry. Each is one `warning:`
 line on stderr, counts in the summary and fails `--strict`. Nothing is deleted,
 and a folder that is stale before the run is renamed first and not reported.
 

@@ -25,6 +25,13 @@ const ULID_B: &str = "01BRZ3NDEKTSV4RRFFQ69G5FAV";
 /// hostile name carries.
 const RETITLE: &str = "\u{1b}]0;pwned\u{7}";
 
+/// An escape sequence for a folder name: a name that holds no `]`, which
+/// would end the reference to it.
+const FOLDER: &str = "\u{1b}[31mpwned";
+
+/// [`FOLDER`] as ntropy shows it.
+const FOLDER_SHOWN: &str = "\\u{1b}[31mpwned";
+
 /// [`RETITLE`] as ntropy shows it.
 const RETITLE_SHOWN: &str = "\\u{1b}]0;pwned\\u{7}";
 
@@ -336,9 +343,9 @@ fn reconcile_reports_a_hostile_asset_folder_name_escaped() {
     note(
         &vault,
         &format!("{ULID_A}-evil.md"),
-        &format!("---\ntitle: Evil\n---\n![x](<_assets/{ULID_A}-{RETITLE}/x.png>)\n"),
+        &format!("---\ntitle: Evil\n---\n![x](<_assets/{ULID_A}-{FOLDER}/x.png>)\n"),
     );
-    let folder = vault.join(format!("all-notes/_assets/{ULID_A}-{RETITLE}"));
+    let folder = vault.join(format!("all-notes/_assets/{ULID_A}-{FOLDER}"));
     fs::create_dir_all(&folder).expect("asset folder");
     fs::write(folder.join("x.png"), b"png").expect("asset");
 
@@ -347,13 +354,13 @@ fn reconcile_reports_a_hostile_asset_folder_name_escaped() {
     let shown = stdout(&output);
     assert!(
         shown.contains(&format!(
-            "renamed _assets/{ULID_A}-{RETITLE_SHOWN}/ -> _assets/{ULID_A}-evil/"
+            "renamed _assets/{ULID_A}-{FOLDER_SHOWN}/ -> _assets/{ULID_A}-evil/"
         )),
         "{shown}"
     );
     assert!(
         shown.contains(&format!(
-            "relinked _assets/{ULID_A}-{RETITLE_SHOWN}/ -> _assets/{ULID_A}-evil/ in {ULID_A}-evil.md"
+            "relinked _assets/{ULID_A}-{FOLDER_SHOWN}/ -> _assets/{ULID_A}-evil/ in {ULID_A}-evil.md"
         )),
         "{shown}"
     );
@@ -379,7 +386,9 @@ fn reconcile_reports_hostile_asset_names_escaped() {
         "{shown}"
     );
     assert!(
-        shown.contains(&format!("`{RETITLE_SHOWN}.txt` is outside every")),
+        shown.contains(&format!(
+            "`{RETITLE_SHOWN}.txt` is outside `all-notes/_assets/`"
+        )),
         "{shown}"
     );
 }

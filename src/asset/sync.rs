@@ -23,15 +23,45 @@ use crate::error::Result;
 use crate::fsutil::{self, FsError};
 use crate::id::Id;
 use crate::note::Note;
-use crate::vault::layout::{ALL_NOTES_DIR, Layout};
+use crate::vault::layout::Layout;
 
-use super::{Place, local_links, owner, place, relink_folder};
+use super::{owner, references, relink_folder};
 
-/// A folder renamed, or a rename that was due and refused.
+/// A folder renamed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FolderMove {
     pub from: PathBuf,
     pub to: PathBuf,
+}
+
+/// Why a rename that was due was not made.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RefusalReason {
+    /// The note owns several folders, and nothing says which is its own.
+    SeveralFolders,
+    /// A folder of the new name exists.
+    TargetExists,
+    /// Something that is not a folder has the new name.
+    TargetNotAFolder,
+}
+
+impl RefusalReason {
+    /// The reason as a clause of the warning.
+    pub fn text(self) -> &'static str {
+        match self {
+            RefusalReason::SeveralFolders => "the note has several asset folders",
+            RefusalReason::TargetExists => "a folder of that name already exists",
+            RefusalReason::TargetNotAFolder => "a file of that name is in the way",
+        }
+    }
+}
+
+/// A rename that was due and refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RefusedMove {
+    pub from: PathBuf,
+    pub to: PathBuf,
+    pub reason: RefusalReason,
 }
 
 /// Links into a renamed folder that were rewritten in one note.
@@ -54,7 +84,7 @@ pub struct AssetSync {
     pub renamed: Vec<FolderMove>,
     /// Renames not made because a folder of that name exists or the note owns
     /// several folders; each folder kept its name.
-    pub refused: Vec<FolderMove>,
+    pub refused: Vec<RefusedMove>,
     /// Bodies rewritten in memory, one entry per note and folder name. The
     /// caller writes the notes.
     pub relinked: Vec<Relink>,
@@ -159,26 +189,40 @@ pub fn plan_renames(folders: &[String], stems: &HashMap<Id, String>) -> (NamePai
     (renames, refused)
 }
 
+/// The names of every entry of `_assets/`, of any type, hidden ones included.
+fn read_entries(layout: &Layout) -> Result<BTreeSet<String>> {
+    let assets = layout.assets_dir();
+    if std::fs::symlink_metadata(&assets).is_ok_and(|meta| meta.file_type().is_symlink()) {
+        return Ok(BTreeSet::new());
+    }
+    Ok(fsutil::read_dir_entries(&assets)?
+        .into_iter()
+        .filter_map(|(path, _)| path.file_name()?.to_str().map(str::to_owned))
+        .collect())
+}
+
 /// The folder names that links should be rewritten from, each with the stem
 /// to rewrite to.
 ///
-/// `listed` is the directory listing after the renames. A name qualifies
-/// when a note owns it, the stem of that note differs from it byte for byte,
-/// the listing holds the stem and does not hold the name. The listing is
-/// compared and not the filesystem asked, since a case-insensitive
-/// filesystem finds the old spelling of a folder that was renamed only in
-/// case.
+/// `folders` and `entries` are the listing of `_assets/` after the renames: its
+/// directories, and every entry of any type. A name qualifies when a note owns
+/// it, the stem of that note differs from it byte for byte, the folders hold
+/// the stem, and no entry of any type has the name. A file or a symlink of that
+/// name is no stale folder: the link may name it. The listing is compared and
+/// not the filesystem asked, since a case-insensitive filesystem finds the old
+/// spelling of a folder that was renamed only in case.
 pub fn stale_names<'a>(
     linked: impl IntoIterator<Item = &'a str>,
-    listed: &[String],
+    folders: &[String],
+    entries: &BTreeSet<String>,
     stems: &HashMap<Id, String>,
 ) -> BTreeMap<String, String> {
-    let listed: BTreeSet<&str> = listed.iter().map(String::as_str).collect();
+    let folders: BTreeSet<&str> = folders.iter().map(String::as_str).collect();
     linked
         .into_iter()
         .filter_map(|name| {
             let stem = stems.get(&owner(name)?)?;
-            (name != stem.as_str() && listed.contains(stem.as_str()) && !listed.contains(name))
+            (name != stem.as_str() && folders.contains(stem.as_str()) && !entries.contains(name))
                 .then(|| (name.to_owned(), stem.clone()))
         })
         .collect()
@@ -211,25 +255,46 @@ pub fn sync(layout: &Layout, notes: &mut [Note]) -> Result<AssetSync> {
         let change = moved(pair);
         match fsutil::rename(&change.from, &change.to) {
             Ok(()) => report.renamed.push(change),
-            Err(error) if error.is_destination_taken() => report.refused.push(change),
+            Err(error) if error.is_destination_taken() => {
+                let target_is_dir = std::fs::symlink_metadata(&change.to)
+                    .is_ok_and(|metadata| metadata.file_type().is_dir());
+                report.refused.push(RefusedMove {
+                    from: change.from,
+                    to: change.to,
+                    reason: if target_is_dir {
+                        RefusalReason::TargetExists
+                    } else {
+                        RefusalReason::TargetNotAFolder
+                    },
+                });
+            }
             Err(error) => return Err(error.into()),
         }
     }
-    report.refused.extend(refused.into_iter().map(moved));
+    report
+        .refused
+        .extend(refused.into_iter().map(moved).map(|change| RefusedMove {
+            from: change.from,
+            to: change.to,
+            reason: RefusalReason::SeveralFolders,
+        }));
     if !report.renamed.is_empty() {
         folders = read_folders(layout)?;
     }
+    let entries = read_entries(layout)?;
 
-    let note_dir = format!("/{ALL_NOTES_DIR}");
     for note in notes.iter_mut() {
-        let linked: Vec<String> = local_links(&note.body)
-            .iter()
-            .filter_map(|link| match place(&note_dir, link.dest.as_str()) {
-                Place::Managed { folder, .. } => Some(folder),
-                _ => None,
-            })
+        let referenced: Vec<String> = references(&note.body)
+            .into_iter()
+            .filter(|reference| reference.slash)
+            .map(|reference| reference.name)
             .collect();
-        let stale = stale_names(linked.iter().map(String::as_str), &folders, &stems);
+        let stale = stale_names(
+            referenced.iter().map(String::as_str),
+            &folders,
+            &entries,
+            &stems,
+        );
         for (from, to) in stale {
             if let Some((body, count)) = relink_folder(&note.body, &from, &to) {
                 note.body = body;
@@ -265,6 +330,27 @@ mod tests {
 
     fn names(names: &[&str]) -> Vec<String> {
         names.iter().map(|name| (*name).to_string()).collect()
+    }
+
+    fn entries_of(names: &[String]) -> BTreeSet<String> {
+        names.iter().cloned().collect()
+    }
+
+    #[test]
+    fn a_loose_file_with_the_old_name_is_no_stale_folder() {
+        let stems = stems(&[(ULID, &format!("{ULID}-new"))]);
+        let folders = names(&[&format!("{ULID}-new")]);
+        let mut entries = entries_of(&folders);
+        entries.insert(format!("{ULID}-notes.txt"));
+
+        let stale = stale_names(
+            [format!("{ULID}-notes.txt").as_str()],
+            &folders,
+            &entries,
+            &stems,
+        );
+
+        assert!(stale.is_empty());
     }
 
     fn pairs(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
@@ -419,7 +505,12 @@ mod tests {
     fn a_link_to_a_folder_that_moved_is_stale() {
         let stems = stems(&[(ULID, &format!("{ULID}-new"))]);
         let listed = names(&[&format!("{ULID}-new")]);
-        let stale = stale_names([format!("{ULID}-old").as_str()], &listed, &stems);
+        let stale = stale_names(
+            [format!("{ULID}-old").as_str()],
+            &listed,
+            &entries_of(&listed),
+            &stems,
+        );
         assert_eq!(
             stale.into_iter().collect::<Vec<_>>(),
             pairs(&[(&format!("{ULID}-old"), &format!("{ULID}-new"))])
@@ -430,14 +521,24 @@ mod tests {
     fn a_link_to_a_folder_that_still_exists_is_not_stale() {
         let stems = stems(&[(ULID, &format!("{ULID}-new"))]);
         let listed = names(&[&format!("{ULID}-new"), &format!("{ULID}-old")]);
-        let stale = stale_names([format!("{ULID}-old").as_str()], &listed, &stems);
+        let stale = stale_names(
+            [format!("{ULID}-old").as_str()],
+            &listed,
+            &entries_of(&listed),
+            &stems,
+        );
         assert!(stale.is_empty());
     }
 
     #[test]
     fn a_link_to_a_note_whose_folder_does_not_exist_is_not_stale() {
         let stems = stems(&[(ULID, &format!("{ULID}-new"))]);
-        let stale = stale_names([format!("{ULID}-old").as_str()], &[], &stems);
+        let stale = stale_names(
+            [format!("{ULID}-old").as_str()],
+            &[],
+            &BTreeSet::new(),
+            &stems,
+        );
         assert!(stale.is_empty());
     }
 
@@ -445,7 +546,12 @@ mod tests {
     fn a_link_to_a_folder_no_note_owns_is_not_stale() {
         let stems = stems(&[(ULID, &format!("{ULID}-new"))]);
         let listed = names(&[&format!("{ULID}-new")]);
-        let stale = stale_names(["shared", format!("{OTHER}-x").as_str()], &listed, &stems);
+        let stale = stale_names(
+            ["shared", format!("{OTHER}-x").as_str()],
+            &listed,
+            &entries_of(&listed),
+            &stems,
+        );
         assert!(stale.is_empty());
     }
 
@@ -455,7 +561,12 @@ mod tests {
         // folder became `-new`; the listing holds only the new spelling.
         let stems = stems(&[(ULID, &format!("{ULID}-new"))]);
         let listed = names(&[&format!("{ULID}-new")]);
-        let stale = stale_names([format!("{ULID}-New").as_str()], &listed, &stems);
+        let stale = stale_names(
+            [format!("{ULID}-New").as_str()],
+            &listed,
+            &entries_of(&listed),
+            &stems,
+        );
         assert_eq!(stale.len(), 1);
     }
 }

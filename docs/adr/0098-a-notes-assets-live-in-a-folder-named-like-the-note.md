@@ -35,8 +35,11 @@ folders.
 
 Both steps go by the ULID and not by a remembered old name. A link into a
 folder name that a note owns under another name is rewritten to the name the
-folder has now, when the folder with the note's stem exists and the old name
-does not. A `reconcile` that stopped between the rename and the rewrite is
+folder has now, when the folder with the note's stem exists and no entry of any
+type in `_assets/` has the old name: a file or a symlink of that name is no stale
+folder, since the link may name it. Only a reference with a `/` after the name is
+rewritten, a path below the folder or the folder with a trailing slash, and a
+bare `_assets/<name>` is left as it is. A `reconcile` that stopped between the rename and the rewrite is
 finished by the next one, and so is a folder that drifted before ntropy
 managed it. Names are compared by the directory listing, so a folder renamed
 only in letter case is found on a case-insensitive filesystem as well. The
@@ -46,9 +49,9 @@ rewrite replaces `_assets/<old>/` by `_assets/<new>/` outside code regions
 A note file is written at most once per `reconcile`, after both the asset
 rewrite and the rewrite of note links, so neither undoes the other.
 
-A rename that is not made leaves each folder as it is and counts as a warning:
-the folder of the stem exists next to a stale one, or the note owns several
-folders. A folder whose name no note's ULID leads is not touched.
+A rename that is not made leaves each folder as it is and counts as a warning
+that names its reason: the note owns several folders, a folder of the new name
+exists, or something that is not a folder has the new name. A folder whose name no note's ULID leads is not touched.
 
 `reconcile` does nothing with asset folders in an encrypted vault. A symlinked
 `_assets` or a symlinked entry in it holds no folder ntropy manages.

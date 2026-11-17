@@ -98,47 +98,114 @@ fn has_scheme(dest: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '.' | '-'))
 }
 
-/// Rewrite the folder name `from` to `to` after `_assets/` everywhere in
-/// `body` outside code, returning the new body and the number of places
-/// changed, or `None` when `from` does not occur.
-pub fn relink_folder(body: &str, from: &str, to: &str) -> Option<(String, usize)> {
-    if from.is_empty() {
-        return None;
-    }
+/// One `_assets/<name>` in a body, outside code, in any syntax: a link, an
+/// image, a reference definition, a raw HTML attribute or plain text.
+///
+/// This is the one matcher for what a body says about an asset folder. A link
+/// the parser finds is [`local_links`], and a rewrite, the `delete` scan for
+/// notes that link a folder and the checks of `reconcile` all read the same
+/// occurrences from here.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Reference {
+    /// The folder name, the text after `_assets/` up to the next `/` or the
+    /// end of the reference.
+    pub name: String,
+    /// Where the name stands in the body.
+    pub name_range: Range<usize>,
+    /// The whole reference, from `_assets` to the end of the path.
+    pub token: Range<usize>,
+    /// Whether a `/` follows the name: a path below the folder, or the folder
+    /// written with a trailing slash. A name without one is no folder path,
+    /// since it may as well be a file directly in `_assets/`.
+    pub slash: bool,
+}
+
+/// Every `_assets/<name>` in `body` outside code, in order. The `_assets`
+/// component matches ignoring ASCII case.
+pub fn references(body: &str) -> Vec<Reference> {
     let masked = link::masked_ranges(body);
     let bytes = body.as_bytes();
     let lead = ASSETS_DIR.len() + 1;
-    let length = lead + from.len();
+    let mut found = Vec::new();
+    let mut at = 0;
+    while at + lead < bytes.len() {
+        let starts = bytes[at..at + ASSETS_DIR.len()].eq_ignore_ascii_case(ASSETS_DIR.as_bytes())
+            && bytes[at + ASSETS_DIR.len()] == b'/'
+            && (at == 0 || !is_name_byte(bytes[at - 1]))
+            && !link::is_masked(&masked, at);
+        if !starts {
+            at += 1;
+            continue;
+        }
+        let name_start = at + lead;
+        let name_end = (name_start..bytes.len())
+            .find(|&i| ends_name(bytes[i]))
+            .unwrap_or(bytes.len());
+        let slash = bytes.get(name_end) == Some(&b'/');
+        let token_end = (name_end..bytes.len())
+            .find(|&i| ends_reference(bytes[i]))
+            .unwrap_or(bytes.len());
+        if name_end > name_start {
+            found.push(Reference {
+                name: body[name_start..name_end].to_owned(),
+                name_range: name_start..name_end,
+                token: at..token_end,
+                slash,
+            });
+        }
+        at = token_end.max(at + 1);
+    }
+    found
+}
 
+/// The byte ranges of `body` the parser reads as raw HTML, an HTML block or
+/// an inline tag.
+pub fn html_ranges(body: &str) -> Vec<Range<usize>> {
+    Parser::new_ext(body, parser_options())
+        .into_offset_iter()
+        .filter_map(|(event, range)| match event {
+            Event::Html(_) | Event::InlineHtml(_) => Some(range),
+            _ => None,
+        })
+        .collect()
+}
+
+/// Rewrite the folder name `from` to `to` after `_assets/` everywhere in
+/// `body` outside code, returning the new body and the number of places
+/// changed, or `None` when `from` does not occur.
+///
+/// Only a reference with a `/` after the name is rewritten, a path below the
+/// folder or the folder with a trailing slash. A bare `_assets/<name>` may be a
+/// file directly in `_assets/` and is left as it is.
+pub fn relink_folder(body: &str, from: &str, to: &str) -> Option<(String, usize)> {
     let mut rewritten = String::new();
     let mut cursor = 0;
     let mut count = 0;
-    let mut at = 0;
-    while at + length <= bytes.len() {
-        let candidate = &bytes[at..at + length];
-        let is_match = candidate[..ASSETS_DIR.len()].eq_ignore_ascii_case(ASSETS_DIR.as_bytes())
-            && candidate[ASSETS_DIR.len()] == b'/'
-            && &candidate[lead..] == from.as_bytes()
-            && (at == 0 || !is_name_byte(bytes[at - 1]))
-            && bytes
-                .get(at + length)
-                .is_none_or(|&next| !is_name_byte(next))
-            && !link::is_masked(&masked, at);
-        if is_match {
-            rewritten.push_str(&body[cursor..at + lead]);
-            rewritten.push_str(to);
-            cursor = at + length;
-            at = cursor;
-            count += 1;
-        } else {
-            at += 1;
-        }
+    for reference in references(body)
+        .iter()
+        .filter(|reference| reference.slash && reference.name == from)
+    {
+        rewritten.push_str(&body[cursor..reference.name_range.start]);
+        rewritten.push_str(to);
+        cursor = reference.name_range.end;
+        count += 1;
     }
     if count == 0 {
         return None;
     }
     rewritten.push_str(&body[cursor..]);
     Some((rewritten, count))
+}
+
+/// Whether `byte` ends a folder name in a reference: the next path segment, or
+/// anything that ends a link target or an attribute value.
+fn ends_name(byte: u8) -> bool {
+    byte == b'/' || ends_reference(byte)
+}
+
+/// Whether `byte` ends a reference.
+fn ends_reference(byte: u8) -> bool {
+    byte.is_ascii_whitespace() || matches!(byte, b')' | b'>' | b'"' | b'\'' | b'#' | b'?' | b']')
 }
 
 /// Whether `byte` can be part of a folder or directory name as written in a
@@ -305,10 +372,52 @@ mod tests {
     }
 
     #[test]
-    fn a_link_to_the_folder_itself_follows_it() {
+    fn a_link_to_the_folder_itself_follows_it_with_its_trailing_slash() {
         assert_eq!(
-            relinked(&format!("[all](_assets/{FROM})")),
-            Some((format!("[all](_assets/{TO})"), 1))
+            relinked(&format!("[all](_assets/{FROM}/)")),
+            Some((format!("[all](_assets/{TO}/)"), 1))
+        );
+    }
+
+    #[test]
+    fn a_bare_name_without_a_slash_is_left_alone() {
+        assert_eq!(relinked(&format!("[all](_assets/{FROM})")), None);
+    }
+
+    #[test]
+    fn a_percent_encoded_slash_is_no_path_below_the_folder() {
+        assert_eq!(relinked(&format!("[x](_assets/{FROM}%2Fchart.png)")), None);
+    }
+
+    #[test]
+    fn references_name_every_occurrence_outside_code_with_its_ranges() {
+        let body = format!(
+            "![a](_assets/{FROM}/a.png) <img src=\"_assets/other/b.png\"> `_assets/code/x` [r]: _assets/loose.txt"
+        );
+        let found = references(&body);
+        let names: Vec<&str> = found.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, [FROM, "other", "loose.txt"]);
+        assert_eq!(&body[found[0].name_range.clone()], FROM);
+        assert_eq!(&body[found[1].token.clone()], "_assets/other/b.png");
+        assert_eq!(
+            found.iter().map(|r| r.slash).collect::<Vec<_>>(),
+            [true, true, false]
+        );
+    }
+
+    #[test]
+    fn html_ranges_cover_blocks_and_inline_tags() {
+        let body = "<img src=\"_assets/a/b.png\">\n\ntext <b>bold</b> and ![x](_assets/c/d.png)";
+        let ranges = html_ranges(body);
+        assert!(
+            ranges
+                .iter()
+                .any(|r| body[r.clone()].contains("_assets/a/"))
+        );
+        assert!(
+            !ranges
+                .iter()
+                .any(|r| body[r.clone()].contains("_assets/c/"))
         );
     }
 

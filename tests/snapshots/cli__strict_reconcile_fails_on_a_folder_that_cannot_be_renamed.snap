@@ -17,4 +17,4 @@ ignored /by-tag/
 Scanned 1 note, reassigned 0 notes, renamed 1 file, relinked 0 links, synced 1 view, ignored 1 entry, unignored 0 entries, 1 warning.
 
 ----- stderr -----
-warning: did not rename `_assets/[ULID....................]-old/` to `_assets/[ULID....................]-brand-new/`: another folder of this note is in the way
+warning: did not rename `_assets/[ULID....................]-old/` to `_assets/[ULID....................]-brand-new/`: the note has several asset folders

@@ -245,8 +245,8 @@ under `-n`. They refuse to work in an encrypted vault.
 
 A note links only its own folder. A link into another note's folder is refused
 by renders and exports and reported by `reconcile`, and `--strict` fails on it,
-as it does on a link to a missing file or to a file outside every `_assets/`
-folder, which still renders. After a retitle the folder keeps its old name until
+as it does on a link to a missing file or to a file outside `all-notes/_assets/`,
+which still renders. After a retitle the folder keeps its old name until
 `reconcile` renames it and rewrites the links into it. `delete` removes the
 folder with the note. A `#` in a link target always starts the fragment, so a
 file with a `#` in its name cannot be linked.

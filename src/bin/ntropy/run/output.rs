@@ -19,7 +19,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use ntropy::asset::{AssetIssue, FolderMove, Linked, Listing};
+use ntropy::asset::{AssetIssue, Linked, Listing, RefusedMove};
 use ntropy::config::ViewConfig;
 use ntropy::id::Id;
 use ntropy::note::Note;
@@ -404,12 +404,13 @@ pub fn print_asset_issues(issues: &[AssetIssue]) {
 }
 
 /// The warning for an asset folder that `reconcile` did not rename.
-pub fn print_refused_asset_renames(refused: &[FolderMove]) {
+pub fn print_refused_asset_renames(refused: &[RefusedMove]) {
     for rename in refused {
         eprintln!(
-            "warning: did not rename `{}` to `{}`: another folder of this note is in the way",
+            "warning: did not rename `{}` to `{}`: {}",
             asset_folder(&rename.from),
-            asset_folder(&rename.to)
+            asset_folder(&rename.to),
+            rename.reason.text()
         );
     }
 }

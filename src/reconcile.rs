@@ -1673,6 +1673,101 @@ mod tests {
         }
 
         #[test]
+        fn a_refused_rename_names_its_reason() {
+            use crate::asset::RefusalReason;
+
+            // Another folder of the note exists next to the stale one.
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-new-title"));
+            plant_folder(&session, &format!("{ULID}-old"));
+            let report = reconcile(&session).expect("reconcile");
+            assert_eq!(
+                report.assets.refused[0].reason,
+                RefusalReason::SeveralFolders
+            );
+
+            // A file has the new name.
+            let (_guard, session) = vault_with_view();
+            drifted_note(&session, "");
+            plant_folder(&session, &format!("{ULID}-old"));
+            std::fs::write(
+                session.layout().asset_folder(&format!("{ULID}-new-title")),
+                b"x",
+            )
+            .expect("a file of the new name");
+            let report = reconcile(&session).expect("reconcile");
+            assert_eq!(
+                report.assets.refused[0].reason,
+                RefusalReason::TargetNotAFolder
+            );
+        }
+
+        #[test]
+        fn a_loose_file_with_the_stale_name_keeps_its_link() {
+            let (_guard, session) = vault_with_view();
+            write_note(
+                &session,
+                &format!("{ULID}-note.md"),
+                &format!("---\ntitle: Note\n---\n[n](_assets/{ULID}-old.txt)\n"),
+            );
+            plant_folder(&session, &format!("{ULID}-note"));
+            std::fs::write(
+                session
+                    .layout()
+                    .assets_dir()
+                    .join(format!("{ULID}-old.txt")),
+                b"x",
+            )
+            .expect("a loose file");
+
+            reconcile(&session).expect("reconcile");
+
+            assert!(
+                body_of(&session, &format!("{ULID}-note.md"))
+                    .contains(&format!("(_assets/{ULID}-old.txt)"))
+            );
+        }
+
+        #[test]
+        fn a_bare_missing_name_and_a_percent_encoded_slash_are_left_alone() {
+            let (_guard, session) = vault_with_view();
+            drifted_note(
+                &session,
+                &format!("[a](_assets/{ULID}-gone) [b](_assets/{ULID}-gone%2Fx.png)\n"),
+            );
+            plant_folder(&session, &format!("{ULID}-old"));
+
+            reconcile(&session).expect("reconcile");
+
+            let body = body_of(&session, &format!("{ULID}-new-title.md"));
+            assert!(body.contains(&format!("(_assets/{ULID}-gone)")), "{body}");
+            assert!(
+                body.contains(&format!("(_assets/{ULID}-gone%2Fx.png)")),
+                "{body}"
+            );
+        }
+
+        #[test]
+        fn raw_html_into_another_notes_folder_is_reported_as_foreign() {
+            let (_guard, session) = vault_with_view();
+            write_note(
+                &session,
+                &format!("{ULID}-note.md"),
+                &format!("---\ntitle: Note\n---\n<img src=\"_assets/{OTHER}-x/c.png\">\n"),
+            );
+
+            let report = reconcile(&session).expect("reconcile");
+
+            assert!(
+                report
+                    .asset_issues
+                    .iter()
+                    .any(|issue| matches!(issue, crate::asset::AssetIssue::Foreign { .. }))
+            );
+        }
+
+        #[test]
         fn a_file_in_the_way_of_the_new_name_refuses_the_rename() {
             let (_guard, session) = vault_with_view();
             drifted_note(&session, "");

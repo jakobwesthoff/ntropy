@@ -6,8 +6,8 @@
 //!
 //! Four things are wrong with an asset link or folder, and each fails
 //! `--strict`: a link to a file missing from the note's own folder, a link
-//! into another note's folder, a link to a file outside every `_assets/`
-//! folder, and a folder in `_assets/` that belongs to no note. A folder
+//! into another note's folder, a link to a file outside `all-notes/_assets/`,
+//! and a folder in `_assets/` that belongs to no note. A folder
 //! whose name is stale between an edit and the next `reconcile` is none of
 //! them: the note owns it, and `reconcile` renames it before this runs.
 
@@ -22,7 +22,7 @@ use crate::vault::layout::{ALL_NOTES_DIR, ASSETS_DIR, Layout};
 
 use crate::render::markdown::resolve_root_relative;
 
-use super::{Standing, local_links, owner, place};
+use super::{Standing, html_ranges, local_links, owner, place, references};
 
 /// One finding about a note's links or the contents of `_assets/`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,8 +34,10 @@ pub enum AssetIssue {
     Foreign { note: PathBuf, path: String },
     /// A link to a file that is in no asset folder.
     Unmanaged { note: PathBuf, path: String },
-    /// An entry of `_assets/` that no valid note owns.
+    /// A folder in `_assets/` that no valid note owns.
     Orphan { entry: String },
+    /// A file directly in `_assets/`, outside every note's folder.
+    Loose { entry: String },
     /// A symlink in or as `_assets/`, which ntropy leaves alone.
     Skipped { entry: String },
 }
@@ -59,12 +61,15 @@ impl AssetIssue {
                 file(note)
             ),
             AssetIssue::Unmanaged { note, path } => format!(
-                "{}: `{path}` is outside every `{ASSETS_DIR}/` folder, so ntropy does not manage it",
+                "{}: `{path}` is outside `{ALL_NOTES_DIR}/{ASSETS_DIR}/`, so ntropy does not manage it",
                 file(note)
             ),
             AssetIssue::Orphan { entry } => {
                 format!("`{ASSETS_DIR}/{entry}` belongs to no note: no valid note carries its ULID")
             }
+            AssetIssue::Loose { entry } => format!(
+                "`{ASSETS_DIR}/{entry}` is a file directly in `{ASSETS_DIR}/`, outside every note's folder"
+            ),
             AssetIssue::Skipped { entry } => {
                 format!("`{entry}` is a symlink, which ntropy leaves alone")
             }
@@ -109,7 +114,9 @@ fn check_folders(layout: &Layout, notes: &[Note]) -> Result<Vec<AssetIssue>> {
             issues.push(AssetIssue::Skipped {
                 entry: format!("{ASSETS_DIR}/{name}"),
             });
-        } else if !(file_type.is_dir() && owner(&name).is_some_and(|id| owners.contains(&id))) {
+        } else if !file_type.is_dir() {
+            issues.push(AssetIssue::Loose { entry: name });
+        } else if !owner(&name).is_some_and(|id| owners.contains(&id)) {
             issues.push(AssetIssue::Orphan { entry: name });
         }
     }
@@ -139,8 +146,34 @@ fn check_links(layout: &Layout, notes: &[Note]) -> Vec<AssetIssue> {
             };
             issues.extend(issue);
         }
+        issues.extend(foreign_html_references(note, &mut seen));
     }
     issues
+}
+
+/// The references into another note's folder that raw HTML makes, which the
+/// parser reads as HTML and not as links: an `<img src>` renders in a browser
+/// and an export keeps it as written, so it is as much a use of the folder as
+/// a link is.
+fn foreign_html_references(
+    note: &Note,
+    seen: &mut BTreeSet<(Standing, String)>,
+) -> Vec<AssetIssue> {
+    let html = html_ranges(&note.body);
+    references(&note.body)
+        .into_iter()
+        .filter(|reference| {
+            html.iter()
+                .any(|range| range.contains(&reference.name_range.start))
+        })
+        .filter(|reference| owner(&reference.name) != Some(note.id))
+        .map(|reference| note.body[reference.token].to_owned())
+        .filter(|path| seen.insert((Standing::Foreign, path.clone())))
+        .map(|path| AssetIssue::Foreign {
+            note: note.path.clone(),
+            path,
+        })
+        .collect()
 }
 
 /// Whether the file `path`, a link target written in a note whose directory is
@@ -321,7 +354,56 @@ mod tests {
                 _ => None,
             })
             .collect();
-        assert_eq!(orphans, ["loose.png", "shared"]);
+        assert_eq!(orphans, ["shared"]);
+    }
+
+    #[test]
+    fn a_file_directly_in_assets_is_loose_not_an_orphan_folder() {
+        let (_guard, session) = vault_with_view();
+        note(&session, ULID, "body");
+        std::fs::create_dir_all(session.layout().assets_dir()).expect("assets");
+        std::fs::write(session.layout().assets_dir().join("loose.png"), b"x").expect("file");
+        assert_eq!(
+            issues(&session),
+            [AssetIssue::Loose {
+                entry: "loose.png".to_string()
+            }]
+        );
+        assert_eq!(
+            messages(&session),
+            ["`_assets/loose.png` is a file directly in `_assets/`, outside every note's folder"]
+        );
+    }
+
+    #[test]
+    fn raw_html_into_another_notes_folder_is_foreign() {
+        let (_guard, session) = vault_with_view();
+        let path = note(
+            &session,
+            ULID,
+            &format!(
+                "<img src=\"_assets/{OTHER}-note/c.png\"> and prose _assets/{OTHER}-note/p.png"
+            ),
+        );
+        note(&session, OTHER, "body");
+        assert_eq!(
+            issues(&session),
+            [AssetIssue::Foreign {
+                note: path,
+                path: format!("_assets/{OTHER}-note/c.png"),
+            }]
+        );
+    }
+
+    #[test]
+    fn raw_html_into_the_own_folder_is_not_reported() {
+        let (_guard, session) = vault_with_view();
+        note(
+            &session,
+            ULID,
+            &format!("<img src=\"_assets/{ULID}-note/c.png\">"),
+        );
+        assert_eq!(issues(&session), []);
     }
 
     #[test]
@@ -407,7 +489,7 @@ mod tests {
         );
         assert_eq!(
             unmanaged.message(),
-            "n.md: `t.txt` is outside every `_assets/` folder, so ntropy does not manage it"
+            "n.md: `t.txt` is outside `all-notes/_assets/`, so ntropy does not manage it"
         );
         assert_eq!(
             AssetIssue::Skipped {

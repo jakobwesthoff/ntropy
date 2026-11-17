@@ -19,13 +19,15 @@ change in any release
   note and prints the old and the new folder name; the summary names the asset
   folders moved. A folder keeps its old name between an edit and the next
   `reconcile`, and `write` and the editor leave it alone. A folder that cannot
-  be renamed because another folder of the note is in the way stays as it is and
-  counts as a warning. An encrypted vault is not touched.
+  be renamed stays as it is and counts as a warning that names its reason: the
+  note has several asset folders, a folder of the new name exists, or a file of
+  that name is in the way. An encrypted vault is not touched.
 - `reconcile` warns about a link to a file missing from the note's own asset
-  folder, a link into another note's folder, a link to a file outside every
-  `_assets/` folder (beside the notes, or in a vault-root `assets/` folder; such
-  a file still renders and exports as before) and an entry of `_assets/` that no
-  note owns, such as the folder of a deleted note. Nothing is deleted.
+  folder, a link into another note's folder, a raw HTML reference into another
+  note's folder, a link to a file outside `all-notes/_assets/` (beside the notes,
+  or in a vault-root `assets/` folder; such a file still renders and exports as
+  before), a folder in `_assets/` that no note owns, such as the folder of a
+  deleted note, and a file directly in `_assets/`. Nothing is deleted.
   `--strict` fails on each of them, and not on a folder name that is stale
   before the run renames it.
   [ADR 0099](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0099-reconcile-checks-asset-links-and-the-assets-directory.md)
@@ -39,7 +41,7 @@ change in any release
   into another note's asset folder. `pdf` and `typst` show the link text or the
   alt text instead, `html` and `site` do not copy the file, each with a warning
   that fails `--strict`. A linked directory no longer carries `all-notes/_assets/`
-  into an export. Links to files outside every `_assets/` folder render and
+  into an export. Links to files outside `all-notes/_assets/` render and
   export as before.
   [ADR 0101](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0101-renders-and-exports-serve-only-a-notes-own-assets.md)
   records the rule.
