@@ -14,8 +14,8 @@ command surface in [cli.md](cli.md).
 `pdf`, the default, and `typst`, the emitted Typst document, both from
 ntropy's typst engine, which converts the note to Typst markup, hands it out
 directly for `typst`, and compiles it with the external `typst` binary for
-`pdf`; and `html`, a self-contained web page from the html engine, which
-converts the same note through the shared Markdown walk and inlines the site
+`pdf`; and `html`, a web page with a `<stem>_files/` directory beside it, from
+the html engine, which converts the same note through the shared Markdown walk and inlines the site
 theme's stylesheet; and `ansi`, the note drawn for a terminal by the ansi
 engine through the patine library. The engines' models live in
 [typst-engine.md](typst-engine.md), [html-engine.md](html-engine.md) and

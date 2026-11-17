@@ -34,6 +34,12 @@ change in any release
   [ADR 0093](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0093-warn-from-ntropy-skill-and-ntropy-version-when-an-installed-copy-of-the-skill-is-older.md)
   records the rule.
 
+### Fixed
+
+- `render --help` described `--to html` as a self-contained web page. The
+  artifact is a page plus a `<stem>_files/` directory beside it, and the help
+  says so.
+
 ## v2.11.0 - 2026-11-16
 
 ### Added

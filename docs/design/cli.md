@@ -269,8 +269,8 @@ matches every note nor opens the picker.
 
 Turn one note into a document artifact: `pdf` (the default, compiled by the
 external `typst` binary, the one tool that must be on `PATH`), `typst`, the
-emitted Typst document, `html`, a self-contained web page
-([html-engine.md](html-engine.md)), or `ansi`, the note drawn for a
+emitted Typst document, `html`, a web page with a `<stem>_files/` directory
+beside it ([html-engine.md](html-engine.md)), or `ansi`, the note drawn for a
 terminal at 80 columns ([ansi-engine.md](ansi-engine.md),
 [ADR 0082](../adr/0082-ansi-render-format-drawn-by-patine.md)); the latter
 three need no external tool. An
