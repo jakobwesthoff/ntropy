@@ -41,6 +41,14 @@ change in any release
 - `render --help` described `--to html` as a self-contained web page. The
   artifact is a page plus a `<stem>_files/` directory beside it, and the help
   says so.
+- `render` failed for a note with a number or a boolean in `tags`, such as
+  `tags: [2026]`, with `expected content, found integer` for a PDF. The
+  `pdf` and `typst` formats now hand `title` and the entries of `tags` to the
+  document theme as strings, as a note's title and tags are read everywhere
+  else, and leave a `null` entry of `tags` out. A custom theme that read them
+  as a number or a boolean receives a string.
+  [ADR 0095](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0095-title-and-tags-reach-a-typst-theme-as-text.md)
+  records the rule.
 
 ## v2.11.0 - 2026-11-16
 

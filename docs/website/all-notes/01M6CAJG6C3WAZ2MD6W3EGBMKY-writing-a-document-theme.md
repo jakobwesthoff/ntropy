@@ -316,7 +316,8 @@ Render again.
 `note` receives four things. `title` is the note's title. `frontmatter`
 is the note's whole frontmatter as Typst values, `title` and `tags`
 included, so `frontmatter.at("author", default: none)` reads a field
-without failing on a note that lacks it. `fmt-value` is a helper of
+without failing on a note that lacks it. `title` and the entries of `tags`
+are always strings, even when the note writes `tags: [2026]`. `fmt-value` is a helper of
 ntropy's that turns any frontmatter value, a list included, into text.
 `paper` is the paper size from step 2, and `body` is the note itself.
 [Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md#what-note-receives)

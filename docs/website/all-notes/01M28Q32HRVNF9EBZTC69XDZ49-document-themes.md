@@ -112,6 +112,9 @@ change only in a `note` of your own.
   lists become arrays and mappings dictionaries, at any depth. A YAML date
   such as `2026-11-01` stays a string, and a value with a YAML tag
   (`!degrees 90`) becomes the string of its YAML text, tag included.
+  Two fields are the exception: `title` and every entry of `tags` arrive
+  as strings, so `tags: [2026, true]` is `("2026", "true")`, and a `null`
+  entry of `tags` is left out.
   `frontmatter.at("author", default: none)` reads a field a note may
   lack. The note's date, which lives in its file name, is not passed.
 - `paper`: the paper size, see [Paper size](#paper-size).

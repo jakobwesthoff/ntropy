@@ -13,6 +13,8 @@ which makes `title` required, and
 
 Amended 2026-10-30 by [ADR 0078](0078-field-predicates-ignore-name-case-and-compare-numbers-by-their-spelling.md).
 
+Amended 2026-11-17 by [ADR 0095](0095-title-and-tags-reach-a-typst-theme-as-text.md).
+
 ## Context
 
 YAML reads an unquoted `2026` as a number and an unquoted `true` as a

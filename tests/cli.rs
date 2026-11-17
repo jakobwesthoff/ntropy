@@ -5125,6 +5125,75 @@ Footnote[^a] text.\n\n[^a]: inside **b**(f) and *e*;\n";
 }
 
 #[test]
+fn the_typst_artifact_carries_numeric_and_boolean_tags_as_strings() {
+    // ADR 0081 reads a number or boolean in `tags` as its text, and the Typst
+    // document hands the theme that text (ADR 0095). No typst binary runs, as
+    // the artifact is the emitted file itself.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "numeric-tags",
+        "---\ntitle: Numeric tags\ntags: [2026, true]\n---\nBody.\n",
+    );
+
+    let mut cmd = ntropy(dir.path());
+    cmd.args(["render", ULID_A, "--to", "typst", "-o", "out.typ", "-n"]);
+    cmd.current_dir(dir.path());
+    let output = cmd.output().expect("run render to typst");
+    assert!(output.status.success(), "{}", rendered(&output));
+
+    let artifact = fs::read_to_string(dir.path().join("out.typ")).expect("read the artifact");
+    assert!(
+        artifact.contains(r#""tags": ("2026", "true")"#),
+        "the tags are not emitted as strings: {artifact}"
+    );
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_note_with_numeric_and_boolean_tags_renders_to_a_real_pdf() {
+    // `text(tag)` in the default look takes content or a string, so a tag that
+    // reached Typst as an integer, a float or a boolean failed the compile with
+    // "expected content". The numeric title and the other numeric fields go
+    // through the same compile.
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "numeric-tags",
+        "---\ntitle: 2026\ntags: [2026, true, 1.5, area/work]\npriority: 3\ndraft: true\nratio: 1.5\n---\nBody.\n",
+    );
+
+    let mut pdf = ntropy(dir.path());
+    pdf.args(["render", ULID_A, "-o", "numeric-tags.pdf", "-n"]);
+    pdf.current_dir(dir.path());
+    let output = pdf.output().expect("run render to pdf");
+    assert!(
+        output.status.success(),
+        "pdf compile failed:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // `pdftotext` is optional: without it the compile above is the check.
+    let Ok(text) = Command::new("pdftotext")
+        .arg(dir.path().join("numeric-tags.pdf"))
+        .arg("-")
+        .output()
+    else {
+        println!("pdftotext not found; skipped the text assertions");
+        return;
+    };
+    let text = String::from_utf8_lossy(&text.stdout);
+    for expected in ["2026", "true", "1.5", "area/work"] {
+        assert!(
+            text.contains(expected),
+            "{expected:?} missing from: {text:?}"
+        );
+    }
+}
+
+#[test]
 #[ignore = "runs the real typst binary; execute via `just verify-render`"]
 fn render_kitchen_sink_compiles_with_real_typst() {
     // The full roundtrip's final leg: the kitchen-sink note rendered to pdf by

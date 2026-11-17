@@ -24,6 +24,7 @@ use serde_yaml_ng::{Mapping, Value};
 use super::prelude::PRELUDE;
 use super::value::value_literal;
 use super::writer::TypstWriter;
+use crate::note::frontmatter::{scalar_text, untag};
 use crate::render::Paper;
 
 /// Assemble the complete emitted document from a note's title, frontmatter,
@@ -63,13 +64,50 @@ pub fn assemble(
     writer.syntax("\n#show: note.with(title: \"");
     writer.string_literal(title);
     writer.syntax("\", frontmatter: ");
-    writer.syntax(&value_literal(&Value::Mapping(frontmatter.clone())));
+    writer.syntax(&value_literal(&Value::Mapping(readable(frontmatter))));
     writer.syntax(", paper: \"");
     writer.syntax(paper.as_str());
     writer.syntax("\",)\n\n");
 
     writer.raw(body);
     writer.finish()
+}
+
+/// The frontmatter as the theme receives it: `title` and `tags` read as the
+/// text ADR 0081 makes of them, every other field a typed value.
+///
+/// A theme draws a tag as text, and Typst's `text` rejects an integer, a float
+/// or a boolean. Reading the two recognized fields the way the note loader
+/// does keeps `tags: [2026]` a list of strings here, and a null entry is
+/// dropped as the loader skips it, rather than drawn as an empty chip.
+fn readable(frontmatter: &Mapping) -> Mapping {
+    let mut readable = frontmatter.clone();
+
+    if let Some(title) = readable.get_mut("title")
+        && let Some(text) = scalar_text(title)
+    {
+        *title = Value::String(text);
+    }
+
+    if let Some(tags) = readable.get_mut("tags") {
+        match untag(tags) {
+            Value::Sequence(entries) => {
+                let texts = entries
+                    .iter()
+                    .filter(|entry| !matches!(untag(entry), Value::Null))
+                    .map(|entry| scalar_text(entry).map_or_else(|| entry.clone(), Value::String))
+                    .collect();
+                *tags = Value::Sequence(texts);
+            }
+            lone => {
+                if let Some(text) = scalar_text(lone) {
+                    *tags = Value::String(text);
+                }
+            }
+        }
+    }
+
+    readable
 }
 
 #[cfg(test)]
@@ -227,6 +265,95 @@ mod tests {
         assert!(
             !document.contains("vault theme"),
             "an unthemed document carries a theme marker: {document}"
+        );
+    }
+
+    /// The frontmatter literal an assembled document carries for `yaml`.
+    fn emitted_frontmatter(yaml: &str) -> String {
+        let document = assemble("Title", &frontmatter(yaml), Paper::A4, None, "body");
+        assert_parses(&document);
+        // The prelude defines `note` with a `frontmatter: (:)` default of its
+        // own, so the search starts at the template application.
+        let application = document
+            .find("#show: note.with(")
+            .expect("the document applies the template");
+        let start = application
+            + document[application..]
+                .find("frontmatter: ")
+                .expect("the template application carries the frontmatter")
+            + "frontmatter: ".len();
+        let end = document[start..]
+            .find(", paper:")
+            .expect("the paper follows the frontmatter");
+        document[start..start + end].to_string()
+    }
+
+    #[test]
+    fn an_integer_tag_is_emitted_as_a_string() {
+        assert_eq!(
+            emitted_frontmatter("title: T\ntags: [2026]\n"),
+            r#"("title": "T", "tags": ("2026",))"#
+        );
+    }
+
+    #[test]
+    fn a_boolean_tag_is_emitted_as_a_string() {
+        assert_eq!(
+            emitted_frontmatter("title: T\ntags: [true]\n"),
+            r#"("title": "T", "tags": ("true",))"#
+        );
+    }
+
+    #[test]
+    fn a_float_tag_is_emitted_as_its_parsed_spelling() {
+        assert_eq!(
+            emitted_frontmatter("title: T\ntags: [1.50]\n"),
+            r#"("title": "T", "tags": ("1.5",))"#
+        );
+    }
+
+    #[test]
+    fn a_numeric_title_in_the_frontmatter_is_emitted_as_a_string() {
+        assert_eq!(emitted_frontmatter("title: 2026\n"), r#"("title": "2026")"#);
+    }
+
+    #[test]
+    fn a_lone_scalar_tags_field_is_emitted_as_a_string() {
+        assert_eq!(
+            emitted_frontmatter("title: T\ntags: 2026\n"),
+            r#"("title": "T", "tags": "2026")"#
+        );
+    }
+
+    #[test]
+    fn a_tagged_scalar_tag_is_emitted_as_its_text() {
+        assert_eq!(
+            emitted_frontmatter("title: T\ntags: [!label 2026]\n"),
+            r#"("title": "T", "tags": ("2026",))"#
+        );
+    }
+
+    #[test]
+    fn a_tagged_tags_list_is_emitted_as_an_array_of_strings() {
+        assert_eq!(
+            emitted_frontmatter("title: T\ntags: !label [2026, a]\n"),
+            r#"("title": "T", "tags": ("2026", "a"))"#
+        );
+    }
+
+    #[test]
+    fn a_null_tag_entry_is_dropped() {
+        assert_eq!(
+            emitted_frontmatter("title: T\ntags: [a, ~, b]\n"),
+            r#"("title": "T", "tags": ("a", "b"))"#
+        );
+    }
+
+    #[test]
+    fn other_fields_keep_their_typed_values() {
+        assert_eq!(
+            emitted_frontmatter("title: T\npriority: 3\ndraft: true\nratio: 1.5\n"),
+            r#"("title": "T", "priority": 3, "draft": true, "ratio": 1.5)"#
         );
     }
 

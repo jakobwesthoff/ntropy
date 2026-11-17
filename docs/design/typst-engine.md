@@ -326,6 +326,10 @@ identical file.
   integers/floats/booleans to their Typst counterparts, null to `none`,
   sequences to arrays, mappings to dictionaries. A metadata value can
   therefore never be interpreted as Typst code, whatever it contains.
+  `title` and `tags` are the exception: they are translated as ADR 0081
+  reads them, so a number or boolean in either is a string, a null entry of
+  `tags` is dropped and a YAML tag is looked through
+  ([ADR 0095](../adr/0095-title-and-tags-reach-a-typst-theme-as-text.md)).
 - **The paper size is baked into the document** as the template's
   `paper:` argument (the vault's configured render option, see
   Configuration in [rendering.md](rendering.md)); the enum's names are

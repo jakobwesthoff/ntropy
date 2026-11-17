@@ -161,7 +161,7 @@ enum Scalar {
 /// The value under any YAML tag (`!label foo`), which `Value::as_str` has
 /// always looked through, so tagged titles and tags keep reading as their
 /// scalar.
-fn untag(mut value: &Value) -> &Value {
+pub(crate) fn untag(mut value: &Value) -> &Value {
     while let Value::Tagged(tagged) = value {
         value = &tagged.value;
     }
