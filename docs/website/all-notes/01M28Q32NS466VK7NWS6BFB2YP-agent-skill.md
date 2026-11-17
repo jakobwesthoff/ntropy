@@ -23,6 +23,13 @@ This writes `~/.claude/skills/ntropy/`. For one project only, install into
 `<project>/.claude/skills`. The install replaces the copy's `references/`
 directory and leaves any other file in `ntropy/` alone.
 
+An installed copy stays as it is when you update ntropy. `ntropy skill` and
+`ntropy --version` warn on stderr about a copy that is older than the ntropy
+that runs, and name the `ntropy skill --install` command that updates it.
+They look in the skills directories of Claude Code, Codex, Gemini CLI, GitHub
+Copilot and Cursor: in the current project up to its git root, and in your
+home directory.
+
 The skill's description marks it as relevant to any task involving
 ntropy, a note vault, or `.ntropy-vault` files, so an agent with the
 skill installed picks it up on its own the moment a task touches one.

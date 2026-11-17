@@ -1,0 +1,5 @@
+---
+source: tests/skill.rs
+expression: scene.stderr(&output)
+---
+warning: the ntropy skill in .claude/skills/ntropy is from ntropy 1.0.0, this ntropy is [VERSION]. Read the current one with `ntropy skill`, and ask the user whether to update the copy with `ntropy skill --install .claude/skills`.

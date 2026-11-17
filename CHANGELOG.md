@@ -24,6 +24,15 @@ change in any release
   `skills/`. `skill` needs no vault.
   [ADR 0092](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0092-ship-the-agent-skill-in-the-binary-and-print-it-with-ntropy-skill.md)
   records the command.
+- `ntropy skill` and `ntropy --version` warn on stderr when an installed copy
+  of the skill is older than the running ntropy, or carries no
+  `ntropy-version`. They look in the skills directories of Claude Code,
+  Codex, Gemini CLI, GitHub Copilot and Cursor, in the current project up to
+  its git root and in the home directory, and the warning names the
+  `ntropy skill --install` command that updates each copy. No other command
+  checks.
+  [ADR 0093](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0093-warn-from-ntropy-skill-and-ntropy-version-when-an-installed-copy-of-the-skill-is-older.md)
+  records the rule.
 
 ## v2.11.0 - 2026-11-16
 

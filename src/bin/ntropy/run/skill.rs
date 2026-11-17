@@ -32,10 +32,31 @@ fn cmd_print(part: Option<&str>) -> Result<ExitCode> {
             skill::part(name).expect("the argument parser accepts only the names of parts")
         }
     };
-    std::io::stdout()
+    let mut stdout = std::io::stdout().lock();
+    stdout
         .write_all(text.as_bytes())
+        .and_then(|()| stdout.flush())
         .context("while printing the skill")?;
+    // An agent that reads the skill this way may have an older copy
+    // installed, which its runner loads in later sessions in place of this
+    // one.
+    warn_of_outdated_skill();
     Ok(ExitCode::SUCCESS)
+}
+
+/// Warns on stderr about every installed copy of the skill that is older
+/// than this ntropy (ADR 0093), searched from the current directory. `ntropy
+/// skill` and `ntropy --version` are the two callers: the version is read
+/// before the command line, so nothing but the current directory can say
+/// where to start. A current directory that cannot be read leaves nowhere to
+/// start, and the check is skipped.
+pub fn warn_of_outdated_skill() {
+    let Ok(start) = std::env::current_dir() else {
+        return;
+    };
+    if let Some(outdated) = skill::age::outdated_copies(&start) {
+        output::warn(&format!("{}. {}", outdated.message, outdated.fix));
+    }
 }
 
 /// Writes the skill into `root/ntropy`, where `root` is a skills directory

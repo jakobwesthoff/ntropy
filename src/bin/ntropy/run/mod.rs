@@ -49,6 +49,7 @@ use crate::cli::{Cli, Command, GlobalArgs, SiteCommand, VaultCommand, ViewComman
 
 use output::NoteRef;
 pub(crate) use output::error_message;
+pub(crate) use skill::warn_of_outdated_skill;
 
 /// Run the parsed CLI to completion, returning the process exit code.
 pub fn run(cli: Cli) -> Result<ExitCode> {

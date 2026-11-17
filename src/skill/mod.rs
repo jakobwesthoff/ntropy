@@ -17,6 +17,8 @@
 use std::io;
 use std::path::Path;
 
+pub mod age;
+
 /// The skill's core: every rule an agent needs for every task.
 pub const SKILL: &str = include_str!("../../skills/ntropy/SKILL.md");
 

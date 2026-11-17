@@ -8,7 +8,8 @@ Accepted
 
 Amended 2026-10-30 by [ADR 0076](0076-adjacent-terms-in-a-query-are-an-implicit-and.md).
 
-Amended 2026-11-17 by [ADR 0092](0092-ship-the-agent-skill-in-the-binary-and-print-it-with-ntropy-skill.md).
+Amended 2026-11-17 by [ADR 0092](0092-ship-the-agent-skill-in-the-binary-and-print-it-with-ntropy-skill.md)
+and [ADR 0093](0093-warn-from-ntropy-skill-and-ntropy-version-when-an-installed-copy-of-the-skill-is-older.md).
 
 The `edit` command is superseded by
 [ADR 0031](0031-merge-edit-into-search.md), which folds it into `search` as a

@@ -11,6 +11,7 @@ The command surface and its behavior. Consolidates
 [ADR 0082](../adr/0082-ansi-render-format-drawn-by-patine.md),
 [ADR 0083](../adr/0083-show-prints-a-note-drawn-for-the-terminal.md),
 [ADR 0092](../adr/0092-ship-the-agent-skill-in-the-binary-and-print-it-with-ntropy-skill.md),
+[ADR 0093](../adr/0093-warn-from-ntropy-skill-and-ntropy-version-when-an-installed-copy-of-the-skill-is-older.md),
 and the query DSL in [query-and-search.md](query-and-search.md).
 
 ## Global behavior
@@ -596,3 +597,20 @@ directory such as `~/.claude/skills`: `SKILL.md`, and every part under
 it is written. A part and `--install` together are a usage error.
 
 `skill` resolves no vault and works outside one.
+
+Printing the core or a part warns on stderr when an installed copy of the
+skill is older than the running ntropy (ADR 0093). The warning is one
+`warning:` line after the skill. `--install` does not check.
+
+### `--version`
+
+`ntropy --version` and `-V` print the version, then the same warning about
+older installed copies of the skill. A copy is an `ntropy` directory with a
+`SKILL.md` in a project skills directory (`.agents/skills`, `.claude/skills`,
+`.gemini/skills`, `.github/skills`, `.cursor/skills`, `.codex/skills`) from
+the current directory up to the git root, or in a personal one in the home
+directory or below `CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `COPILOT_HOME` or
+`GEMINI_CLI_HOME` when that holds an absolute path. A copy whose
+`ntropy-version` is older than the running version, or missing, is named, with
+the `ntropy skill --install` command that updates it. A copy of the same or a
+newer version gives no warning. No other command checks.

@@ -144,6 +144,14 @@ fn bare_invocation_prints_help() {
     assert_cmd_snapshot!(ntropy_bin(dir.path()));
 }
 
+/// A command group without its subcommand is a usage error that prints the
+/// group's help on stderr, which clap reports as its own kind of error.
+#[test]
+fn a_command_group_without_a_subcommand_prints_its_help_as_an_error() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    assert_cmd_snapshot!(ntropy_bin(dir.path()).arg("view"));
+}
+
 #[test]
 fn init_creates_and_is_idempotent() {
     let dir = tempfile::tempdir().expect("temp dir");

@@ -34,7 +34,22 @@ fn main() -> ExitCode {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
 
-    let cli = Cli::parse();
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(error) => {
+            let shows_version = error.kind() == clap::error::ErrorKind::DisplayVersion;
+            // `exit` is what `parse` calls: it prints help, version and
+            // usage errors as clap renders them and ends with clap's exit
+            // code. The version is printed first, so the warning after it
+            // is the last thing a reader sees.
+            if shows_version {
+                let _ = error.print();
+                run::warn_of_outdated_skill();
+                return ExitCode::SUCCESS;
+            }
+            error.exit()
+        }
+    };
     match run::run(cli) {
         Ok(code) => code,
         Err(error) => {

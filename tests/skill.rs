@@ -191,3 +191,313 @@ fn install_into_a_file_is_an_error_that_names_the_path() {
 
     assert_cmd_snapshot!(ntropy(dir.path()).args(["skill", "--install", "skills-root"]));
 }
+
+// =========================================================
+// The warning about an older installed copy
+// =========================================================
+
+/// The version of every copy the tests install as an older one.
+const OLD: &str = "1.0.0";
+
+/// A project directory with a repository root, and a home directory apart
+/// from it, that no skills of whoever runs the tests can reach: the
+/// project's walk up ends at its own `.git`, and `HOME` and every variable
+/// that moves a skills directory are set or removed.
+struct Scene {
+    root: tempfile::TempDir,
+}
+
+impl Scene {
+    fn new() -> Scene {
+        let root = empty_dir();
+        fs::create_dir_all(root.path().join("project/.git")).expect("a creatable directory");
+        fs::create_dir_all(root.path().join("home")).expect("a creatable directory");
+        Scene { root }
+    }
+
+    fn project(&self) -> PathBuf {
+        self.root.path().join("project")
+    }
+
+    fn home(&self) -> PathBuf {
+        self.root.path().join("home")
+    }
+
+    /// `ntropy` run in the project with this scene's home.
+    fn ntropy(&self) -> Command {
+        let mut cmd = ntropy(&self.project());
+        cmd.env("HOME", self.home());
+        for variable in [
+            "CLAUDE_CONFIG_DIR",
+            "CODEX_HOME",
+            "COPILOT_HOME",
+            "GEMINI_CLI_HOME",
+        ] {
+            cmd.env_remove(variable);
+        }
+        cmd
+    }
+
+    /// Installs a `SKILL.md` under `<base>/<skills_dir>/ntropy`, stamped
+    /// `version`, or without a stamp.
+    fn put_copy(&self, base: &Path, skills_dir: &str, version: Option<&str>) {
+        let dir = base.join(skills_dir).join("ntropy");
+        fs::create_dir_all(&dir).expect("a creatable directory");
+        let stamp = version
+            .map(|version| format!("metadata:\n  ntropy-version: \"{version}\"\n"))
+            .unwrap_or_default();
+        fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: ntropy\ndescription: Old.\n{stamp}---\n\nOld body\n"),
+        )
+        .expect("a writable file");
+    }
+
+    /// The stderr of a run as text for a snapshot: the temp directories and
+    /// the running version are replaced, as they differ per run and per
+    /// release. Snapshotted as plain text since insta-cmd would record the
+    /// `HOME` of the run.
+    fn stderr(&self, output: &Output) -> String {
+        let root = self.root.path();
+        let canonical = root.canonicalize().expect("an existing directory");
+        String::from_utf8(output.stderr.clone())
+            .expect("a UTF-8 warning")
+            .replace(&canonical.display().to_string(), "[TMP]")
+            .replace(&root.display().to_string(), "[TMP]")
+            .replace(env!("CARGO_PKG_VERSION"), "[VERSION]")
+    }
+}
+
+/// `ntropy --version` prints clap's version text and nothing else when no
+/// copy is older, in both spellings of the flag.
+#[test]
+fn version_prints_the_version_of_this_ntropy() {
+    let scene = Scene::new();
+
+    for flag in ["--version", "-V"] {
+        let output = scene.ntropy().arg(flag).output().expect("a run");
+
+        assert!(output.status.success(), "{flag}");
+        assert_eq!(
+            stdout_of(&output),
+            format!("ntropy {}\n", env!("CARGO_PKG_VERSION")),
+            "{flag}"
+        );
+        assert_eq!(output.stderr, b"", "{flag}");
+    }
+}
+
+#[test]
+fn an_older_project_copy_warns_after_the_skill() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.project(), ".claude/skills", Some(OLD));
+
+    let output = scene.ntropy().arg("skill").output().expect("a run");
+
+    assert!(output.status.success());
+    assert_eq!(stdout_of(&output), repository_file("SKILL.md"));
+    insta::assert_snapshot!(scene.stderr(&output));
+}
+
+#[test]
+fn a_copy_without_a_stamp_warns() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.project(), ".agents/skills", None);
+
+    let output = scene.ntropy().arg("skill").output().expect("a run");
+
+    insta::assert_snapshot!(scene.stderr(&output));
+}
+
+#[test]
+fn a_global_copy_under_home_is_named_from_home() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.home(), ".claude/skills", Some(OLD));
+
+    let output = scene.ntropy().arg("skill").output().expect("a run");
+
+    insta::assert_snapshot!(scene.stderr(&output));
+}
+
+#[test]
+fn a_part_warns_too() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.project(), ".claude/skills", Some(OLD));
+
+    let output = scene
+        .ntropy()
+        .args(["skill", "querying"])
+        .output()
+        .expect("a run");
+
+    assert_eq!(
+        stdout_of(&output),
+        repository_file("references/querying.md")
+    );
+    assert!(
+        scene
+            .stderr(&output)
+            .starts_with("warning: the ntropy skill in "),
+        "{}",
+        scene.stderr(&output)
+    );
+}
+
+#[test]
+fn a_copy_of_this_version_gives_no_warning() {
+    let scene = Scene::new();
+    scene.put_copy(
+        &scene.project(),
+        ".claude/skills",
+        Some(env!("CARGO_PKG_VERSION")),
+    );
+
+    let output = scene.ntropy().arg("skill").output().expect("a run");
+
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn a_fresh_install_gives_no_warning() {
+    // The stamp the binary ships must be one its own age check reads as
+    // current, or every install would warn about itself.
+    let scene = Scene::new();
+    let install = scene
+        .ntropy()
+        .args(["skill", "--install", ".claude/skills"])
+        .output()
+        .expect("a run");
+    assert!(install.status.success());
+
+    for args in [vec!["skill"], vec!["--version"]] {
+        let output = scene.ntropy().args(&args).output().expect("a run");
+
+        assert!(output.status.success(), "{args:?}");
+        assert!(
+            !String::from_utf8_lossy(&output.stderr).contains("warning"),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+}
+
+#[test]
+fn install_gives_no_warning() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.project(), ".claude/skills", Some(OLD));
+
+    let output = scene
+        .ntropy()
+        .args(["skill", "--install", ".claude/skills"])
+        .output()
+        .expect("a run");
+
+    assert!(output.status.success());
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn another_command_gives_no_warning() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.project(), ".claude/skills", Some(OLD));
+    let vault = scene.project().join("vault");
+    fs::create_dir_all(vault.join("all-notes")).expect("a creatable directory");
+    fs::create_dir_all(vault.join(".ntropy")).expect("a creatable directory");
+
+    let output = scene
+        .ntropy()
+        .arg("--vault")
+        .arg(&vault)
+        .args(["-n", "tags"])
+        .output()
+        .expect("a run");
+
+    assert!(!String::from_utf8_lossy(&output.stderr).contains("skill"));
+}
+
+#[test]
+fn version_warns_after_the_version() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.project(), ".claude/skills", Some(OLD));
+
+    let output = scene.ntropy().arg("--version").output().expect("a run");
+
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_of(&output),
+        format!("ntropy {}\n", env!("CARGO_PKG_VERSION"))
+    );
+    insta::assert_snapshot!(scene.stderr(&output));
+}
+
+#[test]
+fn the_short_version_flag_warns_too() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.project(), ".claude/skills", Some(OLD));
+
+    let long = scene.ntropy().arg("--version").output().expect("a run");
+    let short = scene.ntropy().arg("-V").output().expect("a run");
+
+    assert!(short.status.success());
+    assert_eq!(short.stderr, long.stderr);
+    assert!(!short.stderr.is_empty());
+}
+
+#[test]
+fn version_in_a_removed_directory_prints_the_version_and_no_warning() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.home(), ".claude/skills", Some(OLD));
+    let gone = scene.root.path().join("no-such-dir-after-the-start");
+    fs::create_dir(&gone).expect("a creatable directory");
+
+    // The directory the process starts in is removed before ntropy runs, so
+    // the current directory cannot be read.
+    let output = Command::new("sh")
+        .arg("-c")
+        .arg(r#"cd "$1" && rmdir "$1" && exec "$2" --version"#)
+        .arg("sh")
+        .arg(&gone)
+        .arg(env!("CARGO_BIN_EXE_ntropy"))
+        .env("HOME", scene.home())
+        .env("NTROPY_CONFIG_DIR", NO_CONFIG_DIR)
+        .output()
+        .expect("a run");
+
+    assert!(output.status.success());
+    assert_eq!(
+        stdout_of(&output),
+        format!("ntropy {}\n", env!("CARGO_PKG_VERSION"))
+    );
+    assert_eq!(output.stderr, b"");
+}
+
+#[test]
+fn a_copy_below_claude_config_dir_is_found() {
+    let scene = Scene::new();
+    let config = scene.root.path().join("claude-config");
+    scene.put_copy(&config, "skills", Some(OLD));
+
+    let output = scene
+        .ntropy()
+        .env("CLAUDE_CONFIG_DIR", &config)
+        .arg("skill")
+        .output()
+        .expect("a run");
+
+    insta::assert_snapshot!(scene.stderr(&output));
+}
+
+#[test]
+fn a_relative_claude_config_dir_names_no_directory() {
+    let scene = Scene::new();
+    scene.put_copy(&scene.project(), "no-such-config-dir", Some(OLD));
+
+    let output = scene
+        .ntropy()
+        .env("CLAUDE_CONFIG_DIR", "no-such-config-dir")
+        .arg("skill")
+        .output()
+        .expect("a run");
+
+    assert_eq!(output.stderr, b"");
+}
