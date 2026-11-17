@@ -281,6 +281,13 @@ decides how to honor a setting for the formats it produces.
   naming the path. `--theme` overrides it per invocation and the reserved
   name `default` selects the built-in look from either source.
 
+- `attach_max` (default 25 MiB) is the per-file limit up to which the typst
+  engine attaches a linked asset file to a PDF (ADR 0105). The config takes an
+  integer in bytes or a size string such as `"25 MiB"`, with the units `B`,
+  `KiB`, `MiB` and `GiB`; `0` turns attaching off. A value that is neither is
+  a config parse error naming the key and the value. The default is left out
+  when the section is written.
+
 The `ansi` format reads none of this and takes no theme: `--theme` with it
 is an error, and a configured theme is not loaded.
 

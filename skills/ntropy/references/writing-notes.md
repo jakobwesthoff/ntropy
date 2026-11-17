@@ -248,7 +248,8 @@ by renders and exports and reported by `reconcile`, and `--strict` fails on it,
 as it does on a link to a missing file or to a file outside `all-notes/_assets/`,
 which still renders. After a retitle the folder keeps its old name until
 `reconcile` renames it and rewrites the links into it. `delete` removes the
-folder with the note. A `#` in a link target always starts the fragment, so a
+folder with the note. A PDF render attaches the non-image files the note links
+in its own folder (`ntropy skill rendering`). A `#` in a link target always starts the fragment, so a
 file with a `#` in its name cannot be linked.
 
 ## Slug and normalization facts

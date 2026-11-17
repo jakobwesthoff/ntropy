@@ -18,10 +18,14 @@ use std::process::{Command, ExitCode, Stdio};
 
 use anyhow::{Context, Result, bail};
 
+use ntropy::id::Id;
 use ntropy::link;
 use ntropy::ops::{self, Selector};
-use ntropy::render::{Invocation, Registry, RenderContext, RenderError, ToolOutput, prepare};
+use ntropy::render::{
+    Attachment, Invocation, Registry, RenderContext, RenderError, ToolOutput, prepare,
+};
 use ntropy::session::VaultSession;
+use ntropy::site::scope::ExportScope;
 use ntropy::text::escape_controls;
 
 use crate::cli::GlobalArgs;
@@ -535,6 +539,27 @@ impl RenderContext for ProcessContext {
     fn output_path(&self) -> &Path {
         &self.output
     }
+
+    /// A file is attached only when it passes the rules every export of the
+    /// vault follows (ADR 0072), so a symlink in a note's asset folder that
+    /// leads out of the vault, to a listed entry of it or to another note's
+    /// folder is never embedded in a PDF. typst reads the file itself and
+    /// fails the whole compile on a missing file or a directory, so only a
+    /// regular file reports a size.
+    fn attachment(&mut self, vault_root: &Path, owner: Id, root_absolute: &str) -> Attachment {
+        let scope = ExportScope::new(vault_root, &[], &[]);
+        let path = scope.vault_path(root_absolute);
+        if let Err(refusal) = scope.verdict(&path) {
+            return Attachment::Refused(refusal.reason());
+        }
+        if scope.is_foreign_asset(owner, "/all-notes", root_absolute) {
+            return Attachment::Refused("it lies in another note's asset folder".to_string());
+        }
+        match std::fs::metadata(&path) {
+            Ok(metadata) if metadata.is_file() => Attachment::Size(metadata.len()),
+            _ => Attachment::Absent,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -881,5 +906,155 @@ mod tests {
             }
             other => panic!("expected Spawn, got {other:?}"),
         }
+    }
+
+    // =====================================================================
+    // What may be attached to a PDF
+    // =====================================================================
+
+    const OWNER: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    const OTHER: &str = "01BRZ3NDEKTSV4RRFFQ69G5FAV";
+
+    /// A vault whose note `OWNER` has the asset folder `own`, and whose note
+    /// `OTHER` has one too.
+    struct AssetVault {
+        dir: tempfile::TempDir,
+    }
+
+    impl AssetVault {
+        fn new() -> Self {
+            let dir = tempfile::TempDir::new().expect("temp dir");
+            for folder in [OWNER, OTHER] {
+                std::fs::create_dir_all(
+                    dir.path().join(format!("all-notes/_assets/{folder}-note")),
+                )
+                .expect("asset folder");
+            }
+            std::fs::create_dir_all(dir.path().join(".ntropy")).expect("ntropy dir");
+            AssetVault { dir }
+        }
+
+        /// The root-absolute path of `name` in the owner's folder.
+        fn own(&self, name: &str) -> String {
+            format!("/all-notes/_assets/{OWNER}-note/{name}")
+        }
+
+        fn disk(&self, root_absolute: &str) -> PathBuf {
+            self.dir.path().join(root_absolute.trim_start_matches('/'))
+        }
+
+        fn ask(&self, root_absolute: &str) -> ntropy::render::Attachment {
+            let mut ctx = ProcessContext::new(PathBuf::from("out.pdf")).expect("context");
+            let owner = OWNER.parse().expect("a valid ULID");
+            ctx.attachment(self.dir.path(), owner, root_absolute)
+        }
+    }
+
+    #[test]
+    fn a_regular_file_of_the_own_folder_reports_its_size() {
+        let vault = AssetVault::new();
+        std::fs::write(vault.disk(&vault.own("m.pdf")), b"12345").expect("file");
+        assert_eq!(
+            vault.ask(&vault.own("m.pdf")),
+            ntropy::render::Attachment::Size(5)
+        );
+    }
+
+    #[test]
+    fn an_empty_file_reports_a_size_of_zero() {
+        let vault = AssetVault::new();
+        std::fs::write(vault.disk(&vault.own("empty.txt")), b"").expect("file");
+        assert_eq!(
+            vault.ask(&vault.own("empty.txt")),
+            ntropy::render::Attachment::Size(0)
+        );
+    }
+
+    #[test]
+    fn a_missing_file_and_a_directory_are_not_attachable() {
+        let vault = AssetVault::new();
+        std::fs::create_dir(vault.disk(&vault.own("sub"))).expect("directory");
+        for name in ["no-such-file.pdf", "sub"] {
+            assert_eq!(
+                vault.ask(&vault.own(name)),
+                ntropy::render::Attachment::Absent,
+                "{name}"
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_to_a_file_outside_the_vault_is_refused_and_not_attachable() {
+        let vault = AssetVault::new();
+        let outside = tempfile::TempDir::new().expect("temp dir");
+        let secret = outside.path().join("id_rsa");
+        std::fs::write(&secret, b"-----BEGIN PRIVATE KEY-----").expect("secret");
+        std::os::unix::fs::symlink(&secret, vault.disk(&vault.own("key.pdf"))).expect("symlink");
+        let answer = vault.ask(&vault.own("key.pdf"));
+        assert!(
+            matches!(&answer, ntropy::render::Attachment::Refused(reason) if reason.contains("outside the vault")),
+            "{answer:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_to_a_file_inside_the_vault_reports_the_size_of_its_target() {
+        let vault = AssetVault::new();
+        std::fs::write(vault.dir.path().join("shared.pdf"), b"123").expect("target");
+        std::os::unix::fs::symlink(
+            vault.dir.path().join("shared.pdf"),
+            vault.disk(&vault.own("s.pdf")),
+        )
+        .expect("symlink");
+        assert_eq!(
+            vault.ask(&vault.own("s.pdf")),
+            ntropy::render::Attachment::Size(3)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_to_a_listed_entry_of_the_vault_is_refused() {
+        let vault = AssetVault::new();
+        std::fs::write(vault.dir.path().join(".ntropy/config.toml"), b"x").expect("config");
+        std::os::unix::fs::symlink(
+            vault.dir.path().join(".ntropy/config.toml"),
+            vault.disk(&vault.own("c.toml")),
+        )
+        .expect("symlink");
+        let answer = vault.ask(&vault.own("c.toml"));
+        assert!(
+            matches!(&answer, ntropy::render::Attachment::Refused(reason) if reason.contains(".ntropy")),
+            "{answer:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_into_another_notes_folder_is_refused() {
+        let vault = AssetVault::new();
+        let theirs = vault.disk(&format!("/all-notes/_assets/{OTHER}-note/t.pdf"));
+        std::fs::write(&theirs, b"theirs").expect("file");
+        std::os::unix::fs::symlink(&theirs, vault.disk(&vault.own("t.pdf"))).expect("symlink");
+        let answer = vault.ask(&vault.own("t.pdf"));
+        assert!(
+            matches!(&answer, ntropy::render::Attachment::Refused(reason) if reason.contains("another note's asset folder")),
+            "{answer:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_dangling_symlink_is_refused_as_unresolvable() {
+        let vault = AssetVault::new();
+        std::os::unix::fs::symlink("/no-such-target", vault.disk(&vault.own("d.pdf")))
+            .expect("symlink");
+        let answer = vault.ask(&vault.own("d.pdf"));
+        assert!(
+            matches!(answer, ntropy::render::Attachment::Refused(_)),
+            "{answer:?}"
+        );
     }
 }

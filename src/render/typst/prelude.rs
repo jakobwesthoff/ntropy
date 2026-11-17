@@ -49,4 +49,14 @@ mod tests {
         assert!(PRELUDE.contains("#let notelink("));
         assert!(PRELUDE.contains("#let task("));
     }
+
+    /// The emitter writes `#attachbadge(..)` and `#attachbadge-off(..)` after
+    /// the link to an attached or an oversize file, so both must exist, take
+    /// the state and the size, and a theme that replaces the prelude defines
+    /// them itself.
+    #[test]
+    fn prelude_defines_the_attachment_badges() {
+        assert!(PRELUDE.contains("#let attachbadge(state, size)"));
+        assert!(PRELUDE.contains("#let attachbadge-off(state, size)"));
+    }
 }

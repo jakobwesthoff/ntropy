@@ -8,9 +8,10 @@ expression: document
 
 // Engine-owned definitions inlined ahead of every emitted document. They are
 // the seam a theme replaces: a theme is a different prelude defining `note`,
-// `callout`, `notelink`, and `task`, while the converted body below stays
-// identical. Inlining (rather than importing) keeps the emitted `typst`
-// artifact a single self-contained file that compiles next to the note.
+// `callout`, `notelink`, `attachbadge`, `attachbadge-off`, and `task`, while
+// the converted body below stays identical. Inlining (rather than importing)
+// keeps the emitted `typst` artifact a single self-contained file that
+// compiles next to the note.
 //
 // The default theme names only the fonts the typst binary bundles (Libertinus
 // Serif, New Computer Modern, DejaVu Sans Mono). Libertinus Serif covers
@@ -80,6 +81,36 @@ expression: document
 // ordinary emphasis by the link color.
 #let notelink(body) = {
   text(fill: rgb("#0969da"), emph(body))
+}
+
+// The pill after the link to a file that is attached to the PDF: `state` is
+// "attached" and `size` the file's size. The file itself is found in the
+// viewer's attachments panel. Tinted like the link color.
+#let attachbadge(state, size) = {
+  let tint = rgb("#0969da")
+  h(0.35em)
+  box(
+    inset: (x: 3pt, y: 1.5pt),
+    outset: (y: 1pt),
+    radius: 2pt,
+    fill: tint.lighten(92%),
+    stroke: 0.5pt + tint.lighten(60%),
+    text(size: 0.78em, fill: tint, weight: "medium", state + " · " + size),
+  )
+}
+
+// The same pill, muted grey, after the link to a file above the attach limit,
+// which is not attached: `state` is "not attached".
+#let attachbadge-off(state, size) = {
+  h(0.35em)
+  box(
+    inset: (x: 3pt, y: 1.5pt),
+    outset: (y: 1pt),
+    radius: 2pt,
+    fill: rgb("#f3f4f6"),
+    stroke: 0.5pt + rgb("#d1d5db"),
+    text(size: 0.78em, fill: rgb("#6b7280"), weight: "medium", state + " · " + size),
+  )
 }
 
 // A task-list checkbox, drawn rather than taken from a glyph: one identical

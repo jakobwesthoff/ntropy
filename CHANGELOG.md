@@ -84,6 +84,17 @@ change in any release
   records the layout and
   [ADR 0097](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)
   how asset links are found.
+- A PDF attaches the non-image files that a note links in its own asset folder,
+  and shows `attached · 1.2 MiB` after the link in a tinted badge; the viewer
+  lists the files in its attachments panel. A file above `[render] attach_max`
+  (25 MiB by default, an integer in bytes or a size string such as `"25 MiB"`,
+  `0` turns attaching off) is not attached and gets a grey `not attached · 240 MiB`
+  badge, with a warning that fails `--strict`. A file is attached only when it
+  resolves to a regular file inside the vault, so a symlink to a file outside it
+  is refused with a warning and never embedded. A document theme can restyle the
+  badges with `attachbadge` and `attachbadge-off`.
+  [ADR 0105](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0105-linked-files-are-attached-to-the-pdf.md)
+  records the attachments.
 
 ### Changed
 

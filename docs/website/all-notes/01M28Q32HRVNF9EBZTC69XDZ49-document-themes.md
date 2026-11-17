@@ -63,7 +63,7 @@ so internal tags and `status: draft` never reach a customer:
 }
 ```
 
-Four functions are yours to override; a theme defining only `note` keeps
+Six functions are yours to override; a theme defining only `note` keeps
 the built-in look for the others:
 
 | Function | Signature | Renders |
@@ -71,6 +71,8 @@ the built-in look for the others:
 | `note` | `note(title: none, frontmatter: (:), paper: "a4", body)` | the whole document |
 | `callout` | `callout(kind: "note", body)` | a `> [!NOTE]` admonition |
 | `notelink` | `notelink(body)` | the text of a note link: the target's title, or the link's text when it carries a heading anchor and has text |
+| `attachbadge` | `attachbadge(state, size)` | the badge after the link to a file attached to the PDF: `state` is `attached` and `size` text such as `1.2 MiB` |
+| `attachbadge-off` | `attachbadge-off(state, size)` | the badge after the link to a file above `attach_max`, which is not attached: `state` is `not attached` |
 | `task` | `task(done: false)` | a task-list checkbox |
 
 The theme's source is spliced into the emitted document after ntropy's

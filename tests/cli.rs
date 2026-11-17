@@ -10617,3 +10617,205 @@ mod without_encryption {
         });
     }
 }
+
+// ---------------------------------------------------------------------------
+// Attaching linked files to a PDF
+// ---------------------------------------------------------------------------
+
+/// The vault of [`vault_with_two_notes_and_assets`] with the note A linking
+/// `minutes.pdf` of its own folder, a file of 1500 bytes, and `config` as the
+/// `[render]` table.
+fn vault_with_an_attachable_file(config: &str) -> tempfile::TempDir {
+    let dir =
+        vault_with_two_notes_and_assets(&format!("[minutes](_assets/{ULID_A}-reader/minutes.pdf)"));
+    fs::write(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-reader/minutes.pdf")),
+        vec![b'x'; 1500],
+    )
+    .expect("the linked file");
+    fs::write(
+        dir.path().join(".ntropy/config.toml"),
+        format!("[render]\n{config}\n"),
+    )
+    .expect("config");
+    dir
+}
+
+fn render_attachable_to_typst(dir: &Path, extra: &[&str]) -> (std::process::Output, String) {
+    let target = dir.join("out.typ");
+    let out = ntropy(dir)
+        .args(extra)
+        .args(["render", ULID_A, "--to", "typst", "-n", "-o"])
+        .arg(&target)
+        .output()
+        .expect("run ntropy");
+    let source = fs::read_to_string(&target).unwrap_or_default();
+    (out, source)
+}
+
+#[test]
+fn render_to_typst_attaches_a_linked_file_of_the_notes_own_folder_and_badges_it() {
+    let dir = vault_with_an_attachable_file("");
+    let (out, source) = render_attachable_to_typst(dir.path(), &["--strict"]);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(
+        source.contains(&format!(
+            "#pdf.attach(\"/all-notes/_assets/{ULID_A}-reader/minutes.pdf\");"
+        )),
+        "{source}"
+    );
+    assert!(
+        source.contains("#attachbadge(\"attached\", \"1.5 KiB\");"),
+        "{source}"
+    );
+}
+
+#[test]
+fn a_file_above_attach_max_is_not_attached_and_the_render_warns() {
+    let dir = vault_with_an_attachable_file("attach_max = \"1 KiB\"");
+    let (out, source) = render_attachable_to_typst(dir.path(), &[]);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(!source.contains("#pdf.attach("), "{source}");
+    assert!(
+        source.contains("#attachbadge-off(\"not attached\", \"1.5 KiB\");"),
+        "{source}"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "`_assets/{ULID_A}-reader/minutes.pdf` is 1.5 KiB, above attach_max (1.0 KiB); not attached"
+        )),
+        "{stderr}"
+    );
+
+    let (strict, _) = render_attachable_to_typst(dir.path(), &["--strict"]);
+    assert!(!strict.status.success(), "{}", rendered(&strict));
+}
+
+#[test]
+fn an_attach_max_of_zero_attaches_nothing_and_says_nothing() {
+    let dir = vault_with_an_attachable_file("attach_max = 0");
+    let (out, source) = render_attachable_to_typst(dir.path(), &["--strict"]);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(!source.contains("#pdf.attach("), "{source}");
+    assert!(!source.contains("#attachbadge"), "{source}");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_symlink_in_the_asset_folder_to_a_file_outside_the_vault_is_never_attached() {
+    let dir = vault_with_an_attachable_file("");
+    let outside = tempfile::tempdir().expect("temp dir");
+    let secret = outside.path().join("id_rsa");
+    fs::write(&secret, "-----BEGIN PRIVATE KEY-----").expect("secret");
+    let linked = dir
+        .path()
+        .join(format!("all-notes/_assets/{ULID_A}-reader/minutes.pdf"));
+    fs::remove_file(&linked).expect("remove the file");
+    std::os::unix::fs::symlink(&secret, &linked).expect("symlink");
+
+    let (out, source) = render_attachable_to_typst(dir.path(), &["--strict"]);
+
+    assert!(!source.contains("#pdf.attach("), "{source}");
+    assert!(!source.contains("#attachbadge"), "{source}");
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "`_assets/{ULID_A}-reader/minutes.pdf` is not attached: it resolves outside the vault"
+        )),
+        "{stderr}"
+    );
+    assert!(!out.status.success(), "a refusal fails --strict");
+}
+
+#[test]
+fn a_bad_attach_max_is_a_config_error_naming_key_and_value() {
+    let dir = vault_with_an_attachable_file("attach_max = \"lots\"");
+    let (out, _) = render_attachable_to_typst(dir.path(), &[]);
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("attach_max") && stderr.contains("lots"),
+        "{stderr}"
+    );
+}
+
+#[test]
+#[ignore = "runs the real typst binary; execute via `just verify-render`"]
+fn a_pdf_attaches_the_files_within_the_limit_and_names_the_rest_in_its_badges() {
+    // typst fails a compile that attaches one path twice and one that names a
+    // missing file or a directory, so only a real compile shows that the
+    // emitted `#pdf.attach` calls are accepted. The attachments are listed
+    // from the PDF itself.
+    let dir = vault_with_two_notes_and_assets(&format!(
+        "Minutes: [minutes](_assets/{ULID_A}-reader/minutes.pdf), again \
+         [the minutes](_assets/{ULID_A}-reader/minutes.pdf).\n\n\
+         Recording: [call](_assets/{ULID_A}-reader/call.m4a).\n\n\
+         Two files of one name: [a](_assets/{ULID_A}-reader/a/notes.txt) and \
+         [b](_assets/{ULID_A}-reader/b/notes.txt).\n\n\
+         With a space: [spaced](<_assets/{ULID_A}-reader/my file.txt>).\n\n\
+         Empty: [empty](_assets/{ULID_A}-reader/empty.txt).\n"
+    ));
+    let folder = dir
+        .path()
+        .join(format!("all-notes/_assets/{ULID_A}-reader"));
+    for (name, size) in [
+        ("minutes.pdf", 2_000),
+        ("call.m4a", 6 * 1024 * 1024),
+        ("a/notes.txt", 10),
+        ("b/notes.txt", 20),
+        ("my file.txt", 30),
+        ("empty.txt", 0),
+    ] {
+        let path = folder.join(name);
+        fs::create_dir_all(path.parent().expect("a parent")).expect("subfolder");
+        fs::write(path, vec![b'x'; size]).expect("linked file");
+    }
+    fs::write(
+        dir.path().join(".ntropy/config.toml"),
+        "[render]\nattach_max = \"4 MiB\"\n",
+    )
+    .expect("config");
+
+    let out_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("target/verify-render");
+    fs::create_dir_all(&out_dir).expect("create verify-render dir");
+    let pdf = out_dir.join("attachments.pdf");
+
+    let out = ntropy(dir.path())
+        .args(["render", ULID_A, "-n", "--force", "-o"])
+        .arg(&pdf)
+        .output()
+        .expect("run render to pdf");
+    assert!(out.status.success(), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "`_assets/{ULID_A}-reader/call.m4a` is 6.0 MiB, above attach_max (4.0 MiB); not attached"
+        )),
+        "{stderr}"
+    );
+
+    // `pdfdetach` is optional: without it the compile above is the check.
+    let Ok(listing) = Command::new("pdfdetach").arg("-list").arg(&pdf).output() else {
+        return;
+    };
+    let listing = String::from_utf8_lossy(&listing.stdout).into_owned();
+    assert!(
+        listing.starts_with("5 embedded files"),
+        "five files are attached, the oversize recording is not: {listing}"
+    );
+    assert!(listing.contains("minutes.pdf"), "{listing}");
+    assert!(!listing.contains("call.m4a"), "{listing}");
+
+    // The page as a picture, for a look at the badges.
+    let _ = Command::new("pdftoppm")
+        .args(["-png", "-r", "150", "-singlefile"])
+        .arg(&pdf)
+        .arg(out_dir.join("attachments"))
+        .status();
+}

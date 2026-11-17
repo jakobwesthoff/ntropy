@@ -155,6 +155,19 @@ pub enum Refusal {
 }
 
 impl Refusal {
+    /// Why the path is refused, as a clause that follows the path, such as
+    /// `it resolves outside the vault`.
+    pub fn reason(&self) -> String {
+        match self {
+            Refusal::Listed(component) => {
+                format!("it is or lies inside `{component}`, which exports never copy")
+            }
+            Refusal::Outside(reach) => format!("it resolves outside {reach}"),
+            Refusal::Unresolvable => "it cannot be resolved".to_string(),
+            Refusal::Unexported { .. } => "it is a note, not an asset".to_string(),
+        }
+    }
+
     /// The warning for a path named directly, `by` saying what named it
     /// (`referenced`) and `shown` the path as the reader knows it.
     pub fn message(&self, by: &str, shown: &str) -> String {

@@ -131,3 +131,4 @@ made.
 - [0102. delete removes the note's asset folder](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0102-delete-removes-the-notes-asset-folder.md)
 - [0103. Encrypted vaults take no assets yet](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0103-encrypted-vaults-take-no-assets-yet.md)
 - [0104. asset add and asset list](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0104-asset-add-and-asset-list.md)
+- [0105. Linked files are attached to the PDF](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0105-linked-files-are-attached-to-the-pdf.md)

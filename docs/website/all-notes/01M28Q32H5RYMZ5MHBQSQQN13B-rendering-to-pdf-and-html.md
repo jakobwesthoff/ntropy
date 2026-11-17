@@ -157,6 +157,35 @@ shows the text you wrote instead of the note's title.
 > default `./<slug>.pdf` applies. The warning does not change the exit
 > code.
 
+## Files a note links
+
+A PDF attaches the files a note links in its own asset folder, and
+after each link a small badge says so:
+
+```markdown
+The minutes are in [minutes.pdf](_assets/01j8za2…-meeting/minutes.pdf),
+the recording in [call.m4a](_assets/01j8za2…-meeting/call.m4a).
+```
+
+With the default limit, the minutes come out as `minutes.pdf` followed by a
+blue `attached · 2.0 MiB`. A recording of 240 MiB is not attached and is
+followed by a grey `not attached · 240.0 MiB`, and the render warns, which
+`--strict` turns into a failure. The limit is `attach_max` in the `[render]`
+table of `.ntropy/config.toml`, per file, 25 MiB by default. It takes bytes or
+a size string, and `0` turns attaching off:
+
+```toml
+[render]
+attach_max = "50 MiB"
+```
+
+A viewer shows the attached files in its attachments panel; the link in the
+page does not open them. Images are drawn into the page as always, and only
+files in the note's own `_assets/` folder are attached. A file that
+resolves outside the vault, such as a symlink to a private key, is never
+attached and the render warns about it. A file linked twice is attached once.
+Document themes restyle the badge, see [Document themes](01M28Q32HRVNF9EBZTC69XDZ49-document-themes.md).
+
 ## The look
 
 A PDF takes its look from a document theme, and the `html` page from a

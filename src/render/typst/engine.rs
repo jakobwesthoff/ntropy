@@ -75,12 +75,20 @@ impl Renderer for Typst {
         // The compiler's root is the vault, so the note's own directory is
         // where its relative asset paths must be anchored (ADR 0045).
         let asset_base = asset_base(doc);
+        // The engine touches no filesystem, so the host judges every file a
+        // note links that could be attached to the PDF.
+        let mut check =
+            |root_absolute: &str| ctx.attachment(&doc.vault_root, doc.id, root_absolute);
         let (body, warnings) = emitter::emit_for_note(
             &doc.body,
             &doc.links,
             &asset_base,
             Some(&doc.title),
             Some(doc.id),
+            Some(emitter::AttachPolicy {
+                max: self.options.attach_max,
+                check: &mut check,
+            }),
         );
         let document = document::assemble(
             &doc.title,
@@ -351,7 +359,7 @@ fn asset_base(doc: &PreparedDocument) -> String {
 mod tests {
     use super::*;
     use crate::id::Id;
-    use crate::render::{LinkTarget, ResolvedLink, ToolOutput};
+    use crate::render::{Attachment, LinkTarget, ResolvedLink, ToolOutput};
 
     use std::collections::VecDeque;
     use std::ops::Range;
@@ -373,6 +381,10 @@ mod tests {
         written: Option<Vec<u8>>,
         invocations: Vec<Invocation>,
         scripted: VecDeque<Result<ToolOutput, RenderError>>,
+        /// The answers `attachment` gives by root-absolute path; the questions
+        /// asked are kept as `(vault root, owner, path)`.
+        attachments: Vec<(String, Attachment)>,
+        asked: Vec<(PathBuf, Id, String)>,
     }
 
     impl FakeContext {
@@ -383,7 +395,15 @@ mod tests {
                 written: None,
                 invocations: Vec::new(),
                 scripted: VecDeque::new(),
+                attachments: Vec::new(),
+                asked: Vec::new(),
             }
+        }
+
+        /// Answer `attachment` for `path` with `answer`.
+        fn with_attachment(mut self, path: &str, answer: Attachment) -> Self {
+            self.attachments.push((path.to_string(), answer));
+            self
         }
 
         /// Set the artifact path the context reports, so the pdf arm's output
@@ -440,6 +460,15 @@ mod tests {
 
         fn output_path(&self) -> &Path {
             &self.output
+        }
+
+        fn attachment(&mut self, vault_root: &Path, owner: Id, root_absolute: &str) -> Attachment {
+            self.asked
+                .push((vault_root.to_path_buf(), owner, root_absolute.to_string()));
+            self.attachments
+                .iter()
+                .find(|(path, _)| path == root_absolute)
+                .map_or(Attachment::Absent, |(_, answer)| answer.clone())
         }
     }
 
@@ -1004,5 +1033,84 @@ warning: value of `state(\"x\")` did not converge
                 .contains(r#"paper: "us-letter","#),
             "pdf stdin misses the paper"
         );
+    }
+
+    fn attached_file() -> String {
+        format!("/all-notes/_assets/{ULID}-note/m.pdf")
+    }
+
+    fn linking_note() -> PreparedDocument {
+        doc(
+            "Minutes",
+            "{}",
+            &format!("[m](_assets/{ULID}-note/m.pdf)\n"),
+            Vec::new(),
+        )
+    }
+
+    #[test]
+    fn a_linked_file_within_the_default_limit_is_attached_in_both_formats() {
+        for engine in [
+            Typst::for_typst_format(RenderOptions::default(), None),
+            Typst::for_pdf_format(RenderOptions::default(), None),
+        ] {
+            let mut ctx =
+                FakeContext::new().with_attachment(&attached_file(), Attachment::Size(1024));
+            engine
+                .render(&linking_note(), &mut ctx)
+                .expect("render succeeds");
+            assert_eq!(
+                ctx.asked,
+                [(
+                    PathBuf::from("/vault"),
+                    Id::from_str(ULID).expect("ulid parses"),
+                    attached_file()
+                )]
+            );
+            let document = String::from_utf8_lossy(
+                ctx.written
+                    .as_deref()
+                    .or_else(|| ctx.invocations.first().and_then(|run| run.stdin.as_deref()))
+                    .expect("the document is written or compiled"),
+            )
+            .into_owned();
+            assert!(
+                document.contains(&format!("#pdf.attach(\"{}\");", attached_file())),
+                "{document}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_configured_limit_decides_and_its_warning_reaches_the_host() {
+        let options = RenderOptions {
+            attach_max: 512,
+            ..Default::default()
+        };
+        let mut ctx = FakeContext::new().with_attachment(&attached_file(), Attachment::Size(1024));
+        Typst::for_typst_format(options, None)
+            .render(&linking_note(), &mut ctx)
+            .expect("render succeeds");
+        assert!(!ctx.document().contains("pdf.attach"), "{}", ctx.document());
+        assert_eq!(
+            ctx.warnings,
+            [format!(
+                "`_assets/{ULID}-note/m.pdf` is 1.0 KiB, above attach_max (512 B); not attached"
+            )]
+        );
+    }
+
+    #[test]
+    fn a_limit_of_zero_asks_the_host_nothing() {
+        let options = RenderOptions {
+            attach_max: 0,
+            ..Default::default()
+        };
+        let mut ctx = FakeContext::new().with_attachment(&attached_file(), Attachment::Size(1));
+        Typst::for_typst_format(options, None)
+            .render(&linking_note(), &mut ctx)
+            .expect("render succeeds");
+        assert!(ctx.asked.is_empty());
+        assert!(!ctx.document().contains("pdf.attach"));
     }
 }

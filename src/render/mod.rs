@@ -93,6 +93,32 @@ pub trait RenderContext {
     /// to its tool verbatim, where a relative name starting with `-` could
     /// read as an option and a lone `-` as standard output.
     fn output_path(&self) -> &Path;
+
+    /// What the host says about attaching the file `root_absolute`, a path
+    /// below the vault `vault_root` that a link of the note `owner` names.
+    /// The typst engine touches no filesystem itself, so the host judges
+    /// whether the file may be embedded into the PDF and how large it is. A
+    /// context that cannot tell reports [`Attachment::Absent`], and the link
+    /// then renders as it would without attaching.
+    fn attachment(
+        &mut self,
+        _vault_root: &Path,
+        _owner: crate::id::Id,
+        _root_absolute: &str,
+    ) -> Attachment {
+        Attachment::Absent
+    }
+}
+
+/// The host's answer to [`RenderContext::attachment`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Attachment {
+    /// A regular file of this many bytes that may be embedded.
+    Size(u64),
+    /// A file that exists but must not be embedded, with the reason in words.
+    Refused(String),
+    /// Nothing to attach: no such file, no regular file, or no way to tell.
+    Absent,
 }
 
 /// The directory an artifact's files live in (ADR 0057): `<stem>_files/`

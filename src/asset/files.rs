@@ -92,6 +92,14 @@ pub fn folder_of(layout: &Layout, note: &Note) -> Result<PathBuf, AssetError> {
 /// File extensions whose link is an image, `![..](..)`.
 const IMAGE_EXTENSIONS: [&str; 8] = ["png", "jpg", "jpeg", "gif", "webp", "svg", "avif", "bmp"];
 
+/// Whether the file `name` has an image extension, ignoring case.
+pub fn is_image_name(name: &str) -> bool {
+    let extension = name.rsplit_once('.').map_or("", |(_, extension)| extension);
+    IMAGE_EXTENSIONS
+        .iter()
+        .any(|known| known.eq_ignore_ascii_case(extension))
+}
+
 /// The Markdown link to the file `name` in the folder `folder`: an image for
 /// an image extension, a link otherwise, with the target in angle brackets
 /// when the name holds anything but letters, digits, `.`, `_` and `-`.
@@ -124,10 +132,8 @@ fn link_for(folder: &str, name: &str) -> Result<String, AssetError> {
         format!("<{dest}>")
     };
 
-    let (stem, extension) = name.rsplit_once('.').unwrap_or((name, ""));
-    let image = IMAGE_EXTENSIONS
-        .iter()
-        .any(|known| known.eq_ignore_ascii_case(extension));
+    let stem = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+    let image = is_image_name(name);
     let label = if image && !stem.is_empty() {
         stem
     } else {

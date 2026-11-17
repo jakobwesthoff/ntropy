@@ -17,7 +17,7 @@ order: ntropy's own definitions (the prelude), the line
 `// ---- vault theme ----` and the theme file verbatim, then
 `#show: note.with(title: ..., frontmatter: ..., paper: ...,)` and the
 converted body. Typst binds a name to the last definition above its use,
-so a theme's `note`, `callout`, `notelink` or `task` replaces the built-in
+so a theme's `note`, `callout`, `notelink`, `attachbadge`, `attachbadge-off` or `task` replaces the built-in
 one and the others stay.
 
 | Function | Signature | Called for |
@@ -25,6 +25,8 @@ one and the others stay.
 | `note` | `note(title: none, frontmatter: (:), paper: "a4", body)` | the whole document, through `#show` |
 | `callout` | `callout(kind: "note", body)` | each `> [!NOTE]`-style alert; `kind` is `note`, `tip`, `important`, `warning` or `caution` |
 | `notelink` | `notelink(body)` | the text of a note link, inside `#link("<slug>.pdf")`: the target's title, or the link's text when it carries a heading anchor and has text. A link to the note itself with an anchor goes to the heading's `<ntropy-h-N>` label instead, to the top of the first page for `#top`, and nowhere when the anchor names no heading |
+| `attachbadge` | `attachbadge(state, size)` | the badge after the link to a file attached to the PDF: `state` is `attached`, `size` text such as `1.2 MiB` |
+| `attachbadge-off` | `attachbadge-off(state, size)` | the badge after the link to a file above `[render] attach_max`, which is not attached: `state` is `not attached` |
 | `task` | `task(done: false)` | a task-list checkbox |
 
 The prelude's helpers `fmt-value` (any frontmatter value as text),

@@ -179,6 +179,7 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Link to a heading of the note (`[x](#lists)`) | `#link(<ntropy-h-N>)[escaped label];`, N the label of the heading whose id the fragment names. The ids are the ones the HTML output gives its headings, including the numbered suffixes of repeated text and the footnote ids `fn-N` and `fnref-N` that no heading takes. The fragment is percent-decoded and compared exactly and case-sensitively. A fragment that names no heading renders as the label text alone and raises a warning, since a label that does not exist fails the compile; `--strict` makes the warning an error. `#` and `#top` with no heading of that id link to the top of the first page |
 | Bare URL in text (`https://...`, `www....`) | detected by the emitter with the `linkify` crate over text events (GFM autolink rules; pulldown-cmark has no option for this — verified) and emitted as `#link("url")[url];`; a `www.` URL gains an `https://` scheme in the target |
 | Email autolink (`<user@host>` or bare in text) | `#link("mailto:user@host")[user@host];`; the `mailto:` scheme is added so the link is actionable |
+| Link to a non-image file of the note's own asset folder | the link as above, preceded by `#pdf.attach("/all-notes/_assets/<stem>/<file>");` at the first link to the file and followed by `#attachbadge("attached", "1.2 MiB");`, when the host reports a regular file within `[render] attach_max`. A file above the limit gets the link and `#attachbadge-off("not attached", "240.0 MiB");` and a warning. See Attachments below |
 | Note link, resolved | `#link("<target-slug>.pdf")[#notelink[Title]];`, the target note's current title through a prelude-defined function, so a theme can style note links distinctly from ordinary emphasis, wrapped in a link to the target note's own artifact (see below). A link with a heading anchor shows its author's text in `notelink` instead (the title when that text is blank) and drops the anchor: the heading lives in the target note's own PDF, which a link cannot address ([ADR 0086](../adr/0086-note-links-may-carry-a-heading-anchor.md)). A note link to the note itself that carries a heading anchor links to the heading like a link to a fragment, `#link(<ntropy-h-N>)[#notelink[text]];`, with the same top-of-page and unknown-fragment rules ([ADR 0088](../adr/0088-links-to-a-notes-own-headings-resolve-in-its-pdf.md)); one without an anchor or with an empty anchor links to the note's artifact |
 | Note link, unresolved | the wrapper is dropped and the display text's inner inline events are re-emitted, so markup inside the display text survives |
 | Task list item | bullet item with a `#task(done: ...)` lead-in — the prelude-defined function draws one identical checkbox for both states, so checked and unchecked match optically regardless of font glyph coverage |
@@ -232,6 +233,40 @@ folder of any note, is not emitted: the document shows the link text, or the
 alt text of an image, and the emitter returns a warning. The emitter judges the
 path textually and touches no filesystem, so a symlink in the note's own folder
 that leads elsewhere is not seen.
+
+### Attachments
+
+A link to a non-image file in the note's own asset folder attaches the file to
+the PDF with `#pdf.attach` (ADR 0105). typst stores the attachment at document
+level and draws nothing, so the emitter follows the link with a badge call that
+the prelude defines. The viewer lists the file in its attachments panel under
+its path from the vault root.
+
+`emit_for_note` takes an optional attach policy: the limit in bytes, from
+`[render] attach_max`, and a function that answers for one root-absolute path.
+The engine backs the function with `RenderContext::attachment(vault_root, owner,
+path)`, because the engine touches no filesystem. The answer is the size of a
+regular file that may be embedded, a refusal with its reason, or nothing. The
+emitter asks about a link only when its path, as written, lies in the note's own
+`_assets/<folder>/` and does not end in an image extension (compared ignoring
+case), and not at all when the limit is `0`.
+
+- A size within the limit (an empty file included) gives `#pdf.attach("<path>");`,
+  the link and `#attachbadge("attached", "<size>");`.
+- A size above the limit gives the link and `#attachbadge-off("not attached",
+  "<size>");` and a warning that names the file, its size and the limit.
+- A refusal gives the link alone and a warning "`<path>` is not attached:
+  `<reason>`". Nothing at all, for a missing file or a directory, gives the link
+  alone.
+- typst fails a compile that attaches one path twice, so the emitter keeps the
+  answer per root-absolute path, writes `#pdf.attach` at the first link only and
+  raises each warning once. Every link gets its badge.
+
+The binary's context answers with the rules of ADR 0072 and ADR 0073: the path
+must resolve to a file inside the vault, no component may be an entry that
+exports never copy, and a symlink into another note's asset folder is refused.
+Only a regular file reports a size, since typst fails the whole compile on a
+missing file and on a directory.
 
 Because the emitted document addresses assets from the vault root,
 compiling a `typst`-format artifact by hand takes the vault as the root.
@@ -311,6 +346,8 @@ identical file.
 // Prelude: engine-owned definitions; the theming hook.
 #let callout(kind: "note", body) = ...
 #let notelink(body) = ...
+#let attachbadge(state, size) = ...
+#let attachbadge-off(state, size) = ...
 #let task(done: false) = ...
 #let note(title: none, frontmatter: (:), paper: "a4", body) = ...
 
@@ -348,8 +385,8 @@ identical file.
   does not repeat the title, so a theme whose `note` does not draw
   `title` shows none.
 - **`#show: note.with(...)` is the single seam** between content and
-  presentation. A theme redefines `note`, `callout`, `notelink`, or
-  `task` after the prelude; the document part never changes. The prelude
+  presentation. A theme redefines `note`, `callout`, `notelink`,
+  `attachbadge`, `attachbadge-off`, or `task` after the prelude; the document part never changes. The prelude
   is inlined, not imported, so the artifact stays a single file (see
   "Theme contract" below).
 - `set document(title: ...)` inside `note` supplies the PDF metadata.
@@ -368,6 +405,8 @@ emitted **after** the prelude and **before** the template application:
 // 1. the engine's prelude
 #let callout(kind: "note", body) = ...
 #let notelink(body) = ...
+#let attachbadge(state, size) = ...
+#let attachbadge-off(state, size) = ...
 #let task(done: false) = ...
 #let note(title: none, frontmatter: (:), paper: "a4", body) = ...
 
@@ -381,13 +420,15 @@ emitted **after** the prelude and **before** the template application:
 
 Typst binds a name to the last `#let` above its use, so a theme's
 definition wins for everything below it, and a theme that defines only
-`note` inherits the rest. These four are the API a theme may override:
+`note` inherits the rest. These six are the API a theme may override:
 
 | Function | Signature | Called for |
 | :--- | :--- | :--- |
 | `note` | `note(title: none, frontmatter: (:), paper: "a4", body)` | the whole document, through `#show` |
 | `callout` | `callout(kind: "note", body)` | each GFM admonition; `kind` is one of the five kinds, since a quote with any other marker stays a `#quote` |
 | `notelink` | `notelink(body)` | the text of a resolved note link, inside its `#link`: the target's title, or the author's text when the link carries a heading anchor and that text is not blank. A note link to the note itself with an anchor follows the fragment rules of the element mapping instead of linking to the note's artifact: `#link(<ntropy-h-N>)` for a heading, the top of the first page for `#top`, and `notelink` with no `#link` for an anchor that names no heading |
+| `attachbadge` | `attachbadge(state, size)` | the badge after the link to a file that is attached to the PDF; `state` is `attached` and `size` the file's size as text such as `1.2 MiB`. The default is a pill tinted in the link colour |
+| `attachbadge-off` | `attachbadge-off(state, size)` | the badge after the link to a file above `attach_max`, which is not attached; `state` is `not attached`. The default is a muted grey pill |
 | `task` | `task(done: false)` | each task-list checkbox |
 
 `fmt-value`, `is-empty` and `callout-styles` are helpers the prelude

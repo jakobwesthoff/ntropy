@@ -1253,3 +1253,34 @@ mod encrypted {
         );
     }
 }
+
+#[cfg(unix)]
+#[test]
+fn a_render_reports_a_hostile_unattached_file_name_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    fs::write(
+        vault.join(".ntropy/config.toml"),
+        "[render]\nattach_max = \"1 B\"\n",
+    )
+    .expect("config");
+    let folder = vault.join(format!("all-notes/_assets/{ULID_A}-note"));
+    fs::create_dir_all(&folder).expect("asset folder");
+    fs::write(folder.join(format!("{RETITLE}.pdf")), b"0123456789").expect("asset");
+    note(
+        &vault,
+        &format!("{ULID_A}-note.md"),
+        &format!("---\ntitle: Note\n---\n[x](<_assets/{ULID_A}-note/{RETITLE}.pdf>)\n"),
+    );
+
+    let output = run(ntropy(&vault).args(["render", ULID_A, "--to", "typst", "-o", "out.typ"]));
+
+    assert_no_raw_controls(&output);
+    let shown = stderr(&output);
+    assert!(
+        shown.contains(&format!(
+            "`_assets/{ULID_A}-note/{RETITLE_SHOWN}.pdf` is 10 B, above attach_max (1 B); not attached"
+        )),
+        "{shown}"
+    );
+}

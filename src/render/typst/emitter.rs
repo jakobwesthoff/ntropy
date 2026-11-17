@@ -54,13 +54,13 @@
 use std::collections::HashMap;
 
 use super::writer::{self, TypstWriter};
-use crate::asset::{self, Standing};
+use crate::asset::{self, Place, Standing};
 use crate::id::Id;
-use crate::render::ResolvedLink;
 use crate::render::markdown::{
     self, Alignment, BlockQuoteKind, Heading, InlineStyle, List, NoteLabel, Output, Table, Warning,
     note_label,
 };
+use crate::render::{Attachment, ResolvedLink};
 
 /// The extension a resolved note link targets: the artifact a default
 /// `ntropy render` of the target note produces (ADR 0044).
@@ -90,17 +90,18 @@ pub fn emit(
     asset_base: &str,
     title: Option<&str>,
 ) -> (String, Vec<Warning>) {
-    emit_for_note(body, links, asset_base, title, None)
+    emit_for_note(body, links, asset_base, title, None, None)
 }
 
 /// [`emit`] for the note with id `own_id`: a note link to that note with a
 /// heading anchor links to the heading inside the document.
-pub fn emit_for_note(
+pub fn emit_for_note<'a>(
     body: &str,
     links: &[ResolvedLink],
-    asset_base: &str,
+    asset_base: &'a str,
     title: Option<&str>,
     own_id: Option<Id>,
+    attach: Option<AttachPolicy<'a>>,
 ) -> (String, Vec<Warning>) {
     let mut output = TypstOutput {
         asset_base,
@@ -108,10 +109,20 @@ pub fn emit_for_note(
         own_id,
         heading_labels: HashMap::new(),
         refused: Vec::new(),
+        attach,
+        attached: HashMap::new(),
     };
     let (typst, mut warnings) = markdown::walk(body, links, &mut output);
     warnings.extend(output.refused);
     (typst, warnings)
+}
+
+/// How a PDF attaches the files a note links.
+pub struct AttachPolicy<'a> {
+    /// The largest file, in bytes, that is attached; `0` attaches nothing.
+    pub max: u64,
+    /// The host's verdict on one root-absolute path.
+    pub check: &'a mut dyn FnMut(&str) -> Attachment,
 }
 
 /// The label of the `number`th heading drawn. Like the footnote labels, the
@@ -149,6 +160,23 @@ struct TypstOutput<'a> {
     /// channel for a warning in [`Output::link`], so they are collected here
     /// and joined to the rest when the walk is done.
     refused: Vec<Warning>,
+    /// How linked files are attached, `None` for a render that attaches
+    /// nothing.
+    attach: Option<AttachPolicy<'a>>,
+    /// The verdict on each root-absolute path asked about so far. A file
+    /// linked twice is asked about once and `pdf.attach` is written once,
+    /// since typst fails a compile that attaches one path twice; the flag
+    /// says whether the warning about the file has been raised.
+    attached: HashMap<String, Verdict>,
+}
+
+/// What became of one file a note links, kept per path.
+struct Verdict {
+    answer: Attachment,
+    /// Whether the `#pdf.attach` call for the path is already written.
+    written: bool,
+    /// Whether the warning about the path is already raised.
+    warned: bool,
 }
 
 impl TypstOutput<'_> {
@@ -170,6 +198,88 @@ impl TypstOutput<'_> {
         }
         foreign
     }
+}
+
+impl TypstOutput<'_> {
+    /// The `#pdf.attach` call (empty after the first link to the file) and the
+    /// badge that belong around a link to `dest`, or `None` when the link is
+    /// not attached or badged: no policy, a limit of `0`, a note whose
+    /// identity is unknown, anything but a non-image file of the note's own
+    /// folder, or a file the host knows nothing about.
+    fn attachment(&mut self, dest: &str) -> Option<(String, String)> {
+        let own = self.own_id?;
+        let max = self.attach.as_ref().filter(|policy| policy.max > 0)?.max;
+        let place = asset::place(self.asset_base, dest);
+        let Place::Managed { rest, .. } = &place else {
+            return None;
+        };
+        if place.standing(own) != Standing::Own || rest.is_empty() || asset::is_image_name(rest) {
+            return None;
+        }
+        let path = dest.split_once('#').map_or(dest, |(path, _)| path);
+        let root_absolute = markdown::resolve_root_relative(self.asset_base, path)?;
+
+        if !self.attached.contains_key(&root_absolute) {
+            let check = &mut self.attach.as_mut()?.check;
+            let answer = check(&root_absolute);
+            self.attached.insert(
+                root_absolute.clone(),
+                Verdict {
+                    answer,
+                    written: false,
+                    warned: false,
+                },
+            );
+        }
+        let verdict = self.attached.get_mut(&root_absolute)?;
+        let (size, within) = match &verdict.answer {
+            Attachment::Size(size) => (*size, *size <= max),
+            Attachment::Refused(reason) => {
+                if !std::mem::replace(&mut verdict.warned, true) {
+                    self.refused
+                        .push(Warning::new(format!("`{path}` is not attached: {reason}")));
+                }
+                return None;
+            }
+            Attachment::Absent => return None,
+        };
+
+        let shown = asset::format_size(size);
+        if !within {
+            if !std::mem::replace(&mut verdict.warned, true) {
+                self.refused.push(Warning::new(format!(
+                    "`{path}` is {shown}, above attach_max ({}); not attached",
+                    asset::format_size(max)
+                )));
+            }
+            return Some((
+                String::new(),
+                badge("attachbadge-off", "not attached", &shown),
+            ));
+        }
+        let attach = if std::mem::replace(&mut verdict.written, true) {
+            String::new()
+        } else {
+            let mut writer = TypstWriter::new();
+            writer.syntax("#pdf.attach(\"");
+            writer.string_literal(&root_absolute);
+            writer.syntax("\");");
+            writer.finish()
+        };
+        Some((attach, badge("attachbadge", "attached", &shown)))
+    }
+}
+
+/// The call the prelude defines for the pill after an attachment link:
+/// `#attachbadge("attached", "1.2 MiB");`.
+fn badge(function: &str, state: &str, size: &str) -> String {
+    let mut writer = TypstWriter::new();
+    writer.syntax(&format!("#{function}(\""));
+    writer.string_literal(state);
+    writer.syntax("\", \"");
+    writer.string_literal(size);
+    writer.syntax("\");");
+    writer.finish()
 }
 
 impl Output for TypstOutput<'_> {
@@ -215,11 +325,18 @@ impl Output for TypstOutput<'_> {
         format!("#{call}[{inner}];")
     }
 
+    /// A link into the note's own asset folder to a file that is not an image
+    /// is attached to the PDF when the host says it may be and it is within
+    /// the limit, and followed by a badge that says so (ADR 0105).
     fn link(&mut self, dest: &str, inner: &str) -> String {
         if self.refuses(dest) {
             return inner.to_string();
         }
-        wrap_link(dest, inner)
+        let link = wrap_link(dest, inner);
+        match self.attachment(dest) {
+            Some((attach, badge)) => format!("{attach}{link}{badge}"),
+            None => link,
+        }
     }
 
     /// `#link("<slug>.pdf")[#notelink[Title]]`, with `slug` string-literal
@@ -1783,7 +1900,7 @@ mod tests {
             }
         }
         let own = links.first().map(|link| link.id);
-        emit_for_note(input, &links, ASSET_BASE, Some(title), own)
+        emit_for_note(input, &links, ASSET_BASE, Some(title), own, None)
     }
 
     const SELF_LINK: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV-self-link.md";
@@ -1844,7 +1961,8 @@ mod tests {
         let input = format!("# Self link\n\n[t]({SELF_LINK}#self-link)");
         let links = resolved_links(&input);
         let own = links.first().map(|link| link.id);
-        let (out, warnings) = emit_for_note(&input, &links, ASSET_BASE, Some("Self link"), own);
+        let (out, warnings) =
+            emit_for_note(&input, &links, ASSET_BASE, Some("Self link"), own, None);
         assert_eq!(out, "#notelink[t];\n");
         assert_eq!(warnings.len(), 1);
     }
@@ -1886,7 +2004,7 @@ mod tests {
         let links = resolved_links(&input);
         let elsewhere = Some(crate::id::Id::from_timestamp_ms(0));
         assert_eq!(
-            emit_for_note(&input, &links, ASSET_BASE, None, elsewhere).0,
+            emit_for_note(&input, &links, ASSET_BASE, None, elsewhere, None).0,
             "== Lists <ntropy-h-1>\n\n#link(\"target-title.pdf\")[#notelink[there]];\n"
         );
     }
@@ -1901,7 +2019,7 @@ mod tests {
     /// Emit `input` as the note `NOTE_ID`, which knows its own assets.
     fn as_note(input: &str) -> (String, Vec<Warning>) {
         let id = NOTE_ID.parse().expect("a valid ULID");
-        emit_for_note(input, &[], ASSET_BASE, None, Some(id))
+        emit_for_note(input, &[], ASSET_BASE, None, Some(id), None)
     }
 
     fn refused(input: &str) -> bool {
@@ -2391,5 +2509,274 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             body_titled("# T[^a]\n\nx[^a]\n\n[^a]: A", "T"),
             "x#[#footnote[A]<ntropy-fn-1>];\n"
         );
+    }
+
+    // =====================================================================
+    // Attaching the files a note links
+    // =====================================================================
+
+    const MIB: u64 = 1024 * 1024;
+
+    /// What an emit with an attach policy did: the document, its warnings and
+    /// the paths the host was asked about, in order.
+    struct Attached {
+        body: String,
+        warnings: Vec<String>,
+        asked: Vec<String>,
+    }
+
+    /// Emit `input` as the note `NOTE_ID` with `max` as the limit and the host
+    /// answering from `answers`; a path it holds no answer for is `Absent`.
+    fn attach(input: &str, max: u64, answers: &[(&str, Attachment)]) -> Attached {
+        let id = NOTE_ID.parse().expect("a valid ULID");
+        let mut asked = Vec::new();
+        let mut check = |path: &str| {
+            asked.push(path.to_string());
+            answers
+                .iter()
+                .find(|(known, _)| *known == path)
+                .map_or(Attachment::Absent, |(_, answer)| answer.clone())
+        };
+        let (body, warnings) = emit_for_note(
+            input,
+            &[],
+            ASSET_BASE,
+            None,
+            Some(id),
+            Some(AttachPolicy {
+                max,
+                check: &mut check,
+            }),
+        );
+        Attached {
+            body,
+            warnings: warnings.into_iter().map(|w| w.message).collect(),
+            asked,
+        }
+    }
+
+    fn own(name: &str) -> String {
+        format!("/all-notes/_assets/{NOTE_ID}-note/{name}")
+    }
+
+    #[test]
+    fn a_linked_file_within_the_limit_is_attached_and_badged() {
+        let path = own("m.pdf");
+        let out = attach(
+            &format!("[m](_assets/{NOTE_ID}-note/m.pdf)"),
+            25 * MIB,
+            &[(&path, Attachment::Size(1_258_291))],
+        );
+        assert_eq!(
+            out.body,
+            format!(
+                "#pdf.attach(\"{path}\");#link(\"_assets/{NOTE_ID}-note/m.pdf\")[m];\
+                 #attachbadge(\"attached\", \"1.2 MiB\");\n"
+            )
+        );
+        assert!(out.warnings.is_empty(), "{:?}", out.warnings);
+    }
+
+    #[test]
+    fn a_linked_file_above_the_limit_is_badged_as_not_attached_and_warned_about() {
+        let path = own("call.m4a");
+        let out = attach(
+            &format!("[call](_assets/{NOTE_ID}-note/call.m4a)"),
+            25 * MIB,
+            &[(&path, Attachment::Size(240 * MIB))],
+        );
+        assert_eq!(
+            out.body,
+            format!(
+                "#link(\"_assets/{NOTE_ID}-note/call.m4a\")[call];\
+                 #attachbadge-off(\"not attached\", \"240.0 MiB\");\n"
+            )
+        );
+        assert_eq!(
+            out.warnings,
+            [format!(
+                "`_assets/{NOTE_ID}-note/call.m4a` is 240.0 MiB, above attach_max (25.0 MiB); not attached"
+            )]
+        );
+    }
+
+    #[test]
+    fn a_file_of_exactly_the_limit_is_attached() {
+        let path = own("m.pdf");
+        let out = attach(
+            &format!("[m](_assets/{NOTE_ID}-note/m.pdf)"),
+            MIB,
+            &[(&path, Attachment::Size(MIB))],
+        );
+        assert!(out.body.starts_with("#pdf.attach("), "{}", out.body);
+    }
+
+    #[test]
+    fn a_limit_of_zero_attaches_nothing_and_asks_the_host_nothing() {
+        let path = own("m.pdf");
+        let input = format!("[m](_assets/{NOTE_ID}-note/m.pdf)");
+        let out = attach(&input, 0, &[(&path, Attachment::Size(10))]);
+        assert_eq!(out.body, as_note(&input).0);
+        assert!(out.warnings.is_empty());
+        assert!(out.asked.is_empty(), "{:?}", out.asked);
+    }
+
+    #[test]
+    fn an_empty_file_is_attached() {
+        let path = own("m.txt");
+        let out = attach(
+            &format!("[m](_assets/{NOTE_ID}-note/m.txt)"),
+            25 * MIB,
+            &[(&path, Attachment::Size(0))],
+        );
+        assert!(
+            out.body.ends_with("#attachbadge(\"attached\", \"0 B\");\n"),
+            "{}",
+            out.body
+        );
+        assert!(out.body.starts_with("#pdf.attach("), "{}", out.body);
+    }
+
+    #[test]
+    fn a_file_the_host_does_not_know_renders_as_a_plain_link() {
+        let input = format!("[m](_assets/{NOTE_ID}-note/m.pdf)");
+        let out = attach(&input, 25 * MIB, &[]);
+        assert_eq!(out.body, as_note(&input).0);
+        assert!(out.warnings.is_empty());
+    }
+
+    #[test]
+    fn a_file_the_host_refuses_is_not_attached_and_the_reason_is_warned_about() {
+        let path = own("key");
+        let input = format!("[k](_assets/{NOTE_ID}-note/key)");
+        let out = attach(
+            &input,
+            25 * MIB,
+            &[(
+                &path,
+                Attachment::Refused("it resolves outside the vault".into()),
+            )],
+        );
+        assert_eq!(out.body, as_note(&input).0);
+        assert_eq!(
+            out.warnings,
+            [format!(
+                "`_assets/{NOTE_ID}-note/key` is not attached: it resolves outside the vault"
+            )]
+        );
+    }
+
+    #[test]
+    fn a_file_linked_twice_is_attached_once_and_asked_about_once() {
+        let path = own("m.pdf");
+        let out = attach(
+            &format!("[a](_assets/{NOTE_ID}-note/m.pdf) and [b](_assets/{NOTE_ID}-note/./m.pdf)"),
+            25 * MIB,
+            &[(&path, Attachment::Size(10))],
+        );
+        assert_eq!(out.body.matches("#pdf.attach(").count(), 1, "{}", out.body);
+        assert_eq!(out.body.matches("#attachbadge(").count(), 2, "{}", out.body);
+        assert_eq!(out.asked, [path]);
+    }
+
+    #[test]
+    fn an_oversize_file_linked_twice_is_warned_about_once() {
+        let path = own("call.m4a");
+        let out = attach(
+            &format!("[a](_assets/{NOTE_ID}-note/call.m4a) [b](_assets/{NOTE_ID}-note/call.m4a)"),
+            MIB,
+            &[(&path, Attachment::Size(2 * MIB))],
+        );
+        assert_eq!(
+            out.body.matches("#attachbadge-off(").count(),
+            2,
+            "{}",
+            out.body
+        );
+        assert_eq!(out.warnings.len(), 1, "{:?}", out.warnings);
+    }
+
+    #[test]
+    fn files_of_one_name_in_different_subfolders_are_both_attached() {
+        let (first, second) = (own("a/x.pdf"), own("b/x.pdf"));
+        let out = attach(
+            &format!("[a](_assets/{NOTE_ID}-note/a/x.pdf) [b](_assets/{NOTE_ID}-note/b/x.pdf)"),
+            25 * MIB,
+            &[
+                (&first, Attachment::Size(1)),
+                (&second, Attachment::Size(1)),
+            ],
+        );
+        assert_eq!(out.body.matches("#pdf.attach(").count(), 2, "{}", out.body);
+    }
+
+    #[test]
+    fn a_name_with_a_space_is_attached_by_its_path() {
+        let path = own("my file.pdf");
+        let out = attach(
+            &format!("[m](<_assets/{NOTE_ID}-note/my file.pdf>)"),
+            25 * MIB,
+            &[(&path, Attachment::Size(1))],
+        );
+        assert!(
+            out.body.starts_with(&format!("#pdf.attach(\"{path}\");")),
+            "{}",
+            out.body
+        );
+    }
+
+    #[test]
+    fn a_fragment_is_cut_off_the_attached_path_and_kept_in_the_link() {
+        let path = own("m.pdf");
+        let out = attach(
+            &format!("[m](_assets/{NOTE_ID}-note/m.pdf#page=2)"),
+            25 * MIB,
+            &[(&path, Attachment::Size(1))],
+        );
+        assert!(
+            out.body.starts_with(&format!("#pdf.attach(\"{path}\");")),
+            "{}",
+            out.body
+        );
+        assert!(out.body.contains("m.pdf#page=2"), "{}", out.body);
+    }
+
+    #[test]
+    fn links_that_are_not_a_non_image_file_of_the_own_folder_are_left_alone() {
+        let inputs = [
+            // an image, as image and as link
+            format!("![c](_assets/{NOTE_ID}-note/c.png)"),
+            format!("[c](_assets/{NOTE_ID}-note/c.PNG)"),
+            // another note's folder, a file outside every asset folder, a URL
+            format!("[m](_assets/{OTHER_ID}-note/m.pdf)"),
+            "[m](notes.pdf)".to_string(),
+            "[m](https://example.com/m.pdf)".to_string(),
+            // the folder itself
+            format!("[m](_assets/{NOTE_ID}-note/)"),
+        ];
+        for input in inputs {
+            let out = attach(&input, 25 * MIB, &[]);
+            assert!(out.asked.is_empty(), "{input}: {:?}", out.asked);
+            assert!(!out.body.contains("pdf.attach"), "{input}: {}", out.body);
+            assert!(!out.body.contains("attachbadge"), "{input}: {}", out.body);
+        }
+    }
+
+    #[test]
+    fn a_note_whose_identity_is_unknown_attaches_nothing() {
+        let mut ask = |_: &str| -> Attachment { panic!("nothing is asked without an owner") };
+        let (body, warnings) = emit_for_note(
+            &format!("[m](_assets/{NOTE_ID}-note/m.pdf)"),
+            &[],
+            ASSET_BASE,
+            None,
+            None,
+            Some(AttachPolicy {
+                max: 25 * MIB,
+                check: &mut ask,
+            }),
+        );
+        assert!(!body.contains("pdf.attach"), "{body}");
+        assert!(warnings.is_empty());
     }
 }

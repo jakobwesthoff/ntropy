@@ -67,6 +67,17 @@ or `ntropy skill site-themes`.
 `us-legal`, `us-tabloid`, `us-executive` or `us-oficio`. No flag sets it. A
 theme whose `set page` does not pass `paper: paper` ignores the setting.
 
+A PDF attaches each non-image file that the note links in its own
+`all-notes/_assets/` folder and shows a badge after the link, `attached · 1.2 MiB`.
+The viewer lists the files in its attachments panel; the link does not open
+them. `[render] attach_max` is the limit per file, 25 MiB by default, an
+integer in bytes or a size string such as `"25 MiB"`; `0` turns attaching off.
+A file above the limit is not attached, gets a grey `not attached · 240.0 MiB`
+badge and a warning, which `--strict` fails on. A file that resolves outside
+the vault, such as a symlink to `~/.ssh/id_rsa`, is never attached and warns
+too. Images are embedded as before and links into another note's folder are
+refused.
+
 ## One note as a standalone web page
 
 ```bash
