@@ -297,14 +297,17 @@ pub fn add(layout: &Layout, note: &Note, files: &[PathBuf], options: &AddOptions
     report
 }
 
-/// The folder and, per file, the source, the name it is stored under and its
-/// link, after every check that can run before a file is touched.
+/// Per file, the source, the name it is stored under and its link.
+type Planned = Vec<(PathBuf, String, String)>;
+
+/// The folder and what goes into it, after every check that can run before a
+/// file is touched.
 fn plan(
     layout: &Layout,
     note: &Note,
     files: &[PathBuf],
     options: &AddOptions,
-) -> Result<(PathBuf, Vec<(PathBuf, String, String)>), AssetError> {
+) -> Result<(PathBuf, Planned), AssetError> {
     if options.rename.is_some() && files.len() != 1 {
         return Err(AssetError::RenameNeedsOneFile(files.len()));
     }
@@ -321,7 +324,7 @@ fn plan(
         .filter_map(|(path, _)| Some(path.file_name()?.to_str()?.to_owned()))
         .collect();
 
-    let mut planned: Vec<(PathBuf, String, String)> = Vec::new();
+    let mut planned: Planned = Vec::new();
     for source in files {
         if !std::fs::metadata(source).is_ok_and(|metadata| metadata.is_file()) {
             return Err(AssetError::NotAFile(source.clone()));
