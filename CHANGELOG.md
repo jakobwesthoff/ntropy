@@ -15,6 +15,7 @@ change in any release
 
 - Dependencies updated to their latest compatible releases: `clap` 4.6.8,
   `toml` 1.2.1.
+- `jiff` updated to 1.0.0.
 - Site page templates are rendered with minijinja 3.1.0. The built-in theme
   and the project's own site export byte for byte as before. A custom theme's
   templates

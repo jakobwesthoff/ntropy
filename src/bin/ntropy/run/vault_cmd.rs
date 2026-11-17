@@ -389,7 +389,7 @@ fn history_notice() {
 
 /// The current time, for the marker's informational timestamp.
 fn now() -> String {
-    jiff::Zoned::now().timestamp().to_string()
+    jiff::ZonedDateTime::now().timestamp().to_string()
 }
 
 /// The hooks a run uses.

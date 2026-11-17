@@ -11,7 +11,7 @@
 //! pass through here.
 
 use jiff::Timestamp;
-use jiff::Zoned;
+use jiff::ZonedDateTime;
 use jiff::tz::TimeZone;
 
 /// A failure converting or rendering a derived date.
@@ -35,10 +35,10 @@ pub fn render_local_date(timestamp_ms: u64) -> Result<String, DateError> {
 
 /// The current calendar date as `YYYY-MM-DD` in the system-local timezone.
 ///
-/// Used to title and locate the daily note (`new --today`). It reads the wall
+/// Used to title and locate the daily note (`today`). It reads the wall
 /// clock, so it is the one date helper that is not a pure function of its input.
 pub fn today_local_date() -> String {
-    Zoned::now().strftime("%Y-%m-%d").to_string()
+    ZonedDateTime::now().strftime("%Y-%m-%d").to_string()
 }
 
 /// Render in an explicit timezone.
@@ -50,7 +50,7 @@ fn render_in_zone(timestamp_ms: u64, tz: &TimeZone) -> Result<String, DateError>
     let millis = timestamp_ms as i64;
     let timestamp =
         Timestamp::from_millisecond(millis).map_err(|source| DateError { millis, source })?;
-    let zoned = timestamp.to_zoned(tz.clone());
+    let zoned = timestamp.to_zoned_datetime(tz.clone());
     Ok(zoned.strftime("%Y-%m-%d").to_string())
 }
 
