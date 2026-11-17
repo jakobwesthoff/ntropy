@@ -57,13 +57,24 @@ pub(super) fn cmd_asset(
             },
             interactive,
         ),
-        AssetCommand::List { path, selector } => cmd_list(
-            global,
-            session,
-            Selector::from_arguments(&selector),
+        AssetCommand::List {
             path,
-            interactive,
-        ),
+            folder,
+            selector,
+        } => {
+            let form = match (path, folder) {
+                (true, _) => ListForm::Files,
+                (_, true) => ListForm::Folder,
+                _ => ListForm::Table,
+            };
+            cmd_list(
+                global,
+                session,
+                Selector::from_arguments(&selector),
+                form,
+                interactive,
+            )
+        }
     }
 }
 
@@ -117,32 +128,68 @@ fn cmd_add(
     Ok(exit_for_warnings(global.strict, &warnings, extra))
 }
 
+/// What `asset list` prints.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ListForm {
+    /// The table of files with size and link state.
+    Table,
+    /// The path of every asset file, for scripts.
+    Files,
+    /// The path of the folder, for scripts.
+    Folder,
+}
+
 fn cmd_list(
     global: &GlobalArgs,
     session: &VaultSession,
     selector: Selector,
-    path_only: bool,
+    form: ListForm,
     interactive: bool,
 ) -> Result<ExitCode> {
+    // The script forms count as `-p` for the picker: a cancelled picker then
+    // fails, so a script can tell it from a note without asset files, which
+    // prints nothing and succeeds.
+    let print = form != ListForm::Table;
     let (selection, warnings) =
-        select_one(session, &selector, interactive, path_only, "listing assets")?;
+        select_one(session, &selector, interactive, print, "listing assets")?;
     let note = match selection {
         Selection::Note(note) => note,
         Selection::Exit(code) => return Ok(code),
     };
 
     let listing = asset::list(session.layout(), &note).context("while listing the assets")?;
-    if path_only {
-        println!(
+    match form {
+        ListForm::Folder => println!(
             "{}",
             output::checked_path(&listing.folder, false)?.display()
-        );
-    } else if listing.files.is_empty() {
-        eprintln!("no assets");
-    } else {
-        output::print_asset_listing(&listing)?;
+        ),
+        ListForm::Files => print_file_paths(&listing)?,
+        ListForm::Table if listing.files.is_empty() => eprintln!("no assets"),
+        ListForm::Table => output::print_asset_listing(&listing)?,
     }
     Ok(exit_for_warnings(global.strict, &warnings, 0))
+}
+
+/// Print the path of every file of `listing`, one per line.
+///
+/// Nothing is printed unless every path can be: the listing decodes a name
+/// that is not valid UTF-8 lossily, so it would print as a path that does not
+/// exist, and a name with control characters would reach the terminal.
+fn print_file_paths(listing: &asset::Listing) -> Result<()> {
+    if let Some(name) = listing.non_utf8.first() {
+        bail!(
+            "`{}` is not valid UTF-8, so it is not printed",
+            ntropy::text::escape_controls(name)
+        );
+    }
+    let paths = listing.file_paths();
+    for path in &paths {
+        output::checked_path(path, false)?;
+    }
+    for path in &paths {
+        println!("{}", path.display());
+    }
+    Ok(())
 }
 
 /// `path` as the vault shows it, `all-notes/_assets/<folder>/<file>`, escaped

@@ -471,6 +471,33 @@ fn asset_list_shows_a_hostile_file_name_escaped() {
 }
 
 #[test]
+fn asset_list_path_refuses_a_hostile_file_name_before_printing_any_path() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-note.md"),
+        "---\ntitle: Note\n---\n",
+    );
+    let folder = vault.join(format!("all-notes/_assets/{ULID_A}-note"));
+    fs::create_dir_all(&folder).expect("asset folder");
+    // The listing sorts by byte order and ESC sorts before every printable
+    // byte, so the hostile name starts with `z` to come after the clean file:
+    // a refusal that came late would have printed `a.png` already.
+    fs::write(folder.join("a.png"), b"png").expect("clean asset");
+    fs::write(folder.join(format!("z{RETITLE}.png")), b"png").expect("hostile asset");
+
+    let output = run(ntropy(&vault).args(["asset", "list", "--path", ULID_A]));
+
+    assert!(!output.status.success(), "{output:?}");
+    assert!(output.stdout.is_empty(), "{}", stdout(&output));
+    assert_no_raw_controls(&output);
+    let shown = stderr(&output);
+    assert!(shown.contains(&format!("z{RETITLE_SHOWN}.png")), "{shown}");
+    assert!(shown.contains("not printed"), "{shown}");
+}
+
+#[test]
 fn asset_add_names_a_hostile_file_it_refuses_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");

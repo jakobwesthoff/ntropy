@@ -7971,6 +7971,11 @@ fn incoming(vault: &Path, name: &str, content: &[u8]) -> PathBuf {
     path
 }
 
+/// The three forms of `asset list`: the table, `--path` and `--folder`.
+fn list_forms() -> [Vec<&'static str>; 3] {
+    [vec![], vec!["--path"], vec!["--folder"]]
+}
+
 fn asset_folder_of_a(vault: &Path) -> PathBuf {
     vault.join(format!("all-notes/_assets/{ULID_A}-q3-planning"))
 }
@@ -8157,12 +8162,17 @@ fn asset_add_and_list_refuse_a_symlinked_assets_directory() {
         .arg(&file)
         .output()
         .expect("run");
-    let list = ntropy(dir.path())
-        .args(["-n", "asset", "list", ULID_A])
-        .output()
-        .expect("run");
+    let lists: Vec<_> = list_forms()
+        .iter()
+        .map(|form| {
+            let mut args = vec!["-n", "asset", "list"];
+            args.extend(form);
+            args.push(ULID_A);
+            ntropy(dir.path()).args(args).output().expect("run")
+        })
+        .collect();
 
-    for out in [&add, &list] {
+    for out in std::iter::once(&add).chain(&lists) {
         assert!(!out.status.success(), "{}", rendered(out));
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(stderr.contains("is a symlink"), "{stderr}");
@@ -8189,12 +8199,17 @@ fn asset_add_and_list_refuse_a_symlinked_note_folder() {
         .arg(&file)
         .output()
         .expect("run");
-    let list = ntropy(dir.path())
-        .args(["-n", "asset", "list", "--path", ULID_A])
-        .output()
-        .expect("run");
+    let lists: Vec<_> = list_forms()
+        .iter()
+        .map(|form| {
+            let mut args = vec!["-n", "asset", "list"];
+            args.extend(form);
+            args.push(ULID_A);
+            ntropy(dir.path()).args(args).output().expect("run")
+        })
+        .collect();
 
-    for out in [&add, &list] {
+    for out in std::iter::once(&add).chain(&lists) {
         assert!(!out.status.success(), "{}", rendered(out));
         let stderr = String::from_utf8_lossy(&out.stderr);
         assert!(stderr.contains("is a symlink"), "{stderr}");
@@ -8538,14 +8553,226 @@ fn asset_list_of_a_note_without_assets_says_so_on_stderr() {
 }
 
 #[test]
-fn asset_list_path_prints_the_folder_also_when_it_does_not_exist() {
+fn asset_list_folder_prints_the_folder_also_when_it_does_not_exist() {
     let dir = vault_for_assets();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["-n", "asset", "list", "--folder", ULID_A]);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(!asset_folder_of_a(dir.path()).exists());
+}
+
+/// The asset folder of note A under the vault's canonical root, which is the
+/// spelling `ntropy` prints (the temp directory is a symlink on macOS).
+fn canonical_asset_folder_of_a(vault: &Path) -> PathBuf {
+    asset_folder_of_a(&fs::canonicalize(vault).expect("canonical vault"))
+}
+
+/// Create `relative` below the asset folder of note A, with its directories.
+fn put_asset(vault: &Path, relative: impl AsRef<Path>, content: &[u8]) {
+    let path = asset_folder_of_a(vault).join(relative);
+    fs::create_dir_all(path.parent().expect("a parent")).expect("asset directory");
+    fs::write(path, content).expect("asset");
+}
+
+/// `ntropy asset list --path` on note A, run without a terminal.
+fn asset_list_path_of_a(vault: &Path) -> std::process::Output {
+    ntropy(vault)
+        .args(["-n", "asset", "list", "--path", ULID_A])
+        .output()
+        .expect("run")
+}
+
+#[test]
+fn asset_list_path_prints_the_path_of_every_asset_file() {
+    let dir = vault_for_assets();
+    put_asset(dir.path(), "b.pdf", b"pdf");
+    put_asset(dir.path(), "a.png", b"png");
     redacted(dir.path()).bind(|| {
         let mut cmd = ntropy(dir.path());
         cmd.args(["-n", "asset", "list", "--path", ULID_A]);
         assert_cmd_snapshot!(cmd);
     });
-    assert!(!asset_folder_of_a(dir.path()).exists());
+}
+
+#[test]
+fn asset_list_path_includes_hidden_and_nested_files_and_skips_system_metadata() {
+    let dir = vault_for_assets();
+    put_asset(dir.path(), ".env", b"x");
+    put_asset(dir.path(), "sub/deep.txt", b"x");
+    put_asset(dir.path(), ".DS_Store", b"x");
+
+    let out = asset_list_path_of_a(dir.path());
+
+    let folder = canonical_asset_folder_of_a(dir.path());
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        format!(
+            "{}\n{}\n",
+            folder.join(".env").display(),
+            folder.join("sub/deep.txt").display()
+        )
+    );
+}
+
+#[test]
+fn asset_list_path_leaves_out_a_link_to_a_file_the_folder_lacks() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "q3-planning",
+        &format!(
+            "---\ntitle: Q3 planning\n---\n![x](_assets/{ULID_A}-q3-planning/gone.png)\n![y](_assets/{ULID_A}-q3-planning/here.png)\n"
+        ),
+    );
+    put_asset(dir.path(), "here.png", b"png");
+
+    let out = asset_list_path_of_a(dir.path());
+
+    let folder = canonical_asset_folder_of_a(dir.path());
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        format!("{}\n", folder.join("here.png").display())
+    );
+}
+
+#[test]
+fn asset_list_path_of_a_note_without_a_folder_prints_nothing() {
+    let dir = vault_for_assets();
+
+    let out = asset_list_path_of_a(dir.path());
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(out.stdout.is_empty(), "{}", rendered(&out));
+    assert!(out.stderr.is_empty(), "{}", rendered(&out));
+}
+
+#[test]
+fn asset_list_path_of_a_note_with_an_empty_folder_prints_nothing() {
+    let dir = vault_for_assets();
+    fs::create_dir_all(asset_folder_of_a(dir.path())).expect("empty folder");
+
+    let out = asset_list_path_of_a(dir.path());
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(out.stdout.is_empty(), "{}", rendered(&out));
+    assert!(out.stderr.is_empty(), "{}", rendered(&out));
+}
+
+#[test]
+fn asset_list_path_and_folder_conflict() {
+    let dir = vault_for_assets();
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "list", "--path", "--folder", ULID_A])
+        .output()
+        .expect("run");
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("cannot be used with"), "{stderr}");
+}
+
+#[test]
+fn asset_list_path_prints_a_symlink_as_its_own_path() {
+    let dir = vault_for_assets();
+    let folder = asset_folder_of_a(dir.path());
+    fs::create_dir_all(&folder).expect("folder");
+    let outside = tempfile::tempdir().expect("outside");
+    std::os::unix::fs::symlink(outside.path(), folder.join("to-dir")).expect("directory link");
+    std::os::unix::fs::symlink("no-such-target", folder.join("dangling")).expect("dangling link");
+
+    let out = asset_list_path_of_a(dir.path());
+
+    let folder = canonical_asset_folder_of_a(dir.path());
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        format!(
+            "{}\n{}\n",
+            folder.join("dangling").display(),
+            folder.join("to-dir").display()
+        )
+    );
+}
+
+/// Create a file whose name holds the bytes `name`, which is not valid UTF-8.
+/// Returns `false` where the filesystem refuses such a name (macOS).
+fn put_raw_asset(vault: &Path, name: &[u8]) -> bool {
+    use std::os::unix::ffi::OsStrExt;
+    let folder = asset_folder_of_a(vault);
+    fs::create_dir_all(&folder).expect("folder");
+    let path = folder.join(std::ffi::OsStr::from_bytes(name));
+    let parent = path.parent().expect("a parent");
+    fs::create_dir_all(parent).is_ok() && fs::write(path, b"x").is_ok()
+}
+
+#[test]
+fn asset_list_path_refuses_a_file_name_that_is_not_utf8() {
+    let dir = vault_for_assets();
+    // Skipped where the filesystem refuses the name, as APFS does.
+    if !put_raw_asset(dir.path(), b"caf\xe9.png") {
+        return;
+    }
+
+    let out = asset_list_path_of_a(dir.path());
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    assert!(out.stdout.is_empty(), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("is not valid UTF-8"), "{stderr}");
+}
+
+#[test]
+fn asset_list_path_refuses_two_file_names_that_differ_only_in_invalid_bytes() {
+    let dir = vault_for_assets();
+    // Skipped where the filesystem refuses the name, as APFS does.
+    if !(put_raw_asset(dir.path(), b"caf\xe9.png") && put_raw_asset(dir.path(), b"caf\xe8.png")) {
+        return;
+    }
+
+    let out = asset_list_path_of_a(dir.path());
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    assert!(out.stdout.is_empty(), "{}", rendered(&out));
+}
+
+#[test]
+fn asset_list_path_refuses_a_file_below_a_directory_that_is_not_utf8() {
+    let dir = vault_for_assets();
+    // Skipped where the filesystem refuses the name, as APFS does.
+    if !put_raw_asset(dir.path(), b"sub\xff/x.txt") {
+        return;
+    }
+
+    let out = asset_list_path_of_a(dir.path());
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    assert!(out.stdout.is_empty(), "{}", rendered(&out));
+}
+
+#[test]
+fn asset_list_folder_prints_the_folder_although_a_file_name_is_not_utf8() {
+    let dir = vault_for_assets();
+    // Skipped where the filesystem refuses the name, as APFS does.
+    if !put_raw_asset(dir.path(), b"caf\xe9.png") {
+        return;
+    }
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "list", "--folder", ULID_A])
+        .output()
+        .expect("run");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert_eq!(
+        String::from_utf8_lossy(&out.stdout),
+        format!("{}\n", canonical_asset_folder_of_a(dir.path()).display())
+    );
 }
 
 #[test]
@@ -9831,6 +10058,8 @@ mod encrypted {
 
         for args in [
             vec!["asset", "list", ULID_A],
+            vec!["asset", "list", "--path", ULID_A],
+            vec!["asset", "list", "--folder", ULID_A],
             vec!["asset", "add", ULID_A, file.to_str().expect("utf-8")],
         ] {
             let out = ntropy_encrypted(vault).args(&args).output().expect("run");

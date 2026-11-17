@@ -238,7 +238,8 @@ note. Put them there with ntropy:
   under another name, `--force` replaces a file of that name.
 - `ntropy asset list -n <id>` lists the files with their size and whether the
   note links them, and `broken` for a link to a file the folder lacks. `--path`
-  prints the folder, also when it does not exist yet.
+  prints the absolute path of every file, one per line, and nothing when there
+  is none. `--folder` prints the folder, also when it does not exist yet.
 
 Both select exactly one note as `render` does; several matches are an error
 under `-n`. They refuse to work in an encrypted vault.

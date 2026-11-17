@@ -611,6 +611,38 @@ pub struct Listing {
     /// The folder, whether it exists or not.
     pub folder: PathBuf,
     pub files: Vec<ListedFile>,
+    /// The relative name, lossily decoded, of every entry the walk read whose
+    /// real name is not valid UTF-8.
+    pub non_utf8: Vec<String>,
+}
+
+impl Listing {
+    /// The path of every file row, in the order of `files`.
+    ///
+    /// A row for a link the folder lacks under that exact name has no file
+    /// and gives no path. A symlink is a row and gives its own path, whatever
+    /// it points to: the listing never follows one.
+    pub fn file_paths(&self) -> Vec<PathBuf> {
+        self.files
+            .iter()
+            .filter(|file| file.size.is_some())
+            .map(|file| self.folder.join(&file.name))
+            .collect()
+    }
+}
+
+/// The name of a directory entry as the listing keys it, decoded lossily.
+///
+/// A name that is not valid UTF-8 is also recorded in `non_utf8` as
+/// `prefix` plus the lossy name. The lossy name is not the name on disk, so a
+/// path built from it would not exist, and two such names can decode to the
+/// same key.
+fn entry_name(name: &std::ffi::OsStr, prefix: &str, non_utf8: &mut Vec<String>) -> String {
+    let lossy = name.to_string_lossy().into_owned();
+    if name.to_str().is_none() {
+        non_utf8.push(format!("{prefix}{lossy}"));
+    }
+    lossy
 }
 
 /// The files in the folder of `note`, operating-system metadata left out, and
@@ -622,16 +654,17 @@ pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
     let folder = folder_of(layout, note)?;
 
     let mut found: BTreeMap<String, u64> = BTreeMap::new();
+    let mut non_utf8 = Vec::new();
     let mut pending = vec![(folder.clone(), String::new())];
     while let Some((dir, prefix)) = pending.pop() {
         for (path, file_type) in fsutil::read_dir_entries(&dir)? {
-            let name = path
-                .file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_default();
             if is_system_metadata(&path) {
                 continue;
             }
+            let name = path
+                .file_name()
+                .map(|name| entry_name(name, &prefix, &mut non_utf8))
+                .unwrap_or_default();
             let relative = format!("{prefix}{name}");
             if file_type.is_dir() {
                 pending.push((path, format!("{relative}/")));
@@ -693,7 +726,11 @@ pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
             }),
     );
     files.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(Listing { folder, files })
+    Ok(Listing {
+        folder,
+        files,
+        non_utf8,
+    })
 }
 
 /// Whether `text` holds `_assets/<folder>/<name>`, the `_assets` component
@@ -2044,6 +2081,62 @@ mod tests {
 
         assert!(listing.files.is_empty());
         assert_eq!(listing.folder, session.layout().asset_folder(FOLDER));
+    }
+
+    #[test]
+    fn file_paths_skips_missing_rows_and_joins_nested_names() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(
+            &session,
+            "![x](_assets/01ARZ3NDEKTSV4RRFFQ69G5FAV-note/gone.png)",
+        );
+        let folder = session.layout().asset_folder(FOLDER);
+        std::fs::create_dir_all(folder.join("sub")).expect("folder");
+        std::fs::write(folder.join("sub/deep.txt"), b"x").expect("nested");
+        std::fs::write(folder.join("here.png"), b"x").expect("file");
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(listing.files.len(), 3, "the broken row is listed");
+        assert_eq!(
+            listing.file_paths(),
+            vec![folder.join("here.png"), folder.join("sub/deep.txt")]
+        );
+    }
+
+    #[test]
+    fn a_name_that_is_not_utf8_is_recorded_with_its_relative_path() {
+        use std::os::unix::ffi::OsStrExt;
+        let mut non_utf8 = Vec::new();
+
+        let valid = entry_name(std::ffi::OsStr::new("a.png"), "sub/", &mut non_utf8);
+        let invalid = entry_name(
+            std::ffi::OsStr::from_bytes(b"caf\xe9.png"),
+            "sub/",
+            &mut non_utf8,
+        );
+
+        assert_eq!(valid, "a.png");
+        assert_eq!(invalid, "caf\u{fffd}.png");
+        assert_eq!(non_utf8, vec!["sub/caf\u{fffd}.png".to_string()]);
+    }
+
+    #[test]
+    fn a_listing_records_a_directory_that_is_not_utf8() {
+        use std::os::unix::ffi::OsStrExt;
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let folder = session.layout().asset_folder(FOLDER);
+        let directory = folder.join(std::ffi::OsStr::from_bytes(b"sub\xff"));
+        // Some filesystems refuse such a name; there the case cannot arise.
+        if std::fs::create_dir_all(&directory).is_err() {
+            return;
+        }
+        std::fs::write(directory.join("x.txt"), b"x").expect("file");
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(listing.non_utf8, vec!["sub\u{fffd}".to_string()]);
     }
 
     #[test]

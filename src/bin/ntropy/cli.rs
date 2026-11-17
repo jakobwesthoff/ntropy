@@ -108,10 +108,17 @@ pub enum AssetCommand {
     /// Markdown link names in the note's folder and the folder lacks is listed as
     /// `broken`. Hidden files are listed; only operating-system metadata such as
     /// `.DS_Store` is left out.
+    ///
+    /// `--path` prints the path of each asset file instead, `--folder` the path
+    /// of the folder.
     List {
-        /// Print only the folder's path, also when it does not exist yet.
-        #[arg(long)]
+        /// Print the absolute path of every asset file, one per line.
+        #[arg(long, conflicts_with = "folder")]
         path: bool,
+        /// Print the asset folder's absolute path, also when it does not exist
+        /// yet.
+        #[arg(long)]
+        folder: bool,
         /// A full ULID, a note's filename or path, or a query DSL expression,
         /// as trailing arguments that are each read on their own; words in one
         /// argument form a phrase (omitted = choose from all notes).

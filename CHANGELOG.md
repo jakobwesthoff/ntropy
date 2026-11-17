@@ -9,6 +9,16 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Changed
+
+- **Breaking:** `ntropy asset list --path <note>`, a flag of v2.13.0, now prints
+  the absolute path of every asset file of the note, one per line in the order of
+  the listing, and nothing for a note without asset files. A link to a file the
+  folder lacks is not printed. A script that used `--path` to get the folder
+  must use the new `--folder`, which prints it. The two flags cannot be combined.
+
 ## v2.13.0 - 2026-11-17
 
 ### Added

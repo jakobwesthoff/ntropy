@@ -15,6 +15,7 @@ info:
 success: true
 exit_code: 0
 ----- stdout -----
-[VAULT]/all-notes/_assets/[ULID....................]-q3-planning
+[VAULT]/all-notes/_assets/[ULID....................]-q3-planning/a.png
+[VAULT]/all-notes/_assets/[ULID....................]-q3-planning/b.pdf
 
 ----- stderr -----

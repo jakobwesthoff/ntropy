@@ -10,6 +10,9 @@ Amends [ADR 0018](0018-cli-command-surface.md), whose command list gains
 `asset`. Builds on
 [ADR 0098](0098-a-notes-assets-live-in-a-folder-named-like-the-note.md).
 
+Amended 2026-11-17 by
+[ADR 0106](0106-asset-list-prints-file-paths-or-the-folder.md).
+
 ## Context
 
 A note's assets live in `all-notes/_assets/<stem>/` (ADR 0098). Putting a file

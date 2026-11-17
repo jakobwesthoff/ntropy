@@ -502,7 +502,7 @@ the error says it is now in both places. The views are refreshed after a run tha
 created the folder or placed a file; a refresh that fails is a `warning:` printed
 after the links and counts for `--strict`.
 
-`asset list [--path] <note>` prints a `FILE SIZE LINKED` table of the files in
+`asset list [--path | --folder] <note>` prints a `FILE SIZE LINKED` table of the files in
 the folder at any depth, with hidden files listed and only operating-system
 metadata (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`) left out, the set
 `delete` leaves out of its count, with `yes` or `no` for whether
@@ -512,8 +512,13 @@ own folder whose file is missing. A file that raw HTML in the note names, such a
 reference is found as text in the HTML, so a name written with an entity (`R&amp;D.png`)
 is not matched. Only a Markdown link makes a file `broken`, as `reconcile`
 reports a missing file from those alone. A note without files prints `no assets` on
-stderr. `--path` prints the folder's absolute path, also when it does not exist,
-so a script can create it.
+stderr. `--path` prints the absolute path of every file the table shows with a
+size, one per line in the table's order, and nothing for a note without files. A
+`broken` row has no file and is not printed, and a symlink in the folder is
+printed as its own path. It fails without printing when a name holds control or
+bidi characters or is not valid UTF-8. `--folder` prints the folder's absolute
+path, also when it does not exist, so a script can create it. The two flags
+exclude each other, and both count as `-p` for the picker.
 
 ### `delete`
 
