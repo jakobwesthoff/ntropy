@@ -34,19 +34,20 @@ when ntropy is updated; to take a newer built-in stylesheet, init a fresh
 theme under another name and carry the rules over.
 
 ```bash
-ntropy site theme init mine    # copies the built-in theme to .ntropy/themes/site/mine/
+ntropy -n site theme init mine    # copies the built-in theme to .ntropy/themes/site/mine/
                                # refuses to overwrite an existing directory
 ```
 
 Select it with `[site] theme = "mine"` in `.ntropy/config.toml`, or for one
 export with `--theme mine`; `--theme default` is the built-in theme
 regardless of config. A configured theme that does not exist fails the
-export naming the stylesheet it looked for. A file under `icons/` that is
-not an SVG fails the export naming it.
+export naming the stylesheet it looked for. An `icons/*.svg` file without an
+`<svg>` root element fails the export naming it; other files in `icons/`, such
+as `LICENSE`, are ignored.
 
 ## Workflow: restyle the site
 
-1. `ntropy site theme init mine` and set `[site] theme = "mine"`.
+1. `ntropy -n site theme init mine` and set `[site] theme = "mine"`.
 2. Edit the custom properties at the top of `style.css`; every color,
    typeface, and size below is one of them, so a palette or a wider reading
    column is a few lines.

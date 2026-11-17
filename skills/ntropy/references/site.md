@@ -16,7 +16,7 @@ ntropy site -n -o ./public tag:handbook       # only the notes a query selects
 ntropy site -n -o ./public --force            # empty a non-empty ./public first
 page=$(ntropy site -n -o ./public -p)         # -p prints public/index.html and nothing else
 ntropy site -n -o ./public --theme default    # the built-in look, whatever the config says
-ntropy site theme init mine                   # copy the built-in theme to .ntropy/themes/site/mine/
+ntropy -n site theme init mine                   # copy the built-in theme to .ntropy/themes/site/mine/
 ```
 
 - `-o <dir>` is required. A non-empty directory is refused; `--force` empties
@@ -184,8 +184,8 @@ tag hierarchy is the directory tree the site shows.
 
 ```bash
 # A section landing note and one page inside it.
-note=$(ntropy new --empty -p Welcome)
-ntropy write "$note" <<'NOTE'
+note=$(ntropy new -n --empty -p -- Welcome)
+ntropy write -n "$note" <<'NOTE'
 ---
 title: Welcome
 tags: [handbook/start]
@@ -196,8 +196,8 @@ site: { index: true, label: Getting Started, order: 1 }
 What the handbook covers and where to begin.
 NOTE
 
-note=$(ntropy new --empty -p Installation)
-ntropy write "$note" <<'NOTE'
+note=$(ntropy new -n --empty -p -- Installation)
+ntropy write -n "$note" <<'NOTE'
 ---
 title: Installation
 tags: [handbook/start]
