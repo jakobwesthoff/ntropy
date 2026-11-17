@@ -126,3 +126,4 @@ made.
 - [0097. Asset links are found with the Markdown parser](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)
 - [0098. A note's assets live in a folder named like the note](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
 - [0099. reconcile checks asset links and the assets directory](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0099-reconcile-checks-asset-links-and-the-assets-directory.md)
+- [0100. Views carry an _assets link](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0100-views-carry-an-assets-link.md)

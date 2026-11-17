@@ -45,7 +45,7 @@ pub enum Place {
 }
 
 /// What a link's place means for the note that holds the link.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Standing {
     /// A file in the note's own asset folder.
     Own,

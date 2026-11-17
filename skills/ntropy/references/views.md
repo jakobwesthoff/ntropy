@@ -43,6 +43,10 @@ by-status/in-progress/2026-07-06-refactor-the-parser.md
   -> ../../all-notes/01KWVBW61WHJY7K27WNETSF641-refactor-the-parser.md
 ```
 
+While `all-notes/_assets/` exists, every directory of the view, the root and
+each group, also holds an `_assets` symlink to it, so a note opened through a
+view shows its assets.
+
 Two notes colliding on `<date>-<slug>` in one group get a short ULID-derived
 tail appended to disambiguate. Leaf names in one group differ even ignoring
 case, so every note has its leaf on a case-insensitive filesystem too.

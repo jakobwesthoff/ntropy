@@ -210,6 +210,13 @@ relative to the vault, for example:
     by-tag/programming/rust/2026-06-24-quarterly-review.md
       -> ../../../all-notes/01JZ4QESXNG8YH6P9V0XYZ-quarterly-review.md
 
+While `all-notes/_assets/` exists, every directory of a view, the root and each
+group directory, also holds a relative `_assets` symlink to it (ADR 0100), so a
+note opened through a view resolves `_assets/<folder>/<file>` from the directory
+of the leaf. A group directory is a slug and holds no underscore, so none is
+named `_assets`. The sync removes whatever stands where the link belongs, and
+removes the emptied directories before it creates the links.
+
 Relative links keep the entire vault relocatable: moving or copying the vault
 does not break them. The `../` depth is computed per link from its position in
 the view tree. When two notes would collide on `<date>-<slug>` within one

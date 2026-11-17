@@ -30,6 +30,11 @@ change in any release
   before the run renames it.
   [ADR 0099](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0099-reconcile-checks-asset-links-and-the-assets-directory.md)
   records the checks.
+- While `all-notes/_assets/` exists, every directory of a materialized view
+  holds an `_assets` symlink to it, so a note opened through a view shows its
+  assets.
+  [ADR 0100](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0100-views-carry-an-assets-link.md)
+  records the link.
   [ADR 0098](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
   records the layout and
   [ADR 0097](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)

@@ -20,7 +20,9 @@ use crate::id::Id;
 use crate::note::Note;
 use crate::vault::layout::{ALL_NOTES_DIR, ASSETS_DIR, Layout};
 
-use super::{Place, Standing, local_links, owner, place};
+use crate::render::markdown::resolve_root_relative;
+
+use super::{Standing, local_links, owner, place};
 
 /// One finding about a note's links or the contents of `_assets/`.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,9 +98,10 @@ fn check_folders(layout: &Layout, notes: &[Note]) -> Result<Vec<AssetIssue>> {
     entries.sort_by(|(a, _), (b, _)| a.cmp(b));
     let mut issues = Vec::new();
     for (path, file_type) in entries {
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
+        let name = path
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
         if name.starts_with('.') {
             continue;
         }
@@ -106,10 +109,8 @@ fn check_folders(layout: &Layout, notes: &[Note]) -> Result<Vec<AssetIssue>> {
             issues.push(AssetIssue::Skipped {
                 entry: format!("{ASSETS_DIR}/{name}"),
             });
-        } else if !(file_type.is_dir() && owner(name).is_some_and(|id| owners.contains(&id))) {
-            issues.push(AssetIssue::Orphan {
-                entry: name.to_owned(),
-            });
+        } else if !(file_type.is_dir() && owner(&name).is_some_and(|id| owners.contains(&id))) {
+            issues.push(AssetIssue::Orphan { entry: name });
         }
     }
     Ok(issues)
@@ -120,34 +121,35 @@ fn check_links(layout: &Layout, notes: &[Note]) -> Vec<AssetIssue> {
     let note_dir = format!("/{ALL_NOTES_DIR}");
     let mut issues = Vec::new();
     for note in notes {
-        let mut seen: BTreeSet<(u8, String)> = BTreeSet::new();
+        let mut seen: BTreeSet<(Standing, String)> = BTreeSet::new();
         for link in local_links(&note.body) {
             let place = place(&note_dir, &link.dest);
-            let kind = match place.standing(note.id) {
-                Standing::Own => 0,
-                Standing::Foreign => 1,
-                Standing::Unmanaged => 2,
-                Standing::Escapes => continue,
-            };
+            let standing = place.standing(note.id);
             let path = link.path().to_owned();
-            if !seen.insert((kind, path.clone())) {
+            if !seen.insert((standing, path.clone())) {
                 continue;
             }
             let note = note.path.clone();
-            match (kind, &place) {
-                (0, Place::Managed { folder, rest }) => {
-                    let file = layout.asset_folder(folder).join(rest);
-                    if std::fs::metadata(&file).is_err() {
-                        issues.push(AssetIssue::Missing { note, path });
-                    }
-                }
-                (1, _) => issues.push(AssetIssue::Foreign { note, path }),
-                (2, _) => issues.push(AssetIssue::Unmanaged { note, path }),
-                _ => {}
-            }
+            let issue = match standing {
+                Standing::Own => (!exists_in_vault(layout, &note_dir, &path))
+                    .then_some(AssetIssue::Missing { note, path }),
+                Standing::Foreign => Some(AssetIssue::Foreign { note, path }),
+                Standing::Unmanaged => Some(AssetIssue::Unmanaged { note, path }),
+                Standing::Escapes => None,
+            };
+            issues.extend(issue);
         }
     }
     issues
+}
+
+/// Whether the file `path`, a link target written in a note whose directory is
+/// `note_dir`, exists in the vault, following symlinks, so a link to a
+/// dangling symlink counts as missing.
+fn exists_in_vault(layout: &Layout, note_dir: &str, path: &str) -> bool {
+    resolve_root_relative(note_dir, path).is_some_and(|resolved| {
+        std::fs::metadata(layout.root().join(resolved.trim_start_matches('/'))).is_ok()
+    })
 }
 
 #[cfg(test)]

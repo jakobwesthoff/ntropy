@@ -1758,6 +1758,22 @@ mod tests {
         }
 
         #[test]
+        fn the_views_link_to_the_assets_directory() {
+            let (_guard, session) = vault_with_view();
+            write_note(
+                &session,
+                &format!("{ULID}-note.md"),
+                "---\ntitle: Note\ntags: [work]\n---\nbody\n",
+            );
+            plant_folder(&session, &format!("{ULID}-note"));
+
+            reconcile(&session).expect("reconcile");
+
+            let link = session.root().join("by-tag/work/_assets");
+            assert!(link.join(format!("{ULID}-note/chart.png")).is_file());
+        }
+
+        #[test]
         fn realign_leaves_the_folder_and_the_links() {
             let (_guard, session) = vault_with_view();
             let path = drifted_note(&session, "");
