@@ -206,6 +206,35 @@ mod tests {
     }
 
     #[test]
+    fn every_link_to_a_part_is_followed_by_its_command() {
+        // A reader of `ntropy skill` has no file to follow, so each link to
+        // a part, in the core (`references/<part>.md`) and in a part
+        // (`<part>.md`), also names the command that prints it, on the same
+        // line or the next.
+        let mut checked = 0;
+        for (file, text) in std::iter::once(("SKILL.md", SKILL)).chain(PARTS.iter().copied()) {
+            let prefix = if file == "SKILL.md" {
+                "references/"
+            } else {
+                ""
+            };
+            for (name, _) in PARTS {
+                let link = format!("]({prefix}{name}.md)");
+                for (at, _) in text.match_indices(&link) {
+                    let rest = &text[at + link.len()..];
+                    let two_lines: String = rest.lines().take(2).collect::<Vec<_>>().join("\n");
+                    assert!(
+                        two_lines.contains(&format!("`ntropy skill {name}`")),
+                        "{file}: the link to {name} lacks its command: {two_lines:?}"
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert!(checked >= 15, "found only {checked} links to parts");
+    }
+
+    #[test]
     fn the_repository_holds_no_part_the_binary_does_not_ship() {
         let on_disk: BTreeSet<String> = fs::read_dir(skill_dir().join("references"))
             .expect("the skill has a references directory")

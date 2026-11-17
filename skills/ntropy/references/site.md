@@ -5,7 +5,7 @@ Part of the ntropy skill. Read SKILL.md first, which holds the rules for every t
 `ntropy site` turns the vault into a directory of static pages that any file
 host serves and a browser opens straight from disk. `ntropy render --to html`
 produces the same page for one note, with a files directory beside it. The
-look comes from a site theme ([site-themes.md](site-themes.md)); the
+look comes from a site theme ([site-themes.md](site-themes.md), or `ntropy skill site-themes`); the
 structure comes from tags, views, and the `site` table in a note's
 frontmatter, all described here.
 
@@ -23,7 +23,7 @@ ntropy site theme init mine                   # copy the built-in theme to .ntro
 - `-o <dir>` is required. A non-empty directory is refused; `--force` empties
   it before writing. Nothing else is deleted.
 - The optional query is the ordinary query language
-  ([querying.md](querying.md)). A link from an exported note to a note the
+  ([querying.md](querying.md), or `ntropy skill querying`). A link from an exported note to a note the
   query left out stays as plain text and is reported as a warning.
 - `--theme <name>` overrides `[site] theme` for one export; `default` names
   the built-in theme. A theme that does not exist fails the export before
@@ -137,7 +137,7 @@ site:
   listing: false         # true lists the group's contents below a landing note
   hidden: false          # true keeps the note out of the sidebar, lists, and pager
   related: false         # switches the related notes off (or on) for this page only
-  template: splash       # render with the theme's templates/splash.html (site-themes.md)
+  template: splash       # render with the theme's templates/splash.html (site-themes.md, or ntropy skill site-themes)
 ---
 ```
 
@@ -157,7 +157,7 @@ site:
   into another section is labelled "Previous chapter" or "Next chapter".
 
 The frontmatter rules for everything else are in
-[writing-notes.md](writing-notes.md).
+[writing-notes.md](writing-notes.md), or `ntropy skill writing-notes`.
 
 ## Workflow: publish a documentation subtree
 
@@ -167,7 +167,7 @@ tag hierarchy is the directory tree the site shows.
 1. Choose a root tag and mirror the sections below it: `handbook/start`,
    `handbook/start/gadgets`, `handbook/reference`.
 2. Author every page with `new --empty` and `write`
-   ([writing-notes.md](writing-notes.md)), carrying the section tag and a
+   ([writing-notes.md](writing-notes.md), or `ntropy skill writing-notes`), carrying the section tag and a
    `site` table. Give each section a landing note with `index: true`, a
    `label`, and an `order`; give the pages inside an `order`; hide what
    must not appear.

@@ -52,7 +52,7 @@ case, so every note has its leaf on a case-insensitive filesystem too.
 Views refresh automatically after every ntropy mutation (`new`, `delete`, edits
 made through ntropy's own editor flow). They do NOT see direct file edits: if
 you change a note's frontmatter with your own tools, run `ntropy reconcile` to
-re-sync every view (see [writing-notes.md](writing-notes.md)). If view contents
+re-sync every view (see [writing-notes.md](writing-notes.md), or `ntropy skill writing-notes`). If view contents
 look wrong, reconcile before investigating anything else.
 
 ## Rules
@@ -87,7 +87,7 @@ look wrong, reconcile before investigating anything else.
 Everything a view can group by, a query can filter by without one:
 `ntropy search -n status:done` needs no `by-status` view. Add a view when the
 user will browse that dimension repeatedly through the filesystem or an editor;
-reach for [querying](querying.md) for one-off lookups. As an agent you rarely
+reach for [querying](querying.md), or `ntropy skill querying`, for one-off lookups. As an agent you rarely
 need views for your own work — queries are the programmatic path.
 
 End of references/views.md.

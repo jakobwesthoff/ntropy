@@ -166,7 +166,7 @@ Body is ordinary Markdown.
 - **`site` is reserved.** A `site` mapping (`order`, `label`, `hidden`,
   `index`, `listing`, `related`, `template`) shapes the exported website's navigation
   and is hidden from the page; it is not a place for content. See
-  [site.md](site.md).
+  [site.md](site.md), or `ntropy skill site`.
 
 For clean vaults, reuse field names and values consistently: `field:value`
 queries match values exactly (case-sensitive, the field name ignores case),

@@ -140,7 +140,7 @@ note files share a ULID or a file sits where a converted note would go; run
   hand edit does not (a hand edit needs a follow-up `ntropy reconcile`).
 
 Templates are plain files under `<vault>/.ntropy/templates/`, not config. See
-[writing-notes.md](writing-notes.md).
+[writing-notes.md](writing-notes.md), or `ntropy skill writing-notes`.
 
 ## Reserved names
 
@@ -162,7 +162,7 @@ directories and DO NOT remove the managed ignore entries.
 Malformed notes (no `title`, bad filename) are skipped with a stderr warning by
 default. Pass `--strict` to turn those warnings into hard errors — useful as a
 vault health check. `reconcile --strict` also fails on a configured view
-skipped for an invalid name ([views.md](views.md)):
+skipped for an invalid name ([views.md](views.md), or `ntropy skill views`):
 
 ```bash
 ntropy search -n --strict > /dev/null   # exits non-zero if any note is malformed
