@@ -51,7 +51,10 @@ with the hint to use `--as`.
 
 The folder is found by the ULID of the note, under whatever name it has. A note
 whose folder has not been renamed since a retitle gets the file in that folder
-and a link that names it, and a note with several folders is refused.
+and a link that names it, and a note with several folders is refused. A symlinked `_assets` directory, or
+a symlink where the note's folder belongs, is refused too by both commands: the
+entry is one ntropy leaves alone (ADR 0098), and a file added or listed through
+it would belong to another note or to a place outside the vault.
 
 `asset list` prints the files of the folder with their size and whether the note
 links each, and a file the note links in its own folder and the folder lacks as

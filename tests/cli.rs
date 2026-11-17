@@ -8141,6 +8141,65 @@ fn asset_add_refuses_two_files_whose_names_differ_only_in_case_and_changes_nothi
 }
 
 #[test]
+fn asset_add_and_list_refuse_a_symlinked_assets_directory() {
+    let dir = vault_for_assets();
+    let outside = tempfile::tempdir().expect("outside");
+    let assets = dir.path().join("all-notes/_assets");
+    let _ = fs::remove_dir_all(&assets);
+    std::os::unix::fs::symlink(outside.path(), &assets).expect("symlink");
+    let file = incoming(dir.path(), "chart.png", b"png");
+
+    let add = ntropy(dir.path())
+        .args(["-n", "asset", "add", ULID_A])
+        .arg(&file)
+        .output()
+        .expect("run");
+    let list = ntropy(dir.path())
+        .args(["-n", "asset", "list", ULID_A])
+        .output()
+        .expect("run");
+
+    for out in [&add, &list] {
+        assert!(!out.status.success(), "{}", rendered(out));
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains("is a symlink"), "{stderr}");
+    }
+    assert_eq!(
+        fs::read_dir(outside.path()).expect("outside").count(),
+        0,
+        "nothing was written through the link"
+    );
+}
+
+#[test]
+fn asset_add_and_list_refuse_a_symlinked_note_folder() {
+    let dir = vault_for_assets();
+    let other = dir
+        .path()
+        .join("all-notes/_assets/01BRZ3NDEKTSV4RRFFQ69G5FAV-other");
+    fs::create_dir_all(&other).expect("other note's folder");
+    std::os::unix::fs::symlink(&other, asset_folder_of_a(dir.path())).expect("symlink");
+    let file = incoming(dir.path(), "chart.png", b"png");
+
+    let add = ntropy(dir.path())
+        .args(["-n", "asset", "add", ULID_A])
+        .arg(&file)
+        .output()
+        .expect("run");
+    let list = ntropy(dir.path())
+        .args(["-n", "asset", "list", "--path", ULID_A])
+        .output()
+        .expect("run");
+
+    for out in [&add, &list] {
+        assert!(!out.status.success(), "{}", rendered(out));
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert!(stderr.contains("is a symlink"), "{stderr}");
+    }
+    assert_eq!(fs::read_dir(&other).expect("other").count(), 0);
+}
+
+#[test]
 fn asset_add_as_stores_the_file_under_another_name_and_move_removes_the_source() {
     let dir = vault_for_assets();
     let file = incoming(dir.path(), "IMG_4711.png", b"png");

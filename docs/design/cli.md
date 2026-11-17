@@ -464,7 +464,9 @@ yet (ADR 0103).
 into the note's asset folder, creating it. The folder is the one the note owns
 under whatever name it has, so between a retitle and the next `reconcile` the
 files go into the folder that has not moved yet and the printed link carries its
-name. The link of each file goes to stdout, `![stem](_assets/<folder>/<file>)`
+name. A symlinked `all-notes/_assets` or a symlink in place of the note's folder
+is an error for `asset add` and `asset list` alike, since `reconcile` leaves
+such an entry alone. The link of each file goes to stdout, `![stem](_assets/<folder>/<file>)`
 for an image extension (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `avif`,
 `bmp`) and `[name](...)` for any other file, the target in angle brackets when
 the name holds anything but letters, digits, `.`, `_` and `-`. One `added <path>`

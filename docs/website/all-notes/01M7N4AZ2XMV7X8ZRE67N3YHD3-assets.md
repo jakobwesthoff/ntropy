@@ -57,7 +57,7 @@ FILE                     SIZE      LINKED
 08-front-page-phone.png  32.5 KiB  yes
 ```
 
-`LINKED` says whether the note links the file. A link into the note's own folder whose file is gone shows as `broken`. `--path` prints the folder's absolute path, also when it does not exist yet.
+`LINKED` says whether the note links the file. A link into the note's own folder whose file is gone shows as `broken`. `--path` prints the folder's absolute path, also when it does not exist yet. A symlink where the note's folder or `all-notes/_assets/` belongs is an error for both commands, because `reconcile` leaves such an entry alone too.
 
 A `#` always starts the fragment of a link, so a file with a `#` in its name cannot be linked. `asset add` refuses such a name and suggests `--as`.
 

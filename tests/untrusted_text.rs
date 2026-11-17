@@ -524,6 +524,38 @@ fn asset_add_names_a_hostile_path_it_would_add_over_itself_escaped() {
 }
 
 #[test]
+fn asset_add_names_a_hostile_symlinked_folder_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-{RETITLE}.md"),
+        "---\ntitle: Note\n---\n",
+    );
+    let elsewhere = dir.path().join("elsewhere");
+    fs::create_dir_all(&elsewhere).expect("elsewhere");
+    fs::create_dir_all(vault.join("all-notes/_assets")).expect("assets");
+    std::os::unix::fs::symlink(
+        &elsewhere,
+        vault.join(format!("all-notes/_assets/{ULID_A}-{RETITLE}")),
+    )
+    .expect("symlink");
+    let file = vault.join("a.png");
+    fs::write(&file, b"png").expect("source");
+
+    let output = run(ntropy(&vault).args(["asset", "add", ULID_A]).arg(&file));
+
+    assert_no_raw_controls(&output);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains(RETITLE_SHOWN),
+        "{}",
+        stderr(&output)
+    );
+    assert_eq!(fs::read_dir(&elsewhere).expect("elsewhere").count(), 0);
+}
+
+#[test]
 fn reconcile_reports_a_hostile_link_target_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");

@@ -54,6 +54,13 @@ pub enum AssetError {
     )]
     CaseClash { first: String, second: String },
 
+    #[error(
+        "`{}` is a symlink, which ntropy leaves alone, so no assets can be added to it or \
+         listed from it",
+        .0.display()
+    )]
+    Symlinked(PathBuf),
+
     #[error("`--as` names one file, but {0} files were given")]
     RenameNeedsOneFile(usize),
 
@@ -89,17 +96,33 @@ pub struct Added {
 
 /// The folder of `note`: the one it owns under whatever name it has, or the
 /// one named like the note when it has none yet.
+///
+/// A symlinked `_assets` directory, or a symlink where the note's folder
+/// belongs, is refused: ntropy leaves such an entry alone (ADR 0098), and a
+/// file added or listed through it would belong to another note or to a place
+/// outside the vault, under a link that names this note's folder.
 pub fn folder_of(layout: &Layout, note: &Note) -> Result<PathBuf, AssetError> {
+    let is_symlink = |path: &Path| {
+        std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
+    };
+    if is_symlink(&layout.assets_dir()) {
+        return Err(AssetError::Symlinked(layout.assets_dir()));
+    }
     let stem = note
         .path
         .file_stem()
         .map(|stem| stem.to_string_lossy().into_owned())
         .unwrap_or_default();
     let listed = read_folders(layout)?;
-    match choose_folder(&listed, note.id, &stem) {
-        FolderChoice::Existing(name) | FolderChoice::Create(name) => Ok(layout.asset_folder(&name)),
-        FolderChoice::Several(names) => Err(AssetError::SeveralFolders(names)),
+    let name = match choose_folder(&listed, note.id, &stem) {
+        FolderChoice::Existing(name) | FolderChoice::Create(name) => name,
+        FolderChoice::Several(names) => return Err(AssetError::SeveralFolders(names)),
+    };
+    let folder = layout.asset_folder(&name);
+    if is_symlink(&folder) {
+        return Err(AssetError::Symlinked(folder));
     }
+    Ok(folder)
 }
 
 /// File extensions whose link is an image, `![..](..)`.
@@ -1107,6 +1130,108 @@ mod tests {
             std::fs::read(stored[0].as_ref().expect("entry").path()).expect("read"),
             b"first"
         );
+    }
+
+    // ---- A symlinked assets directory or note folder ----
+
+    /// A vault whose `all-notes/_assets` is a symlink to a directory outside
+    /// it, and that directory.
+    fn symlinked_assets_directory(session: &VaultSession) -> PathBuf {
+        let outside = session.root().join("outside-assets");
+        std::fs::create_dir_all(&outside).expect("outside");
+        let assets = session.layout().assets_dir();
+        let _ = std::fs::remove_dir_all(&assets);
+        std::os::unix::fs::symlink(&outside, &assets).expect("symlink");
+        outside
+    }
+
+    /// A vault whose folder for the note is a symlink to another note's
+    /// folder, and that other folder.
+    fn symlinked_note_folder(session: &VaultSession) -> PathBuf {
+        let other = session
+            .layout()
+            .asset_folder("01BRZ3NDEKTSV4RRFFQ69G5FAV-other");
+        std::fs::create_dir_all(&other).expect("other note's folder");
+        std::os::unix::fs::symlink(&other, session.layout().asset_folder(FOLDER)).expect("symlink");
+        other
+    }
+
+    fn entries(dir: &Path) -> Vec<String> {
+        std::fs::read_dir(dir)
+            .expect("directory")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn nothing_is_added_through_a_symlinked_assets_directory() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let outside = symlinked_assets_directory(&session);
+        let file = source(&session, "a.pdf", b"x");
+
+        let err = add(session.layout(), &note, &[file], &opts()).expect_err("refused");
+
+        assert!(matches!(err, AssetError::Symlinked(_)), "{err:?}");
+        assert!(entries(&outside).is_empty(), "{:?}", entries(&outside));
+    }
+
+    #[test]
+    fn nothing_is_added_through_a_symlinked_note_folder() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let other = symlinked_note_folder(&session);
+        let file = source(&session, "a.pdf", b"x");
+
+        let err = add(session.layout(), &note, &[file], &opts()).expect_err("refused");
+
+        assert!(matches!(err, AssetError::Symlinked(_)), "{err:?}");
+        assert!(entries(&other).is_empty(), "{:?}", entries(&other));
+    }
+
+    #[test]
+    fn a_dangling_note_folder_symlink_is_refused_too() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        std::fs::create_dir_all(session.layout().assets_dir()).expect("assets");
+        std::os::unix::fs::symlink("/no-such-folder", session.layout().asset_folder(FOLDER))
+            .expect("symlink");
+        let file = source(&session, "a.pdf", b"x");
+
+        let err = add(session.layout(), &note, &[file], &opts()).expect_err("refused");
+
+        assert!(matches!(err, AssetError::Symlinked(_)), "{err:?}");
+    }
+
+    #[test]
+    fn nothing_is_listed_through_a_symlinked_assets_directory() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let outside = symlinked_assets_directory(&session);
+        std::fs::create_dir_all(outside.join(FOLDER)).expect("folder behind the link");
+        std::fs::write(outside.join(FOLDER).join("secret.pdf"), b"x").expect("file");
+
+        let err = list(session.layout(), &note).expect_err("refused");
+
+        assert!(matches!(err, AssetError::Symlinked(_)), "{err:?}");
+    }
+
+    #[test]
+    fn nothing_is_listed_through_a_symlinked_note_folder() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let other = symlinked_note_folder(&session);
+        std::fs::write(other.join("theirs.pdf"), b"x").expect("file");
+
+        let err = list(session.layout(), &note).expect_err("refused");
+
+        assert!(matches!(err, AssetError::Symlinked(_)), "{err:?}");
     }
 
     #[test]
