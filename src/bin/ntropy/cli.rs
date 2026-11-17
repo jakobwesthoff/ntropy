@@ -73,8 +73,9 @@ pub enum AssetCommand {
     /// Each link goes to stdout, `![alt](..)` for an image and `[name](..)`
     /// for any other file, with the target in angle brackets when the name
     /// needs them; `added <path>` lines go to stderr. The note is never
-    /// edited: place the links yourself. Nothing is copied unless every file
-    /// can be. Two names that differ only in case, from each other or from a
+    /// edited: place the links yourself. Every check runs before the first file
+    /// is touched; an I/O failure during the transfer leaves the files already
+    /// placed, which are named in the output. Two names that differ only in case, from each other or from a
     /// file of the folder, are refused.
     Add {
         /// Move the files instead of copying them.

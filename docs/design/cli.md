@@ -473,7 +473,7 @@ the name holds anything but letters, digits, `.`, `_` and `-`. One `added <path>
 line per file goes to stderr. Every printed link is read back with the Markdown
 parser, and a name whose link would not read back as the file, one with `&amp;`
 in it, is refused with the hint to use `--as`; so are names with `#`, `\`, `/`,
-`<`, `>` or a control character. Nothing is copied unless every file can be: a
+`<`, `>` or a control character. Every check runs before the first file is touched: a
 source must be a file and not the file it would be stored as (the same
 directory entry reached through a symlinked directory such as a view's `_assets`
 link, a hard link of it, or a symlink to it: a move or a forced copy would remove
@@ -488,7 +488,13 @@ are one entry only on some filesystems, such as canonically equivalent accents. 
 through a hidden temp file in the folder and is renamed into place. `--move`
 renames on one device, and copies and removes the source across devices; a
 symlink as the source is copied by what it points to and the link itself is
-removed. `--as` needs exactly one file.
+removed. `--as` needs exactly one file. An I/O failure during the transfer stops
+the command after the files already placed: their `added` lines and links are
+printed, then the error, which names the file and the cause. A move whose copy
+succeeded and whose source could not be removed prints the file as stored, and
+the error says it is now in both places. The views are refreshed after a run that
+created the folder or placed a file; a refresh that fails is a `warning:` printed
+after the links and counts for `--strict`.
 
 `asset list [--path] <note>` prints a `FILE SIZE LINKED` table of the files in
 the folder at any depth, hidden entries left out, with `yes` or `no` for whether

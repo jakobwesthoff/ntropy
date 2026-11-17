@@ -33,7 +33,13 @@ other file, the target in angle brackets when the name holds anything but
 letters, digits, `.`, `_` and `-`; one `added <path>` line per file goes to
 stderr. `--move` moves the files instead of copying them, `--as <name>` stores
 one file under another name, and `--force` replaces a file of that name, which
-is otherwise refused. Nothing is added unless every file can be. A file that is
+is otherwise refused. Every check runs before the first file is touched. An
+I/O failure during the transfer leaves the files already placed: the command
+prints the `added` line and the link of each of them, then the error, which names
+the file and the cause. A move whose copy succeeded and whose source could not be
+removed prints the file as stored and says it is now in both places. A view that
+cannot be refreshed after the files are in place is a warning that counts for
+`--strict`, printed after the links. A file that is
 already the file it would be stored as, reached by the same path, through a
 symlinked directory such as a view's `_assets` link, by a hard link or as a
 symlink to it, is refused, since the move or the forced copy would remove the

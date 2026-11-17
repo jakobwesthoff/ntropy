@@ -17,10 +17,11 @@ use anyhow::{Context, Result, bail};
 
 use ntropy::asset::{self, AddOptions};
 use ntropy::ops::Selector;
+use ntropy::reconcile;
 use ntropy::session::VaultSession;
 
 use super::one_note::{Selection, select_one};
-use super::{CopyWarnings, exit_for_warnings, output, refresh_views};
+use super::{exit_for_warnings, output, print_skipped_views};
 use crate::cli::{AssetCommand, GlobalArgs};
 
 pub(super) fn cmd_asset(
@@ -81,19 +82,35 @@ fn cmd_add(
         Selection::Exit(code) => return Ok(code),
     };
 
-    let added =
-        asset::add(session.layout(), &note, files, options).context("while adding the assets")?;
-    // The `_assets` link of every view directory appears with the first
-    // folder, so the views follow.
-    refresh_views(session, CopyWarnings::AlreadyPrinted)?;
+    let report = asset::add(session.layout(), &note, files, options);
 
-    for file in &added {
+    // What was placed is shown first, whatever came after: a file that moved
+    // is not lost track of because a later one failed.
+    for file in &report.added {
         eprintln!("added {}", shown_in_vault(session, &file.path));
     }
-    for file in &added {
+    for file in &report.added {
         println!("{}", ntropy::text::escape_controls(&file.link));
     }
-    Ok(exit_for_warnings(global.strict, &warnings, 0))
+
+    // The views follow a folder that appeared or a file that arrived. A view
+    // that cannot be refreshed is a warning, since the files are in place and
+    // the links are printed.
+    let mut extra = 0;
+    if report.touched {
+        match reconcile::refresh_views(session) {
+            Ok(refresh) => print_skipped_views(&refresh.skipped_views),
+            Err(error) => {
+                output::warn(&format!("could not refresh the views: {error:#}"));
+                extra += 1;
+            }
+        }
+    }
+
+    if let Some(error) = report.error {
+        return Err(error).context("while adding the assets");
+    }
+    Ok(exit_for_warnings(global.strict, &warnings, extra))
 }
 
 fn cmd_list(

@@ -61,6 +61,25 @@ pub enum AssetError {
     )]
     Symlinked(PathBuf),
 
+    #[error("could not store `{name}`: {cause}")]
+    Transfer {
+        name: String,
+        #[source]
+        cause: FsError,
+    },
+
+    #[error(
+        "stored `{name}`, but could not remove the source `{}`: {cause}; the file is now in \
+         both places",
+        given.display()
+    )]
+    SourceKept {
+        name: String,
+        given: PathBuf,
+        #[source]
+        cause: FsError,
+    },
+
     #[error("`--as` names one file, but {0} files were given")]
     RenameNeedsOneFile(usize),
 
@@ -83,6 +102,19 @@ pub struct AddOptions {
     pub rename: Option<String>,
     /// Replace a file of the same name.
     pub force: bool,
+}
+
+/// What `asset add` did: the files it placed, whether it touched the disk,
+/// and the error that stopped it, if any.
+#[derive(Debug)]
+pub struct AddReport {
+    /// The files placed, in order. Also set when a later file failed.
+    pub added: Vec<Added>,
+    /// Whether the folder was created or a file placed, so the views may need
+    /// to follow.
+    pub touched: bool,
+    /// Why the command stopped before the last file.
+    pub error: Option<AssetError>,
 }
 
 /// A file put into the note's folder.
@@ -202,16 +234,77 @@ fn link_for(folder: &str, name: &str) -> Result<String, AssetError> {
 /// a file, that it is not already the file it would be stored as, that each
 /// name can be linked, that no two names differ only in case, from each other
 /// or from a file of the folder, and, without `force`, that no file of that
-/// name is there.
+/// name is there. An I/O failure during the transfer cannot be checked ahead:
+/// the files placed before it stay, and the report names them together with
+/// the error, so the caller can show what happened.
+///
 /// A symlink as a source is followed for a copy. A move of one copies what it
 /// points to and then removes the link itself, never its target, since moving
 /// the link would put a symlink into the folder.
-pub fn add(
+pub fn add(layout: &Layout, note: &Note, files: &[PathBuf], options: &AddOptions) -> AddReport {
+    let mut report = AddReport {
+        added: Vec::new(),
+        touched: false,
+        error: None,
+    };
+    let (folder, planned) = match plan(layout, note, files, options) {
+        Ok(planned) => planned,
+        Err(error) => {
+            report.error = Some(error);
+            return report;
+        }
+    };
+    if let Err(error) = fsutil::create_dir_all(&folder) {
+        report.error = Some(error.into());
+        return report;
+    }
+    report.touched = true;
+
+    let mut placed: BTreeMap<Identity, String> = BTreeMap::new();
+    for (source, name, link) in planned {
+        let path = folder.join(&name);
+        // A name the checks told apart can still be one entry on this
+        // filesystem. A forced placement would replace the file this run has
+        // just stored under the other spelling, so it stops instead.
+        if let Some(first) = placed_earlier(&placed, &path) {
+            report.error = Some(AssetError::CaseClash {
+                first,
+                second: name,
+            });
+            return report;
+        }
+        let outcome = transfer(&source, &path, &folder, options);
+        if let Some(identity) = identity_of(&path).filter(|_| outcome.stored()) {
+            placed.insert(identity, name.clone());
+        }
+        match outcome {
+            Transfer::Done => report.added.push(Added { path, link }),
+            Transfer::NotStored(cause) => {
+                report.error = Some(AssetError::Transfer { name, cause });
+                return report;
+            }
+            Transfer::SourceKept(cause) => {
+                report.added.push(Added { path, link });
+                report.error = Some(AssetError::SourceKept {
+                    name,
+                    given: source,
+                    cause,
+                });
+                return report;
+            }
+        }
+    }
+    report
+}
+
+/// The folder and, per file, the source, the name it is stored under and its
+/// link, after every check that can run before a file is touched.
+fn plan(
     layout: &Layout,
     note: &Note,
     files: &[PathBuf],
     options: &AddOptions,
-) -> Result<Vec<Added>, AssetError> {
+) -> Result<(PathBuf, Vec<(PathBuf, String, String)>), AssetError> {
     if options.rename.is_some() && files.len() != 1 {
         return Err(AssetError::RenameNeedsOneFile(files.len()));
     }
@@ -273,28 +366,7 @@ pub fn add(
         }
         planned.push((source.clone(), name, link));
     }
-
-    fsutil::create_dir_all(&folder)?;
-    let mut added = Vec::new();
-    let mut placed: BTreeMap<Identity, String> = BTreeMap::new();
-    for (source, name, link) in planned {
-        let path = folder.join(&name);
-        // A name the checks above told apart can still be one entry on this
-        // filesystem. A forced placement would replace the file this run has
-        // just stored under the other spelling, so it stops instead.
-        if let Some(first) = placed_earlier(&placed, &path) {
-            return Err(AssetError::CaseClash {
-                first,
-                second: name,
-            });
-        }
-        transfer(&source, &path, &folder, options)?;
-        if let Some(identity) = identity_of(&path) {
-            placed.insert(identity, name);
-        }
-        added.push(Added { path, link });
-    }
-    Ok(added)
+    Ok((folder, planned))
 }
 
 /// The name as a filesystem that folds case would compare it.
@@ -354,15 +426,30 @@ fn is_the_target(source: &Path, target: &Path) -> bool {
         || identity(std::fs::metadata(source)) == Some(at_target)
 }
 
+/// How placing one file ended.
+enum Transfer {
+    Done,
+    /// The file was not stored.
+    NotStored(FsError),
+    /// The file was stored and the source could not be removed.
+    SourceKept(FsError),
+}
+
+impl Transfer {
+    /// Whether a file now stands at the target.
+    fn stored(&self) -> bool {
+        !matches!(self, Transfer::NotStored(_))
+    }
+}
+
 /// Put `source` at `target`, inside `folder`.
-fn transfer(
-    source: &Path,
-    target: &Path,
-    folder: &Path,
-    options: &AddOptions,
-) -> Result<(), AssetError> {
+fn transfer(source: &Path, target: &Path, folder: &Path, options: &AddOptions) -> Transfer {
+    let stored = |result: Result<(), FsError>| match result {
+        Ok(()) => Transfer::Done,
+        Err(cause) => Transfer::NotStored(cause),
+    };
     if !options.move_files {
-        return Ok(fsutil::copy_file(source, target, options.force)?);
+        return stored(fsutil::copy_file(source, target, options.force));
     }
     // A rename keeps one file on one device, and moves a symlink as the link,
     // so only a regular file on the folder's own device is renamed.
@@ -372,10 +459,15 @@ fn transfer(
         (Ok(a), Ok(b)) if a.dev() == b.dev()
     );
     if !is_link && same_device && !options.force {
-        return Ok(fsutil::rename(source, target)?);
+        return stored(fsutil::rename(source, target));
     }
-    fsutil::copy_file(source, target, options.force)?;
-    Ok(fsutil::remove_file(source)?)
+    if let Err(cause) = fsutil::copy_file(source, target, options.force) {
+        return Transfer::NotStored(cause);
+    }
+    match fsutil::remove_file(source) {
+        Ok(()) => Transfer::Done,
+        Err(cause) => Transfer::SourceKept(cause),
+    }
 }
 
 /// Whether a file of the folder is linked by the note.
@@ -502,6 +594,20 @@ mod tests {
 
     fn opts() -> AddOptions {
         AddOptions::default()
+    }
+
+    /// `add` as a `Result`, for the tests that only care about the outcome.
+    fn add(
+        layout: &Layout,
+        note: &Note,
+        files: &[PathBuf],
+        options: &AddOptions,
+    ) -> Result<Vec<Added>, AssetError> {
+        let report = super::add(layout, note, files, options);
+        match report.error {
+            Some(error) => Err(error),
+            None => Ok(report.added),
+        }
     }
 
     // ---- The link ----
@@ -1232,6 +1338,100 @@ mod tests {
         let err = list(session.layout(), &note).expect_err("refused");
 
         assert!(matches!(err, AssetError::Symlinked(_)), "{err:?}");
+    }
+
+    // ---- A failure partway ----
+
+    #[test]
+    fn a_failure_on_a_later_file_reports_the_files_already_placed() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let folder = session.layout().asset_folder(FOLDER);
+        // A directory of the second file's name: `--force` cannot replace it.
+        std::fs::create_dir_all(folder.join("b.pdf")).expect("directory");
+        let files = [
+            source(&session, "a.pdf", b"a"),
+            source(&session, "b.pdf", b"b"),
+        ];
+        let options = AddOptions {
+            force: true,
+            ..opts()
+        };
+
+        let report = super::add(session.layout(), &note, &files, &options);
+
+        assert_eq!(report.added.len(), 1, "{report:?}");
+        assert!(report.added[0].link.starts_with("[a.pdf]"));
+        assert_eq!(std::fs::read(folder.join("a.pdf")).expect("read"), b"a");
+        assert!(report.touched);
+        let error = report.error.expect("the second file failed");
+        assert!(
+            matches!(&error, AssetError::Transfer { name, .. } if name == "b.pdf"),
+            "{error:?}"
+        );
+    }
+
+    #[test]
+    fn a_failed_check_places_nothing_and_touches_nothing() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let files = [
+            source(&session, "a.pdf", b"a"),
+            source(&session, "no-such-file.pdf", b"x"),
+        ];
+        std::fs::remove_file(&files[1]).expect("remove");
+
+        let report = super::add(session.layout(), &note, &files, &opts());
+
+        assert!(report.added.is_empty());
+        assert!(!report.touched);
+        assert!(matches!(report.error, Some(AssetError::NotAFile(_))));
+    }
+
+    #[test]
+    fn a_source_that_cannot_be_removed_after_its_copy_is_reported_as_stored() {
+        use std::os::unix::fs::PermissionsExt;
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let locked = session.root().join("locked");
+        std::fs::create_dir_all(&locked).expect("locked");
+        let file = locked.join("a.pdf");
+        std::fs::write(&file, b"keep").expect("source");
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o555)).expect("chmod");
+        // A user that may remove it anyway (root) cannot show the failure.
+        let probe = locked.join("probe");
+        let can_write = std::fs::write(&probe, b"x").is_ok();
+        let _ = std::fs::remove_file(&probe);
+        if can_write {
+            std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+                .expect("chmod back");
+            return;
+        }
+        let options = AddOptions {
+            move_files: true,
+            force: true,
+            ..opts()
+        };
+
+        let report = super::add(
+            session.layout(),
+            &note,
+            std::slice::from_ref(&file),
+            &options,
+        );
+        std::fs::set_permissions(&locked, std::fs::Permissions::from_mode(0o755))
+            .expect("chmod back");
+
+        assert_eq!(report.added.len(), 1, "{report:?}");
+        assert_eq!(
+            std::fs::read(&report.added[0].path).expect("stored"),
+            b"keep"
+        );
+        assert!(file.exists(), "the source is still there");
+        assert!(
+            matches!(report.error, Some(AssetError::SourceKept { .. })),
+            "{report:?}"
+        );
     }
 
     #[test]

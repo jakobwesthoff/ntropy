@@ -8200,6 +8200,70 @@ fn asset_add_and_list_refuse_a_symlinked_note_folder() {
 }
 
 #[test]
+fn asset_add_prints_the_files_it_placed_before_a_failure_and_then_the_error() {
+    let dir = vault_for_assets();
+    let first = incoming(dir.path(), "a.pdf", b"a");
+    let second = incoming(dir.path(), "b.pdf", b"b");
+    // A directory of the second file's name, which `--force` cannot replace.
+    fs::create_dir_all(asset_folder_of_a(dir.path()).join("b.pdf")).expect("directory");
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "add", "--force", ULID_A])
+        .arg(&first)
+        .arg(&second)
+        .output()
+        .expect("run");
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stdout.contains(&format!("[a.pdf](_assets/{ULID_A}-q3-planning/a.pdf)")),
+        "{stdout}"
+    );
+    assert!(stderr.contains("added "), "{stderr}");
+    assert!(stderr.contains("a.pdf"), "{stderr}");
+    assert!(stderr.contains("could not store `b.pdf`"), "{stderr}");
+    assert_eq!(
+        fs::read(asset_folder_of_a(dir.path()).join("a.pdf")).expect("a.pdf"),
+        b"a"
+    );
+}
+
+#[test]
+fn asset_add_turns_a_failing_view_refresh_into_a_warning_after_the_links() {
+    let dir = vault_for_assets();
+    let file = incoming(dir.path(), "chart.png", b"png");
+    // A regular file where the view's directory belongs: the sync cannot go on.
+    fs::write(dir.path().join("by-tag"), b"in the way").expect("file");
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "add", ULID_A])
+        .arg(&file)
+        .output()
+        .expect("run");
+    let strict = ntropy(dir.path())
+        .args(["-n", "--strict", "asset", "add", "--force", ULID_A])
+        .arg(&file)
+        .output()
+        .expect("run");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stdout.contains("![chart](_assets/"), "{stdout}");
+    assert!(
+        stderr.contains("warning: could not refresh the views"),
+        "{stderr}"
+    );
+    assert!(!strict.status.success(), "{}", rendered(&strict));
+    assert!(
+        String::from_utf8_lossy(&strict.stdout).contains("![chart](_assets/"),
+        "the link is printed under --strict too"
+    );
+}
+
+#[test]
 fn asset_add_as_stores_the_file_under_another_name_and_move_removes_the_source() {
     let dir = vault_for_assets();
     let file = incoming(dir.path(), "IMG_4711.png", b"png");

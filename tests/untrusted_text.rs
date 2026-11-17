@@ -556,6 +556,34 @@ fn asset_add_names_a_hostile_symlinked_folder_escaped() {
 }
 
 #[test]
+fn asset_add_names_a_failed_transfer_in_a_hostile_vault_path_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), RETITLE);
+    note(
+        &vault,
+        &format!("{ULID_A}-note.md"),
+        "---\ntitle: Note\n---\n",
+    );
+    let folder = vault.join(format!("all-notes/_assets/{ULID_A}-note"));
+    fs::create_dir_all(folder.join("b.pdf")).expect("a directory the second file cannot replace");
+    let first = dir.path().join("a.pdf");
+    let second = dir.path().join("b.pdf");
+    fs::write(&first, b"a").expect("first");
+    fs::write(&second, b"b").expect("second");
+
+    let output = run(ntropy(&vault)
+        .args(["asset", "add", "--force", ULID_A])
+        .arg(&first)
+        .arg(&second));
+
+    assert_no_raw_controls(&output);
+    assert!(!output.status.success());
+    let shown = stderr(&output);
+    assert!(shown.contains("could not store `b.pdf`"), "{shown}");
+    assert!(shown.contains(RETITLE_SHOWN), "{shown}");
+}
+
+#[test]
 fn reconcile_reports_a_hostile_link_target_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");

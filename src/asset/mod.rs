@@ -23,7 +23,8 @@ mod sync;
 
 pub use check::{AssetIssue, check};
 pub use files::{
-    AddOptions, Added, AssetError, Linked, ListedFile, Listing, add, folder_of, is_image_name, list,
+    AddOptions, AddReport, Added, AssetError, Linked, ListedFile, Listing, add, folder_of,
+    is_image_name, list,
 };
 pub use links::{
     LocalLink, Reference, html_ranges, local_links, names_a_file, references, relink_folder,

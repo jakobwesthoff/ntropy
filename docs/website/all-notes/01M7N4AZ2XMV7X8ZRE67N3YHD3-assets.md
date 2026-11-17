@@ -39,6 +39,8 @@ added all-notes/_assets/01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page/notes.pdf
 
 The `added` lines go to stderr and the links to stdout, so a pipe or a command substitution takes only the links. An image extension (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `avif`, `bmp`) gets an image link, any other file a plain link. `asset add` never edits the note: you place the link where you want it.
 
+If copying a file fails partway, for example because the disk is full, the files already placed stay: `asset add` prints their `added` lines and links first and then the error, which names the file and the cause. Every check that can run before the first file is touched does.
+
 The note is a ULID, a file name or path, or a query that matches one note. Several matches open the picker on a terminal and are an error under `-n`. These options change what happens to the files:
 
 - `--move` moves the files instead of copying them.
