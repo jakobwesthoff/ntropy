@@ -591,10 +591,12 @@ argument it prints the core, `SKILL.md`. A part name prints that part:
 stdout as it is, unwrapped and uncoloured, also on a terminal.
 
 `--install <dir>` writes the skill to `<dir>/ntropy/` instead, for a skills
-directory such as `~/.claude/skills`: `SKILL.md`, and every part under
-`references/`. It replaces `references/` whole and leaves any other file in
+directory such as `~/.claude/skills`: every part under `references/`, then
+`SKILL.md`. It replaces `references/` whole and leaves any other file in
 `<dir>/ntropy/` alone. Each file is named on stdout as `installed <path>` once
-it is written. A part and `--install` together are a usage error.
+it is written. `SKILL.md` comes last as it carries the version stamp, so an
+install that fails half way leaves the stamp of the copy it found and the
+warning about that copy stays. A part and `--install` together are a usage error.
 
 `skill` resolves no vault and works outside one.
 

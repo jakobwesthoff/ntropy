@@ -69,13 +69,16 @@ pub fn part(name: &str) -> Option<&'static str> {
         .map(|(_, text)| *text)
 }
 
-/// Writes the core and every part into `dir`, handing each file to
+/// Writes every part and then the core into `dir`, handing each file to
 /// `announce` once it is written. `dir` is the skill's own directory, such
 /// as `.claude/skills/ntropy`.
 ///
 /// ntropy owns `references/` in `dir`: it is replaced whole, so a part an
 /// older ntropy wrote and this one no longer ships disappears. Any other
-/// file in `dir` stays. A failure names the path it happened at.
+/// file in `dir` stays. The core carries the stamp that says which ntropy
+/// the parts belong to, so it is written last: an install that stops half
+/// way leaves the stamp of the copy it found, and the warning about that
+/// copy stays. A failure names the path it happened at.
 pub fn install(dir: &Path, mut announce: impl FnMut(&Path) -> io::Result<()>) -> io::Result<()> {
     // The message of an I/O error names no path, and the caller prints
     // only this error, so each failure carries the path it happened at.
@@ -84,9 +87,6 @@ pub fn install(dir: &Path, mut announce: impl FnMut(&Path) -> io::Result<()>) ->
         move |error: io::Error| io::Error::new(error.kind(), format!("{path}: {error}"))
     };
     std::fs::create_dir_all(dir).map_err(at(dir))?;
-    let core = dir.join("SKILL.md");
-    std::fs::write(&core, SKILL).map_err(at(&core))?;
-    announce(&core)?;
 
     let references = dir.join("references");
     match std::fs::remove_dir_all(&references) {
@@ -101,7 +101,10 @@ pub fn install(dir: &Path, mut announce: impl FnMut(&Path) -> io::Result<()>) ->
         std::fs::write(&file, text).map_err(at(&file))?;
         announce(&file)?;
     }
-    Ok(())
+
+    let core = dir.join("SKILL.md");
+    std::fs::write(&core, SKILL).map_err(at(&core))?;
+    announce(&core)
 }
 
 #[cfg(test)]
@@ -300,12 +303,11 @@ mod tests {
         })
         .expect("an installable skill");
 
-        let mut expected = vec![dir.join("SKILL.md")];
-        expected.extend(
-            PARTS
-                .iter()
-                .map(|(name, _)| dir.join(format!("references/{name}.md"))),
-        );
+        let mut expected: Vec<_> = PARTS
+            .iter()
+            .map(|(name, _)| dir.join(format!("references/{name}.md")))
+            .collect();
+        expected.push(dir.join("SKILL.md"));
         assert_eq!(announced, expected);
     }
 
@@ -364,6 +366,23 @@ mod tests {
             .expect_err("the announcement failed");
 
         assert_eq!(error.to_string(), "closed stdout");
-        assert!(!dir.join("references").exists());
+        assert!(!dir.join("SKILL.md").exists());
+    }
+
+    #[test]
+    fn a_failed_install_keeps_the_stamp_of_the_copy_it_found() {
+        // The stamp says which ntropy the parts beside it belong to, so it
+        // is written last: an install that stops half way must not leave a
+        // current stamp over parts of an older ntropy.
+        let root = temp();
+        let dir = root.path().join("ntropy");
+        fs::create_dir_all(&dir).unwrap();
+        let old = "---\nname: ntropy\nmetadata:\n  ntropy-version: \"1.0.0\"\n---\n";
+        fs::write(dir.join("SKILL.md"), old).unwrap();
+        fs::write(dir.join("references"), "in the way").unwrap();
+
+        install(&dir, |_| Ok(())).expect_err("a file is no directory to replace");
+
+        assert_eq!(fs::read_to_string(dir.join("SKILL.md")).unwrap(), old);
     }
 }

@@ -49,8 +49,8 @@ warning.
 
 Each `ntropy skill` without `--install` and each `ntropy --version` looks for
 up to six skills directories per directory from the current directory to the
-git root, six in the home directory and one for each moving variable that is
-set.
+git root, six in the home directory, and below each moving variable that is
+set the directories it moves (two for `GEMINI_CLI_HOME`, one for the others).
 
 A copy older than the ntropy that runs goes unnoticed until someone runs
 `ntropy skill` or `ntropy --version`.

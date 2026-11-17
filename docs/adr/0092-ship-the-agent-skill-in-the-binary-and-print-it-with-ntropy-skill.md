@@ -29,9 +29,11 @@ ends with its own end line.
 
 The skill is compiled into the binary. `ntropy skill` prints the core,
 `ntropy skill <part>` prints one part, and `ntropy skill --install <dir>`
-writes `<dir>/ntropy/SKILL.md` and every part to `<dir>/ntropy/references/`,
+writes every part to `<dir>/ntropy/references/` and then `<dir>/ntropy/SKILL.md`,
 naming each file on stdout as it is written. `--install` replaces
-`references/` whole and leaves any other file in `<dir>/ntropy/` alone. An
+`references/` whole and leaves any other file in `<dir>/ntropy/` alone. The
+core is written last because it carries the stamp: an install that stops half
+way leaves the stamp of the copy it found. An
 unknown part is a usage error that lists the parts. `skill` needs no vault
 and resolves none.
 
