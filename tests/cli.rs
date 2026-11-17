@@ -1576,16 +1576,19 @@ fn vault_of_two_notes() -> tempfile::TempDir {
 }
 
 /// Build the view links, so `by-tag/work/` holds a symlink to `ULID_A`.
+///
+/// The group directory also holds the `_assets` link every view directory
+/// carries, and the order `read_dir` returns depends on the filesystem, so
+/// the note's link is picked by name rather than by position.
 fn build_views(vault: &Path) -> PathBuf {
     let out = run_in(vault, &["-n", "reconcile"]);
     assert!(out.status.success(), "{}", rendered(&out));
     let view_dir = vault.join("by-tag/work");
-    let entry = fs::read_dir(&view_dir)
+    fs::read_dir(&view_dir)
         .expect("the view holds the tag's directory")
-        .next()
-        .expect("a link")
-        .expect("entry");
-    entry.path()
+        .map(|entry| entry.expect("entry").path())
+        .find(|path| path.file_name().is_some_and(|name| name != "_assets"))
+        .expect("a link to the note")
 }
 
 #[test]
