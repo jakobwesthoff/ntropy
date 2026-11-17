@@ -53,6 +53,16 @@ does not see asset folders at all.
   --strict` or a lint command) that reports asset links pointing at
   missing files and asset folders without a matching note.
 
+## Research
+
+The research for this decision lives in `docs/research/asset-handling/`,
+started 2026-11-17: what ntropy does with assets today in each output
+(PDF, `render --to html`, the site export) and under encryption, the
+options from keeping today's convention to a different model entirely,
+and their trade-offs, argued out between two researchers and reviewed
+adversarially. The decision is still open and is taken with the user
+from `open-questions.md` there, which leads with the folder naming.
+
 ## Open questions
 
 - Commands: does ntropy create the folder (`new --assets`, an
