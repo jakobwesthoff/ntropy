@@ -24,6 +24,7 @@ Commands:
   render     Render a note to a document artifact
   show       Show a note drawn for the terminal
   site       Export the vault as a static website
+  asset      Add files to a note's asset folder and list what is there
   view       Manage materialized view definitions
   tags       List all tags with note counts
   info       Show the active vault, its resolution, and vault statistics

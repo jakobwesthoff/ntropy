@@ -224,14 +224,32 @@ Shape daily notes by editing that template. It
 must exist; a vault predating it just needs `ntropy init <vault>` re-run, which
 seeds missing pieces without touching existing ones.
 
-## Attachments
+## Assets
 
-Non-`.md` files and subdirectories inside `all-notes/` are ignored by ntropy,
-so images and other attachments live right next to the notes and are referenced
-with ordinary relative Markdown syntax (`![diagram](diagram.png)`). Only
-inter-note links get the ULID-based refresh treatment.
-A `#` in a link target always starts the fragment, so a file with a `#` in its
-name cannot be linked.
+A note's files, images, transcripts and any other attachment live in
+`all-notes/_assets/<note file name without extension>/`, a folder named like the
+note. Put them there with ntropy:
+
+- `ntropy asset add -n <id> <file…>` copies the files in (`--move` moves them)
+  and prints one Markdown link per file on stdout, `![alt](_assets/<folder>/<file>)`
+  for an image and `[name](...)` for any other file, with the target in angle
+  brackets when the name needs them. `added` lines go to stderr. It never edits
+  the note: place the link in the body yourself. `--as <name>` stores one file
+  under another name, `--force` replaces a file of that name.
+- `ntropy asset list -n <id>` lists the files with their size and whether the
+  note links them, and `broken` for a link to a file the folder lacks. `--path`
+  prints the folder, also when it does not exist yet.
+
+Both select exactly one note as `render` does; several matches are an error
+under `-n`. They refuse to work in an encrypted vault.
+
+A note links only its own folder. A link into another note's folder is refused
+by renders and exports and reported by `reconcile`, and `--strict` fails on it,
+as it does on a link to a missing file or to a file outside every `_assets/`
+folder, which still renders. After a retitle the folder keeps its old name until
+`reconcile` renames it and rewrites the links into it. `delete` removes the
+folder with the note. A `#` in a link target always starts the fragment, so a
+file with a `#` in its name cannot be linked.
 
 ## Slug and normalization facts
 

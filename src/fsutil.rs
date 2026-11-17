@@ -139,6 +139,34 @@ pub fn atomic_write_private(path: &Path, contents: &[u8]) -> Result<()> {
     place(&tmp_path, path)
 }
 
+/// Copy the file `from` to `to`, following a symlink at `from`, and flush the
+/// copy and its directory.
+///
+/// The bytes are copied to a hidden temp file beside `to` and renamed into
+/// place, so `to` is either absent or complete, and the copy streams through
+/// the kernel instead of being read into memory, which an asset of hundreds of
+/// megabytes needs. The temp file is hidden so a crash leaves nothing that
+/// shows in a listing or an export. Without `replace` an existing `to` is
+/// refused as [`rename`] refuses one; with it the copy replaces `to` the way
+/// [`atomic_write`] does.
+pub fn copy_file(from: &Path, to: &Path, replace: bool) -> Result<()> {
+    let name = to
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned());
+    let temp = parent_dir(to).join(format!(".{}.ntropy-tmp", name.unwrap_or_default()));
+    std::fs::copy(from, &temp).map_err(|e| {
+        discard(&temp);
+        FsError::new("copying", from, e)
+    })?;
+    if replace {
+        place(&temp, to)
+    } else {
+        sync_file(&temp)
+            .and_then(|()| rename(&temp, to))
+            .inspect_err(|_| discard(&temp))
+    }
+}
+
 /// A uniquely named temp path beside `path`.
 ///
 /// A ULID suffix keeps concurrent or repeated writes from clobbering each
@@ -993,6 +1021,75 @@ mod tests {
             .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
             .collect();
         assert_eq!(names, ["NOTE.md"]);
+    }
+
+    #[test]
+    fn copy_file_makes_a_complete_copy_and_leaves_no_temp_file() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let from = dir.path().join("source.bin");
+        let to = dir.path().join("copy.bin");
+        let content = vec![7u8; 3 * 1024 * 1024];
+        std::fs::write(&from, &content).expect("seed");
+
+        copy_file(&from, &to, false).expect("copy");
+
+        assert_eq!(std::fs::read(&to).expect("read copy"), content);
+        assert_eq!(names(dir.path()), ["copy.bin", "source.bin"]);
+    }
+
+    #[test]
+    fn copy_file_refuses_to_replace_without_replace() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let from = dir.path().join("source.txt");
+        let to = dir.path().join("copy.txt");
+        std::fs::write(&from, "new").expect("seed");
+        std::fs::write(&to, "old").expect("existing");
+
+        let err = copy_file(&from, &to, false).expect_err("an existing destination");
+
+        assert!(err.to_string().contains("refusing to replace"), "{err}");
+        assert_eq!(std::fs::read_to_string(&to).expect("read"), "old");
+        assert_eq!(names(dir.path()), ["copy.txt", "source.txt"]);
+    }
+
+    #[test]
+    fn copy_file_replaces_with_replace() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let from = dir.path().join("source.txt");
+        let to = dir.path().join("copy.txt");
+        std::fs::write(&from, "new").expect("seed");
+        std::fs::write(&to, "old").expect("existing");
+
+        copy_file(&from, &to, true).expect("copy");
+
+        assert_eq!(std::fs::read_to_string(&to).expect("read"), "new");
+        assert_eq!(names(dir.path()), ["copy.txt", "source.txt"]);
+    }
+
+    #[test]
+    fn copy_file_copies_what_a_symlink_points_to() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let target = dir.path().join("target.txt");
+        let link = dir.path().join("link.txt");
+        let to = dir.path().join("copy.txt");
+        std::fs::write(&target, "bytes").expect("seed");
+        symlink(Path::new("target.txt"), &link).expect("symlink");
+
+        copy_file(&link, &to, false).expect("copy");
+
+        assert!(!std::fs::symlink_metadata(&to).expect("lstat").is_symlink());
+        assert_eq!(std::fs::read_to_string(&to).expect("read"), "bytes");
+    }
+
+    #[test]
+    fn copy_file_of_a_missing_source_leaves_nothing_behind() {
+        let dir = tempfile::tempdir().expect("temp dir");
+
+        let err = copy_file(&dir.path().join("none"), &dir.path().join("copy"), false)
+            .expect_err("no source");
+
+        assert!(err.to_string().contains("copying"), "{err}");
+        assert!(names(dir.path()).is_empty());
     }
 
     #[test]

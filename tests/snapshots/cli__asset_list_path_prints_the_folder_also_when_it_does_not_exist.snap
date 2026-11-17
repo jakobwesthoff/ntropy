@@ -1,0 +1,20 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - asset
+    - list
+    - "--path"
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+[VAULT]/all-notes/_assets/[ULID....................]-q3-planning
+
+----- stderr -----

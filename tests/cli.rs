@@ -7775,6 +7775,318 @@ fn a_reconcile_after_a_delete_that_kept_the_folder_reports_it_as_an_orphan() {
     assert!(stderr.contains("belongs to no note"), "{stderr}");
 }
 
+// ---- asset add and asset list ----
+
+/// A vault with the note A, "Q3 planning", tagged `meeting`.
+fn vault_for_assets() -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "q3-planning",
+        "---\ntitle: Q3 planning\ntags: [meeting]\n---\nbody\n",
+    );
+    dir
+}
+
+/// Put a file called `name` into `<vault>/incoming/` and return its path.
+fn incoming(vault: &Path, name: &str, content: &[u8]) -> PathBuf {
+    let dir = vault.join("incoming");
+    fs::create_dir_all(&dir).expect("incoming");
+    let path = dir.join(name);
+    fs::write(&path, content).expect("incoming file");
+    path
+}
+
+fn asset_folder_of_a(vault: &Path) -> PathBuf {
+    vault.join(format!("all-notes/_assets/{ULID_A}-q3-planning"))
+}
+
+#[test]
+fn asset_add_copies_files_and_prints_their_links() {
+    let dir = vault_for_assets();
+    let chart = incoming(dir.path(), "chart.png", b"png");
+    let minutes = incoming(dir.path(), "minutes.pdf", b"pdf");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["-n", "asset", "add", ULID_A])
+            .arg(&chart)
+            .arg(&minutes);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert_eq!(
+        fs::read(asset_folder_of_a(dir.path()).join("chart.png")).expect("png"),
+        b"png"
+    );
+    assert!(chart.exists(), "a copy leaves the source");
+}
+
+#[test]
+fn asset_add_puts_a_name_with_a_space_in_angle_brackets() {
+    let dir = vault_for_assets();
+    let shot = incoming(dir.path(), "my shot.png", b"png");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["-n", "asset", "add", ULID_A]).arg(&shot);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn asset_add_selects_its_note_by_file_name_path_or_query() {
+    let dir = vault_for_assets();
+    let file = incoming(dir.path(), "a.png", b"a");
+    let name = format!("{ULID_A}-q3-planning.md");
+    let path = dir.path().join("all-notes").join(&name);
+    for selector in [
+        name.as_str(),
+        path.to_str().expect("utf-8"),
+        "title:\"Q3 planning\"",
+    ] {
+        let out = ntropy(dir.path())
+            .args(["-n", "asset", "add", "--force", selector])
+            .arg(&file)
+            .output()
+            .expect("run ntropy");
+        assert!(out.status.success(), "{selector}: {}", rendered(&out));
+    }
+    assert!(asset_folder_of_a(dir.path()).join("a.png").is_file());
+}
+
+#[test]
+fn asset_add_with_a_query_matching_several_notes_is_an_error_under_n() {
+    let dir = vault_for_assets();
+    write_note(
+        dir.path(),
+        ULID_B,
+        "weekly-sync",
+        "---\ntitle: Weekly sync\ntags: [meeting]\n---\nbody\n",
+    );
+    let file = incoming(dir.path(), "a.png", b"a");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["-n", "asset", "add", "tag:meeting"]).arg(&file);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(
+        !dir.path().join("all-notes/_assets").exists(),
+        "nothing was added to either note"
+    );
+}
+
+#[test]
+fn asset_add_with_a_selector_that_matches_nothing_fails() {
+    let dir = vault_for_assets();
+    let file = incoming(dir.path(), "a.png", b"a");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["-n", "asset", "add", "no-such-note"]).arg(&file);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn asset_add_refuses_a_file_that_is_already_there_unless_forced() {
+    let dir = vault_for_assets();
+    let file = incoming(dir.path(), "chart.png", b"one");
+    let first = ntropy(dir.path())
+        .args(["-n", "asset", "add", ULID_A])
+        .arg(&file)
+        .output()
+        .expect("run");
+    assert!(first.status.success());
+    fs::write(&file, b"two").expect("new content");
+
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["-n", "asset", "add", ULID_A]).arg(&file);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert_eq!(
+        fs::read(asset_folder_of_a(dir.path()).join("chart.png")).expect("read"),
+        b"one"
+    );
+
+    let forced = ntropy(dir.path())
+        .args(["-n", "asset", "add", "--force", ULID_A])
+        .arg(&file)
+        .output()
+        .expect("run");
+    assert!(forced.status.success());
+    assert_eq!(
+        fs::read(asset_folder_of_a(dir.path()).join("chart.png")).expect("read"),
+        b"two"
+    );
+}
+
+#[test]
+fn asset_add_as_stores_the_file_under_another_name_and_move_removes_the_source() {
+    let dir = vault_for_assets();
+    let file = incoming(dir.path(), "IMG_4711.png", b"png");
+    let out = ntropy(dir.path())
+        .args([
+            "-n",
+            "asset",
+            "add",
+            "--move",
+            "--as",
+            "org-chart.png",
+            ULID_A,
+        ])
+        .arg(&file)
+        .output()
+        .expect("run");
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(String::from_utf8_lossy(&out.stdout).starts_with("![org-chart]("));
+    assert!(
+        asset_folder_of_a(dir.path())
+            .join("org-chart.png")
+            .is_file()
+    );
+    assert!(!file.exists());
+}
+
+#[test]
+fn asset_add_as_with_two_files_fails_before_copying() {
+    let dir = vault_for_assets();
+    let one = incoming(dir.path(), "a.png", b"a");
+    let two = incoming(dir.path(), "b.png", b"b");
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "add", "--as", "x.png", ULID_A])
+        .arg(&one)
+        .arg(&two)
+        .output()
+        .expect("run");
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("`--as` names one file"));
+    assert!(!dir.path().join("all-notes/_assets").exists());
+}
+
+#[test]
+fn asset_add_makes_the_views_link_the_assets_directory() {
+    let dir = vault_for_assets();
+    ntropy(dir.path()).arg("reconcile").output().expect("run");
+    assert!(!dir.path().join("by-tag/meeting/_assets").exists());
+    let file = incoming(dir.path(), "a.png", b"a");
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "add", ULID_A])
+        .arg(&file)
+        .output()
+        .expect("run");
+
+    assert!(out.status.success());
+    assert!(
+        dir.path()
+            .join(format!("by-tag/meeting/_assets/{ULID_A}-q3-planning/a.png"))
+            .is_file()
+    );
+}
+
+#[test]
+fn asset_add_after_a_retitle_stores_into_the_folder_that_has_not_moved_yet() {
+    let dir = vault_for_assets();
+    let first = incoming(dir.path(), "a.png", b"a");
+    ntropy(dir.path())
+        .args(["-n", "asset", "add", ULID_A])
+        .arg(&first)
+        .output()
+        .expect("run");
+    let retitled = run_write(
+        dir.path(),
+        &[ULID_A],
+        "---\ntitle: Brand new\ntags: [meeting]\n---\nbody\n",
+    );
+    assert!(retitled.status.success());
+    let second = incoming(dir.path(), "b.png", b"b");
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "add", ULID_A])
+        .arg(&second)
+        .output()
+        .expect("run");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(
+        asset_folder_of_a(dir.path()).join("b.png").is_file(),
+        "the old-named folder took it"
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stdout)
+            .contains(&format!("_assets/{ULID_A}-q3-planning/b.png"))
+    );
+    let reconciled = ntropy(dir.path())
+        .args(["--strict", "reconcile"])
+        .output()
+        .expect("run");
+    assert!(reconciled.status.success(), "{}", rendered(&reconciled));
+    assert!(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-brand-new/b.png"))
+            .is_file()
+    );
+}
+
+#[test]
+fn asset_list_shows_the_size_and_whether_the_note_links_each_file() {
+    let dir = vault_for_assets();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "q3-planning",
+        &format!(
+            "---\ntitle: Q3 planning\ntags: [meeting]\n---\n![c](_assets/{ULID_A}-q3-planning/chart.png)\n[m](_assets/{ULID_A}-q3-planning/gone.pdf)\n"
+        ),
+    );
+    let folder = asset_folder_of_a(dir.path());
+    fs::create_dir_all(&folder).expect("folder");
+    fs::write(folder.join("chart.png"), vec![0u8; 84 * 1024]).expect("file");
+    fs::write(folder.join("old-draft.png"), vec![0u8; 40 * 1024]).expect("file");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["-n", "asset", "list", ULID_A]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn asset_list_of_a_note_without_assets_says_so_on_stderr() {
+    let dir = vault_for_assets();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["-n", "asset", "list", ULID_A]);
+        assert_cmd_snapshot!(cmd);
+    });
+}
+
+#[test]
+fn asset_list_path_prints_the_folder_also_when_it_does_not_exist() {
+    let dir = vault_for_assets();
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["-n", "asset", "list", "--path", ULID_A]);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(!asset_folder_of_a(dir.path()).exists());
+}
+
+#[test]
+fn asset_list_with_a_query_matching_several_notes_is_an_error_under_n() {
+    let dir = vault_for_assets();
+    write_note(
+        dir.path(),
+        ULID_B,
+        "weekly-sync",
+        "---\ntitle: Weekly sync\ntags: [meeting]\n---\nbody\n",
+    );
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "list", "tag:meeting"])
+        .output()
+        .expect("run");
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("is ambiguous (2 matches)"));
+}
+
 #[test]
 fn edit_no_match_exits_nonzero() {
     // A selector matching nothing prints the no-match message and exits
@@ -9029,6 +9341,28 @@ mod encrypted {
             .expect("run");
         assert!(output.status.success(), "{output:?}");
         assert_eq!(String::from_utf8_lossy(&output.stdout), note);
+    }
+
+    #[test]
+    fn the_asset_commands_refuse_to_work_in_an_encrypted_vault() {
+        let dir = setup_encrypted_vault();
+        let vault = dir.path();
+        let file = vault.join("a.png");
+        fs::write(&file, b"png").expect("file");
+
+        for args in [
+            vec!["asset", "list", ULID_A],
+            vec!["asset", "add", ULID_A, file.to_str().expect("utf-8")],
+        ] {
+            let out = ntropy_encrypted(vault).args(&args).output().expect("run");
+            assert!(!out.status.success(), "{args:?}");
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            assert!(
+                stderr.contains("asset encryption is not supported yet"),
+                "{args:?}: {stderr}"
+            );
+        }
+        assert!(!vault.join("all-notes/_assets").exists());
     }
 
     /// A vault holding `note` as `ULID_A`, encrypted on disk.

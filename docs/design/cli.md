@@ -451,6 +451,41 @@ command only under `--strict`.
     ntropy write "$note" < note.md
     ntropy search -n -P <ulid> | rewrite | ntropy write <ulid>
 
+### `asset add` and `asset list`
+
+Both work on exactly one note, selected as `render` and `delete` select theirs
+(ADR 0104): a ULID, a file name or path, or a query, the picker on a terminal
+when several match and an error under `-n`. Nothing is ever put into several
+notes, and `asset add` never edits the note. They refuse to work in an
+encrypted vault, with an error saying that asset encryption is not supported
+yet (ADR 0103).
+
+`asset add [--move] [--as <name>] [--force] <note> <file>...` puts the files
+into the note's asset folder, creating it. The folder is the one the note owns
+under whatever name it has, so between a retitle and the next `reconcile` the
+files go into the folder that has not moved yet and the printed link carries its
+name. The link of each file goes to stdout, `![stem](_assets/<folder>/<file>)`
+for an image extension (`png`, `jpg`, `jpeg`, `gif`, `webp`, `svg`, `avif`,
+`bmp`) and `[name](...)` for any other file, the target in angle brackets when
+the name holds anything but letters, digits, `.`, `_` and `-`. One `added <path>`
+line per file goes to stderr. Every printed link is read back with the Markdown
+parser, and a name whose link would not read back as the file, one with `&amp;`
+in it, is refused with the hint to use `--as`; so are names with `#`, `\`, `/`,
+`<`, `>` or a control character. Nothing is copied unless every file can be: a
+source must be a file, two files may not be stored under one name, and a file of
+that name in the folder is refused unless `--force` replaces it. A copy streams
+through a hidden temp file in the folder and is renamed into place. `--move`
+renames on one device, and copies and removes the source across devices; a
+symlink as the source is copied by what it points to and the link itself is
+removed. `--as` needs exactly one file.
+
+`asset list [--path] <note>` prints a `FILE SIZE LINKED` table of the files in
+the folder at any depth, hidden entries left out, with `yes` or `no` for whether
+the note links the file and `broken`, with size `-`, for a link into the note's
+own folder whose file is missing. A note without files prints `no assets` on
+stderr. `--path` prints the folder's absolute path, also when it does not exist,
+so a script can create it.
+
 ### `delete`
 
 Removes the note's file, then the asset folder the note owns, and syncs the

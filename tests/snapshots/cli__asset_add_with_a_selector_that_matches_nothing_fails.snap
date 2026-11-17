@@ -1,0 +1,20 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - asset
+    - add
+    - no-such-note
+    - /var/folders/p2/r4y13yqj6mg653fwkv3rz76r0000gn/T/.tmpiEhDGt/incoming/a.png
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: no note matches `no-such-note`

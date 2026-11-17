@@ -9,6 +9,7 @@
 //! picker and editor, confirmation prompts, and translating outcomes into exit
 //! codes. Each command resolves to one or more `ops::` calls plus presentation.
 
+mod asset;
 mod edit;
 mod editor;
 mod interact;
@@ -195,6 +196,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
             force,
             print,
         ),
+        Command::Asset(sub) => asset::cmd_asset(&cli.global, &session, sub, interactive),
         Command::View(sub) => cmd_view(&session, sub),
         // Handled above, before vault resolution.
         Command::Unlock | Command::Lock | Command::Vault { .. } => {

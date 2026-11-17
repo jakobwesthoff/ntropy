@@ -1,0 +1,22 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - asset
+    - list
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+FILE           SIZE      LINKED
+chart.png      84.0 KiB  yes
+gone.pdf       -         broken
+old-draft.png  40.0 KiB  no
+
+----- stderr -----

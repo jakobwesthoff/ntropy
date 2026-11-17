@@ -65,6 +65,56 @@ pub struct GlobalArgs {
     pub passphrase_file: Option<PathBuf>,
 }
 
+/// The subcommands of `ntropy asset`.
+#[derive(Subcommand, Debug)]
+pub enum AssetCommand {
+    /// Copy files into a note's asset folder and print their Markdown links.
+    ///
+    /// Each link goes to stdout, `![alt](..)` for an image and `[name](..)`
+    /// for any other file, with the target in angle brackets when the name
+    /// needs them; `added <path>` lines go to stderr. The note is never
+    /// edited: place the links yourself. Nothing is copied unless every file
+    /// can be.
+    Add {
+        /// Move the files instead of copying them.
+        #[arg(long = "move")]
+        move_files: bool,
+        /// Store the one file under this name.
+        #[arg(long = "as", value_name = "NAME")]
+        rename: Option<String>,
+        /// Replace a file of the same name in the folder.
+        #[arg(long)]
+        force: bool,
+        /// The note: a full ULID, a note's filename or path, or a query. It
+        /// is one argument, so quote a query that holds spaces.
+        ///
+        /// A lone argument that ends in `.md` or `.age` and names an existing file
+        /// selects the note in it, as for `render`. Several matching notes open
+        /// the picker on a terminal and are an error under `-n`.
+        #[arg(value_name = "ID|PATH|QUERY")]
+        selector: String,
+        /// The files to add.
+        #[arg(required = true, value_name = "FILE")]
+        files: Vec<PathBuf>,
+    },
+
+    /// List a note's asset files with their size and whether the note links
+    /// them.
+    ///
+    /// A file the note links in its folder and the folder lacks is listed as
+    /// `broken`. Hidden files are left out.
+    List {
+        /// Print only the folder's path, also when it does not exist yet.
+        #[arg(long)]
+        path: bool,
+        /// A full ULID, a note's filename or path, or a query DSL expression,
+        /// as trailing arguments that are each read on their own; words in one
+        /// argument form a phrase (omitted = choose from all notes).
+        #[arg(value_name = "ID|PATH|QUERY")]
+        selector: Vec<String>,
+    },
+}
+
 #[derive(Subcommand, Debug)]
 pub enum Command {
     /// Initialize a vault (idempotent).
@@ -324,6 +374,14 @@ pub enum Command {
         #[arg(short = 'p', long)]
         print: bool,
     },
+
+    /// Add files to a note's asset folder and list what is there.
+    ///
+    /// A note's assets live in `all-notes/_assets/<note file name>/`. Both
+    /// commands work on exactly one note, selected as `render` and `delete`
+    /// select theirs. They do not work in an encrypted vault.
+    #[command(subcommand)]
+    Asset(AssetCommand),
 
     /// Manage materialized view definitions.
     #[command(subcommand)]

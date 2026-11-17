@@ -130,3 +130,4 @@ made.
 - [0101. Renders and exports serve only a note's own assets](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0101-renders-and-exports-serve-only-a-notes-own-assets.md)
 - [0102. delete removes the note's asset folder](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0102-delete-removes-the-notes-asset-folder.md)
 - [0103. Encrypted vaults take no assets yet](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0103-encrypted-vaults-take-no-assets-yet.md)
+- [0104. asset add and asset list](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0104-asset-add-and-asset-list.md)

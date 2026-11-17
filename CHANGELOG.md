@@ -56,6 +56,18 @@ change in any release
   encrypted vault.
   [ADR 0103](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0103-encrypted-vaults-take-no-assets-yet.md)
   records the refusal.
+- `ntropy asset add <note> <file…>` copies (or, with `--move`, moves) files into
+  the note's asset folder and prints the Markdown link of each on stdout,
+  `![alt](..)` for an image and `[name](..)` for any other file, with angle
+  brackets for a name with spaces; `added` lines go to stderr. It never edits the
+  note. `--as <name>` stores one file under another name and `--force` replaces
+  a file of that name. `ntropy asset list [--path] <note>` lists the files with
+  their size and whether the note links them, and `--path` prints the folder
+  only. Both select one note as `render` does: a ULID, a file name or path, or a
+  query, the picker on a terminal when several match, an error under `-n`. They
+  refuse to work in an encrypted vault.
+  [ADR 0104](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0104-asset-add-and-asset-list.md)
+  records the commands.
   [ADR 0098](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
   records the layout and
   [ADR 0097](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)

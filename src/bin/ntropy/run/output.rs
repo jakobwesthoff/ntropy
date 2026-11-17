@@ -19,7 +19,7 @@ use std::io::{self, Write};
 use std::path::Path;
 
 use anyhow::{Context, Result, bail};
-use ntropy::asset::{AssetIssue, FolderMove};
+use ntropy::asset::{AssetIssue, FolderMove, Linked, Listing};
 use ntropy::config::ViewConfig;
 use ntropy::id::Id;
 use ntropy::note::Note;
@@ -342,6 +342,31 @@ pub fn file_name(path: &Path) -> String {
 /// for a message (ADR 0071).
 pub fn asset_folder(path: &Path) -> String {
     format!("{}/{}/", layout::ASSETS_DIR, file_name(path))
+}
+
+/// Print the files of a note's asset folder as a `FILE SIZE LINKED` table.
+pub fn print_asset_listing(listing: &Listing) -> Result<()> {
+    let rows: Vec<Vec<String>> = listing
+        .files
+        .iter()
+        .map(|file| {
+            let linked = match file.linked {
+                Linked::Yes => "yes",
+                Linked::No => "no",
+                Linked::Missing => "broken",
+            };
+            vec![
+                file.name.clone(),
+                file.size.map_or_else(|| "-".to_string(), human_size),
+                linked.to_string(),
+            ]
+        })
+        .collect();
+
+    let stdout = std::io::stdout();
+    let mut out = stdout.lock();
+    write_table(&mut out, &["FILE", "SIZE", "LINKED"], &rows)
+        .context("while printing the assets table")
 }
 
 /// The confirmation question of `delete`. `assets` is the number of files

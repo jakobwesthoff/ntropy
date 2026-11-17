@@ -1,0 +1,24 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - asset
+    - add
+    - 01ARZ3NDEKTSV4RRFFQ69G5FAV
+    - /var/folders/p2/r4y13yqj6mg653fwkv3rz76r0000gn/T/.tmpVg0Xwb/incoming/chart.png
+    - /var/folders/p2/r4y13yqj6mg653fwkv3rz76r0000gn/T/.tmpVg0Xwb/incoming/minutes.pdf
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+![chart](_assets/[ULID....................]-q3-planning/chart.png)
+[minutes.pdf](_assets/[ULID....................]-q3-planning/minutes.pdf)
+
+----- stderr -----
+added all-notes/_assets/[ULID....................]-q3-planning/chart.png
+added all-notes/_assets/[ULID....................]-q3-planning/minutes.pdf

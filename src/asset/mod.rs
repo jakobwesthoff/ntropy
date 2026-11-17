@@ -16,10 +16,12 @@
 //! disk, and everything that changes them, builds on it.
 
 mod check;
+mod files;
 mod links;
 mod sync;
 
 pub use check::{AssetIssue, check};
+pub use files::{AddOptions, Added, AssetError, Linked, ListedFile, Listing, add, folder_of, list};
 pub use links::{LocalLink, local_links, names_a_file, relink_folder};
 pub use sync::{
     AssetSync, FolderMove, Relink, first_unencryptable, plan_renames, read_folders, stale_names,

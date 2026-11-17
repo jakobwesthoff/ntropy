@@ -205,6 +205,8 @@ fn the_command_reference_names_the_subcommands_of_the_groups() {
     let rows = command_reference().join("\n");
     for name in [
         "site theme init",
+        "asset add",
+        "asset list",
         "view list",
         "view add",
         "view remove",

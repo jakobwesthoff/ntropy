@@ -1,0 +1,23 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - asset
+    - add
+    - "tag:meeting"
+    - /var/folders/p2/r4y13yqj6mg653fwkv3rz76r0000gn/T/.tmpZLVAPc/incoming/a.png
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: `tag:meeting` is ambiguous (2 matches):
+  [DATE....]  Weekly sync  [meeting]  ([ULID....................])
+  [DATE....]  Q3 planning  [meeting]  ([ULID....................])
+refine the query, or pass a full ULID or the note's path
