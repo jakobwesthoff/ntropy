@@ -8091,6 +8091,34 @@ fn asset_add_refuses_a_file_that_is_already_there_unless_forced() {
 }
 
 #[test]
+fn asset_add_refuses_a_file_that_is_already_in_the_folder_and_keeps_it() {
+    let dir = vault_for_assets();
+    let file = incoming(dir.path(), "chart.png", b"png");
+    let first = ntropy(dir.path())
+        .args(["-n", "asset", "add", ULID_A])
+        .arg(&file)
+        .output()
+        .expect("run");
+    assert!(first.status.success());
+    let stored = asset_folder_of_a(dir.path()).join("chart.png");
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "add", "--move", "--force", ULID_A])
+        .arg(&stored)
+        .output()
+        .expect("run");
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(stderr.contains("is already the file"), "{stderr}");
+    assert!(
+        stderr.matches("chart.png").count() >= 2,
+        "the message names source and target: {stderr}"
+    );
+    assert_eq!(fs::read(&stored).expect("the file is still there"), b"png");
+}
+
+#[test]
 fn asset_add_as_stores_the_file_under_another_name_and_move_removes_the_source() {
     let dir = vault_for_assets();
     let file = incoming(dir.path(), "IMG_4711.png", b"png");

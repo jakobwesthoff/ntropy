@@ -33,7 +33,11 @@ other file, the target in angle brackets when the name holds anything but
 letters, digits, `.`, `_` and `-`; one `added <path>` line per file goes to
 stderr. `--move` moves the files instead of copying them, `--as <name>` stores
 one file under another name, and `--force` replaces a file of that name, which
-is otherwise refused. Nothing is added unless every file can be. A name whose
+is otherwise refused. Nothing is added unless every file can be. A file that is
+already the file it would be stored as, reached by the same path, through a
+symlinked directory such as a view's `_assets` link, by a hard link or as a
+symlink to it, is refused, since the move or the forced copy would remove the
+only copy. A name whose
 link the Markdown parser of ADR 0097 would not read back as the file is refused
 with the hint to use `--as`.
 

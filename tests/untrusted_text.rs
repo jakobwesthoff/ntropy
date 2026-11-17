@@ -494,6 +494,36 @@ fn asset_add_names_a_hostile_file_it_refuses_escaped() {
 }
 
 #[test]
+fn asset_add_names_a_hostile_path_it_would_add_over_itself_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-note.md"),
+        "---\ntitle: Note\n---\n",
+    );
+    let folder = vault.join(format!("all-notes/_assets/{ULID_A}-note"));
+    fs::create_dir_all(&folder).expect("asset folder");
+    fs::write(folder.join("a.png"), b"png").expect("asset");
+    // The same file reached through a directory with a hostile name.
+    let via = vault.join(RETITLE);
+    std::os::unix::fs::symlink(&folder, &via).expect("symlink");
+
+    let output = run(ntropy(&vault)
+        .args(["asset", "add", "--force", ULID_A])
+        .arg(via.join("a.png")));
+
+    assert_no_raw_controls(&output);
+    assert!(!output.status.success());
+    assert!(
+        stderr(&output).contains(RETITLE_SHOWN),
+        "{}",
+        stderr(&output)
+    );
+    assert!(folder.join("a.png").exists());
+}
+
+#[test]
 fn reconcile_reports_a_hostile_link_target_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");

@@ -41,6 +41,13 @@ pub enum AssetError {
     #[error("`{0}` already exists in the note's folder; pass --as <name> or --force")]
     Exists(String),
 
+    #[error(
+        "`{}` is already the file `{}` in the note's folder; nothing was changed",
+        given.display(),
+        target.display()
+    )]
+    SameFile { given: PathBuf, target: PathBuf },
+
     #[error("`--as` names one file, but {0} files were given")]
     RenameNeedsOneFile(usize),
 
@@ -163,8 +170,9 @@ fn link_for(folder: &str, name: &str) -> Result<String, AssetError> {
 /// `note`, creating it when needed.
 ///
 /// Everything is checked before the first file is touched: that each source is
-/// a file, that each name can be linked, that no two files would be stored
-/// under one name and, without `force`, that no file of that name is there.
+/// a file, that it is not already the file it would be stored as, that each
+/// name can be linked, that no two files would be stored under one name and,
+/// without `force`, that no file of that name is there.
 /// A symlink as a source is followed for a copy. A move of one copies what it
 /// points to and then removes the link itself, never its target, since moving
 /// the link would put a symlink into the folder.
@@ -201,6 +209,13 @@ pub fn add(
             },
         };
         let link = link_for(&folder_name, &name)?;
+        let target = folder.join(&name);
+        if is_the_target(source, &target) {
+            return Err(AssetError::SameFile {
+                given: source.clone(),
+                target,
+            });
+        }
         if planned.iter().any(|(_, taken, _)| *taken == name) {
             return Err(AssetError::StoredTwice(name));
         }
@@ -218,6 +233,29 @@ pub fn add(
         added.push(Added { path, link });
     }
     Ok(added)
+}
+
+/// Whether `source` is the entry at `target` or a way to reach its file.
+///
+/// A move or a forced copy puts the file at `target` and then removes the
+/// source, so when both are one directory entry the removal deletes the only
+/// copy. The entries are compared by device and inode, which sees through a
+/// symlinked directory on the way (a view's `_assets` link), a hard link and
+/// the spelling of a name on a filesystem that folds case. A source that is a
+/// symlink to the target counts as well, since the copy would read the file it
+/// is about to replace. A symlink standing at `target` that points at the source
+/// is a different entry and only the link is replaced.
+fn is_the_target(source: &Path, target: &Path) -> bool {
+    let identity = |metadata: std::io::Result<std::fs::Metadata>| {
+        metadata
+            .ok()
+            .map(|metadata| (metadata.dev(), metadata.ino()))
+    };
+    let Some(at_target) = identity(std::fs::symlink_metadata(target)) else {
+        return false;
+    };
+    identity(std::fs::symlink_metadata(source)) == Some(at_target)
+        || identity(std::fs::metadata(source)) == Some(at_target)
 }
 
 /// Put `source` at `target`, inside `folder`.
@@ -700,6 +738,151 @@ mod tests {
                 .expect("lstat")
                 .is_symlink()
         );
+    }
+
+    // ---- A source that is its own target ----
+
+    /// A file already stored in the note's folder, and the folder.
+    fn stored(session: &VaultSession, name: &str, content: &[u8]) -> (PathBuf, PathBuf) {
+        let folder = session.layout().asset_folder(FOLDER);
+        std::fs::create_dir_all(&folder).expect("folder");
+        let path = folder.join(name);
+        std::fs::write(&path, content).expect("stored file");
+        (folder, path)
+    }
+
+    /// Every way of asking for the same entry must be refused and leave the
+    /// file and its bytes alone.
+    fn assert_same_file_refused(session: &VaultSession, note: &Note, source: &Path, as_name: &str) {
+        for (move_files, force) in [(false, false), (false, true), (true, false), (true, true)] {
+            let options = AddOptions {
+                move_files,
+                force,
+                rename: Some(as_name.to_string()),
+            };
+            let err = add(
+                session.layout(),
+                note,
+                std::slice::from_ref(&source.to_path_buf()),
+                &options,
+            )
+            .expect_err("a file is not added over itself");
+            assert!(
+                matches!(err, AssetError::SameFile { .. }),
+                "move={move_files} force={force}: {err:?}"
+            );
+            assert_eq!(
+                std::fs::read(source).expect("the file is still there"),
+                b"keep",
+                "move={move_files} force={force}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_file_already_in_the_folder_is_not_added_over_itself() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (_, path) = stored(&session, "a.pdf", b"keep");
+
+        assert_same_file_refused(&session, &note, &path, "a.pdf");
+    }
+
+    #[test]
+    fn the_same_file_reached_through_a_symlinked_directory_is_refused() {
+        // The stand-in for a view's `_assets` link: a directory component that
+        // is a symlink to the folder.
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (folder, path) = stored(&session, "a.pdf", b"keep");
+        let via = session.root().join("via");
+        std::os::unix::fs::symlink(&folder, &via).expect("symlink");
+
+        assert_same_file_refused(&session, &note, &via.join("a.pdf"), "a.pdf");
+        assert!(path.exists());
+    }
+
+    #[test]
+    fn a_hard_link_of_the_target_is_refused() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (_, path) = stored(&session, "a.pdf", b"keep");
+        let hard = source(&session, "hard.pdf", b"x");
+        std::fs::remove_file(&hard).expect("remove");
+        std::fs::hard_link(&path, &hard).expect("hard link");
+
+        assert_same_file_refused(&session, &note, &hard, "a.pdf");
+    }
+
+    #[test]
+    fn a_symlink_standing_in_the_folder_is_not_added_over_itself() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (folder, _) = stored(&session, "other.pdf", b"x");
+        let outside = source(&session, "outside.pdf", b"keep");
+        let link = folder.join("link.pdf");
+        std::os::unix::fs::symlink(&outside, &link).expect("symlink");
+
+        assert_same_file_refused(&session, &note, &link, "link.pdf");
+        assert_eq!(std::fs::read(&outside).expect("outside"), b"keep");
+    }
+
+    #[test]
+    fn a_symlink_to_the_target_is_refused() {
+        // The copy follows the link to the very file it is about to replace.
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (_, path) = stored(&session, "a.pdf", b"keep");
+        let link = session.root().join("incoming-link.pdf");
+        std::os::unix::fs::symlink(&path, &link).expect("symlink");
+
+        assert_same_file_refused(&session, &note, &link, "a.pdf");
+        assert_eq!(std::fs::read(&path).expect("target"), b"keep");
+    }
+
+    #[test]
+    fn a_symlink_in_the_folder_is_replaced_by_the_file_it_points_at() {
+        // Guard: the link is a different entry from its target, the copy goes
+        // through a temp file, and only the link is replaced.
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (folder, _) = stored(&session, "other.pdf", b"x");
+        let outside = source(&session, "a.pdf", b"keep");
+        std::os::unix::fs::symlink(&outside, folder.join("a.pdf")).expect("symlink");
+        let options = AddOptions {
+            move_files: true,
+            force: true,
+            ..opts()
+        };
+
+        add(
+            session.layout(),
+            &note,
+            std::slice::from_ref(&outside),
+            &options,
+        )
+        .expect("a link to the source is replaced by the source");
+
+        let target = folder.join("a.pdf");
+        assert!(
+            !std::fs::symlink_metadata(&target)
+                .expect("lstat")
+                .is_symlink()
+        );
+        assert_eq!(std::fs::read(&target).expect("read"), b"keep");
+    }
+
+    #[test]
+    fn a_case_only_rename_is_the_same_file_where_the_filesystem_folds_case() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(&session, "body");
+        let (folder, path) = stored(&session, "chart.pdf", b"keep");
+        // The probe: does this filesystem find `CHART.PDF` for `chart.pdf`?
+        if !folder.join("CHART.PDF").exists() {
+            return;
+        }
+
+        assert_same_file_refused(&session, &note, &path, "Chart.pdf");
     }
 
     #[test]

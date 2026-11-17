@@ -472,7 +472,10 @@ line per file goes to stderr. Every printed link is read back with the Markdown
 parser, and a name whose link would not read back as the file, one with `&amp;`
 in it, is refused with the hint to use `--as`; so are names with `#`, `\`, `/`,
 `<`, `>` or a control character. Nothing is copied unless every file can be: a
-source must be a file, two files may not be stored under one name, and a file of
+source must be a file and not the file it would be stored as (the same
+directory entry reached through a symlinked directory such as a view's `_assets`
+link, a hard link of it, or a symlink to it: a move or a forced copy would remove
+the only copy), two files may not be stored under one name, and a file of
 that name in the folder is refused unless `--force` replaces it. A copy streams
 through a hidden temp file in the folder and is renamed into place. `--move`
 renames on one device, and copies and removes the source across devices; a
