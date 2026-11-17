@@ -24,7 +24,7 @@ use ntropy::id::Id;
 use ntropy::note::Note;
 use ntropy::ops::{TagCount, VaultStats};
 use ntropy::reconcile::{Realignment, Reassignment, Rename};
-use ntropy::scan::ScanWarning;
+use ntropy::scan::{ScanWarning, WarningKind};
 use ntropy::text::escape_controls;
 use ntropy::vault::{ResolveSource, Vault};
 use unicode_width::UnicodeWidthStr;
@@ -198,11 +198,13 @@ pub fn print_warnings(warnings: &[ScanWarning]) {
 /// (ADR 0071): the message can quote file names too, such as the note that
 /// keeps a copy's ULID.
 fn format_warning(warning: &ScanWarning) -> String {
-    let message = format!(
-        "skipped `{}`: {}",
-        file_name(&warning.path),
-        warning.message
-    );
+    let file = file_name(&warning.path);
+    let message = match warning.kind {
+        WarningKind::Skipped => format!("skipped `{file}`: {}", warning.message),
+        // A copy is left out of the notes the scan returns, yet a full ULID
+        // selector lists it, so the warning names the shared id and not a skip.
+        WarningKind::SharedId => format!("`{file}` {}", warning.message),
+    };
     escape_controls(&message).into_owned()
 }
 
@@ -699,10 +701,10 @@ mod tests {
 
     #[test]
     fn a_warning_escapes_the_file_name() {
-        let warning = ScanWarning {
-            path: std::path::PathBuf::from(format!("/v/all-notes/{ULID}-\u{1b}x.md")),
-            message: "the frontmatter is not valid YAML".to_string(),
-        };
+        let warning = ScanWarning::skipped(
+            std::path::PathBuf::from(format!("/v/all-notes/{ULID}-\u{1b}x.md")),
+            "the frontmatter is not valid YAML".to_string(),
+        );
         assert_eq!(
             format_warning(&warning),
             format!("skipped `{ULID}-\\u{{1b}}x.md`: the frontmatter is not valid YAML")
@@ -711,13 +713,41 @@ mod tests {
 
     #[test]
     fn a_warning_escapes_the_message() {
-        let warning = ScanWarning {
-            path: std::path::PathBuf::from("/v/all-notes/x.md"),
-            message: "`\u{1b}x.md` does not start with a valid ULID".to_string(),
-        };
+        let warning = ScanWarning::skipped(
+            std::path::PathBuf::from("/v/all-notes/x.md"),
+            "`\u{1b}x.md` does not start with a valid ULID".to_string(),
+        );
         assert_eq!(
             format_warning(&warning),
             "skipped `x.md`: `\\u{1b}x.md` does not start with a valid ULID"
+        );
+    }
+
+    #[test]
+    fn a_shared_id_warning_names_the_file_and_does_not_say_skipped() {
+        let warning = ScanWarning {
+            path: std::path::PathBuf::from(format!("/v/all-notes/{ULID}-plan-b.md")),
+            message: format!("shares its id with `{ULID}-plan.md`; run `ntropy reconcile`"),
+            kind: WarningKind::SharedId,
+        };
+        assert_eq!(
+            format_warning(&warning),
+            format!(
+                "`{ULID}-plan-b.md` shares its id with `{ULID}-plan.md`; run `ntropy reconcile`"
+            )
+        );
+    }
+
+    #[test]
+    fn a_shared_id_warning_escapes_the_file_name() {
+        let warning = ScanWarning {
+            path: std::path::PathBuf::from("/v/all-notes/\u{1b}x.md"),
+            message: "shares its id with `y.md`".to_string(),
+            kind: WarningKind::SharedId,
+        };
+        assert_eq!(
+            format_warning(&warning),
+            "`\\u{1b}x.md` shares its id with `y.md`"
         );
     }
 

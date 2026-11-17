@@ -122,3 +122,4 @@ made.
 - [0093. Warn from ntropy skill and ntropy --version when an installed copy of the skill is older](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0093-warn-from-ntropy-skill-and-ntropy-version-when-an-installed-copy-of-the-skill-is-older.md)
 - [0094. Cut the agent skill into a core of rules and eight parts](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0094-cut-the-agent-skill-into-a-core-of-rules-and-eight-parts.md)
 - [0095. Title and tags reach a Typst theme as text](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0095-title-and-tags-reach-a-typst-theme-as-text.md)
+- [0096. A copy's warning names the shared ULID](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0096-a-copys-warning-names-the-shared-ulid.md)

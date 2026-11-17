@@ -979,8 +979,23 @@ fn report_ambiguous(selector: &str, notes: &[ntropy::note::Note]) -> Result<()> 
     for note in notes {
         eprintln!("  {}", output::note_reference(note)?);
     }
-    eprintln!("refine the query, or pass a full ULID or the note's path");
+    eprintln!("{}", ambiguity_hint(notes));
     Ok(())
+}
+
+/// What to do about an ambiguous selector.
+///
+/// Matches that all carry one ULID are a note and its copies, which only a
+/// full ULID selector returns (ADR 0067). Passing the ULID again changes
+/// nothing for them, so the hint names a path and `reconcile`, which gives
+/// the copies ULIDs of their own.
+fn ambiguity_hint(notes: &[ntropy::note::Note]) -> &'static str {
+    let share_one_id = notes.windows(2).all(|pair| pair[0].id == pair[1].id);
+    if notes.len() > 1 && share_one_id {
+        "these files share one ULID; pass the path of one, or run `ntropy reconcile` to give the copies new ULIDs"
+    } else {
+        "refine the query, or pass a full ULID or the note's path"
+    }
 }
 
 /// Prompt on the controlling terminal for a yes/no confirmation.
@@ -1066,6 +1081,47 @@ mod tests {
             unignored_line("/a\u{1b}b/"),
             "stopped ignoring /a\\u{1b}b/; left directory `a\\u{1b}b/` in place, delete it \
              manually if you no longer need it"
+        );
+    }
+
+    /// A note parsed from synthetic content under the ULID `id`.
+    fn note_with_id(id: &str, slug: &str) -> ntropy::note::Note {
+        ntropy::note::Note::parse(
+            std::path::PathBuf::from(format!("/vault/all-notes/{id}-{slug}.md")),
+            "---\ntitle: T\n---\nbody\n",
+            None,
+        )
+        .expect("the synthetic note parses")
+    }
+
+    #[test]
+    fn matches_sharing_one_ulid_get_the_path_and_reconcile_hint() {
+        let id = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+        let notes = [note_with_id(id, "plan"), note_with_id(id, "plan-b")];
+        assert_eq!(
+            ambiguity_hint(&notes),
+            "these files share one ULID; pass the path of one, or run `ntropy reconcile` to give the copies new ULIDs"
+        );
+    }
+
+    #[test]
+    fn matches_with_different_ulids_get_the_refine_hint() {
+        let notes = [
+            note_with_id("01ARZ3NDEKTSV4RRFFQ69G5FAV", "plan"),
+            note_with_id("01BX5ZZKBKACTAV9WEVGEMMVRZ", "plan"),
+        ];
+        assert_eq!(
+            ambiguity_hint(&notes),
+            "refine the query, or pass a full ULID or the note's path"
+        );
+    }
+
+    #[test]
+    fn a_single_match_gets_the_refine_hint() {
+        let notes = [note_with_id("01ARZ3NDEKTSV4RRFFQ69G5FAV", "plan")];
+        assert_eq!(
+            ambiguity_hint(&notes),
+            "refine the query, or pass a full ULID or the note's path"
         );
     }
 

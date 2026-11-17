@@ -49,6 +49,14 @@ change in any release
   as a number or a boolean receives a string.
   [ADR 0095](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0095-title-and-tags-reach-a-typst-theme-as-text.md)
   records the rule.
+- The error for a full ULID that a note and its copy share, such as in
+  `delete <ULID>`, told the user to "pass a full ULID or the note's path".
+  It now says the files share one ULID and names a path or `ntropy
+  reconcile`, which gives the copies new ULIDs. The scan warning for a copy
+  read `skipped <copy>` although `search <ULID>` lists it; it now reads
+  `<copy> shares its id with <keeper>`.
+  [ADR 0096](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0096-a-copys-warning-names-the-shared-ulid.md)
+  records the wording.
 
 ## v2.11.0 - 2026-11-16
 

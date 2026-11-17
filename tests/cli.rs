@@ -1415,8 +1415,32 @@ fn search_id_prints_a_copied_note_once() {
     let out = run_in(dir.path(), &["search", "-n", "--id", ULID_A]);
     assert_prints(&out, &format!("{ULID_A}\n"));
     assert!(
-        String::from_utf8_lossy(&out.stderr).contains(&format!("skipped `{ULID_A}-plan-b.md`")),
+        String::from_utf8_lossy(&out.stderr).contains(&format!(
+            "`{ULID_A}-plan-b.md` shares its id with `{ULID_A}-plan.md`"
+        )),
         "the copy is still reported: {}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn search_by_the_ulid_of_a_copied_note_lists_both_files_and_warns_without_calling_one_skipped() {
+    // A full ULID selects the keeper and its copies (ADR 0067), so the copy is
+    // a row of the table. The warning must not say the copy was skipped.
+    let dir = setup_vault();
+    copied_note(dir.path());
+    let out = run_in(dir.path(), &["search", "-n", ULID_A]);
+    assert!(out.status.success(), "{}", rendered(&out));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(
+        stdout.contains(&format!("{ULID_A}-plan.md"))
+            && stdout.contains(&format!("{ULID_A}-plan-b.md")),
+        "{}",
+        rendered(&out)
+    );
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains("skipped"),
+        "{}",
         rendered(&out)
     );
 }
@@ -1671,8 +1695,7 @@ fn the_ulid_of_a_copied_note_is_ambiguous_and_the_path_of_the_copy_is_not() {
     let by_ulid = run_in(dir.path(), &["delete", "-n", "-f", ULID_A]);
     assert_eq!(by_ulid.status.code(), Some(1), "{}", rendered(&by_ulid));
     assert!(
-        String::from_utf8_lossy(&by_ulid.stderr)
-            .contains("refine the query, or pass a full ULID or the note's path"),
+        String::from_utf8_lossy(&by_ulid.stderr).contains("is ambiguous (2 matches)"),
         "{}",
         rendered(&by_ulid)
     );
@@ -1682,6 +1705,37 @@ fn the_ulid_of_a_copied_note_is_ambiguous_and_the_path_of_the_copy_is_not() {
     assert!(by_path.status.success(), "{}", rendered(&by_path));
     assert!(!note_file(dir.path(), ULID_A, "plan-b").exists());
     assert!(note_file(dir.path(), ULID_A, "plan").exists());
+}
+
+#[test]
+fn the_hint_for_a_shared_ulid_names_the_path_and_reconcile() {
+    // The ULID was passed in full already, so the way out is a path or the
+    // reconcile that gives the copy a ULID of its own.
+    let dir = setup_vault();
+    copied_note(dir.path());
+
+    let out = run_in(dir.path(), &["delete", "-n", "-f", ULID_A]);
+    assert!(
+        String::from_utf8_lossy(&out.stderr).contains(
+            "these files share one ULID; pass the path of one, or run `ntropy reconcile` \
+             to give the copies new ULIDs"
+        ),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn the_hint_for_a_shared_ulid_does_not_ask_for_a_full_ulid() {
+    let dir = setup_vault();
+    copied_note(dir.path());
+
+    let out = run_in(dir.path(), &["delete", "-n", "-f", ULID_A]);
+    assert!(
+        !String::from_utf8_lossy(&out.stderr).contains("full ULID"),
+        "{}",
+        rendered(&out)
+    );
 }
 
 #[test]
@@ -6891,7 +6945,9 @@ fn new_print_reports_a_copied_note() {
     assert!(out.status.success(), "{}", rendered(&out));
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert!(
-        stderr.contains(&format!("skipped `{ULID_A}-plan-b.md`")),
+        stderr.contains(&format!(
+            "`{ULID_A}-plan-b.md` shares its id with `{ULID_A}-plan.md`"
+        )),
         "{}",
         rendered(&out)
     );
@@ -7621,7 +7677,9 @@ done
         assert!(output.status.success(), "{}", rendered(&output));
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains(&format!("skipped `{ULID_A}-plan-b.md`")),
+            stderr.contains(&format!(
+                "`{ULID_A}-plan-b.md` shares its id with `{ULID_A}-plan.md`"
+            )),
             "{}",
             rendered(&output)
         );

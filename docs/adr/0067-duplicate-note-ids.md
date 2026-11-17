@@ -11,6 +11,8 @@ a note's ULID never changed after creation, and
 [ADR 0019](0019-scan-robustness-and-resource-tolerance.md), which gains a
 reason to skip a file.
 
+Amended 2026-11-17 by [ADR 0096](0096-a-copys-warning-names-the-shared-ulid.md).
+
 ## Context
 
 Copying a note file copies the ULID in its name. Every layer assumes one file

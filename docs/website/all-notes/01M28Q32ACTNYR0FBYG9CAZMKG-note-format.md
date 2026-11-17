@@ -77,11 +77,12 @@ named `<ulid>.age` with no slug at all, so there is nothing to drift.
 
 Copying a note file by hand copies its ULID, and two files then claim one
 identity. ntropy keeps the one with the shorter file name as the note. It
-skips the other with a warning that names the note it kept, so searches,
-views and links see one note per ULID. Passing that ULID to `search` or
-`delete` still matches both files. `ntropy reconcile`, or editing or
-writing either file through ntropy, gives the copy a ULID of its own with
-the same creation time and says so. Links that used the shared ULID keep
+leaves the other out and warns that it shares its ULID with the note it
+kept, so searches, views and links see one note per ULID. Passing that
+ULID to `search` or `delete` still matches both files, and `delete`
+refuses it as ambiguous until it is given the path of one. `ntropy
+reconcile`, or editing or writing either file through ntropy, gives the
+copy a ULID of its own with the same creation time and says so. Links that used the shared ULID keep
 pointing at the note that kept it.
 
 ## Linking between notes

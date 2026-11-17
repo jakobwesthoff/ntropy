@@ -45,16 +45,36 @@ pub struct Scan {
     pub duplicates: Vec<Duplicate>,
 }
 
-/// A single skipped file and the human-readable reason.
+/// What a scan warning says about its file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WarningKind {
+    /// The file is no note the scan can use and was left out.
+    Skipped,
+    /// The file is a copy of a note: another file keeps its ULID, and a full
+    /// ULID selector still returns the copy beside the keeper (ADR 0067).
+    SharedId,
+}
+
+/// A single file the scan has something to say about and the human-readable
+/// reason.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ScanWarning {
     pub path: PathBuf,
     pub message: String,
+    pub kind: WarningKind,
 }
 
 impl ScanWarning {
-    /// The warning for a copy the scan skipped because another file keeps its
-    /// ULID.
+    /// The warning for a file the scan skipped.
+    pub fn skipped(path: PathBuf, message: String) -> Self {
+        ScanWarning {
+            path,
+            message,
+            kind: WarningKind::Skipped,
+        }
+    }
+
+    /// The warning for a copy whose ULID another file keeps.
     pub fn for_duplicate(duplicate: &Duplicate) -> Self {
         let keeper = duplicate
             .keeper
@@ -64,8 +84,9 @@ impl ScanWarning {
         ScanWarning {
             path: duplicate.note.path.clone(),
             message: format!(
-                "its id is also used by `{keeper}`; run `ntropy reconcile` to give it a new id"
+                "shares its id with `{keeper}`; run `ntropy reconcile` to give it a new id"
             ),
+            kind: WarningKind::SharedId,
         }
     }
 }
@@ -144,13 +165,15 @@ pub fn scan_notes_dir(all_notes_dir: &Path, cipher: &dyn NoteCipher) -> Result<S
                 let path = entry.path();
                 if !has_extension(path, note_ext) {
                     if warn_about_markdown && has_md_extension(path) {
-                        warnings.lock().expect("warnings lock").push(ScanWarning {
-                            path: path.to_path_buf(),
-                            message:
+                        warnings
+                            .lock()
+                            .expect("warnings lock")
+                            .push(ScanWarning::skipped(
+                                path.to_path_buf(),
                                 "plaintext Markdown in an encrypted vault; run `ntropy reconcile` \
                                  to encrypt it in place"
                                     .to_string(),
-                        });
+                            ));
                     }
                     // Everything else is a resource and ignored silently.
                     return WalkState::Continue;
@@ -158,10 +181,10 @@ pub fn scan_notes_dir(all_notes_dir: &Path, cipher: &dyn NoteCipher) -> Result<S
 
                 match load_note(path, cipher) {
                     Ok(note) => notes.lock().expect("notes lock").push(note),
-                    Err(message) => warnings.lock().expect("warnings lock").push(ScanWarning {
-                        path: path.to_path_buf(),
-                        message,
-                    }),
+                    Err(message) => warnings
+                        .lock()
+                        .expect("warnings lock")
+                        .push(ScanWarning::skipped(path.to_path_buf(), message)),
                 }
                 WalkState::Continue
             })
