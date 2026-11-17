@@ -10,7 +10,7 @@ A note's images, PDFs, transcripts and any other file live in a folder of their 
 
 A note's folder is `all-notes/_assets/<note file name without extension>/`. For the note `01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page.md` it is:
 
-```text
+```
 all-notes/_assets/01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page/
 ```
 
@@ -30,7 +30,7 @@ A folder belongs to the note whose ULID starts its name, whatever slug follows. 
 ntropy asset add 01M6CBSVZBM74V17MGTHGWYECR 07-front-page.png notes.pdf
 ```
 
-```text
+```
 added all-notes/_assets/01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page/07-front-page.png
 added all-notes/_assets/01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page/notes.pdf
 ![07-front-page](_assets/01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page/07-front-page.png)
@@ -51,7 +51,7 @@ The note is a ULID, a file name or path, or a query that matches one note. Sever
 ntropy asset list 01M6CBSVZBM74V17MGTHGWYECR
 ```
 
-```text
+```
 FILE                     SIZE      LINKED
 07-front-page.png        36.5 KiB  yes
 08-front-page-phone.png  32.5 KiB  yes
@@ -65,7 +65,7 @@ A `#` always starts the fragment of a link, so a file with a `#` in its name can
 
 The folder's name follows the note's file name. After a retitle the folder keeps its old name until the next `reconcile`, which renames it and rewrites the links into it in every note:
 
-```text
+```
 renamed _assets/01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page/ -> _assets/01M6CBSVZBM74V17MGTHGWYECR-building-a-front-page/
 relinked _assets/01M6CBSVZBM74V17MGTHGWYECR-making-a-front-page/ -> _assets/01M6CBSVZBM74V17MGTHGWYECR-building-a-front-page/ in 01M6CBSVZBM74V17MGTHGWYECR-building-a-front-page.md (2 links)
 ```
@@ -111,7 +111,7 @@ The three guides on writing themes kept their 15 screenshots in two folders at t
 ntropy reconcile
 ```
 
-```text
+```
 warning: 01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme.md: `../assets/document-theme/step-1.png` is outside `all-notes/_assets/`, so ntropy does not manage it
 ...
 Scanned 30 notes, reassigned 0 notes, renamed 0 files, relinked 0 links, synced 0 views, ignored 0 entries, unignored 0 entries, 15 warnings.
@@ -123,7 +123,7 @@ The warnings name the files and the notes that link them. The first step is to m
 ntropy asset add --move 01M6CAJG6C3WAZ2MD6W3EGBMKY assets/document-theme/step-*.png
 ```
 
-```text
+```
 added all-notes/_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-1.png
 added all-notes/_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step-2.png
 ...
@@ -134,7 +134,7 @@ added all-notes/_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/step
 
 The same command moves the other two notes' files. `asset add` does not touch the notes, so the second step is to point their links at the new place. Every old link of a note had the same prefix, so one search and replace per note does it: in the document theme guide, `../assets/document-theme/` becomes `_assets/01M6CAJG6C3WAZ2MD6W3EGBMKY-writing-a-document-theme/`. Where the old links share no prefix, the printed links are the new text: paste each in place of the old link. The last step is the check, which is `reconcile` again:
 
-```text
+```
 Scanned 30 notes, reassigned 0 notes, renamed 0 files, relinked 0 links, synced 0 views, ignored 0 entries, unignored 0 entries, 0 warnings.
 ```
 
