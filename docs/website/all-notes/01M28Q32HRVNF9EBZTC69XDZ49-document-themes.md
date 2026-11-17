@@ -184,7 +184,9 @@ draw the body twice, nor a block that holds a heading or a footnote with a
 repeated reference: Typst rejects the duplicated label as soon as a link
 names that heading or a later reference names that footnote, and the
 compile fails. An `outline()` of the headings compiles, unless a heading
-holds a footnote the note references again. A `show footnote` rule runs
+holds a footnote the note references again. The files a note links are
+attached by calls after the body, so a theme that draws the body twice also
+fails when the note links a file that is attached. A `show footnote` rule runs
 for the repeated references as well, and `it.body` is a label there, so a
 rule that prints the body must check `type(it.body) == label`.
 

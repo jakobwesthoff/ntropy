@@ -179,7 +179,7 @@ the mapping grows as the bottom-up discussion settles further constructs.
 | Link to a heading of the note (`[x](#lists)`) | `#link(<ntropy-h-N>)[escaped label];`, N the label of the heading whose id the fragment names. The ids are the ones the HTML output gives its headings, including the numbered suffixes of repeated text and the footnote ids `fn-N` and `fnref-N` that no heading takes. The fragment is percent-decoded and compared exactly and case-sensitively. A fragment that names no heading renders as the label text alone and raises a warning, since a label that does not exist fails the compile; `--strict` makes the warning an error. `#` and `#top` with no heading of that id link to the top of the first page |
 | Bare URL in text (`https://...`, `www....`) | detected by the emitter with the `linkify` crate over text events (GFM autolink rules; pulldown-cmark has no option for this — verified) and emitted as `#link("url")[url];`; a `www.` URL gains an `https://` scheme in the target |
 | Email autolink (`<user@host>` or bare in text) | `#link("mailto:user@host")[user@host];`; the `mailto:` scheme is added so the link is actionable |
-| Link to a non-image file of the note's own asset folder | the link as above, preceded by `#pdf.attach("/all-notes/_assets/<stem>/<file>");` at the first link to the file and followed by `#attachbadge("attached", "1.2 MiB");`, when the host reports a regular file within `[render] attach_max`. A file above the limit gets the link and `#attachbadge-off("not attached", "240.0 MiB");` and a warning. See Attachments below |
+| Link to a non-image file of the note's own asset folder | the link as above, followed by `#attachbadge("attached", "1.2 MiB");`, when the host reports a regular file within `[render] attach_max`; the file's `#pdf.attach("/all-notes/_assets/<stem>/<file>");` call stands after the whole body. A file above the limit gets the link and `#attachbadge-off("not attached", "240.0 MiB");` and a warning. See Attachments below |
 | Note link, resolved | `#link("<target-slug>.pdf")[#notelink[Title]];`, the target note's current title through a prelude-defined function, so a theme can style note links distinctly from ordinary emphasis, wrapped in a link to the target note's own artifact (see below). A link with a heading anchor shows its author's text in `notelink` instead (the title when that text is blank) and drops the anchor: the heading lives in the target note's own PDF, which a link cannot address ([ADR 0086](../adr/0086-note-links-may-carry-a-heading-anchor.md)). A note link to the note itself that carries a heading anchor links to the heading like a link to a fragment, `#link(<ntropy-h-N>)[#notelink[text]];`, with the same top-of-page and unknown-fragment rules ([ADR 0088](../adr/0088-links-to-a-notes-own-headings-resolve-in-its-pdf.md)); one without an anchor or with an empty anchor links to the note's artifact |
 | Note link, unresolved | the wrapper is dropped and the display text's inner inline events are re-emitted, so markup inside the display text survives |
 | Task list item | bullet item with a `#task(done: ...)` lead-in — the prelude-defined function draws one identical checkbox for both states, so checked and unchecked match optically regardless of font glyph coverage |
@@ -251,16 +251,23 @@ emitter asks about a link only when its path, as written, lies in the note's own
 `_assets/<folder>/` and does not end in an image extension (compared ignoring
 case), and not at all when the limit is `0`.
 
-- A size within the limit (an empty file included) gives `#pdf.attach("<path>");`,
-  the link and `#attachbadge("attached", "<size>");`.
+- A size within the limit (an empty file included) gives the link and
+  `#attachbadge("attached", "<size>");`, and the file is noted for the attach
+  calls after the body.
 - A size above the limit gives the link and `#attachbadge-off("not attached",
   "<size>");` and a warning that names the file, its size and the limit.
 - A refusal gives the link alone and a warning "`<path>` is not attached:
   `<reason>`". Nothing at all, for a missing file or a directory, gives the link
   alone.
-- typst fails a compile that attaches one path twice, so the emitter keeps the
-  answer per root-absolute path, writes `#pdf.attach` at the first link only and
-  raises each warning once. Every link gets its badge.
+- typst fails a compile that attaches one path twice, and it evaluates a table
+  header repeated on every page, a heading an `outline()` draws again and a
+  footnote more than once. So the emitter writes no `#pdf.attach` beside a link:
+  it keeps the answer per root-absolute path, collects the files within the limit
+  in the order they were first approved, and appends one `#pdf.attach("<path>");`
+  line per file after the whole body, separated from it by a blank line, outside
+  every element. It raises each warning once, and every link gets its badge. A
+  theme that lays the body out twice breaks attachments the same way it breaks
+  labels.
 
 The binary's context answers with the rules of ADR 0072 and ADR 0073: the path
 must resolve to a file inside the vault, no component may be an entry that

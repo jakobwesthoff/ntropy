@@ -29,7 +29,12 @@ The `typst` and `pdf` formats attach every non-image file that a link of the
 note names in the note's own asset folder, up to a limit per file. The limit is
 `[render] attach_max`, 25 MiB by default, an integer in bytes or a size string
 such as `"25 MiB"`; `0` turns attaching off. A per-file limit makes the result
-independent of the order of the links. A file linked several times is attached
+independent of the order of the links. The `#pdf.attach` calls are written once
+each, after the whole body, and not beside the links: typst evaluates a table
+header repeated on every page, a heading an `outline()` draws again and a
+footnote more than once, and fails a compile that attaches a path twice. A theme
+that lays out the body twice breaks attachments for the same reason. A file
+linked several times is attached
 once.
 
 After the link text the page shows a badge. A file within the limit gets

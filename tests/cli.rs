@@ -11035,6 +11035,13 @@ fn a_pdf_attaches_the_files_within_the_limit_and_names_the_rest_in_its_badges() 
     // missing file or a directory, so only a real compile shows that the
     // emitted `#pdf.attach` calls are accepted. The attachments are listed
     // from the PDF itself.
+    // Two layouts typst evaluates more than once: a table header repeated on
+    // every page (the default prelude's table rule) and a heading an
+    // `outline()` draws again (the theme below). A link to a file in either
+    // must not make the compile fail with "attempted to attach file twice".
+    let rows: String = (1..=120)
+        .map(|row| format!("| row {row} | x |\n"))
+        .collect();
     let dir = vault_with_two_notes_and_assets(&format!(
         "Minutes: [minutes](_assets/{ULID_A}-reader/minutes.pdf), again \
          [the minutes](_assets/{ULID_A}-reader/minutes.pdf).\n\n\
@@ -11042,7 +11049,9 @@ fn a_pdf_attaches_the_files_within_the_limit_and_names_the_rest_in_its_badges() 
          Two files of one name: [a](_assets/{ULID_A}-reader/a/notes.txt) and \
          [b](_assets/{ULID_A}-reader/b/notes.txt).\n\n\
          With a space: [spaced](<_assets/{ULID_A}-reader/my file.txt>).\n\n\
-         Empty: [empty](_assets/{ULID_A}-reader/empty.txt).\n"
+         Empty: [empty](_assets/{ULID_A}-reader/empty.txt).\n\n\
+         # See [the title file](_assets/{ULID_A}-reader/title.txt)\n\n\
+         | [header file](_assets/{ULID_A}-reader/header.txt) | Note |\n| --- | --- |\n{rows}"
     ));
     let folder = dir
         .path()
@@ -11054,14 +11063,23 @@ fn a_pdf_attaches_the_files_within_the_limit_and_names_the_rest_in_its_badges() 
         ("b/notes.txt", 20),
         ("my file.txt", 30),
         ("empty.txt", 0),
+        ("title.txt", 40),
+        ("header.txt", 50),
     ] {
         let path = folder.join(name);
         fs::create_dir_all(path.parent().expect("a parent")).expect("subfolder");
         fs::write(path, vec![b'x'; size]).expect("linked file");
     }
+    let themes = dir.path().join(".ntropy/themes/typst");
+    fs::create_dir_all(&themes).expect("themes dir");
+    fs::write(
+        themes.join("outline.typ"),
+        "#let note(title: none, frontmatter: (:), paper: \"a4\", body) = { outline(); body }\n",
+    )
+    .expect("theme");
     fs::write(
         dir.path().join(".ntropy/config.toml"),
-        "[render]\nattach_max = \"4 MiB\"\n",
+        "[render]\ntheme = \"outline\"\nattach_max = \"4 MiB\"\n",
     )
     .expect("config");
 
@@ -11089,8 +11107,8 @@ fn a_pdf_attaches_the_files_within_the_limit_and_names_the_rest_in_its_badges() 
     };
     let listing = String::from_utf8_lossy(&listing.stdout).into_owned();
     assert!(
-        listing.starts_with("5 embedded files"),
-        "five files are attached, the oversize recording is not: {listing}"
+        listing.starts_with("7 embedded files"),
+        "seven files are attached, the oversize recording is not: {listing}"
     );
     assert!(listing.contains("minutes.pdf"), "{listing}");
     assert!(!listing.contains("call.m4a"), "{listing}");

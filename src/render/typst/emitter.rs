@@ -111,9 +111,20 @@ pub fn emit_for_note<'a>(
         refused: Vec::new(),
         attach,
         attached: HashMap::new(),
+        to_attach: Vec::new(),
     };
-    let (typst, mut warnings) = markdown::walk(body, links, &mut output);
+    let (mut typst, mut warnings) = markdown::walk(body, links, &mut output);
     warnings.extend(output.refused);
+    if !output.to_attach.is_empty() {
+        typst.push('\n');
+        for path in &output.to_attach {
+            let mut call = TypstWriter::new();
+            call.syntax("#pdf.attach(\"");
+            call.string_literal(path);
+            call.syntax("\");\n");
+            typst.push_str(&call.finish());
+        }
+    }
     (typst, warnings)
 }
 
@@ -164,17 +175,21 @@ struct TypstOutput<'a> {
     /// nothing.
     attach: Option<AttachPolicy<'a>>,
     /// The verdict on each root-absolute path asked about so far. A file
-    /// linked twice is asked about once and `pdf.attach` is written once,
-    /// since typst fails a compile that attaches one path twice; the flag
-    /// says whether the warning about the file has been raised.
+    /// linked twice is asked about once; the flag says whether the warning
+    /// about the file has been raised.
     attached: HashMap<String, Verdict>,
+    /// The files to attach, in the order they were first approved. Their
+    /// `#pdf.attach` calls are written once, after the whole body: typst fails
+    /// a compile that attaches one path twice, and it lays out a table header
+    /// repeated on every page, a heading an `outline()` draws again and a
+    /// footnote more than once, so a call written beside the link would be
+    /// evaluated again with it.
+    to_attach: Vec<String>,
 }
 
 /// What became of one file a note links, kept per path.
 struct Verdict {
     answer: Attachment,
-    /// Whether the `#pdf.attach` call for the path is already written.
-    written: bool,
     /// Whether the warning about the path is already raised.
     warned: bool,
 }
@@ -201,12 +216,12 @@ impl TypstOutput<'_> {
 }
 
 impl TypstOutput<'_> {
-    /// The `#pdf.attach` call (empty after the first link to the file) and the
-    /// badge that belong around a link to `dest`, or `None` when the link is
-    /// not attached or badged: no policy, a limit of `0`, a note whose
-    /// identity is unknown, anything but a non-image file of the note's own
-    /// folder, or a file the host knows nothing about.
-    fn attachment(&mut self, dest: &str) -> Option<(String, String)> {
+    /// The badge that belongs after a link to `dest`, or `None` when the link is
+    /// not badged: no policy, a limit of `0`, a note whose identity is unknown,
+    /// anything but a non-image file of the note's own folder, or a file the
+    /// host knows nothing about. A file within the limit is noted for the
+    /// attach calls after the body.
+    fn attachment(&mut self, dest: &str) -> Option<String> {
         let own = self.own_id?;
         let max = self.attach.as_ref().filter(|policy| policy.max > 0)?.max;
         let place = asset::place(self.asset_base, dest);
@@ -226,7 +241,6 @@ impl TypstOutput<'_> {
                 root_absolute.clone(),
                 Verdict {
                     answer,
-                    written: false,
                     warned: false,
                 },
             );
@@ -252,21 +266,12 @@ impl TypstOutput<'_> {
                     asset::format_size(max)
                 )));
             }
-            return Some((
-                String::new(),
-                badge("attachbadge-off", "not attached", &shown),
-            ));
+            return Some(badge("attachbadge-off", "not attached", &shown));
         }
-        let attach = if std::mem::replace(&mut verdict.written, true) {
-            String::new()
-        } else {
-            let mut writer = TypstWriter::new();
-            writer.syntax("#pdf.attach(\"");
-            writer.string_literal(&root_absolute);
-            writer.syntax("\");");
-            writer.finish()
-        };
-        Some((attach, badge("attachbadge", "attached", &shown)))
+        if !self.to_attach.contains(&root_absolute) {
+            self.to_attach.push(root_absolute);
+        }
+        Some(badge("attachbadge", "attached", &shown))
     }
 }
 
@@ -326,15 +331,16 @@ impl Output for TypstOutput<'_> {
     }
 
     /// A link into the note's own asset folder to a file that is not an image
-    /// is attached to the PDF when the host says it may be and it is within
-    /// the limit, and followed by a badge that says so (ADR 0105).
+    /// is followed by a badge, and the file is attached to the PDF when the
+    /// host says it may be and it is within the limit (ADR 0105). The attach
+    /// call itself is written after the body, see [`TypstOutput::to_attach`].
     fn link(&mut self, dest: &str, inner: &str) -> String {
         if self.refuses(dest) {
             return inner.to_string();
         }
         let link = wrap_link(dest, inner);
         match self.attachment(dest) {
-            Some((attach, badge)) => format!("{attach}{link}{badge}"),
+            Some(badge) => format!("{link}{badge}"),
             None => link,
         }
     }
@@ -2570,8 +2576,9 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
         assert_eq!(
             out.body,
             format!(
-                "#pdf.attach(\"{path}\");#link(\"_assets/{NOTE_ID}-note/m.pdf\")[m];\
-                 #attachbadge(\"attached\", \"1.2 MiB\");\n"
+                "#link(\"_assets/{NOTE_ID}-note/m.pdf\")[m];\
+                 #attachbadge(\"attached\", \"1.2 MiB\");\n\n\
+                 #pdf.attach(\"{path}\");\n"
             )
         );
         assert!(out.warnings.is_empty(), "{:?}", out.warnings);
@@ -2608,7 +2615,12 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             MIB,
             &[(&path, Attachment::Size(MIB))],
         );
-        assert!(out.body.starts_with("#pdf.attach("), "{}", out.body);
+        assert!(
+            out.body
+                .ends_with(&format!("\n\n#pdf.attach(\"{path}\");\n")),
+            "{}",
+            out.body
+        );
     }
 
     #[test]
@@ -2630,11 +2642,99 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             &[(&path, Attachment::Size(0))],
         );
         assert!(
-            out.body.ends_with("#attachbadge(\"attached\", \"0 B\");\n"),
+            out.body.contains("#attachbadge(\"attached\", \"0 B\");"),
             "{}",
             out.body
         );
-        assert!(out.body.starts_with("#pdf.attach("), "{}", out.body);
+        assert!(
+            out.body
+                .ends_with(&format!("\n\n#pdf.attach(\"{path}\");\n")),
+            "{}",
+            out.body
+        );
+    }
+
+    /// typst fails a compile that lays an element with `#pdf.attach` in it out
+    /// twice (a table header repeated on every page, a heading an `outline()`
+    /// draws again), so the calls stand after everything the body draws, one
+    /// per file, in the order the files were first linked.
+    fn assert_attached_only_at_the_end(body: &str, paths: &[&str]) {
+        let block: String = paths
+            .iter()
+            .map(|path| format!("#pdf.attach(\"{path}\");\n"))
+            .collect();
+        assert!(
+            body.ends_with(&format!("\n\n{block}")),
+            "the calls are not a block at the end: {body}"
+        );
+        assert_eq!(
+            body.matches("#pdf.attach(").count(),
+            paths.len(),
+            "a call stands somewhere else too: {body}"
+        );
+    }
+
+    #[test]
+    fn a_link_in_a_table_header_row_is_attached_outside_the_table() {
+        let path = own("m.pdf");
+        let out = attach(
+            &format!("| [m](_assets/{NOTE_ID}-note/m.pdf) | Note |\n| --- | --- |\n| a | b |\n"),
+            25 * MIB,
+            &[(&path, Attachment::Size(1))],
+        );
+        assert!(
+            out.body.contains("table.header([#link(\"_assets/"),
+            "the link stays in the header: {}",
+            out.body
+        );
+        assert!(
+            out.body.contains("#attachbadge(\"attached\""),
+            "{}",
+            out.body
+        );
+        assert_attached_only_at_the_end(&out.body, &[&path]);
+    }
+
+    #[test]
+    fn a_link_in_a_heading_is_attached_outside_the_heading() {
+        let path = own("m.pdf");
+        let out = attach(
+            &format!("# See [m](_assets/{NOTE_ID}-note/m.pdf)\n\nBody.\n"),
+            25 * MIB,
+            &[(&path, Attachment::Size(1))],
+        );
+        assert!(out.body.starts_with("= See #link("), "{}", out.body);
+        assert_attached_only_at_the_end(&out.body, &[&path]);
+    }
+
+    #[test]
+    fn a_link_in_a_footnote_is_attached_outside_the_footnote() {
+        let path = own("m.pdf");
+        let out = attach(
+            &format!("Text[^1]\n\n[^1]: see [m](_assets/{NOTE_ID}-note/m.pdf)\n"),
+            25 * MIB,
+            &[(&path, Attachment::Size(1))],
+        );
+        assert!(out.body.contains("#footnote["), "{}", out.body);
+        assert_attached_only_at_the_end(&out.body, &[&path]);
+    }
+
+    #[test]
+    fn several_files_are_attached_in_the_order_they_are_first_linked() {
+        let (first, second) = (own("b.pdf"), own("a.pdf"));
+        let out = attach(
+            &format!(
+                "[b](_assets/{NOTE_ID}-note/b.pdf) [a](_assets/{NOTE_ID}-note/a.pdf) \
+                 [b again](_assets/{NOTE_ID}-note/b.pdf)"
+            ),
+            25 * MIB,
+            &[
+                (&first, Attachment::Size(1)),
+                (&second, Attachment::Size(1)),
+            ],
+        );
+        assert_attached_only_at_the_end(&out.body, &[&first, &second]);
+        assert_eq!(out.body.matches("#attachbadge(").count(), 3, "{}", out.body);
     }
 
     #[test]
@@ -2719,7 +2819,8 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             &[(&path, Attachment::Size(1))],
         );
         assert!(
-            out.body.starts_with(&format!("#pdf.attach(\"{path}\");")),
+            out.body
+                .ends_with(&format!("\n\n#pdf.attach(\"{path}\");\n")),
             "{}",
             out.body
         );
@@ -2734,7 +2835,8 @@ A footnote reference.[^fn] And a dangling [display *text*](danglingid).
             &[(&path, Attachment::Size(1))],
         );
         assert!(
-            out.body.starts_with(&format!("#pdf.attach(\"{path}\");")),
+            out.body
+                .ends_with(&format!("\n\n#pdf.attach(\"{path}\");\n")),
             "{}",
             out.body
         );

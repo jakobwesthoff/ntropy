@@ -109,7 +109,9 @@ drawn once, at its first reference, and later references show its number.
 Drawing the body twice, or a block holding a heading or a repeatedly
 referenced footnote, fails the compile on the duplicated label. An
 `outline()` of the headings compiles unless a heading holds a footnote the
-note references again. A `show footnote` rule also runs for the repeated
+note references again. The files a note links are attached with calls after the
+body, so a theme that draws the body twice also fails when the note links a file
+that is attached. A `show footnote` rule also runs for the repeated
 references, where `it.body` is a label: check `type(it.body) == label`
 before printing it.
 
