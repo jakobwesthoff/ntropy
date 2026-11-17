@@ -104,7 +104,8 @@ pub enum AssetCommand {
     /// List a note's asset files with their size and whether the note links
     /// them.
     ///
-    /// A file the note links in its folder and the folder lacks is listed as
+    /// A file that raw HTML in the note names counts as linked. A file a
+    /// Markdown link names in the note's folder and the folder lacks is listed as
     /// `broken`. Hidden files are listed; only operating-system metadata such as
     /// `.DS_Store` is left out.
     List {

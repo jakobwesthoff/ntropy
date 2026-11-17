@@ -68,8 +68,10 @@ it would belong to another note or to a place outside the vault.
 
 `asset list` prints the files of the folder with their size, hidden files
 included and operating-system metadata left out as `delete` leaves it out, and
-whether the note links each, and a file the note links in its own folder and the folder lacks as
-`broken`. `--path` prints only the folder, also when it does not exist yet. The
+whether the note links each, a file that raw HTML in the note names counting as
+linked, and a file a Markdown link of the note names in its own folder and the
+folder lacks as `broken`: only Markdown links make a file missing, as `reconcile`
+reports it. `--path` prints only the folder, also when it does not exist yet. The
 unlinked files of a folder show in `asset list` only (ADR 0099).
 
 In an encrypted vault both commands fail with an error saying that asset

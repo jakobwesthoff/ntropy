@@ -20,7 +20,8 @@ use crate::note::Note;
 use crate::vault::layout::{ALL_NOTES_DIR, ASSETS_DIR, Layout};
 
 use super::{
-    FolderChoice, Place, choose_folder, is_system_metadata, local_links, owner, place, read_folders,
+    FolderChoice, Place, choose_folder, html_ranges, is_system_metadata, local_links, owner, place,
+    read_folders,
 };
 
 /// Why an asset could not be added or listed.
@@ -652,12 +653,29 @@ pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
         })
         .collect();
 
+    // Raw HTML (`<img src=".." width="300">`, the usual way to size a picture)
+    // uses a file as much as a link does. It only upgrades a file that is
+    // there: whether a name it holds is a file is for a Markdown link to say,
+    // since `reconcile` reports a missing file from those alone.
+    let folder_name = folder
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let html: Vec<&str> = html_ranges(&note.body)
+        .into_iter()
+        .map(|range| &note.body[range])
+        .collect();
+    let used_in_html = |name: &str| {
+        html.iter()
+            .any(|slice| names_the_file(slice, &folder_name, name))
+    };
+
     let mut files: Vec<ListedFile> = found
         .iter()
         .map(|(name, size)| ListedFile {
             name: name.clone(),
             size: Some(*size),
-            linked: if linked.contains(name) {
+            linked: if linked.contains(name) || used_in_html(name) {
                 Linked::Yes
             } else {
                 Linked::No
@@ -676,6 +694,21 @@ pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
     );
     files.sort_by(|a, b| a.name.cmp(&b.name));
     Ok(Listing { folder, files })
+}
+
+/// Whether `text` holds `_assets/<folder>/<name>`, the `_assets` component
+/// matched ignoring ASCII case, the way an HTML attribute names the file.
+fn names_the_file(text: &str, folder: &str, name: &str) -> bool {
+    let wanted = format!("{folder}/{name}");
+    let marker = ASSETS_DIR.len() + 1;
+    text.as_bytes()
+        .windows(marker)
+        .enumerate()
+        .any(|(at, window)| {
+            window[..ASSETS_DIR.len()].eq_ignore_ascii_case(ASSETS_DIR.as_bytes())
+                && window[ASSETS_DIR.len()] == b'/'
+                && text[at + marker..].starts_with(&wanted)
+        })
 }
 
 #[cfg(test)]
@@ -1871,6 +1904,76 @@ mod tests {
 
         let names: Vec<&str> = listing.files.iter().map(|f| f.name.as_str()).collect();
         assert_eq!(names, [".env", "a.pdf"]);
+    }
+
+    // ---- Raw HTML references ----
+
+    fn listed(listing: &Listing) -> Vec<(&str, Option<u64>, Linked)> {
+        listing
+            .files
+            .iter()
+            .map(|f| (f.name.as_str(), f.size, f.linked))
+            .collect()
+    }
+
+    #[test]
+    fn a_file_the_note_uses_through_raw_html_is_listed_as_linked() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(
+            &session,
+            &format!(
+                "<img src=\"_assets/{FOLDER}/wide.png\" width=\"300\">\n\n\
+                 <a href='_assets/{FOLDER}/my pic.png'>a picture</a>"
+            ),
+        );
+        let folder = session.layout().asset_folder(FOLDER);
+        std::fs::create_dir_all(&folder).expect("folder");
+        std::fs::write(folder.join("wide.png"), b"1").expect("file");
+        std::fs::write(folder.join("my pic.png"), b"12").expect("file");
+        std::fs::write(folder.join("unused.png"), b"123").expect("file");
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(
+            listed(&listing),
+            [
+                ("my pic.png", Some(2), Linked::Yes),
+                ("unused.png", Some(3), Linked::No),
+                ("wide.png", Some(1), Linked::Yes),
+            ]
+        );
+    }
+
+    #[test]
+    fn raw_html_never_makes_a_file_missing() {
+        // Only a Markdown link makes a file missing, as `reconcile` reports it.
+        let (_g, session) = vault_with_view();
+        let note = note_with(
+            &session,
+            &format!("<img src=\"_assets/{FOLDER}/gone.png\" width=\"300\">"),
+        );
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert!(listing.files.is_empty(), "{:?}", listing.files);
+    }
+
+    #[test]
+    fn a_reference_in_code_does_not_make_a_file_linked() {
+        let (_g, session) = vault_with_view();
+        let note = note_with(
+            &session,
+            &format!(
+                "`<img src=\"_assets/{FOLDER}/wide.png\">`\n\n```html\n<img src=\"_assets/{FOLDER}/wide.png\">\n```"
+            ),
+        );
+        let folder = session.layout().asset_folder(FOLDER);
+        std::fs::create_dir_all(&folder).expect("folder");
+        std::fs::write(folder.join("wide.png"), b"1").expect("file");
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(listed(&listing), [("wide.png", Some(1), Linked::No)]);
     }
 
     #[test]
