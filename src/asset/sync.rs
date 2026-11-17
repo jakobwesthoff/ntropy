@@ -17,10 +17,10 @@
 //! drift of a folder that was never renamed along with its note.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::error::Result;
-use crate::fsutil;
+use crate::fsutil::{self, FsError};
 use crate::id::Id;
 use crate::note::Note;
 use crate::vault::layout::{ALL_NOTES_DIR, Layout};
@@ -58,6 +58,39 @@ pub struct AssetSync {
     /// Bodies rewritten in memory, one entry per note and folder name. The
     /// caller writes the notes.
     pub relinked: Vec<Relink>,
+}
+
+/// The first file or symlink below `assets_dir` that is not operating-system
+/// metadata, in path order, or `None` when there is none.
+///
+/// Such a file would stay plaintext beside encrypted notes, which is what
+/// `vault encrypt` refuses (asset encryption is not supported yet). Empty
+/// folders hold nothing and pass. The names of OS metadata, which the Finder or
+/// Explorer drop into any folder they open, pass too: `.DS_Store`, `._*`,
+/// `Thumbs.db` and `desktop.ini`. Any other hidden file, such as `.env`, blocks.
+pub fn first_unencryptable(assets_dir: &Path) -> std::result::Result<Option<PathBuf>, FsError> {
+    let mut entries = fsutil::read_dir_entries(assets_dir)?;
+    entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+    for (path, file_type) in entries {
+        // A symlink to a directory is no directory here: it is not followed.
+        if file_type.is_dir() {
+            if let Some(found) = first_unencryptable(&path)? {
+                return Ok(Some(found));
+            }
+        } else if !is_system_metadata(&path) {
+            return Ok(Some(path));
+        }
+    }
+    Ok(None)
+}
+
+/// Whether `path` is a file the Finder or Explorer drops into a folder.
+fn is_system_metadata(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    matches!(name.as_str(), ".DS_Store" | "Thumbs.db" | "desktop.ini") || name.starts_with("._")
 }
 
 /// Folder names as `(from, to)` pairs.
@@ -239,6 +272,90 @@ mod tests {
             .iter()
             .map(|(from, to)| ((*from).to_string(), (*to).to_string()))
             .collect()
+    }
+
+    fn assets_with(files: &[&str]) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().expect("temp dir");
+        for file in files {
+            let path = dir.path().join(file);
+            if let Some(name) = file.strip_suffix('/') {
+                std::fs::create_dir_all(dir.path().join(name)).expect("directory");
+            } else {
+                std::fs::create_dir_all(path.parent().expect("a parent")).expect("directories");
+                std::fs::write(path, b"x").expect("file");
+            }
+        }
+        dir
+    }
+
+    #[test]
+    fn a_file_in_a_folder_blocks_encryption() {
+        let dir = assets_with(&["folder/chart.png"]);
+        assert_eq!(
+            first_unencryptable(dir.path()).expect("walk"),
+            Some(dir.path().join("folder/chart.png"))
+        );
+    }
+
+    #[test]
+    fn a_file_directly_in_the_assets_directory_blocks_encryption() {
+        let dir = assets_with(&["loose.png"]);
+        assert!(first_unencryptable(dir.path()).expect("walk").is_some());
+    }
+
+    #[test]
+    fn the_first_file_in_path_order_is_named() {
+        let dir = assets_with(&["b/two.png", "a/one.png", "a/zero.png"]);
+        assert_eq!(
+            first_unencryptable(dir.path()).expect("walk"),
+            Some(dir.path().join("a/one.png"))
+        );
+    }
+
+    #[test]
+    fn empty_folders_pass() {
+        let dir = assets_with(&["a/", "b/c/d/"]);
+        assert_eq!(first_unencryptable(dir.path()).expect("walk"), None);
+    }
+
+    #[test]
+    fn a_missing_assets_directory_passes() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        assert_eq!(
+            first_unencryptable(&dir.path().join("no-such-dir")).expect("walk"),
+            None
+        );
+    }
+
+    #[test]
+    fn operating_system_metadata_passes() {
+        let dir = assets_with(&[
+            ".DS_Store",
+            "folder/.DS_Store",
+            "folder/._chart.png",
+            "folder/Thumbs.db",
+            "folder/desktop.ini",
+        ]);
+        assert_eq!(first_unencryptable(dir.path()).expect("walk"), None);
+    }
+
+    #[test]
+    fn another_hidden_file_blocks_encryption() {
+        let dir = assets_with(&["folder/.env"]);
+        assert_eq!(
+            first_unencryptable(dir.path()).expect("walk"),
+            Some(dir.path().join("folder/.env"))
+        );
+    }
+
+    #[test]
+    fn a_symlink_blocks_encryption() {
+        let dir = assets_with(&["folder/"]);
+        std::os::unix::fs::symlink("/", dir.path().join("folder/link")).expect("symlink");
+        assert_eq!(
+            first_unencryptable(dir.path()).expect("walk"),
+            Some(dir.path().join("folder/link"))
+        );
     }
 
     #[test]

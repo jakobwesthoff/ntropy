@@ -41,6 +41,7 @@ use crate::keys::KeyError;
 use crate::reconcile;
 use crate::scan::{self, ScanError};
 use crate::session::VaultSession;
+use crate::vault::layout::ASSETS_DIR;
 use crate::vault::{Vault, ViewName};
 use crate::view::{self, SkippedView};
 
@@ -153,6 +154,15 @@ pub enum MigrateError {
         quoted_list(.0)
     )]
     DuplicateIds(Vec<PathBuf>),
+
+    /// A file sits in `all-notes/_assets/`. The conversion encrypts notes
+    /// only, so the file would stay plaintext beside them.
+    #[error(
+        "nothing was converted: `{}` is in `all-notes/_assets/`, and asset encryption is not \
+         supported yet, so it would stay plaintext beside the encrypted notes",
+        .0.display()
+    )]
+    AssetsPresent(PathBuf),
 
     /// Files sit where the conversion would write notes, and would be
     /// overwritten (ADR 0067).
@@ -481,6 +491,11 @@ pub fn preflight(
     if !scan.duplicates.is_empty() {
         let copies = scan.duplicates.into_iter().map(|d| d.note.path).collect();
         return Err(MigrateError::DuplicateIds(copies));
+    }
+    if operation == Operation::Encrypt
+        && let Some(file) = crate::asset::first_unencryptable(&all_notes.join(ASSETS_DIR))?
+    {
+        return Err(MigrateError::AssetsPresent(file));
     }
 
     let conversions = plan::conversions(all_notes, operation, &scan.notes);
@@ -823,6 +838,53 @@ mod tests {
         );
         assert_eq!(listing(&session), before, "nothing was converted");
         assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn encrypt_refuses_while_a_file_is_in_the_assets_directory() {
+        let (_guard, session) = plaintext_vault();
+        let folder = session.layout().asset_folder(&format!("{ULID_A}-alpha"));
+        std::fs::create_dir_all(&folder).expect("asset folder");
+        std::fs::write(folder.join("chart.png"), b"png").expect("asset");
+        let before = listing(&session);
+        let (_, target) = fresh_target();
+
+        let result = start(&session, Operation::Encrypt, &PlaintextCipher, &target);
+
+        let err = result.expect_err("the asset would stay plaintext");
+        let message = err.to_string();
+        assert!(message.contains("chart.png"), "{message}");
+        assert!(
+            message.contains("asset encryption is not supported yet"),
+            "{message}"
+        );
+        assert_eq!(listing(&session), before, "nothing was converted");
+        assert!(!session.layout().migration_file().exists());
+    }
+
+    #[test]
+    fn encrypt_goes_ahead_with_only_empty_folders_and_system_metadata_in_assets() {
+        let (_guard, session) = plaintext_vault();
+        let assets = session.layout().assets_dir();
+        std::fs::create_dir_all(assets.join("empty-folder")).expect("empty folder");
+        std::fs::write(assets.join(".DS_Store"), b"x").expect("metadata");
+        let (_, target) = fresh_target();
+
+        let result = start(&session, Operation::Encrypt, &PlaintextCipher, &target);
+
+        result.expect("nothing in the assets directory would stay plaintext");
+    }
+
+    #[test]
+    fn encrypt_refuses_another_hidden_file_in_assets() {
+        let (_guard, session) = plaintext_vault();
+        std::fs::create_dir_all(session.layout().assets_dir()).expect("assets");
+        std::fs::write(session.layout().assets_dir().join(".env"), b"secret").expect("hidden");
+        let (_, target) = fresh_target();
+
+        let result = start(&session, Operation::Encrypt, &PlaintextCipher, &target);
+
+        assert!(result.is_err());
     }
 
     #[test]

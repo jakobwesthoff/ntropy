@@ -145,7 +145,8 @@ What differs for an agent:
 Converting an existing vault is `ntropy vault encrypt` (and `vault decrypt`
 back). Both rewrite every note, ask first unless given `-y`, and are safe to
 interrupt: `--resume` finishes one that was. They refuse to start while two
-note files share a ULID or a file sits where a converted note would go; run
+note files share a ULID, a file sits where a converted note would go or a
+file is in `all-notes/_assets/` (asset encryption is not supported yet); run
 `ntropy reconcile` first, or move the named files away.
 
 `ntropy vault passphrase` changes only the passphrase that wraps the

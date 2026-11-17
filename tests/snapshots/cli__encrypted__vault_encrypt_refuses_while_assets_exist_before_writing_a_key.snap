@@ -1,0 +1,21 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - "-n"
+    - "--passphrase-file"
+    - test-passphrase.txt
+    - vault
+    - encrypt
+    - "-y"
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: nothing was converted: `[VAULT]/all-notes/_assets/[ULID....................]-plan/chart.png` is in `all-notes/_assets/`, and asset encryption is not supported yet, so it would stay plaintext beside the encrypted notes

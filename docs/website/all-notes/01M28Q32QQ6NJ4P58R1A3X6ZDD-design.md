@@ -129,3 +129,4 @@ made.
 - [0100. Views carry an _assets link](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0100-views-carry-an-assets-link.md)
 - [0101. Renders and exports serve only a note's own assets](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0101-renders-and-exports-serve-only-a-notes-own-assets.md)
 - [0102. delete removes the note's asset folder](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0102-delete-removes-the-notes-asset-folder.md)
+- [0103. Encrypted vaults take no assets yet](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0103-encrypted-vaults-take-no-assets-yet.md)

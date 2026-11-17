@@ -26,6 +26,12 @@ Deliberately outside the model:
 - **Metadata.** Filenames reveal each note's ULID (and thus its creation
   time), the note count, and file sizes. `.ntropy/` contents remain plaintext
   (see below).
+- **Assets.** Encryption covers note files only, so the files in
+  `all-notes/_assets/` would stay plaintext. An encrypted vault takes no
+  assets in this release: `vault encrypt` refuses while `_assets/` holds a file
+  or a symlink other than operating-system metadata (`.DS_Store`, `._*`,
+  `Thumbs.db`, `desktop.ini`), naming the first one, and `reconcile`, `delete`
+  and the `asset` commands do no asset work in an encrypted vault (ADR 0103).
 - **History predating encryption.** Encrypting an existing vault does not
   reach into git history or a sync provider's version history; plaintext
   revisions recorded before the migration stay readable there.

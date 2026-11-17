@@ -45,6 +45,11 @@ tag taxonomy in plaintext directory names inside the synced folder.
 `view add` is refused. `view list` and `view remove` keep working, so a
 vault encrypted after the fact can be cleaned up.
 
+Notes are the only files ntropy encrypts. A note's asset folder
+(`all-notes/_assets/`) would stay plaintext, so an encrypted vault takes no
+assets yet: `vault encrypt` refuses to start while that folder holds a file,
+and names the first one.
+
 A rendered document or an exported site is plaintext by nature. If you
 write one into the vault, ntropy warns that it will sync unencrypted.
 

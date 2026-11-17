@@ -21,7 +21,10 @@ mod sync;
 
 pub use check::{AssetIssue, check};
 pub use links::{LocalLink, local_links, names_a_file, relink_folder};
-pub use sync::{AssetSync, FolderMove, Relink, plan_renames, read_folders, stale_names, sync};
+pub use sync::{
+    AssetSync, FolderMove, Relink, first_unencryptable, plan_renames, read_folders, stale_names,
+    sync,
+};
 
 use crate::id::{Id, ULID_LEN};
 use crate::render::markdown::resolve_root_relative;

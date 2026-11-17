@@ -9414,6 +9414,23 @@ mod encrypted {
     }
 
     #[test]
+    fn vault_encrypt_refuses_while_assets_exist_before_writing_a_key() {
+        let dir = convertible_vault();
+        let vault = dir.path();
+        write_note(vault, ULID_A, "plan", "---\ntitle: Plan\n---\nbody\n");
+        let folder = vault.join(format!("all-notes/_assets/{ULID_A}-plan"));
+        fs::create_dir_all(&folder).expect("asset folder");
+        fs::write(folder.join("chart.png"), b"png").expect("asset");
+
+        redacted(vault).bind(|| {
+            assert_cmd_snapshot!(ntropy_convert(vault).args(["vault", "encrypt", "-y"]));
+        });
+
+        assert!(!vault.join(".ntropy/identity.pub").exists());
+        assert!(vault.join(format!("all-notes/{ULID_A}-plan.md")).is_file());
+    }
+
+    #[test]
     fn an_encrypted_vault_is_searchable_afterwards() {
         // The end-to-end proof: convert, then read it back through the CLI.
         let dir = convertible_vault();

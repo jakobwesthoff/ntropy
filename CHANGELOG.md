@@ -49,6 +49,13 @@ change in any release
   the new `--remove-assets` removes it anyway.
   [ADR 0102](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0102-delete-removes-the-notes-asset-folder.md)
   records the behaviour.
+- `vault encrypt` refuses to start while `all-notes/_assets/` holds a file or a
+  symlink other than operating-system metadata, because asset encryption is not
+  supported yet and the file would stay plaintext beside the encrypted notes.
+  It names the first such file. `reconcile` and `delete` do no asset work in an
+  encrypted vault.
+  [ADR 0103](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0103-encrypted-vaults-take-no-assets-yet.md)
+  records the refusal.
   [ADR 0098](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
   records the layout and
   [ADR 0097](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)
