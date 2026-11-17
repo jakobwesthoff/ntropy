@@ -3,7 +3,7 @@
 Research on how ntropy should store, name, check, render and encrypt the files
 that belong to a note (images, PDFs, transcripts, archives). Started
 2026-11-17. The todo that carries the matter is
-[Decide how ntropy stores, names and reconciles note assets](../../../todos/all-notes/01M6E0CWM5KS1FRX3DTB3VREB7-decide-how-ntropy-stores-names-and-reconciles-note-assets.md).
+[Give each note an asset folder that ntropy manages](../../../todos/all-notes/01M6E0CWM5KS1FRX3DTB3VREB7-give-each-note-an-asset-folder-that-ntropy-manages.md).
 
 The facts about the code are checked against `main` at commit `ed914a3`
 (release v2.11.0).
@@ -23,9 +23,12 @@ The facts about the code are checked against `main` at commit `ed914a3`
 
 The research is done. The decisions are taken with the user, working
 through [open-questions.md](open-questions.md), and recorded in
-[decisions.md](decisions.md). Round 1 (2026-11-17) settled the folder
-naming, its location and the link form in encrypted vaults, and deferred
-asset encryption. The questions from 6 on are open.
+[decisions.md](decisions.md). Rounds 1 to 4 (2026-11-17) decided the
+design except asset encryption, which waits until the layout has been
+used for a while. Where a decision differs from a recommendation or a
+"settled" point in [options.md](options.md), decisions.md wins: the asset
+folder is `_assets`, named like the note file, and there is no conversion
+command.
 
 Both researchers recommend one family of layout: a folder per note named by
 the note's bare ULID, `all-notes/assets/<ULID>/`, linked with plain relative

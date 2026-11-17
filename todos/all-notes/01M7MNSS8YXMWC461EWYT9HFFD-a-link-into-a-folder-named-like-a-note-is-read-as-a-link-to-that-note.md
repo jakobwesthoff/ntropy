@@ -47,4 +47,4 @@ slash, and a reconcile test that leaves such a link alone.
 
 ## Relations
 
-- Relates to: [Decide how ntropy stores, names and reconciles note assets](01M6E0CWM5KS1FRX3DTB3VREB7-decide-how-ntropy-stores-names-and-reconciles-note-assets.md), any per-note asset folder directly in `all-notes/` needs this fixed first
+- Relates to: [Give each note an asset folder that ntropy manages](01M6E0CWM5KS1FRX3DTB3VREB7-give-each-note-an-asset-folder-that-ntropy-manages.md), any per-note asset folder directly in `all-notes/` needs this fixed first

@@ -231,7 +231,7 @@ Four conventions exist in the user's own material:
 
 1. The `primary` vault: `all-notes/assets/<note basename>/`, linked
    `assets/<basename>/<file>`. It comes from the meeting-minutes workflow
-   (todo [01M6E0CWM5KS1FRX3DTB3VREB7](../../../todos/all-notes/01M6E0CWM5KS1FRX3DTB3VREB7-decide-how-ntropy-stores-names-and-reconciles-note-assets.md)).
+   (todo [01M6E0CWM5KS1FRX3DTB3VREB7](../../../todos/all-notes/01M6E0CWM5KS1FRX3DTB3VREB7-give-each-note-an-asset-folder-that-ntropy-manages.md)).
    The researchers did not open that vault; the lead measured it afterwards, see
    below.
 2. The agent skill: attachments "right next to the notes", referenced with

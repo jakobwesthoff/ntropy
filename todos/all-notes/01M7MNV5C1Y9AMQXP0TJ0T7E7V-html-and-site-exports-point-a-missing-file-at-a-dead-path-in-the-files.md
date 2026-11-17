@@ -40,4 +40,4 @@ and keeps the link working if the file turns up beside the output.
 
 ## Relations
 
-- Relates to: [Decide how ntropy stores, names and reconciles note assets](01M6E0CWM5KS1FRX3DTB3VREB7-decide-how-ntropy-stores-names-and-reconciles-note-assets.md), how exports treat asset links
+- Relates to: [Give each note an asset folder that ntropy manages](01M6E0CWM5KS1FRX3DTB3VREB7-give-each-note-an-asset-folder-that-ntropy-manages.md), how exports treat asset links
