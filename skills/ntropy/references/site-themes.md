@@ -1,15 +1,4 @@
----
-name: site-themes
-description: >-
-  Write or adapt a site theme for the website export and the html render
-  format: the theme directory layout, the custom properties the built-in
-  stylesheet exposes for colors, type, and sizes, fonts, the icon sprite,
-  the page markup a stylesheet targets, what the built-in stylesheet and
-  the page scripts rely on, and the page templates with their blocks and
-  variables.
-metadata:
-  tags: theme, css, stylesheet, fonts, icons, tokens, templates, site, html
----
+Part of the ntropy skill. Read SKILL.md first, which holds the rules for every task; `ntropy skill` prints it.
 
 # Site themes
 
@@ -338,3 +327,5 @@ it, and the page uses `page.html`. The templates are read at export and never
 copied into the site or beside an artifact. One that fails to parse or to
 render fails the export naming it, so export to a scratch directory after
 every edit. A template named under `templates/ntropy/` is refused.
+
+End of references/site-themes.md.

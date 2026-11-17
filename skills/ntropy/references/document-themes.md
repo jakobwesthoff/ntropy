@@ -1,14 +1,4 @@
----
-name: document-themes
-description: >-
-  Write or adapt a document theme for `render` to pdf and typst: where the
-  Typst file lives and how it is selected, how it is spliced into the
-  emitted document, what `note` receives, the functions it may override,
-  the body's elements as show-rule hooks, paper, assets, imports, fonts and
-  TYPST_FONT_PATHS, and how to see typst's warnings and errors.
-metadata:
-  tags: theme, typst, pdf, render, fonts, paper, show rules
----
+Part of the ntropy skill. Read SKILL.md first, which holds the rules for every task; `ntropy skill` prints it.
 
 # Document themes
 
@@ -190,3 +180,5 @@ Remove them with `ntropy delete -n -f 01M6CCEVBP701HH0VPBT6ZNAYZ`,
 Every GitHub release attaches the same archive, packed from the release's
 commit: `https://github.com/jakobwesthoff/ntropy/releases/download/<tag>/theme-test-note.tar.gz`
 matches that release's binary.
+
+End of references/document-themes.md.

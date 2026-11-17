@@ -1,11 +1,4 @@
----
-name: views
-description: >-
-  Materialized symlink views: grouping notes by a frontmatter field into
-  browsable directories, view commands, gitignore management, and drift rules.
-metadata:
-  tags: views, symlinks, view-add, gitignore, reconcile, browsing
----
+Part of the ntropy skill. Read SKILL.md first, which holds the rules for every task; `ntropy skill` prints it.
 
 # Materialized views
 
@@ -96,3 +89,5 @@ Everything a view can group by, a query can filter by without one:
 user will browse that dimension repeatedly through the filesystem or an editor;
 reach for [querying](querying.md) for one-off lookups. As an agent you rarely
 need views for your own work — queries are the programmatic path.
+
+End of references/views.md.

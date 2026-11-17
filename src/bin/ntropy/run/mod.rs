@@ -25,6 +25,7 @@ mod securetemp;
 mod show;
 mod signals;
 mod site;
+mod skill;
 #[cfg(feature = "encryption")]
 mod vault_cmd;
 
@@ -78,6 +79,11 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
     // one (ADR 0029).
     if let Command::Lsp = command {
         return lsp::run();
+    }
+
+    // The skill is compiled into the binary and needs no vault (ADR 0092).
+    if let Command::Skill { part, install } = &command {
+        return skill::cmd_skill(part.as_deref(), install.as_deref());
     }
 
     // The key and conversion commands resolve the vault themselves. A
@@ -192,6 +198,7 @@ pub fn run(cli: Cli) -> Result<ExitCode> {
         // Handled above, before vault resolution.
         Command::Info { .. } => unreachable!("info is dispatched before vault resolution"),
         Command::Lsp => unreachable!("lsp is dispatched before vault resolution"),
+        Command::Skill { .. } => unreachable!("skill is dispatched before vault resolution"),
     }
 }
 

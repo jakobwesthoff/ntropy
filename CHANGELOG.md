@@ -9,6 +9,22 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Added
+
+- `ntropy skill` prints the agent skill compiled into the binary, so an agent
+  reads the skill of the ntropy that runs. `ntropy skill <part>` prints one of
+  its parts (`writing-notes`, `querying`, `vaults`, `views`, `site`,
+  `site-themes`, `document-themes`), and `ntropy skill --install <dir>` writes
+  the skill to `<dir>/ntropy/`, for a skills directory such as
+  `~/.claude/skills`, and names each file it writes. It replaces the copy's
+  `references/` directory and leaves any other file there alone. `SKILL.md`
+  carries an `ntropy-version` stamp, and the published crate carries
+  `skills/`. `skill` needs no vault.
+  [ADR 0092](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0092-ship-the-agent-skill-in-the-binary-and-print-it-with-ntropy-skill.md)
+  records the command.
+
 ## v2.11.0 - 2026-11-16
 
 ### Added

@@ -1,0 +1,22 @@
+---
+source: tests/skill.rs
+info:
+  program: ntropy
+  args:
+    - skill
+    - views
+    - "--install"
+    - skills-root
+  env:
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: the argument '[PART]' cannot be used with '--install <DIR>'
+
+Usage: ntropy skill <PART>
+
+For more information, try '--help'.

@@ -10,12 +10,13 @@ repository = "https://github.com/jakobwesthoff/ntropy"
 license = "MPL-2.0"
 keywords = ["notes", "markdown", "zettelkasten", "cli", "knowledge-base"]
 categories = ["command-line-utilities", "text-processing"]
-# Docs, todos, the agent skill, shell extras and repository tooling are not
-# needed to build ntropy. Of the site frontend sources only grammars.json
+# Docs, todos, shell extras and repository tooling are not needed to build
+# ntropy. The agent skill under skills/ stays in the package, since the binary
+# embeds its files (ADR 0092). Of the site frontend sources only grammars.json
 # stays, which a unit test embeds; the built frontend lives in src/site/.
 exclude = [
     ".adr-dir", ".claude/", ".github/", "CLAUDE.md", "contrib/", "docs/", "justfile",
-    "scripts/", "skills/", "todos/",
+    "scripts/", "todos/",
     "site/.bun-version", "site/biome.json", "site/build.ts", "site/bun.lock",
     "site/node_modules/", "site/package.json", "site/src/", "site/tsconfig.json",
     "site/vite.config.ts",

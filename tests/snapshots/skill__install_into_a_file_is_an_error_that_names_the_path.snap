@@ -1,0 +1,17 @@
+---
+source: tests/skill.rs
+info:
+  program: ntropy
+  args:
+    - skill
+    - "--install"
+    - skills-root
+  env:
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 1
+----- stdout -----
+
+----- stderr -----
+error: while installing the skill: skills-root/ntropy: Not a directory (os error 20)

@@ -1,0 +1,24 @@
+---
+source: tests/skill.rs
+info:
+  program: ntropy
+  args:
+    - skill
+    - "--install"
+    - skills-root
+  env:
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+installed skills-root/ntropy/SKILL.md
+installed skills-root/ntropy/references/writing-notes.md
+installed skills-root/ntropy/references/querying.md
+installed skills-root/ntropy/references/vaults.md
+installed skills-root/ntropy/references/views.md
+installed skills-root/ntropy/references/site.md
+installed skills-root/ntropy/references/site-themes.md
+installed skills-root/ntropy/references/document-themes.md
+
+----- stderr -----

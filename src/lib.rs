@@ -71,6 +71,7 @@ pub mod reconcile;
 pub mod render;
 pub mod scan;
 pub mod site;
+pub mod skill;
 pub mod template;
 pub mod view;
 

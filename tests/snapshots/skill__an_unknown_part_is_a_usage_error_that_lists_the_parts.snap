@@ -1,0 +1,19 @@
+---
+source: tests/skill.rs
+info:
+  program: ntropy
+  args:
+    - skill
+    - no-such-part
+  env:
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: false
+exit_code: 2
+----- stdout -----
+
+----- stderr -----
+error: invalid value 'no-such-part' for '[PART]'
+  [possible values: writing-notes, querying, vaults, views, site, site-themes, document-themes]
+
+For more information, try '--help'.

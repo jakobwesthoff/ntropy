@@ -1,11 +1,4 @@
----
-name: writing-notes
-description: >-
-  How to create and author well-behaving ntropy notes: the creation workflow,
-  frontmatter rules, tags, inter-note links, templates, and when to reconcile.
-metadata:
-  tags: notes, frontmatter, tags, links, templates, reconcile, authoring
----
+Part of the ntropy skill. Read SKILL.md first, which holds the rules for every task; `ntropy skill` prints it.
 
 # Writing notes
 
@@ -292,3 +285,5 @@ plain lexical sort of `all-notes/` is chronological.
 - Links target `<ulid>-<slug>.md` filenames.
 - `ntropy reconcile` run after any direct edit to frontmatter or title (`write`
   does this itself).
+
+End of references/writing-notes.md.

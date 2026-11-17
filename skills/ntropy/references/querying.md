@@ -1,11 +1,4 @@
----
-name: querying
-description: >-
-  The ntropy query language (tag:, field:, text:, and/or/not), how search and
-  delete select notes, plain-output parsing, and exit-code recipes for scripting.
-metadata:
-  tags: search, query, dsl, delete, scripting, exit-codes, output
----
+Part of the ntropy skill. Read SKILL.md first, which holds the rules for every task; `ntropy skill` prints it.
 
 # Querying and scripting
 
@@ -160,3 +153,5 @@ no lookup and no picker. An unset shell variable (`delete -n -f "$ID"`)
 therefore cannot delete a note.
 
 Deleting removes the canonical file and refreshes the views.
+
+End of references/querying.md.

@@ -12,7 +12,8 @@
 //! (ADR 0076); a lone argument naming a note's file is a path (ADR 0091).
 //! `edit` is a hidden alias of `search` (ADR 0031). `search`,
 //! `new` and `today` take `--id` beside `-p` to print a note's ULID instead of
-//! its path (ADR 0090). A bare `ntropy` prints help.
+//! its path (ADR 0090). `skill` takes an optional part name or `--install <DIR>`
+//! (ADR 0092). A bare `ntropy` prints help.
 
 use std::path::PathBuf;
 
@@ -346,6 +347,24 @@ pub enum Command {
     /// Run the language server over stdin/stdout.
     // ADR 0029 governs the language-server surface.
     Lsp,
+
+    /// Print the agent skill compiled into this ntropy, or install it.
+    ///
+    /// Prints the skill's core, or one part of it, so an agent reads the skill
+    /// of the ntropy that runs. `--install <DIR>` writes it to `<DIR>/ntropy/`
+    /// for a skills directory such as `~/.claude/skills`. Needs no vault
+    /// (ADR 0092).
+    Skill {
+        /// Part of the skill to print in place of its core.
+        #[arg(
+            value_parser = clap::builder::PossibleValuesParser::new(ntropy::skill::part_names()),
+            conflicts_with = "install"
+        )]
+        part: Option<String>,
+        /// Write the skill into DIR/ntropy, replacing its references/ directory.
+        #[arg(long, value_name = "DIR")]
+        install: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand, Debug)]

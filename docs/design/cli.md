@@ -10,6 +10,7 @@ The command surface and its behavior. Consolidates
 [ADR 0037](../adr/0037-render-command-surface.md),
 [ADR 0082](../adr/0082-ansi-render-format-drawn-by-patine.md),
 [ADR 0083](../adr/0083-show-prints-a-note-drawn-for-the-terminal.md),
+[ADR 0092](../adr/0092-ship-the-agent-skill-in-the-binary-and-print-it-with-ntropy-skill.md),
 and the query DSL in [query-and-search.md](query-and-search.md).
 
 ## Global behavior
@@ -578,3 +579,20 @@ spawn. Unlike the other commands it does not resolve a vault from the global
 flags; it resolves one per open document (ADR 0029). The capabilities and
 editor setup are documented in
 [language-server.md](language-server.md).
+
+### `skill [part]`
+
+Print the agent skill compiled into the binary (ADR 0092). Without an
+argument it prints the core, `SKILL.md`. A part name prints that part:
+`writing-notes`, `querying`, `vaults`, `views`, `site`, `site-themes` or
+`document-themes`, the file names under `skills/ntropy/references/` without
+`.md`. An unknown name is a usage error that lists them. The Markdown goes to
+stdout as it is, unwrapped and uncoloured, also on a terminal.
+
+`--install <dir>` writes the skill to `<dir>/ntropy/` instead, for a skills
+directory such as `~/.claude/skills`: `SKILL.md`, and every part under
+`references/`. It replaces `references/` whole and leaves any other file in
+`<dir>/ntropy/` alone. Each file is named on stdout as `installed <path>` once
+it is written. A part and `--install` together are a usage error.
+
+`skill` resolves no vault and works outside one.

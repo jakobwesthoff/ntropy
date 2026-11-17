@@ -10,23 +10,18 @@ an agent skill that teaches them.
 
 ## Install
 
-The quickest install is the [`skills` CLI](https://skills.sh), which
-places the skill into Claude Code, Cursor, Codex, and most other
-SKILL.md-aware agents. It installs into the project by default and for
-your user with `-g`:
+The skill is compiled into ntropy, so an agent reads the skill of the
+ntropy that runs. `ntropy skill` prints it, and `ntropy skill --install`
+writes it where your agent loads skills from. For Claude Code, every
+project at once:
 
 ```bash
-npx skills add jakobwesthoff/ntropy
+ntropy skill --install ~/.claude/skills
 ```
 
-Or skip the tooling and copy the directory by hand. For Claude Code it
-belongs at `~/.claude/skills/ntropy` (every project) or
-`<project>/.claude/skills/ntropy` (just that project):
-
-```bash
-git clone https://github.com/jakobwesthoff/ntropy.git
-cp -R ntropy/skills/ntropy ~/.claude/skills/ntropy
-```
+This writes `~/.claude/skills/ntropy/`. For one project only, install into
+`<project>/.claude/skills`. The install replaces the copy's `references/`
+directory and leaves any other file in `ntropy/` alone.
 
 The skill's description marks it as relevant to any task involving
 ntropy, a note vault, or `.ntropy-vault` files, so an agent with the
@@ -38,7 +33,9 @@ skill installed picks it up on its own the moment a task touches one.
 holds a `SKILL.md` with the vault model, rules for agents, a do/don't
 table, and a command reference. Beside it are reference docs on writing
 notes, querying, vaults, views, the website export with its navigation
-settings, site themes, and document themes.
+settings, site themes, and document themes. `ntropy skill <part>` prints
+one of them: `writing-notes`, `querying`, `vaults`, `views`, `site`,
+`site-themes` or `document-themes`.
 
 The rules are the part an agent gets wrong on its own:
 

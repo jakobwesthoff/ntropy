@@ -22,6 +22,8 @@ The exceptions carry no header:
 
 - the vault seed content under `src/vault/seed/` (ADR 0039), copied
   verbatim into user vaults; a unit test in `vault::seed` enforces this;
+- the agent skill under `skills/` (ADR 0092), copied verbatim into agents'
+  skills directories; a unit test in `skill` enforces this;
 - the generated frontend output under `src/site/dist/` (ADR 0051); a unit
   test in `site` enforces this;
 - the third-party font and icon files of the built-in site theme under

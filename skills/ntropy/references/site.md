@@ -1,14 +1,4 @@
----
-name: site
-description: >-
-  Export a vault, or a query's subset of it, as a static website with
-  `ntropy site`; render one note as the same page on its own with
-  `render --to html`; configure the front page, the sidebar's root, a
-  hand-assembled nav table, and per-note order, labels, landing pages, and
-  hidden pages through the `site` frontmatter table.
-metadata:
-  tags: site, website, export, html, navigation, sidebar, nav, frontmatter, render
----
+Part of the ntropy skill. Read SKILL.md first, which holds the rules for every task; `ntropy skill` prints it.
 
 # Publishing notes as a website
 
@@ -251,3 +241,5 @@ a `note:` line, which `--strict` does not count.
 | Hand over a site whose export printed warnings | fix what they name, or export with `--strict` in scripts |
 | `ntropy site -o ./public` into a used directory | `--force`, on purpose, or a fresh directory |
 | Write the site into an encrypted vault | a directory outside it; the pages are plaintext |
+
+End of references/site.md.

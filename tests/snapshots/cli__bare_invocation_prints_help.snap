@@ -31,6 +31,7 @@ Commands:
   lock       Forget the stored identity, so reading requires the passphrase again
   vault      Whole-vault operations: converting storage and managing the key
   lsp        Run the language server over stdin/stdout
+  skill      Print the agent skill compiled into this ntropy, or install it
   help       Print this message or the help of the given subcommand(s)
 
 Options:

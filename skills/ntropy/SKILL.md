@@ -8,7 +8,34 @@ description: >-
   vault, or .ntropy-vault files.
 metadata:
   tags: ntropy, notes, markdown, vault, cli, site, website, html
+  ntropy-version: "2.11.0"
 ---
+
+Read this file to its last line before you run ntropy. The last line is
+`End of the ntropy skill.` If you have not seen it, read the file again in
+full, from its path or from the output of `ntropy skill`. Read a file under
+`references/` when a step below names it. Each ends with its own end line
+too.
+
+Seven files hold details for some tasks:
+
+- `references/writing-notes.md`, or `ntropy skill writing-notes`: before you
+  author a note, and for frontmatter rules, tags, inter-note links, templates
+  and when to reconcile.
+- `references/querying.md`, or `ntropy skill querying`: for the full query
+  language, how `search` and `delete` select notes, output parsing and
+  exit-code recipes.
+- `references/vaults.md`, or `ntropy skill vaults`: for vault anatomy, how the
+  active vault is resolved, and creating global, project-local and custom
+  vaults.
+- `references/views.md`, or `ntropy skill views`: before you add or change a
+  view, and for drift and git rules.
+- `references/site.md`, or `ntropy skill site`: for `ntropy site`, the
+  standalone `render --to html` page, and the `[site]` and nav tables.
+- `references/site-themes.md`, or `ntropy skill site-themes`: before you write
+  or adapt a site theme.
+- `references/document-themes.md`, or `ntropy skill document-themes`: before
+  you write or adapt a document theme for PDF and Typst output.
 
 # Working with ntropy
 
@@ -66,7 +93,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
    artifact path (`out=$(ntropy render -n -p <ulid>)`). `--to typst` emits
    the Typst document. `--to html` writes the note as a web page,
    `<stem>.html` plus a `<stem>_files/` directory beside it that the page
-   needs; move the two together ([references/site.md](references/site.md)).
+   needs; move the two together ([references/site.md](references/site.md), or `ntropy skill site`).
    `--to ansi` writes the note drawn for a terminal, with ANSI escape
    sequences, at 80 columns; GitHub alerts are drawn as callouts.
 11. **The vault's theme is automatic; never pass `--theme` to get it.** Which
@@ -136,7 +163,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy delete -n -f <id>` | Delete one note and refresh views. |
 | `ntropy render -n -p <id> -o out.pdf` | Render one note to a document. The vault's configured theme applies automatically; `--theme <name>` overrides it, `--theme default` forces the built-in look. `--to` picks the format: `pdf` (default, via ntropy's own typst engine, needing only `typst` on `PATH`), `typst` for the emitted document, `html` for a web page with a `<stem>_files/` directory beside it, or `ansi` for the note drawn for a terminal (no theme); the last three need no external tool. Resolves to exactly one note; `-p` prints the artifact path; an existing artifact is refused without `--force`; a default name from a file name with control or bidi characters, or a leading `-`, is refused (run `ntropy reconcile` or pass `-o`). |
 | `ntropy show -n <id>` | Print one note drawn for a terminal: frontmatter block, then the styled Markdown, GitHub alerts as callouts. Into a pipe it is plain text laid out at 80 columns (`--width` changes that), not the note's source, so read a note's exact text with `search -n -P`. Interactively a long note opens in `$PAGER` or `less -R`; `-n` never pages. Resolves to exactly one note, like `render`. |
-| `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website: a page per note, a tag tree, a page per view and group, a front page, sidebar, search, works from disk. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `--theme` overrides the site theme. `site theme init <name>` copies the built-in theme into the vault. Warnings name missing files, links to files an export never copies (`.ntropy`, `.git`, credentials and the like), links to notes outside the export, and unresolvable navigation; `--strict` fails on them. Hidden files and metadata left out of a linked folder are `note:` lines, which `--strict` does not count. Details: [references/site.md](references/site.md). |
+| `ntropy site -n -o <dir> [query]` | Export the vault, or the notes a query selects, as a static website: a page per note, a tag tree, a page per view and group, a front page, sidebar, search, works from disk. A non-empty `<dir>` is refused without `--force`; `-p` prints the front page's path; `--theme` overrides the site theme. `site theme init <name>` copies the built-in theme into the vault. Warnings name missing files, links to files an export never copies (`.ntropy`, `.git`, credentials and the like), links to notes outside the export, and unresolvable navigation; `--strict` fails on them. Hidden files and metadata left out of a linked folder are `note:` lines, which `--strict` does not count. Details: [references/site.md](references/site.md), or `ntropy skill site`. |
 | `ntropy reconcile` | Give copied notes their own ULIDs, realign drifted filenames, refresh links, re-sync views and `.gitignore`. |
 | `ntropy view list\|add\|remove` | Manage materialized views, e.g. `view add by-status --field status`. |
 | `ntropy tags -n` | Every tag with its note count — check this before inventing new tags. |
@@ -144,6 +171,7 @@ language for filtering, and materialized symlink views for filesystem browsing.
 | `ntropy unlock` / `ntropy lock` | Store or forget an encrypted vault's key. |
 | `ntropy vault encrypt\|decrypt\|rekey\|passphrase` | Convert a vault's storage or manage its key. Rewrites every note, so pass `-y` to skip the confirmation; `--resume` finishes an interrupted run. |
 | `ntropy lsp` | Language server for editors (link/tag completion, go-to-definition); not used from scripts. Editor setup lives in the ntropy README. |
+| `ntropy skill [part]` | Print this skill, or one of its parts (`writing-notes`, `querying`, `vaults`, `views`, `site`, `site-themes`, `document-themes`). `--install <dir>` writes the skill to `<dir>/ntropy/`, for a skills directory such as `~/.claude/skills`, and replaces its `references/`. It needs no vault. |
 
 `search`, `delete`, `render` and `show` also take a note's filename or path
 as the one selector, and `write` does too. A lone argument that ends in `.md`
@@ -189,7 +217,7 @@ is unlocked; what differs for an agent:
 global default. A `.ntropy-vault` file is one line pointing at a vault
 elsewhere, which is how a project pins its own vault. Details and creation
 recipes for global, project-local, and custom vaults:
-[references/vaults.md](references/vaults.md).
+[references/vaults.md](references/vaults.md), or `ntropy skill vaults`.
 
 ## Core workflows
 
@@ -239,7 +267,7 @@ ntropy reconcile
 ```
 
 Frontmatter rules in full, plus tags, inter-note links, and template authoring:
-[references/writing-notes.md](references/writing-notes.md).
+[references/writing-notes.md](references/writing-notes.md), or `ntropy skill writing-notes`.
 
 **Find and read notes:**
 
@@ -252,7 +280,7 @@ ntropy search -n --id 'tag:work and not status:done'     # just the ULIDs
 
 Full query language (`tag:`, `field:`, `text:`, `and`/`or`/`not`), output
 parsing, and exit-code recipes:
-[references/querying.md](references/querying.md).
+[references/querying.md](references/querying.md), or `ntropy skill querying`.
 
 **Set up a project vault:**
 
@@ -267,7 +295,7 @@ echo "notes" > myproject/.ntropy-vault   # commands anywhere in the project now 
 ntropy view add by-status --field status
 ```
 
-View semantics, drift, and git rules: [references/views.md](references/views.md).
+View semantics, drift, and git rules: [references/views.md](references/views.md), or `ntropy skill views`.
 
 **Publish a documentation subtree as a website:** tag the pages as a tree,
 give each section a landing note, order the pages through their `site`
@@ -291,9 +319,11 @@ ntropy site -n -o ./public --strict tag:handbook
 ```
 
 The `[site]` table, the nav table, the `site` frontmatter keys, and the
-standalone `render --to html` page: [references/site.md](references/site.md).
+standalone `render --to html` page: [references/site.md](references/site.md), or `ntropy skill site`.
 Writing a theme: a site theme for `site` and `render --to html` (layout,
 tokens, fonts, icons, markup, templates, a front page) is
-[references/site-themes.md](references/site-themes.md); a document theme
+[references/site-themes.md](references/site-themes.md), or `ntropy skill site-themes`; a document theme
 for PDF and Typst output (`note`, show rules, fonts, paper) is
-[references/document-themes.md](references/document-themes.md).
+[references/document-themes.md](references/document-themes.md), or `ntropy skill document-themes`.
+
+End of the ntropy skill.

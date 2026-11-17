@@ -1,11 +1,4 @@
----
-name: vaults
-description: >-
-  Vault anatomy, how ntropy resolves the active vault, and recipes for creating
-  global, project-local, and custom vaults, including .ntropy-vault pointer files.
-metadata:
-  tags: vault, init, resolution, pointer-file, configuration, git
----
+Part of the ntropy skill. Read SKILL.md first, which holds the rules for every task; `ntropy skill` prints it.
 
 # Vaults
 
@@ -177,3 +170,5 @@ ntropy search -n --strict > /dev/null   # exits non-zero if any note is malforme
 
 (An empty vault also exits non-zero, since a no-match listing does; check
 stderr for `error:` versus the no-match message when it matters.)
+
+End of references/vaults.md.
