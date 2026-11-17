@@ -226,4 +226,27 @@ mod tests {
         let parsed: PerVaultConfig = toml::from_str(&text).expect("parse back");
         assert_eq!(parsed, cfg);
     }
+
+    #[test]
+    fn a_bad_attach_max_in_the_file_is_a_parse_error_naming_key_and_value() {
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("config.toml");
+        std::fs::write(&path, "[render]\nattach_max = \"lots\"\n").expect("write");
+        let err = PerVaultConfig::load(&path).expect_err("a bad size does not parse");
+        let ConfigError::Parse { source, .. } = &err else {
+            panic!("expected a parse error, got {err:?}");
+        };
+        let source = source.to_string();
+        assert!(
+            source.contains("attach_max") && source.contains("lots"),
+            "{source}"
+        );
+    }
+
+    #[test]
+    fn parse_render_attach_max_as_a_size_string() {
+        let cfg: PerVaultConfig =
+            toml::from_str("[render]\nattach_max = \"1 MiB\"\n").expect("parse");
+        assert_eq!(cfg.render.attach_max, 1024 * 1024);
+    }
 }

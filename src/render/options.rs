@@ -56,9 +56,12 @@ impl Paper {
     }
 }
 
+/// The default per-file limit for attaching a linked file to a PDF, in bytes.
+pub const DEFAULT_ATTACH_MAX: u64 = 25 * 1024 * 1024;
+
 /// Engine-independent render settings, the `[render]` section of the vault
 /// config.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RenderOptions {
     /// The paper format artifacts are laid out for.
     #[serde(default)]
@@ -75,6 +78,70 @@ pub struct RenderOptions {
     /// path it looked for.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub theme: Option<String>,
+    /// The per-file size limit in bytes up to which a linked file is attached
+    /// to a PDF; `0` turns attaching off.
+    ///
+    /// The config takes an integer (bytes) or a size string such as
+    /// `"25 MiB"`; the default is left out when the section is written.
+    #[serde(
+        default = "default_attach_max",
+        deserialize_with = "attach_max_from_toml",
+        skip_serializing_if = "is_default_attach_max"
+    )]
+    pub attach_max: u64,
+}
+
+impl Default for RenderOptions {
+    fn default() -> Self {
+        RenderOptions {
+            paper: Paper::default(),
+            theme: None,
+            attach_max: DEFAULT_ATTACH_MAX,
+        }
+    }
+}
+
+fn default_attach_max() -> u64 {
+    DEFAULT_ATTACH_MAX
+}
+
+fn is_default_attach_max(bytes: &u64) -> bool {
+    *bytes == DEFAULT_ATTACH_MAX
+}
+
+/// Reads `attach_max` as an integer byte count or a size string. A hand-written
+/// visitor rather than an untagged enum, so the error for a bad value names
+/// the value instead of "data did not match any variant".
+fn attach_max_from_toml<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::{Error, Unexpected, Visitor};
+
+    struct SizeVisitor;
+
+    impl Visitor<'_> for SizeVisitor {
+        type Value = u64;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a size in bytes or a size string such as \"25 MiB\"")
+        }
+
+        fn visit_u64<E: Error>(self, bytes: u64) -> Result<u64, E> {
+            Ok(bytes)
+        }
+
+        fn visit_i64<E: Error>(self, bytes: i64) -> Result<u64, E> {
+            u64::try_from(bytes).map_err(|_| E::invalid_value(Unexpected::Signed(bytes), &self))
+        }
+
+        fn visit_str<E: Error>(self, text: &str) -> Result<u64, E> {
+            crate::asset::parse_size(text)
+                .ok_or_else(|| E::invalid_value(Unexpected::Str(text), &self))
+        }
+    }
+
+    deserializer.deserialize_any(SizeVisitor)
 }
 
 impl RenderOptions {
@@ -107,7 +174,11 @@ mod tests {
             Paper::UsOficio,
         ];
         for paper in variants {
-            let options = RenderOptions { paper, theme: None };
+            let options = RenderOptions {
+                paper,
+                theme: None,
+                ..Default::default()
+            };
             let toml = toml::to_string(&options).expect("options serialize");
             assert_eq!(toml.trim(), format!("paper = \"{}\"", paper.as_str()));
             let back: RenderOptions = toml::from_str(&toml).expect("the name parses back");
@@ -139,6 +210,7 @@ mod tests {
             !RenderOptions {
                 paper: Paper::UsLetter,
                 theme: None,
+                ..Default::default()
             }
             .is_default()
         );
@@ -146,6 +218,7 @@ mod tests {
             !RenderOptions {
                 paper: Paper::A4,
                 theme: Some("corporate".into()),
+                ..Default::default()
             }
             .is_default(),
             "a configured theme alone is not the default section"
@@ -160,6 +233,7 @@ mod tests {
         let options = RenderOptions {
             paper: Paper::A4,
             theme: Some("corporate".into()),
+            ..Default::default()
         };
         let toml = toml::to_string(&options).expect("options serialize");
         assert!(
@@ -180,5 +254,83 @@ mod tests {
     fn a_config_without_a_theme_key_parses_as_no_theme() {
         let options: RenderOptions = toml::from_str(r#"paper = "a4""#).expect("parses");
         assert_eq!(options.theme, None);
+    }
+
+    #[test]
+    fn attach_max_defaults_to_25_mib() {
+        assert_eq!(DEFAULT_ATTACH_MAX, 25 * 1024 * 1024);
+        assert_eq!(RenderOptions::default().attach_max, DEFAULT_ATTACH_MAX);
+        let options: RenderOptions = toml::from_str("").expect("parses");
+        assert_eq!(options.attach_max, DEFAULT_ATTACH_MAX);
+    }
+
+    #[test]
+    fn attach_max_accepts_integer_bytes() {
+        let options: RenderOptions = toml::from_str("attach_max = 1048576").expect("parses");
+        assert_eq!(options.attach_max, 1024 * 1024);
+    }
+
+    #[test]
+    fn attach_max_accepts_a_size_string() {
+        let options: RenderOptions = toml::from_str(r#"attach_max = "512 KiB""#).expect("parses");
+        assert_eq!(options.attach_max, 512 * 1024);
+    }
+
+    #[test]
+    fn attach_max_zero_turns_attaching_off_as_integer_and_as_string() {
+        for text in [
+            "attach_max = 0",
+            r#"attach_max = "0""#,
+            r#"attach_max = "0 B""#,
+        ] {
+            let options: RenderOptions = toml::from_str(text).expect("parses");
+            assert_eq!(options.attach_max, 0, "{text}");
+        }
+    }
+
+    #[test]
+    fn a_bad_attach_max_error_names_the_key_and_the_value() {
+        for (text, value) in [
+            (r#"attach_max = "lots""#, "lots"),
+            ("attach_max = -5", "-5"),
+            ("attach_max = 1.5", "1.5"),
+        ] {
+            let message = toml::from_str::<RenderOptions>(text)
+                .expect_err("not a size")
+                .to_string();
+            assert!(
+                message.contains("attach_max") && message.contains(value),
+                "the error for {text} names key and value: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn attach_max_is_omitted_at_its_default_and_written_as_bytes_otherwise() {
+        let bare = toml::to_string(&RenderOptions::default()).expect("defaults serialize");
+        assert!(
+            !bare.contains("attach_max"),
+            "the default was written: {bare}"
+        );
+
+        for (attach_max, line) in [(1024 * 1024, "attach_max = 1048576"), (0, "attach_max = 0")] {
+            let options = RenderOptions {
+                attach_max,
+                ..Default::default()
+            };
+            let text = toml::to_string(&options).expect("serializes");
+            assert!(text.contains(line), "{text}");
+            let back: RenderOptions = toml::from_str(&text).expect("parses back");
+            assert_eq!(back, options);
+        }
+    }
+
+    #[test]
+    fn a_changed_attach_max_is_not_the_default_section() {
+        let options = RenderOptions {
+            attach_max: 0,
+            ..Default::default()
+        };
+        assert!(!options.is_default());
     }
 }

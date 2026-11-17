@@ -440,20 +440,10 @@ pub fn print_refused_asset_renames(refused: &[RefusedMove]) {
     }
 }
 
-/// A byte count as a short human-readable figure: whole bytes below a KiB,
-/// otherwise one decimal in binary units, matching the sizes `ls -lh` shows.
+/// A byte count as a short human-readable figure; see
+/// [`ntropy::asset::format_size`].
 pub fn human_size(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["KiB", "MiB", "GiB", "TiB"];
-    if bytes < 1024 {
-        return format!("{bytes} B");
-    }
-    let mut size = bytes as f64 / 1024.0;
-    let mut unit = 0;
-    while size >= 1024.0 && unit < UNITS.len() - 1 {
-        size /= 1024.0;
-        unit += 1;
-    }
-    format!("{size:.1} {}", UNITS[unit])
+    ntropy::asset::format_size(bytes)
 }
 
 // =============================================================================

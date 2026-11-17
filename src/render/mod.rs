@@ -31,7 +31,7 @@ pub mod registry;
 pub mod theme;
 pub mod typst;
 
-pub use options::{Paper, RenderOptions};
+pub use options::{DEFAULT_ATTACH_MAX, Paper, RenderOptions};
 pub use prepare::prepare;
 pub use registry::{DEFAULT_FORMAT, Registry};
 pub use theme::{DEFAULT_THEME, Theme};

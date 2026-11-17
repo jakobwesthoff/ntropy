@@ -973,6 +973,7 @@ warning: value of `state(\"x\")` did not converge
         let options = RenderOptions {
             paper: Paper::UsLetter,
             theme: None,
+            ..Default::default()
         };
         let document = doc("Paper", "{}", "body\n", Vec::new());
 
