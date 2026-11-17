@@ -86,6 +86,11 @@ theme and the vault), reported as the site reports it, a `note:` line never coun
 `--strict`
 ([ADR 0073](../adr/0073-what-html-and-site-exports-copy-from-the-vault.md));
 the artifact and its files directory are never mirrored into themselves.
+A link or image into another note's asset folder is not copied and the page
+keeps it as written; the render warns and `--strict` fails on it (ADR 0101).
+The path is judged as written and as it resolves, so a symlink in the note's
+own folder that leads into another folder is refused too. A linked directory
+leaves out the vault's `all-notes/_assets/`.
 Every file the engine writes besides the page lies inside
 `<stem>_files/`; a target outside it fails the render. The theme is
 selected as the site selects

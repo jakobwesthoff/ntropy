@@ -51,6 +51,8 @@ struct DocumentTargets<'a> {
     files: &'a str,
     /// The note's directory as a root-absolute path within the vault.
     note_dir: &'a str,
+    /// The note being rendered, which has only its own assets.
+    owner: Id,
     scope: &'a ExportScope,
     /// The ids of the sprite's symbols the page inlines.
     icon_ids: &'a BTreeSet<String>,
@@ -62,6 +64,9 @@ impl Targets for DocumentTargets<'_> {
     }
 
     fn asset_href(&self, dest: &str) -> String {
+        if self.scope.is_foreign_asset(self.owner, self.note_dir, dest) {
+            return dest.to_string();
+        }
         match self.scope.href_path(self.note_dir, dest) {
             Some(path) => format!("{}/{FILES_DIR}{path}", self.files),
             None => dest.to_string(),
@@ -96,6 +101,7 @@ impl Renderer for Html {
         let targets = DocumentTargets {
             files: &files,
             note_dir: &note_dir,
+            owner: doc.id,
             scope: &scope,
             icon_ids: &icon_ids,
         };
@@ -164,6 +170,12 @@ impl Renderer for Html {
         // The files the note references, mirrored as the site mirrors them.
         let mut referenced: Vec<String> = Vec::new();
         for dest in &emitted.assets {
+            if scope.is_foreign_asset(doc.id, &note_dir, dest) {
+                ctx.warn(&format!(
+                    "referenced path `{dest}` is in another note's asset folder; not copied"
+                ));
+                continue;
+            }
             match resolve_root_relative(&note_dir, dest) {
                 Some(path) => {
                     if !referenced.contains(&path) {

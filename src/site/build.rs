@@ -244,6 +244,13 @@ pub fn build(input: &Input<'_>) -> Result<Built, crate::error::Error> {
             rendered_assets = rendered.assets;
         }
         for dest in rendered_assets {
+            if export.scope.is_foreign_asset(note.id, &note_dir, &dest) {
+                warnings.push(format!(
+                    "{}: referenced path `{dest}` is in another note's asset folder; not copied",
+                    note.path.display()
+                ));
+                continue;
+            }
             match resolve_root_relative(&note_dir, &dest) {
                 Some(path) => {
                     if !referenced.contains(&path) {
@@ -621,6 +628,8 @@ struct PageTargets<'a> {
     model: &'a Model,
     prefix: String,
     note_dir: &'a str,
+    /// The note being rendered, which has only its own assets.
+    owner: Id,
     scope: &'a ExportScope,
     /// The ids of the sprite's symbols, which every page inlines.
     icon_ids: &'a BTreeSet<String>,
@@ -635,6 +644,9 @@ impl Targets for PageTargets<'_> {
     }
 
     fn asset_href(&self, dest: &str) -> String {
+        if self.scope.is_foreign_asset(self.owner, self.note_dir, dest) {
+            return dest.to_string();
+        }
         match self.scope.href_path(self.note_dir, dest) {
             Some(path) => format!("{}{FILES_DIR}{path}", self.prefix),
             None => dest.to_string(),
@@ -712,6 +724,7 @@ fn render_note(
         model,
         prefix: prefix.clone(),
         note_dir,
+        owner: note.id,
         scope: export.scope,
         icon_ids: export.icon_ids,
     };

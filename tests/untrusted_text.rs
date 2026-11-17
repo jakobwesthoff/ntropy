@@ -385,6 +385,28 @@ fn reconcile_reports_hostile_asset_names_escaped() {
 }
 
 #[test]
+fn a_render_reports_a_hostile_foreign_asset_path_escaped() {
+    let dir = tempfile::tempdir().expect("temp dir");
+    let vault = vault_at(dir.path(), "vault");
+    note(
+        &vault,
+        &format!("{ULID_A}-note.md"),
+        &format!("---\ntitle: Note\n---\n![x](<_assets/shared/{RETITLE}.png>)\n"),
+    );
+
+    let output = run(ntropy(&vault).args(["render", ULID_A, "--to", "html", "-o", "page.html"]));
+
+    assert_no_raw_controls(&output);
+    let shown = stderr(&output);
+    assert!(
+        shown.contains(&format!(
+            "`_assets/shared/{RETITLE_SHOWN}.png` is in another note's asset folder; not copied"
+        )),
+        "{shown}"
+    );
+}
+
+#[test]
 fn reconcile_reports_a_hostile_link_target_escaped() {
     let dir = tempfile::tempdir().expect("temp dir");
     let vault = vault_at(dir.path(), "vault");

@@ -7523,6 +7523,147 @@ fn a_write_that_retitles_a_note_leaves_its_asset_folder_for_reconcile() {
     );
 }
 
+/// A vault with the note A, which links `link` as a file, and the note B with
+/// a picture in its asset folder.
+fn vault_with_two_notes_and_assets(link: &str) -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "reader",
+        &format!("---\ntitle: Reader\n---\n{link}\n"),
+    );
+    write_note(
+        dir.path(),
+        ULID_B,
+        "owner",
+        "---\ntitle: Owner\n---\nbody\n",
+    );
+    for (id, slug) in [(ULID_A, "reader"), (ULID_B, "owner")] {
+        let folder = dir.path().join(format!("all-notes/_assets/{id}-{slug}"));
+        fs::create_dir_all(&folder).expect("asset folder");
+        fs::write(folder.join("chart.png"), b"png").expect("asset");
+    }
+    dir
+}
+
+#[test]
+fn render_to_typst_does_not_embed_an_image_from_another_notes_folder() {
+    let dir = vault_with_two_notes_and_assets(&format!(
+        "![theirs](_assets/{ULID_B}-owner/chart.png) ![mine](_assets/{ULID_A}-reader/chart.png)"
+    ));
+    let target = dir.path().join("out.typ");
+
+    let out = ntropy(dir.path())
+        .args(["render", ULID_A, "--to", "typst", "-n", "-o"])
+        .arg(&target)
+        .output()
+        .expect("run ntropy");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let source = fs::read_to_string(&target).expect("the typst source");
+    assert!(!source.contains(&format!("{ULID_B}-owner")), "{source}");
+    assert!(
+        source.contains(&format!("{ULID_A}-reader/chart.png")),
+        "{source}"
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "_assets/{ULID_B}-owner/chart.png` is in another note's asset folder; not rendered"
+        )),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn a_strict_render_fails_on_a_link_into_another_notes_folder() {
+    let dir =
+        vault_with_two_notes_and_assets(&format!("[theirs](_assets/{ULID_B}-owner/chart.png)"));
+
+    let out = ntropy(dir.path())
+        .args(["--strict", "render", ULID_A, "--to", "typst", "-n", "-o"])
+        .arg(dir.path().join("out.typ"))
+        .output()
+        .expect("run ntropy");
+
+    assert!(!out.status.success(), "{}", rendered(&out));
+}
+
+#[test]
+fn render_to_html_copies_the_notes_own_assets_and_not_another_notes() {
+    let dir = vault_with_two_notes_and_assets(&format!(
+        "![theirs](_assets/{ULID_B}-owner/chart.png) ![mine](_assets/{ULID_A}-reader/chart.png)"
+    ));
+    let target = dir.path().join("rendered.html");
+
+    let out = ntropy(dir.path())
+        .args(["render", ULID_A, "--to", "html", "-n", "-o"])
+        .arg(&target)
+        .output()
+        .expect("run ntropy");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let files = dir.path().join("rendered_files/files/all-notes/_assets");
+    assert!(files.join(format!("{ULID_A}-reader/chart.png")).is_file());
+    assert!(!files.join(format!("{ULID_B}-owner")).exists());
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains(&format!(
+            "referenced path `_assets/{ULID_B}-owner/chart.png` is in another note's asset folder; not copied"
+        )),
+        "{stderr}"
+    );
+    let page = fs::read_to_string(&target).expect("the page");
+    assert!(
+        page.contains(&format!("src=\"_assets/{ULID_B}-owner/chart.png\"")),
+        "{page}"
+    );
+}
+
+#[test]
+fn render_to_html_of_a_linked_notes_directory_leaves_the_asset_folders_out() {
+    let dir = vault_with_two_notes_and_assets("[all](/all-notes)");
+    let target = dir.path().join("rendered.html");
+
+    let out = ntropy(dir.path())
+        .args(["render", ULID_A, "--to", "html", "-n", "-o"])
+        .arg(&target)
+        .output()
+        .expect("run ntropy");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(
+        !dir.path()
+            .join("rendered_files/files/all-notes/_assets")
+            .exists()
+    );
+    let stderr = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        stderr.contains("the asset folders of the notes, `_assets/`"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn site_does_not_copy_a_file_from_another_notes_folder() {
+    let dir = vault_with_two_notes_and_assets(&format!(
+        "![theirs](_assets/{ULID_B}-owner/chart.png) ![mine](_assets/{ULID_A}-reader/chart.png)"
+    ));
+
+    let output = site(dir.path(), &["-o", "out"]);
+
+    assert!(output.status.success(), "{}", rendered(&output));
+    let files = dir.path().join("out/files/all-notes/_assets");
+    assert!(files.join(format!("{ULID_A}-reader/chart.png")).is_file());
+    assert!(!files.join(format!("{ULID_B}-owner")).exists());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("is in another note's asset folder; not copied"),
+        "{stderr}"
+    );
+}
+
 #[test]
 fn edit_no_match_exits_nonzero() {
     // A selector matching nothing prints the no-match message and exits

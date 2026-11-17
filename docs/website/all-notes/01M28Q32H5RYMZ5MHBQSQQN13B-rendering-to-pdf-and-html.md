@@ -79,7 +79,9 @@ both.
   the theme, the fonts, the scripts, the grammars the page's code needs,
   and the images it shows. A linked folder is copied without any note
   but this one, and without the files a website export never copies,
-  such as `.git` and hidden files. The page keeps the header, the scheme
+  such as `.git` and hidden files. A file in another note's `_assets/`
+  folder is not copied either, and a linked folder leaves out
+  `all-notes/_assets/`. The page keeps the header, the scheme
   switch, and the outline, and drops what needs a site: the sidebar, the
   search, breadcrumbs, and the pager.
 - `ansi` writes the note drawn for a terminal at 80 columns: the

@@ -81,7 +81,8 @@ the light/dark switch, and the outline; it has no sidebar, search,
 breadcrumbs, pager, or related notes, and its tags are plain text.
 
 Warnings are the export's (missing or out-of-vault files, links to files the
-export never copies, a fence language without a grammar), and `--strict`
+export never copies, links into another note's `_assets/` folder, a fence
+language without a grammar), and `--strict`
 makes them fail. Metadata left out of a linked folder is a `note:` line,
 which `--strict` does not count. The whole vault as a site is
 [site.md](site.md), or `ntropy skill site`.

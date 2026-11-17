@@ -276,7 +276,10 @@ with everything below it, at any depth, judged on the path as written and
 on the path it resolves to; a note outside the exported set, a regular
 file directly in `all-notes/` ending in `.md` or `.age` in any case, judged
 where it resolves, so a view's leaf is its note; and, below a linked
-directory, every hidden entry. A link that names such a path directly is a warning and the page
+directory, every hidden entry. A file in another note's asset folder is refused the same way, judged
+where the link is written and where it resolves, and a linked directory
+leaves out the vault's `all-notes/_assets/` (ADR 0101). A link that names such
+a path directly is a warning and the page
 keeps it as written; a link that names a hidden file that is not listed
 copies it. A file is copied only when it resolves inside the vault (a
 theme's file: inside the theme or the vault), compared by path components,

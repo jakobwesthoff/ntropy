@@ -127,3 +127,4 @@ made.
 - [0098. A note's assets live in a folder named like the note](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
 - [0099. reconcile checks asset links and the assets directory](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0099-reconcile-checks-asset-links-and-the-assets-directory.md)
 - [0100. Views carry an _assets link](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0100-views-carry-an-assets-link.md)
+- [0101. Renders and exports serve only a note's own assets](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0101-renders-and-exports-serve-only-a-notes-own-assets.md)

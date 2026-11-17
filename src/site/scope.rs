@@ -18,8 +18,11 @@ use std::collections::{BTreeSet, HashSet};
 use std::ffi::{OsStr, OsString};
 use std::path::{Component, Path, PathBuf};
 
+use crate::asset::{self, Standing};
 use crate::fsutil::{self, FileId, FsError};
-use crate::vault::layout::{self, ALL_NOTES_DIR, NTROPY_DIR, POINTER_FILE};
+use crate::id::Id;
+use crate::render::markdown::resolve_root_relative;
+use crate::vault::layout::{self, ALL_NOTES_DIR, ASSETS_DIR, NTROPY_DIR, POINTER_FILE};
 
 // =========================================================
 // The names never copied
@@ -202,6 +205,8 @@ pub struct Walk {
     pub unscanned: usize,
     /// What the export may read from, for the warning's wording.
     pub reach: &'static str,
+    /// How many times the asset folders of the notes were left out.
+    pub assets: usize,
 }
 
 /// How many distinct names a note line spells out before it counts the rest.
@@ -268,6 +273,9 @@ impl Walk {
                 "symlinked directory",
                 "symlinked directories",
             ));
+        }
+        if self.assets > 0 {
+            parts.push(format!("the asset folders of the notes, `{ASSETS_DIR}/`"));
         }
         parts.extend(
             self.ntropy
@@ -369,6 +377,10 @@ pub struct ExportScope {
     scanned_extension: &'static str,
     /// The note files the export holds; every other note stays out.
     exported: HashSet<FileId>,
+    /// The vault's `all-notes/_assets/`, by identity and resolved, `None`
+    /// for a scope that has none (a theme's) or when it does not exist.
+    assets_dir: Option<FileId>,
+    assets_resolved: Option<PathBuf>,
 }
 
 impl ExportScope {
@@ -376,6 +388,7 @@ impl ExportScope {
     /// `exported` are the files of the notes the export holds, `excluded`
     /// the export's own output.
     pub fn new(vault_root: &Path, exported: &[&Path], excluded: &[&Path]) -> Self {
+        let assets = vault_root.join(ALL_NOTES_DIR).join(ASSETS_DIR);
         let excluded = excluded
             .iter()
             .filter_map(|path| {
@@ -394,6 +407,8 @@ impl ExportScope {
                 .iter()
                 .filter_map(|path| fsutil::file_id(path))
                 .collect(),
+            assets_dir: fsutil::file_id(&assets),
+            assets_resolved: std::fs::canonicalize(&assets).ok(),
         }
     }
 
@@ -410,6 +425,8 @@ impl ExportScope {
             notes_dir: fsutil::file_id(&vault_root.join(ALL_NOTES_DIR)),
             scanned_extension: scanned_extension(vault_root),
             exported: HashSet::new(),
+            assets_dir: None,
+            assets_resolved: None,
         }
     }
 
@@ -498,6 +515,35 @@ impl ExportScope {
         })
     }
 
+    /// Whether `dest`, written in the note `owner` in `note_dir`, is a file in
+    /// another note's asset folder.
+    ///
+    /// Judged on the path as written, so a case variant or a path through a
+    /// view's `_assets` link counts, and on the path it resolves to, so a
+    /// symlink in the note's own folder that leads into another folder
+    /// counts too (ADR 0101).
+    pub fn is_foreign_asset(&self, owner: Id, note_dir: &str, dest: &str) -> bool {
+        let path = dest.split_once('#').map_or(dest, |(path, _)| path);
+        if asset::place(note_dir, path).standing(owner) == Standing::Foreign {
+            return true;
+        }
+        let (Some(assets), Some(root_absolute)) =
+            (&self.assets_resolved, resolve_root_relative(note_dir, path))
+        else {
+            return false;
+        };
+        let Ok(resolved) = std::fs::canonicalize(self.vault_path(&root_absolute)) else {
+            return false;
+        };
+        resolved.strip_prefix(assets).is_ok_and(|below| {
+            let folder = below
+                .components()
+                .next()
+                .and_then(|component| component.as_os_str().to_str());
+            folder.and_then(asset::owner) != Some(owner)
+        })
+    }
+
     /// The root-absolute vault path a page links for `dest`, written in a
     /// note in `note_dir`, or `None` when the link keeps its text: the path
     /// climbs out of the vault (ADR 0072) or is refused.
@@ -573,7 +619,17 @@ impl ExportScope {
                     Ok(Some(_)) => walk.files.push((relative, path)),
                 }
             } else if file_type.is_dir() {
-                self.walk_into(&path, &relative, walk)?;
+                // The asset folders of all notes are never mirrored through a
+                // linked parent directory: a note has only its own assets, and
+                // a link to its own folder starts the walk below this entry.
+                if self
+                    .assets_dir
+                    .is_some_and(|id| fsutil::file_id(&path) == Some(id))
+                {
+                    walk.assets += 1;
+                } else {
+                    self.walk_into(&path, &relative, walk)?;
+                }
             } else if let Some(Refusal::Unexported { scanned }) =
                 self.unexported(&path, in_notes_dir)
             {
@@ -755,6 +811,150 @@ mod tests {
             encrypted.verdict(&encrypted.vault_path("/all-notes/plain.md")),
             Err(Refusal::Unexported { scanned: false })
         );
+    }
+
+    // ---- A note has only its own assets ----
+
+    const NOTE_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    const OTHER_ID: &str = "01BRZ3NDEKTSV4RRFFQ69G5FAV";
+
+    fn note_id() -> crate::id::Id {
+        NOTE_ID.parse().expect("a valid ULID")
+    }
+
+    /// A vault whose `_assets/` holds a folder of the note `NOTE_ID` and one of
+    /// `OTHER_ID`, each with a `c.png`.
+    fn vault_with_assets() -> tempfile::TempDir {
+        let vault = tempfile::tempdir().expect("temp dir");
+        for id in [NOTE_ID, OTHER_ID] {
+            let folder = vault.path().join(format!("all-notes/_assets/{id}-note"));
+            std::fs::create_dir_all(&folder).expect("asset folder");
+            std::fs::write(folder.join("c.png"), "png").expect("asset");
+        }
+        vault
+    }
+
+    #[test]
+    fn another_notes_folder_is_a_foreign_asset() {
+        let vault = vault_with_assets();
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+        let dest = format!("_assets/{OTHER_ID}-note/c.png");
+        assert!(scope.is_foreign_asset(note_id(), "/all-notes", &dest));
+    }
+
+    #[test]
+    fn the_notes_own_folder_is_not_a_foreign_asset() {
+        let vault = vault_with_assets();
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+        let dest = format!("_assets/{NOTE_ID}-note/c.png");
+        assert!(!scope.is_foreign_asset(note_id(), "/all-notes", &dest));
+    }
+
+    #[test]
+    fn a_file_outside_every_assets_folder_is_not_a_foreign_asset() {
+        let vault = vault_with_assets();
+        std::fs::write(vault.path().join("all-notes/t.txt"), "t").expect("file");
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+        assert!(!scope.is_foreign_asset(note_id(), "/all-notes", "t.txt"));
+        assert!(!scope.is_foreign_asset(note_id(), "/all-notes", "missing.txt"));
+    }
+
+    #[test]
+    fn a_folder_without_an_owner_is_a_foreign_asset() {
+        let vault = vault_with_assets();
+        std::fs::create_dir_all(vault.path().join("all-notes/_assets/shared")).expect("folder");
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+        assert!(scope.is_foreign_asset(note_id(), "/all-notes", "_assets/shared/logo.png"));
+    }
+
+    #[test]
+    fn a_symlink_in_the_own_folder_into_another_notes_folder_is_a_foreign_asset() {
+        let vault = vault_with_assets();
+        let own = vault
+            .path()
+            .join(format!("all-notes/_assets/{NOTE_ID}-note"));
+        std::os::unix::fs::symlink(
+            format!("../{OTHER_ID}-note/c.png"),
+            own.join("borrowed.png"),
+        )
+        .expect("symlink");
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+        let dest = format!("_assets/{NOTE_ID}-note/borrowed.png");
+        assert!(scope.is_foreign_asset(note_id(), "/all-notes", &dest));
+    }
+
+    #[test]
+    fn a_symlink_in_the_own_folder_to_a_file_beside_the_notes_is_not_a_foreign_asset() {
+        let vault = vault_with_assets();
+        std::fs::write(vault.path().join("all-notes/t.png"), "t").expect("file");
+        let own = vault
+            .path()
+            .join(format!("all-notes/_assets/{NOTE_ID}-note"));
+        std::os::unix::fs::symlink("../../t.png", own.join("t.png")).expect("symlink");
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+        let dest = format!("_assets/{NOTE_ID}-note/t.png");
+        assert!(!scope.is_foreign_asset(note_id(), "/all-notes", &dest));
+    }
+
+    #[test]
+    fn the_assets_directory_itself_is_a_foreign_asset() {
+        let vault = vault_with_assets();
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+        assert!(scope.is_foreign_asset(note_id(), "/all-notes", "_assets"));
+    }
+
+    #[test]
+    fn another_notes_folder_through_a_view_symlink_is_a_foreign_asset() {
+        let vault = vault_with_assets();
+        std::fs::create_dir_all(vault.path().join("by-tag")).expect("view");
+        std::os::unix::fs::symlink("../all-notes/_assets", vault.path().join("by-tag/_assets"))
+            .expect("symlink");
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+        let dest = format!("../by-tag/_assets/{OTHER_ID}-note/c.png");
+        assert!(scope.is_foreign_asset(note_id(), "/all-notes", &dest));
+    }
+
+    #[test]
+    fn a_walk_never_enters_the_assets_directory_of_the_notes() {
+        let vault = vault_with_assets();
+        std::fs::write(vault.path().join("all-notes/t.txt"), "t").expect("file");
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+
+        let walk = scope.walk(vault.path()).expect("walk");
+
+        let files: Vec<&str> = walk.files.iter().map(|(name, _)| name.as_str()).collect();
+        assert_eq!(files, ["all-notes/t.txt"]);
+        assert_eq!(walk.assets, 1);
+        assert_eq!(
+            walk.warning("referenced directory", "/").as_deref(),
+            Some("referenced directory `/`: left out the asset folders of the notes, `_assets/`")
+        );
+    }
+
+    #[test]
+    fn a_walk_of_one_notes_own_folder_copies_its_files() {
+        let vault = vault_with_assets();
+        let scope = ExportScope::new(vault.path(), &[], &[]);
+        let own = vault
+            .path()
+            .join(format!("all-notes/_assets/{NOTE_ID}-note"));
+
+        let walk = scope.walk(&own).expect("walk");
+
+        assert_eq!(walk.files.len(), 1);
+        assert_eq!(walk.assets, 0);
+    }
+
+    #[test]
+    fn a_theme_walk_does_not_know_the_assets_directory() {
+        let vault = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(vault.path().join("theme/_assets")).expect("theme folder");
+        std::fs::write(vault.path().join("theme/_assets/a.css"), "x").expect("file");
+        let scope = ExportScope::for_theme(&vault.path().join("theme"), vault.path());
+
+        let walk = scope.walk(&vault.path().join("theme")).expect("walk");
+
+        assert_eq!(walk.files.len(), 1);
     }
 
     #[test]

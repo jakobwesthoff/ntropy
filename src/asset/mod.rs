@@ -20,7 +20,7 @@ mod links;
 mod sync;
 
 pub use check::{AssetIssue, check};
-pub use links::{LocalLink, local_links, relink_folder};
+pub use links::{LocalLink, local_links, names_a_file, relink_folder};
 pub use sync::{AssetSync, FolderMove, Relink, plan_renames, read_folders, stale_names, sync};
 
 use crate::id::{Id, ULID_LEN};

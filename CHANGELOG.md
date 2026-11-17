@@ -35,6 +35,14 @@ change in any release
   assets.
   [ADR 0100](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0100-views-carry-an-assets-link.md)
   records the link.
+- A note has only its own assets: renders and exports refuse a link or image
+  into another note's asset folder. `pdf` and `typst` show the link text or the
+  alt text instead, `html` and `site` do not copy the file, each with a warning
+  that fails `--strict`. A linked directory no longer carries `all-notes/_assets/`
+  into an export. Links to files outside every `_assets/` folder render and
+  export as before.
+  [ADR 0101](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0101-renders-and-exports-serve-only-a-notes-own-assets.md)
+  records the rule.
   [ADR 0098](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
   records the layout and
   [ADR 0097](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0097-asset-links-are-found-with-the-markdown-parser.md)

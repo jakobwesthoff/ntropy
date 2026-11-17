@@ -54,6 +54,7 @@
 use std::collections::HashMap;
 
 use super::writer::{self, TypstWriter};
+use crate::asset::{self, Standing};
 use crate::id::Id;
 use crate::render::ResolvedLink;
 use crate::render::markdown::{
@@ -106,8 +107,11 @@ pub fn emit_for_note(
         title: title.map(|title| title.trim().to_string()),
         own_id,
         heading_labels: HashMap::new(),
+        refused: Vec::new(),
     };
-    markdown::walk(body, links, &mut output)
+    let (typst, mut warnings) = markdown::walk(body, links, &mut output);
+    warnings.extend(output.refused);
+    (typst, warnings)
 }
 
 /// The label of the `number`th heading drawn. Like the footnote labels, the
@@ -141,6 +145,31 @@ struct TypstOutput<'a> {
     /// label by this number: the id itself can hold characters, `²` or `½`
     /// among them, that Typst rejects in a label.
     heading_labels: HashMap<String, usize>,
+    /// The warnings for links into another note's asset folder. A link has no
+    /// channel for a warning in [`Output::link`], so they are collected here
+    /// and joined to the rest when the walk is done.
+    refused: Vec<Warning>,
+}
+
+impl TypstOutput<'_> {
+    /// Whether `dest` is a file in another note's asset folder, which the
+    /// note may not use: each note has only its own assets (ADR 0101). A note
+    /// whose identity is not known refuses nothing. The check is on the path
+    /// as written, since this engine touches no filesystem, so a symlink in
+    /// the note's own folder is not seen.
+    fn refuses(&mut self, dest: &str) -> bool {
+        let Some(own) = self.own_id else {
+            return false;
+        };
+        let foreign = asset::names_a_file(dest)
+            && asset::place(self.asset_base, dest).standing(own) == Standing::Foreign;
+        if foreign {
+            self.refused.push(Warning::new(format!(
+                "`{dest}` is in another note's asset folder; not rendered"
+            )));
+        }
+        foreign
+    }
 }
 
 impl Output for TypstOutput<'_> {
@@ -187,6 +216,9 @@ impl Output for TypstOutput<'_> {
     }
 
     fn link(&mut self, dest: &str, inner: &str) -> String {
+        if self.refuses(dest) {
+            return inner.to_string();
+        }
         wrap_link(dest, inner)
     }
 
@@ -243,6 +275,9 @@ impl Output for TypstOutput<'_> {
             warnings.push(Warning::new(format!(
                 "remote image cannot be embedded; linked instead: {dest}"
             )));
+        } else if self.refuses(dest) {
+            // The picture is not embedded, and the alt text stands in for it.
+            writer.markup_text(alt);
         } else {
             // A fragment selects nothing in an embedded image, and typst
             // would look for a file with the `#` in its name.
@@ -1854,6 +1889,137 @@ mod tests {
             emit_for_note(&input, &links, ASSET_BASE, None, elsewhere).0,
             "== Lists <ntropy-h-1>\n\n#link(\"target-title.pdf\")[#notelink[there]];\n"
         );
+    }
+
+    // =====================================================================
+    // A note has only its own assets
+    // =====================================================================
+
+    const NOTE_ID: &str = "01ARZ3NDEKTSV4RRFFQ69G5FAV";
+    const OTHER_ID: &str = "01BRZ3NDEKTSV4RRFFQ69G5FAV";
+
+    /// Emit `input` as the note `NOTE_ID`, which knows its own assets.
+    fn as_note(input: &str) -> (String, Vec<Warning>) {
+        let id = NOTE_ID.parse().expect("a valid ULID");
+        emit_for_note(input, &[], ASSET_BASE, None, Some(id))
+    }
+
+    fn refused(input: &str) -> bool {
+        let (body, warnings) = as_note(input);
+        let named = warnings
+            .iter()
+            .any(|w| w.message.contains("another note's asset folder"));
+        assert_eq!(
+            named,
+            !body.contains("#image(") && !body.contains("#link("),
+            "{body:?} {warnings:?}"
+        );
+        named
+    }
+
+    #[test]
+    fn an_image_in_the_notes_own_folder_is_embedded() {
+        let (body, warnings) = as_note(&format!("![c](_assets/{NOTE_ID}-note/c.png)"));
+        assert_eq!(
+            body,
+            format!("#image(\"/all-notes/_assets/{NOTE_ID}-note/c.png\", alt: \"c\");\n")
+        );
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn an_image_in_another_notes_folder_is_not_embedded_and_is_warned_about() {
+        let (body, warnings) = as_note(&format!("![chart](_assets/{OTHER_ID}-note/c.png)"));
+        assert_eq!(body, "chart\n");
+        assert_eq!(
+            warnings
+                .iter()
+                .map(|w| w.message.as_str())
+                .collect::<Vec<_>>(),
+            [format!(
+                "`_assets/{OTHER_ID}-note/c.png` is in another note's asset folder; not rendered"
+            )]
+        );
+    }
+
+    #[test]
+    fn a_link_into_another_notes_folder_shows_its_text_and_no_link() {
+        let (body, warnings) = as_note(&format!("[the minutes](_assets/{OTHER_ID}-note/m.pdf)"));
+        assert_eq!(body, "the minutes\n");
+        assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn a_link_into_the_notes_own_folder_stays_a_link() {
+        let (body, warnings) = as_note(&format!("[m](_assets/{NOTE_ID}-note/m.pdf)"));
+        assert_eq!(
+            body,
+            format!("#link(\"_assets/{NOTE_ID}-note/m.pdf\")[m];\n")
+        );
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn a_folder_without_an_owner_is_refused() {
+        assert!(refused("![x](_assets/shared/logo.png)"));
+    }
+
+    #[test]
+    fn the_spelling_of_the_assets_directory_does_not_matter() {
+        assert!(refused(&format!("![x](_ASSETS/{OTHER_ID}-note/c.png)")));
+        assert!(refused(&format!(
+            "![x](/All-Notes/_assets/{OTHER_ID}-note/c.png)"
+        )));
+    }
+
+    #[test]
+    fn another_notes_folder_reached_through_a_view_is_refused() {
+        assert!(refused(&format!(
+            "![x](../by-tag/_assets/{OTHER_ID}-note/c.png)"
+        )));
+    }
+
+    #[test]
+    fn a_fragment_does_not_hide_a_foreign_folder() {
+        assert!(refused(&format!(
+            "[x](_assets/{OTHER_ID}-note/m.pdf#page=2)"
+        )));
+    }
+
+    #[test]
+    fn an_assets_directory_a_user_keeps_elsewhere_is_not_refused() {
+        let (body, warnings) = as_note("![x](../projects/_assets/logo.png)");
+        assert!(body.starts_with("#image(\"/projects/_assets/logo.png\""));
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn files_outside_every_assets_folder_still_render() {
+        let (body, warnings) = as_note("![x](../assets/logo.svg) [t](transcript.txt)");
+        assert!(body.contains("#image(\"/assets/logo.svg\""), "{body}");
+        assert!(body.contains("#link(\"transcript.txt\")"), "{body}");
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn a_url_with_an_assets_path_is_not_refused() {
+        let (body, warnings) = as_note(&format!(
+            "[x](https://example.org/_assets/{OTHER_ID}-n/a.png)"
+        ));
+        assert!(body.contains("#link(\"https://example.org/"), "{body}");
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn without_an_own_id_nothing_is_refused() {
+        let body = emit(
+            &format!("![x](_assets/{OTHER_ID}-note/c.png)"),
+            &[],
+            ASSET_BASE,
+            None,
+        )
+        .0;
+        assert!(body.contains("#image("), "{body}");
     }
 
     #[test]

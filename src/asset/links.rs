@@ -78,7 +78,7 @@ pub fn local_links(body: &str) -> Vec<LocalLink> {
 
 /// Whether `dest` names a file of the vault rather than a URL, a heading of
 /// the same note or another note.
-fn names_a_file(dest: &str) -> bool {
+pub fn names_a_file(dest: &str) -> bool {
     !dest.is_empty()
         && !dest.starts_with('#')
         && !dest.starts_with("//")

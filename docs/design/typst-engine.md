@@ -226,6 +226,13 @@ shared vault asset with `../assets/logo.svg`; a path climbing out of the
 vault cannot be expressed against the root and is left as written, for
 the compiler to reject by name.
 
+A note has only its own assets (ADR 0101). A link or image whose path, as
+written, lies in another note's `_assets/<folder>/`, or in `_assets/` outside a
+folder of any note, is not emitted: the document shows the link text, or the
+alt text of an image, and the emitter returns a warning. The emitter judges the
+path textually and touches no filesystem, so a symlink in the note's own folder
+that leads elsewhere is not seen.
+
 Because the emitted document addresses assets from the vault root,
 compiling a `typst`-format artifact by hand takes the vault as the root.
 typst refuses a main file outside its root ("source file must be
