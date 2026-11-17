@@ -73,11 +73,21 @@ change in any release
   `![alt](..)` for an image and `[name](..)` for any other file, with angle
   brackets for a name with spaces; `added` lines go to stderr. It never edits the
   note. `--as <name>` stores one file under another name and `--force` replaces
-  a file of that name. `ntropy asset list [--path] <note>` lists the files with
-  their size and whether the note links them, and `--path` prints the folder
+  a file of that name. Every check runs before the first file is touched: a file
+  is refused when it is already the file it would be stored as (so a re-add with
+  `--move --force` cannot delete it), when its name differs only in case from
+  another file's, from each other planned name or from one in the folder, and when
+  it is a note of the vault. An I/O failure during the transfer leaves the files
+  already placed, and their `added` lines and links are printed before the error.
+  `--move` out of another note's asset folder warns that the links of that note
+  break, and a view that cannot be refreshed afterwards is a warning; both count
+  for `--strict`. `ntropy asset list [--path] <note>` lists the files with
+  their size and whether the note links them (a file raw HTML names counts as
+  linked), hidden files included, and `--path` prints the folder
   only. Both select one note as `render` does: a ULID, a file name or path, or a
   query, the picker on a terminal when several match, an error under `-n`. They
-  refuse to work in an encrypted vault.
+  refuse to work in an encrypted vault and through a symlinked `_assets` or note
+  folder.
   [ADR 0104](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0104-asset-add-and-asset-list.md)
   records the commands.
   [ADR 0098](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0098-a-notes-assets-live-in-a-folder-named-like-the-note.md)
@@ -91,8 +101,10 @@ change in any release
   `0` turns attaching off) is not attached and gets a grey `not attached · 240 MiB`
   badge, with a warning that fails `--strict`. A file is attached only when it
   resolves to a regular file inside the vault, so a symlink to a file outside it
-  is refused with a warning and never embedded. A document theme can restyle the
-  badges with `attachbadge` and `attachbadge-off`.
+  is refused with a warning and never embedded. The attach calls stand once after
+  the body, so a link in a repeated table header or in an outline heading does not
+  fail the compile. A document theme can restyle the badges with `attachbadge` and
+  `attachbadge-off`.
   [ADR 0105](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0105-linked-files-are-attached-to-the-pdf.md)
   records the attachments.
 
