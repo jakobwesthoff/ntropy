@@ -385,13 +385,38 @@ pub fn delete_prompt(reference: &str, assets: Option<(usize, u64)>) -> String {
 /// The warning for each asset folder `delete` keeps because other notes link
 /// into it.
 pub fn print_kept_assets(plan: &DeletePlan) {
-    let referrers: Vec<String> = plan.referrers.iter().map(|path| file_name(path)).collect();
+    let named = |paths: &[std::path::PathBuf]| -> String {
+        paths
+            .iter()
+            .map(|path| file_name(path))
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
     for folder in &plan.folders {
+        let files = super::plural(folder.files, "file", "files");
+        if plan.survivors.is_empty() {
+            warn(&format!(
+                "keeping `{}` ({files}), linked by {}; pass --remove-assets to remove it",
+                asset_folder(&folder.path),
+                named(&plan.referrers)
+            ));
+        } else {
+            warn(&format!(
+                "keeping `{}` ({files}): {} still carries this note's ULID, and the folder is \
+                 removed with the last file that does",
+                asset_folder(&folder.path),
+                named(&plan.survivors)
+            ));
+        }
+    }
+}
+
+/// The warning for each symlink in `_assets/` that `delete` leaves alone.
+pub fn print_left_symlinks(plan: &DeletePlan) {
+    for link in &plan.symlinks {
         warn(&format!(
-            "keeping `{}` ({}), linked by {}; pass --remove-assets to remove it",
-            asset_folder(&folder.path),
-            super::plural(folder.files, "file", "files"),
-            referrers.join(", ")
+            "leaving `{}` in place: it is a symlink",
+            asset_folder(link).trim_end_matches('/')
         ));
     }
 }

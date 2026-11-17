@@ -1,0 +1,21 @@
+---
+source: tests/cli.rs
+info:
+  program: ntropy
+  args:
+    - delete
+    - "-f"
+    - "-n"
+    - /var/folders/p2/r4y13yqj6mg653fwkv3rz76r0000gn/T/.tmpQl6wth/all-notes/01ARZ3NDEKTSV4RRFFQ69G5FAV-doomed-copy.md
+  env:
+    EDITOR: "true"
+    NTROPY_CONFIG_DIR: no-such-config-dir
+---
+success: true
+exit_code: 0
+----- stdout -----
+Deleted [DATE....]  Doomed  ([ULID....................])
+
+----- stderr -----
+warning: `[ULID....................]-doomed-copy.md` shares its id with `[ULID....................]-doomed.md`; run `ntropy reconcile` to give it a new id
+warning: keeping `_assets/[ULID....................]-doomed/` (3 files): [ULID....................]-doomed.md still carries this note's ULID, and the folder is removed with the last file that does

@@ -25,6 +25,7 @@ pub use files::{AddOptions, Added, AssetError, Linked, ListedFile, Listing, add,
 pub use links::{
     LocalLink, Reference, html_ranges, local_links, names_a_file, references, relink_folder,
 };
+pub(crate) use sync::is_system_metadata;
 pub use sync::{
     AssetSync, FolderMove, RefusalReason, RefusedMove, Relink, first_unencryptable, plan_renames,
     read_folders, stale_names, sync,

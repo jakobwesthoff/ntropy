@@ -46,9 +46,13 @@ change in any release
   [ADR 0101](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0101-renders-and-exports-serve-only-a-notes-own-assets.md)
   records the rule.
 - `delete` removes the note's asset folder with the note, and its confirmation
-  says so with the number of files and their size. When another note links a
-  file in the folder, the folder stays, the notes that link it are named, and
-  the new `--remove-assets` removes it anyway.
+  says so with the number of files and their size, every file but
+  operating-system metadata. While another file in `all-notes/` carries the
+  note's ULID, such as a copy or a merge-conflict file, the folder stays. When
+  another Markdown file refers to the folder, in a link or in raw HTML, the
+  folder stays, the files that refer to it are named, and the new
+  `--remove-assets` removes it anyway. A symlinked asset folder is left alone
+  and a warning says so.
   [ADR 0102](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0102-delete-removes-the-notes-asset-folder.md)
   records the behaviour.
 - `vault encrypt` refuses to start while `all-notes/_assets/` holds a file or a

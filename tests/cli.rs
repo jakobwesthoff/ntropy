@@ -7730,6 +7730,119 @@ fn delete_keeps_the_asset_folder_another_note_links_and_names_that_note() {
     );
 }
 
+/// A copy of the note A, a second file that carries its ULID.
+fn copy_of_a(vault: &Path) -> PathBuf {
+    let path = vault.join(format!("all-notes/{ULID_A}-doomed-copy.md"));
+    fs::write(&path, "---\ntitle: Doomed\n---\nbody\n").expect("the copy");
+    path
+}
+
+#[test]
+fn delete_of_a_copy_keeps_the_folder_the_original_uses() {
+    let dir = vault_for_deleting_assets("");
+    let copy = copy_of_a(dir.path());
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["delete", "-f", "-n"]).arg(&copy);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(
+        dir.path()
+            .join(format!("all-notes/{ULID_A}-doomed.md"))
+            .exists()
+    );
+    assert!(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-doomed/a.png"))
+            .exists()
+    );
+}
+
+#[test]
+fn delete_of_the_original_while_a_copy_exists_keeps_the_folder_even_with_remove_assets() {
+    let dir = vault_for_deleting_assets("");
+    copy_of_a(dir.path());
+    let original = dir.path().join(format!("all-notes/{ULID_A}-doomed.md"));
+    let out = ntropy(dir.path())
+        .args(["delete", "-f", "-n", "--remove-assets"])
+        .arg(&original)
+        .output()
+        .expect("run ntropy");
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("still carries this note's ULID"));
+    assert!(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-doomed/a.png"))
+            .exists()
+    );
+}
+
+#[test]
+fn delete_keeps_the_folder_while_a_merge_conflict_file_carries_the_ulid() {
+    let dir = vault_for_deleting_assets("");
+    fs::write(
+        dir.path()
+            .join(format!("all-notes/{ULID_A}-doomed-conflict.md")),
+        "---\n<<<<<<< HEAD\ntitle: A\n=======\ntitle: B\n>>>>>>> other\n---\nbody\n",
+    )
+    .expect("the conflict file");
+    let original = dir.path().join(format!("all-notes/{ULID_A}-doomed.md"));
+    let out = ntropy(dir.path())
+        .args(["delete", "-f", "-n"])
+        .arg(&original)
+        .output()
+        .expect("run ntropy");
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-doomed/a.png"))
+            .exists()
+    );
+}
+
+#[test]
+fn delete_counts_hidden_files_in_the_folder_it_removes() {
+    let dir = vault_for_deleting_assets("");
+    fs::write(
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-doomed/.env")),
+        b"secret",
+    )
+    .expect("a hidden file");
+    let out = ntropy(dir.path())
+        .args(["delete", ULID_A, "-f", "-n"])
+        .output()
+        .expect("run ntropy");
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(String::from_utf8_lossy(&out.stdout).contains("Deleted 4 assets"));
+}
+
+#[test]
+fn delete_says_it_leaves_a_symlinked_asset_folder_in_place() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "doomed",
+        "---\ntitle: Doomed\n---\nbody\n",
+    );
+    let elsewhere = dir.path().join("elsewhere");
+    fs::create_dir_all(&elsewhere).expect("target");
+    fs::create_dir_all(dir.path().join("all-notes/_assets")).expect("assets");
+    std::os::unix::fs::symlink(
+        &elsewhere,
+        dir.path()
+            .join(format!("all-notes/_assets/{ULID_A}-doomed")),
+    )
+    .expect("symlink");
+    redacted(dir.path()).bind(|| {
+        let mut cmd = ntropy(dir.path());
+        cmd.args(["delete", ULID_A, "-f", "-n"]);
+        assert_cmd_snapshot!(cmd);
+    });
+    assert!(elsewhere.exists());
+}
+
 #[test]
 fn delete_with_remove_assets_removes_a_folder_another_note_links() {
     let dir = vault_for_deleting_assets(&format!("![c](_assets/{ULID_A}-doomed/a.png)"));

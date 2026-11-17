@@ -492,10 +492,15 @@ Removes the note's file, then the asset folder the note owns, and syncs the
 views (ADR 0102). The folder is found by the ULID in its name, so a folder with
 a stale slug goes too. The confirmation names it: `Delete <note> and its 3
 assets (1.3 MiB)? [y/N]`, and the run prints `Deleted 3 assets (1.3 MiB)`
-after the note's own line. When another note links a file in the folder, the
-folder stays: a `warning:` line on stderr names the folder, its file count and
-the notes that link it, and `--remove-assets` removes it anyway. `--force`
-keeps its one meaning, skipping the confirmation. The note goes first, so a
+after the note's own line. The count is of every file but operating-system
+metadata, so it matches what goes. While another file in `all-notes/` carries
+the note's ULID, such as a copy, a skipped file or a merge-conflict file, the
+folder stays whatever the flag says. When another Markdown file refers to the
+folder, in a link or in raw HTML, the folder stays: a `warning:` line on stderr
+names the folder, its file count and the files that refer to it, and
+`--remove-assets` removes it anyway. A symlink that stands where the folder
+would be is left alone and a `warning:` line says so. `--force` keeps its one
+meaning, skipping the confirmation. The note goes first, so a
 crash leaves a folder that `reconcile` reports and never a note whose links
 point nowhere. A symlink in the folder is removed as a link and never
 followed, and an encrypted vault has no asset folders to remove.

@@ -11,14 +11,13 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::asset::{self, Place, local_links, owner};
+use crate::asset::{self, owner};
 use crate::error::Result;
 use crate::fsutil;
 use crate::id::Id;
+use crate::note::filename;
 use crate::reconcile;
-use crate::scan;
 use crate::session::VaultSession;
-use crate::vault::layout::ALL_NOTES_DIR;
 
 /// One asset folder a note owns and what it holds.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,8 +34,14 @@ pub struct AssetFolder {
 pub struct DeletePlan {
     /// The asset folders the note owns.
     pub folders: Vec<AssetFolder>,
-    /// The other notes that link a file in one of those folders.
+    /// The other Markdown files that refer to one of those folders.
     pub referrers: Vec<PathBuf>,
+    /// The other files in `all-notes/` that carry the note's ULID. While one
+    /// exists the folder is not removed, whatever the flag says.
+    pub survivors: Vec<PathBuf>,
+    /// The symlinks in `_assets/` that the note's ULID leads. They are left
+    /// alone.
+    pub symlinks: Vec<PathBuf>,
 }
 
 impl DeletePlan {
@@ -51,10 +56,20 @@ impl DeletePlan {
     }
 }
 
-/// What deleting the note `id` would do to the asset folders it owns.
+/// What deleting the note `id`, whose file is `path`, would do to the asset
+/// folders it owns.
 ///
 /// An encrypted vault has no managed assets and plans nothing.
-pub fn plan_delete(session: &VaultSession, id: Id) -> Result<DeletePlan> {
+///
+/// Whether another file carries the note's ULID is read from the file names
+/// in `all-notes/`, as `reconcile` reads the ULIDs that are taken, and not
+/// from the scan: a copy, a file the scan skipped and a merge-conflict file all
+/// count, and any of them may be the note the folder belongs to from now on.
+/// Notes that link into the folder are found by the text of every Markdown
+/// file there, for the same reason, through the matcher the rest of the asset
+/// code reads references with, so a link with a stale slug, another letter case
+/// or raw HTML counts.
+pub fn plan_delete(session: &VaultSession, id: Id, path: &Path) -> Result<DeletePlan> {
     if session.is_encrypted() {
         return Ok(DeletePlan::default());
     }
@@ -65,35 +80,61 @@ pub fn plan_delete(session: &VaultSession, id: Id) -> Result<DeletePlan> {
             folders.push(measure(&layout.asset_folder(&name))?);
         }
     }
+    let mut symlinks = Vec::new();
+    for (entry, file_type) in fsutil::read_dir_entries(&layout.assets_dir())? {
+        let owned = entry
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| owner(name) == Some(id));
+        if owned && file_type.is_symlink() {
+            symlinks.push(entry);
+        }
+    }
+    symlinks.sort();
     if folders.is_empty() {
-        return Ok(DeletePlan::default());
+        return Ok(DeletePlan {
+            symlinks,
+            ..DeletePlan::default()
+        });
     }
 
-    // A referrer is found by the ULID of the folder it links into and not by
-    // its name, so a link with a stale slug or another letter case, which
-    // `reconcile` would still repair to this folder, counts.
-    let scan = scan::scan_notes_dir(&layout.all_notes(), session.cipher())?;
-    let note_dir = format!("/{ALL_NOTES_DIR}");
-    let mut referrers: Vec<PathBuf> = scan
-        .notes
-        .iter()
-        .filter(|note| note.id != id)
-        .filter(|note| {
-            local_links(&note.body).iter().any(|link| {
-                matches!(
-                    asset::place(&note_dir, &link.dest),
-                    Place::Managed { folder, .. } if owner(&folder) == Some(id)
-                )
-            })
-        })
-        .map(|note| note.path.clone())
-        .collect();
+    let mut survivors = Vec::new();
+    let mut referrers = Vec::new();
+    for (entry, file_type) in fsutil::read_dir_entries(&layout.all_notes())? {
+        if entry == path || file_type.is_dir() {
+            continue;
+        }
+        let carries_the_id = entry
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(|name| filename::parse_any(name).ok())
+            .is_some_and(|parsed| parsed.id == id);
+        if carries_the_id {
+            survivors.push(entry.clone());
+        }
+        let links_the_folder = filename::has_md_extension(&entry)
+            && std::fs::read_to_string(&entry).is_ok_and(|text| {
+                asset::references(&text)
+                    .iter()
+                    .any(|reference| owner(&reference.name) == Some(id))
+            });
+        if links_the_folder {
+            referrers.push(entry);
+        }
+    }
+    survivors.sort();
     referrers.sort();
-    Ok(DeletePlan { folders, referrers })
+    Ok(DeletePlan {
+        folders,
+        referrers,
+        survivors,
+        symlinks,
+    })
 }
 
-/// The files and bytes below `folder`, hidden entries left out. A symlink
-/// counts as a file of no size and is never followed.
+/// The files and bytes below `folder`, operating-system metadata left out.
+/// Every other file is counted, hidden ones too, since removing the folder
+/// removes them. A symlink counts as a file of no size and is never followed.
 fn measure(folder: &Path) -> Result<AssetFolder> {
     let mut found = AssetFolder {
         path: folder.to_path_buf(),
@@ -103,15 +144,9 @@ fn measure(folder: &Path) -> Result<AssetFolder> {
     let mut pending = vec![folder.to_path_buf()];
     while let Some(dir) = pending.pop() {
         for (path, file_type) in fsutil::read_dir_entries(&dir)? {
-            let hidden = path
-                .file_name()
-                .is_some_and(|name| name.as_encoded_bytes().starts_with(b"."));
-            if hidden {
-                continue;
-            }
             if file_type.is_dir() {
                 pending.push(path);
-            } else {
+            } else if !asset::is_system_metadata(&path) {
                 found.files += 1;
                 if file_type.is_file() {
                     found.bytes += std::fs::symlink_metadata(&path)
@@ -154,6 +189,10 @@ mod tests {
 
     fn id() -> Id {
         ULID.parse().expect("a valid ULID")
+    }
+
+    fn note_file_of(session: &VaultSession) -> PathBuf {
+        session.layout().all_notes().join(format!("{ULID}-note.md"))
     }
 
     fn plant(session: &VaultSession, folder: &str, files: &[(&str, &[u8])]) -> PathBuf {
@@ -211,7 +250,7 @@ mod tests {
             ],
         );
 
-        let plan = plan_delete(&session, id()).expect("plan");
+        let plan = plan_delete(&session, id(), &note_file_of(&session)).expect("plan");
 
         assert_eq!(
             plan.folders,
@@ -239,7 +278,7 @@ mod tests {
             &[("a.png", b"1")],
         );
 
-        let plan = plan_delete(&session, id()).expect("plan");
+        let plan = plan_delete(&session, id(), &note_file_of(&session)).expect("plan");
 
         assert_eq!(plan.folders.len(), 1);
     }
@@ -255,7 +294,7 @@ mod tests {
         plant(&session, &format!("{OTHER}-other"), &[("a.png", b"1")]);
 
         assert_eq!(
-            plan_delete(&session, id()).expect("plan"),
+            plan_delete(&session, id(), &note_file_of(&session)).expect("plan"),
             DeletePlan::default()
         );
     }
@@ -271,7 +310,7 @@ mod tests {
         plant(&session, &format!("{ULID}-note"), &[("a.png", b"1")]);
         let linker = note_linking(&session, OTHER, &format!("_assets/{ULID}-note/a.png"));
 
-        let plan = plan_delete(&session, id()).expect("plan");
+        let plan = plan_delete(&session, id(), &note_file_of(&session)).expect("plan");
 
         assert_eq!(plan.referrers, [linker]);
     }
@@ -289,7 +328,7 @@ mod tests {
         let third = "01CRZ3NDEKTSV4RRFFQ69G5FAV";
         let spelled = note_linking(&session, third, &format!("_ASSETS/{ULID}-note/a.png"));
 
-        let plan = plan_delete(&session, id()).expect("plan");
+        let plan = plan_delete(&session, id(), &note_file_of(&session)).expect("plan");
 
         assert_eq!(plan.referrers, [stale, spelled]);
     }
@@ -310,7 +349,7 @@ mod tests {
         );
 
         assert!(
-            plan_delete(&session, id())
+            plan_delete(&session, id(), &note_file_of(&session))
                 .expect("plan")
                 .referrers
                 .is_empty()
@@ -331,9 +370,117 @@ mod tests {
         std::os::unix::fs::symlink(elsewhere.path().join("big.bin"), folder.join("big.bin"))
             .expect("symlink");
 
-        let plan = plan_delete(&session, id()).expect("plan");
+        let plan = plan_delete(&session, id(), &note_file_of(&session)).expect("plan");
 
         assert_eq!((plan.files(), plan.bytes()), (2, 1));
+    }
+
+    #[test]
+    fn a_copy_that_carries_the_ulid_is_a_survivor() {
+        let (_g, session) = vault_with_view();
+        let original = write_note(
+            &session,
+            &format!("{ULID}-note.md"),
+            "---\ntitle: Note\n---\n",
+        );
+        let copy = write_note(
+            &session,
+            &format!("{ULID}-note-copy.md"),
+            "---\ntitle: Note\n---\n",
+        );
+        plant(&session, &format!("{ULID}-note"), &[("a.png", b"1")]);
+
+        let of_the_original = plan_delete(&session, id(), &original).expect("plan");
+        let of_the_copy = plan_delete(&session, id(), &copy).expect("plan");
+
+        assert_eq!(of_the_original.survivors, std::slice::from_ref(&copy));
+        assert_eq!(of_the_copy.survivors, [original]);
+    }
+
+    #[test]
+    fn a_merge_conflict_file_that_the_scan_skips_is_a_survivor_and_a_referrer() {
+        let (_g, session) = vault_with_view();
+        let note = write_note(
+            &session,
+            &format!("{ULID}-note.md"),
+            "---\ntitle: Note\n---\n",
+        );
+        let conflict = write_note(
+            &session,
+            &format!("{ULID}-note-conflict.md"),
+            &format!(
+                "---\n<<<<<<< HEAD\ntitle: A\n=======\ntitle: B\n>>>>>>> other\n---\n![c](_assets/{ULID}-note/a.png)\n"
+            ),
+        );
+        plant(&session, &format!("{ULID}-note"), &[("a.png", b"1")]);
+
+        let plan = plan_delete(&session, id(), &note).expect("plan");
+
+        assert_eq!(plan.survivors, std::slice::from_ref(&conflict));
+        assert_eq!(plan.referrers, [conflict]);
+    }
+
+    #[test]
+    fn a_duplicate_of_another_note_and_raw_html_are_referrers() {
+        let (_g, session) = vault_with_view();
+        write_note(
+            &session,
+            &format!("{ULID}-note.md"),
+            "---\ntitle: Note\n---\n",
+        );
+        plant(&session, &format!("{ULID}-note"), &[("a.png", b"1")]);
+        let one = write_note(
+            &session,
+            &format!("{OTHER}-one.md"),
+            &format!("---\ntitle: One\n---\n<img src=\"_assets/{ULID}-note/a.png\">\n"),
+        );
+        let two = write_note(
+            &session,
+            &format!("{OTHER}-one-copy.md"),
+            &format!("---\ntitle: One\n---\n![c](_assets/{ULID}-note/a.png)\n"),
+        );
+
+        let plan = plan_delete(&session, id(), &note_file_of(&session)).expect("plan");
+
+        assert_eq!(plan.referrers, [two, one]);
+    }
+
+    #[test]
+    fn hidden_files_count_because_the_removal_takes_them_and_os_metadata_does_not() {
+        let (_g, session) = vault_with_view();
+        write_note(
+            &session,
+            &format!("{ULID}-note.md"),
+            "---\ntitle: Note\n---\n",
+        );
+        plant(
+            &session,
+            &format!("{ULID}-note"),
+            &[(".env", b"abc"), (".DS_Store", b"x"), ("._a.png", b"y")],
+        );
+
+        let plan = plan_delete(&session, id(), &note_file_of(&session)).expect("plan");
+
+        assert_eq!((plan.files(), plan.bytes()), (1, 3));
+    }
+
+    #[test]
+    fn a_symlink_the_ulid_leads_is_listed_and_not_a_folder() {
+        let (_g, session) = vault_with_view();
+        write_note(
+            &session,
+            &format!("{ULID}-note.md"),
+            "---\ntitle: Note\n---\n",
+        );
+        let elsewhere = tempfile::tempdir().expect("temp dir");
+        std::fs::create_dir_all(session.layout().assets_dir()).expect("assets");
+        let link = session.layout().asset_folder(&format!("{ULID}-note"));
+        std::os::unix::fs::symlink(elsewhere.path(), &link).expect("symlink");
+
+        let plan = plan_delete(&session, id(), &note_file_of(&session)).expect("plan");
+
+        assert!(plan.folders.is_empty());
+        assert_eq!(plan.symlinks, [link]);
     }
 
     #[test]
@@ -394,7 +541,7 @@ mod tests {
         plant(session, &format!("{ULID}-note"), &[("a.png", b"1")]);
 
         assert_eq!(
-            plan_delete(session, id()).expect("plan"),
+            plan_delete(session, id(), &note_file_of(session)).expect("plan"),
             DeletePlan::default()
         );
     }

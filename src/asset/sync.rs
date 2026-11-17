@@ -115,7 +115,7 @@ pub fn first_unencryptable(assets_dir: &Path) -> std::result::Result<Option<Path
 }
 
 /// Whether `path` is a file the Finder or Explorer drops into a folder.
-fn is_system_metadata(path: &Path) -> bool {
+pub(crate) fn is_system_metadata(path: &Path) -> bool {
     let name = path
         .file_name()
         .map(|name| name.to_string_lossy().into_owned())

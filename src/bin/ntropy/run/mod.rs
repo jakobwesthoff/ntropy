@@ -841,11 +841,14 @@ fn cmd_delete(
     // The asset folder goes with the note unless another note links a file in
     // it. The plan is made before the prompt so the question can say what
     // goes.
-    let plan = ops::plan_delete(session, id).context("while planning the deletion")?;
-    let keep_folders = !plan.referrers.is_empty() && !remove_assets;
+    let plan = ops::plan_delete(session, id, &path).context("while planning the deletion")?;
+    // Another file that carries the note's ULID may be the note the folder
+    // belongs to from now on, so the flag does not override it.
+    let keep_folders = !plan.survivors.is_empty() || (!plan.referrers.is_empty() && !remove_assets);
     if keep_folders {
         output::print_kept_assets(&plan);
     }
+    output::print_left_symlinks(&plan);
     let removed: Vec<PathBuf> = if keep_folders {
         Vec::new()
     } else {
