@@ -506,15 +506,18 @@ after the links and counts for `--strict`.
 the folder at any depth, with hidden files listed and only operating-system
 metadata (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`) left out, the set
 `delete` leaves out of its count, with `yes` or `no` for whether
-the note links the file and `broken`, with size `-`, for a link into the note's
-own folder whose file is missing. A file that raw HTML in the note names, such as
+the note links the file and `broken`, with size `-`, for a Markdown link that
+no file of the folder satisfies: a link into the note's own folder whose file is
+missing, or a link that carries the note's ULID and names another folder, which
+the table shows as the link is written. A link counts for a file only when its
+folder name equals the note's folder exactly (ADR 0107). A file that raw HTML in the note names, such as
 `<img src="_assets/<folder>/wide.png" width="300">`, counts as linked; the
 reference is found as text in the HTML, so a name written with an entity (`R&amp;D.png`)
 is not matched. Only a Markdown link makes a file `broken`, as `reconcile`
 reports a missing file from those alone. A note without files prints `no assets` on
 stderr. `--path` prints the absolute path of every file the table shows with a
 size, one per line in the table's order, and nothing for a note without files. A
-`broken` row has no file and is not printed, and a symlink in the folder is
+`broken` row has no size and is not printed, and a symlink in the folder is
 printed as its own path. It fails without printing when a name holds control or
 bidi characters or is not valid UTF-8. `--folder` prints the folder's absolute
 path, also when it does not exist, so a script can create it. The two flags

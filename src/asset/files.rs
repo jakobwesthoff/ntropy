@@ -590,19 +590,33 @@ fn transfer(source: &Path, target: &Path, folder: &Path, options: &AddOptions) -
 pub enum Linked {
     Yes,
     No,
-    /// The note links it and it is not in the folder.
+    /// A Markdown link of the note names this file in the note's folder and
+    /// the folder lacks it, or names a folder other than the note's.
     Missing,
 }
 
 /// One row of `asset list`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ListedFile {
-    /// The path below the folder, with `/` separators.
+    /// The path below the folder, with `/` separators. A row for a link into
+    /// a folder other than the note's is named by the link as written, so it
+    /// cannot be mistaken for a file of the folder.
     pub name: String,
-    /// The size in bytes, `None` for a file the note links and the folder
-    /// lacks.
+    /// The size in bytes, `None` for a link the folder does not satisfy.
     pub size: Option<u64>,
     pub linked: Linked,
+    /// The link behind a `Missing` row.
+    pub broken: Option<BrokenLink>,
+}
+
+/// A Markdown link of the note that no file of its folder satisfies.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BrokenLink {
+    /// The link target as written in the note, without its fragment.
+    pub written: String,
+    /// Whether the link names the note's own folder, so that the file is what
+    /// lacks, and not the folder.
+    pub names_own_folder: bool,
 }
 
 /// What a note's asset folder holds.
@@ -675,25 +689,37 @@ pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
         }
     }
 
+    // Only a link into the folder the note has counts for its files. A link
+    // that carries the note's ULID but names another folder is a link to a
+    // file this folder lacks, whatever the folder holds under that file name.
+    let folder_name = folder
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let note_dir = format!("/{ALL_NOTES_DIR}");
-    let linked: BTreeSet<String> = local_links(&note.body)
-        .iter()
-        .filter_map(|link| match place(&note_dir, &link.dest) {
-            Place::Managed { folder, rest } if owner(&folder) == Some(note.id) => {
-                (!rest.is_empty()).then_some(rest)
-            }
-            _ => None,
-        })
-        .collect();
+    let mut linked: BTreeSet<String> = BTreeSet::new();
+    // Keyed by (folder, file) so that several links to one target are one row;
+    // the value is the first spelling in the note.
+    let mut targets: BTreeMap<(String, String), String> = BTreeMap::new();
+    for link in local_links(&note.body) {
+        let Place::Managed { folder, rest } = place(&note_dir, &link.dest) else {
+            continue;
+        };
+        if owner(&folder) != Some(note.id) || rest.is_empty() {
+            continue;
+        }
+        if folder == folder_name {
+            linked.insert(rest.clone());
+        }
+        targets
+            .entry((folder, rest))
+            .or_insert_with(|| link.path().to_owned());
+    }
 
     // Raw HTML (`<img src=".." width="300">`, the usual way to size a picture)
     // uses a file as much as a link does. It only upgrades a file that is
     // there: whether a name it holds is a file is for a Markdown link to say,
     // since `reconcile` reports a missing file from those alone.
-    let folder_name = folder
-        .file_name()
-        .map(|name| name.to_string_lossy().into_owned())
-        .unwrap_or_default();
     let html: Vec<&str> = html_ranges(&note.body)
         .into_iter()
         .map(|range| &note.body[range])
@@ -713,19 +739,32 @@ pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
             } else {
                 Linked::No
             },
+            broken: None,
         })
         .collect();
     files.extend(
-        linked
-            .iter()
-            .filter(|name| !found.contains_key(*name))
-            .map(|name| ListedFile {
-                name: name.clone(),
-                size: None,
-                linked: Linked::Missing,
+        targets
+            .into_iter()
+            .filter(|((folder, rest), _)| *folder != folder_name || !found.contains_key(rest))
+            .map(|((folder, rest), written)| {
+                let names_own_folder = folder == folder_name;
+                ListedFile {
+                    name: if names_own_folder {
+                        rest
+                    } else {
+                        written.clone()
+                    },
+                    size: None,
+                    linked: Linked::Missing,
+                    broken: Some(BrokenLink {
+                        written,
+                        names_own_folder,
+                    }),
+                }
             }),
     );
-    files.sort_by(|a, b| a.name.cmp(&b.name));
+    // A row without a size sorts after a file of the same name.
+    files.sort_by(|a, b| (&a.name, a.size.is_none()).cmp(&(&b.name, b.size.is_none())));
     Ok(Listing {
         folder,
         files,
@@ -2057,6 +2096,184 @@ mod tests {
         let listing = list(session.layout(), &note).expect("list");
 
         assert_eq!(listing.files[0].linked, Linked::Yes);
+    }
+
+    // ---- Links into another folder of the note ----
+
+    /// The folder of the note with `names` stored in it and a note whose body
+    /// is `body`, for the tests of links into a folder of another name.
+    fn note_with_files(
+        session: &VaultSession,
+        body: &str,
+        names: &[&str],
+    ) -> (Note, std::path::PathBuf) {
+        let note = note_with(session, body);
+        let folder = session.layout().asset_folder(FOLDER);
+        std::fs::create_dir_all(&folder).expect("folder");
+        for name in names {
+            std::fs::write(folder.join(name), b"x").expect("file");
+        }
+        (note, folder)
+    }
+
+    #[test]
+    fn a_link_into_a_wrong_folder_of_the_note_is_broken_and_leaves_the_file_unlinked() {
+        let (_g, session) = vault_with_view();
+        let wrong = format!("_assets/{ULID}-wrong-slug/transkript.txt");
+        let (note, _) = note_with_files(&session, &format!("[t]({wrong})"), &["transkript.txt"]);
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(
+            listed(&listing),
+            [
+                (wrong.as_str(), None, Linked::Missing),
+                ("transkript.txt", Some(1), Linked::No),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_wrong_folder_link_does_not_hide_a_right_one_to_the_same_file() {
+        let (_g, session) = vault_with_view();
+        let wrong = format!("_assets/{ULID}-wrong-slug/chart.png");
+        let (note, _) = note_with_files(
+            &session,
+            &format!("![a]({wrong}) ![b](_assets/{FOLDER}/chart.png)"),
+            &["chart.png"],
+        );
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(
+            listed(&listing),
+            [
+                (wrong.as_str(), None, Linked::Missing),
+                ("chart.png", Some(1), Linked::Yes),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_link_naming_the_new_title_folder_while_the_folder_has_the_old_name_is_broken() {
+        let (_g, session) = vault_with_view();
+        let old = format!("{ULID}-old-name");
+        let named_like_the_note = format!("_assets/{FOLDER}/chart.png");
+        let note = note_with(&session, &format!("![c]({named_like_the_note})"));
+        let folder = session.layout().asset_folder(&old);
+        std::fs::create_dir_all(&folder).expect("folder");
+        std::fs::write(folder.join("chart.png"), b"x").expect("file");
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(
+            listed(&listing),
+            [
+                (named_like_the_note.as_str(), None, Linked::Missing),
+                ("chart.png", Some(1), Linked::No),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_link_naming_the_folder_in_another_letter_case_is_broken() {
+        let (_g, session) = vault_with_view();
+        let cased = format!("_assets/{ULID}-Note/chart.png");
+        let (note, _) = note_with_files(&session, &format!("![c]({cased})"), &["chart.png"]);
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(
+            listed(&listing),
+            [
+                (cased.as_str(), None, Linked::Missing),
+                ("chart.png", Some(1), Linked::No),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_wrong_folder_link_in_another_spelling_is_shown_as_written() {
+        let (_g, session) = vault_with_view();
+        let written = format!("../all-notes/_assets/{ULID}-wrong/x.png");
+        let (note, _) = note_with_files(&session, &format!("![x]({written}#p=2)"), &[]);
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(
+            listed(&listing),
+            [(written.as_str(), None, Linked::Missing)]
+        );
+    }
+
+    #[test]
+    fn two_wrong_folders_naming_one_file_give_two_ordered_rows() {
+        let (_g, session) = vault_with_view();
+        let (first, second) = (
+            format!("_assets/{ULID}-a/x.png"),
+            format!("_assets/{ULID}-b/x.png"),
+        );
+        let (note, _) = note_with_files(&session, &format!("![b]({second}) ![a]({first})"), &[]);
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(
+            listed(&listing),
+            [
+                (first.as_str(), None, Linked::Missing),
+                (second.as_str(), None, Linked::Missing),
+            ]
+        );
+    }
+
+    #[test]
+    fn two_links_to_one_wrong_target_give_one_row() {
+        let (_g, session) = vault_with_view();
+        let wrong = format!("_assets/{ULID}-wrong/x.png");
+        let (note, _) = note_with_files(&session, &format!("![a]({wrong}) [b]({wrong})"), &[]);
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(listed(&listing), [(wrong.as_str(), None, Linked::Missing)]);
+    }
+
+    #[test]
+    fn file_paths_lists_the_real_file_once_next_to_a_wrong_folder_row() {
+        let (_g, session) = vault_with_view();
+        let (note, folder) = note_with_files(
+            &session,
+            &format!("[t](_assets/{ULID}-wrong/transkript.txt)"),
+            &["transkript.txt"],
+        );
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(listing.files.len(), 2, "{:?}", listing.files);
+        assert_eq!(listing.file_paths(), vec![folder.join("transkript.txt")]);
+    }
+
+    #[test]
+    fn a_link_to_a_file_outside_the_asset_folders_makes_no_row() {
+        let (_g, session) = vault_with_view();
+        let (note, _) = note_with_files(&session, "[p](../elsewhere/plan.pdf)", &["chart.png"]);
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(listed(&listing), [("chart.png", Some(1), Linked::No)]);
+    }
+
+    #[test]
+    fn a_raw_html_reference_into_a_wrong_folder_does_not_link_the_file() {
+        let (_g, session) = vault_with_view();
+        let (note, _) = note_with_files(
+            &session,
+            &format!("<img src=\"_assets/{ULID}-wrong/wide.png\" width=\"300\">"),
+            &["wide.png"],
+        );
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(listed(&listing), [("wide.png", Some(1), Linked::No)]);
     }
 
     #[test]

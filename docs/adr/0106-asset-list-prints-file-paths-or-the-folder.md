@@ -10,6 +10,9 @@ Amends [ADR 0104](0104-asset-add-and-asset-list.md), where `asset list --path`
 prints the folder: `--path` now prints the asset files and the new `--folder`
 prints the folder.
 
+Amended 2026-11-18 by
+[ADR 0107](0107-asset-list-compares-a-links-folder-with-the-notes-folder.md).
+
 ## Context
 
 A script working on a note's assets needs the path of each file and the path of

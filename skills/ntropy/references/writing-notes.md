@@ -241,7 +241,8 @@ note. Put them there with ntropy:
   `--force` and only the files to replace.
 - `ntropy asset list -n <id>` lists the files with their size and whether the
   note links them: `yes`, `no` for a file the note does not link, and `broken`
-  for a link to a file the folder lacks. `--path` prints the absolute path of
+  for a link to a file the folder lacks or to another folder name, shown as
+  written. `--path` prints the absolute path of
   every file, one per line, and nothing when there is none. `--folder` prints
   the folder, also when it does not exist yet.
 

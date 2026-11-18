@@ -9,6 +9,16 @@ command-line program. The crate's library is internal and its API can
 change in any release
 ([ADR 0075](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0075-version-numbers-cover-the-cli-not-the-library.md)).
 
+## Unreleased
+
+### Fixed
+
+- `ntropy asset list` listed a file as linked when a Markdown link named a folder
+  that carries the note's ULID but is not the note's asset folder, also when no
+  such folder exists. Such a link now shows as `broken`, with the link as written
+  in the FILE column, and the file of the folder with that name shows as `no`
+  unless another link names it. `reconcile` handles the same link as before.
+
 ## v2.14.0 - 2026-11-17
 
 ### Changed

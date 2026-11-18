@@ -8392,6 +8392,43 @@ fn asset_list_counts_a_file_used_through_raw_html_as_linked() {
 }
 
 #[test]
+fn asset_list_shows_a_link_into_a_wrong_folder_as_broken() {
+    let dir = setup_vault();
+    let wrong = format!("_assets/{ULID_A}-wrong-slug/chart.png");
+    write_note(
+        dir.path(),
+        ULID_A,
+        "q3-planning",
+        &format!("---\ntitle: Q3 planning\n---\n![c]({wrong})\n"),
+    );
+    let file = incoming(dir.path(), "chart.png", b"png");
+    let add = ntropy(dir.path())
+        .args(["-n", "asset", "add", ULID_A])
+        .arg(&file)
+        .output()
+        .expect("run");
+    assert!(add.status.success(), "{}", rendered(&add));
+
+    let out = ntropy(dir.path())
+        .args(["-n", "asset", "list", ULID_A])
+        .output()
+        .expect("run");
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    let row = |name: &str| {
+        stdout
+            .lines()
+            .find(|line| line.starts_with(name))
+            .unwrap_or_else(|| panic!("no row for {name}: {stdout}"))
+            .trim_end()
+            .to_owned()
+    };
+    assert!(row("chart.png").ends_with("no"), "{stdout}");
+    assert!(row(&wrong).ends_with("broken"), "{stdout}");
+}
+
+#[test]
 fn asset_add_as_stores_the_file_under_another_name_and_move_removes_the_source() {
     let dir = vault_for_assets();
     let file = incoming(dir.path(), "IMG_4711.png", b"png");
