@@ -235,14 +235,24 @@ note. Put them there with ntropy:
   for an image and `[name](...)` for any other file, with the target in angle
   brackets when the name needs them. `added` lines go to stderr. It never edits
   the note: place the link in the body yourself. `--as <name>` stores one file
-  under another name, `--force` replaces a file of that name.
+  under another name, `--force` replaces a file of that name. It checks every
+  file before it copies one: when one name is already in the folder, it adds
+  none of the files and exits 1. Run it again without that file, or with
+  `--force` and only the files to replace.
 - `ntropy asset list -n <id>` lists the files with their size and whether the
-  note links them, and `broken` for a link to a file the folder lacks. `--path`
-  prints the absolute path of every file, one per line, and nothing when there
-  is none. `--folder` prints the folder, also when it does not exist yet.
+  note links them: `yes`, `no` for a file the note does not link, and `broken`
+  for a link to a file the folder lacks. `--path` prints the absolute path of
+  every file, one per line, and nothing when there is none. `--folder` prints
+  the folder, also when it does not exist yet.
 
 Both select exactly one note as `render` does; several matches are an error
-under `-n`. They refuse to work in an encrypted vault.
+under `-n`. They refuse to work in an encrypted vault. A note created with
+`new --empty` and not written yet is no note to them (`no note matches`), so
+`write` the note first and add its files after.
+
+No command removes one file from a note's folder. Delete the file itself (with
+`git rm` when the vault is a git repository); `asset list` no longer lists it,
+and a link to it reads `broken`.
 
 A note links only its own folder. A link into another note's folder is refused
 by renders and exports and reported by `reconcile`, and `--strict` fails on it,
