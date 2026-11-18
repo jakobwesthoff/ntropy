@@ -509,8 +509,9 @@ metadata (`.DS_Store`, `._*`, `Thumbs.db`, `desktop.ini`) left out, the set
 the note links the file and `broken`, with size `-`, for a Markdown link that
 no file of the folder satisfies: a link into the note's own folder whose file is
 missing, or a link that carries the note's ULID and names another folder, which
-the table shows as the link is written. A link counts for a file only when its
-folder name equals the note's folder exactly (ADR 0107). A file that raw HTML in the note names, such as
+the table shows as the link's target as the Markdown parser reads it, without
+its fragment. A link counts for a file only when its folder name equals the
+note's folder exactly (ADR 0107). A file that raw HTML in the note names, such as
 `<img src="_assets/<folder>/wide.png" width="300">`, counts as linked; the
 reference is found as text in the HTML, so a name written with an entity (`R&amp;D.png`)
 is not matched. Only a Markdown link makes a file `broken`, as `reconcile`
@@ -523,7 +524,8 @@ bidi characters or is not valid UTF-8. `--folder` prints the folder's absolute
 path, also when it does not exist, so a script can create it. The two flags
 exclude each other, and both count as `-p` for the picker. Each `broken` row
 prints a `warning:` line on stderr before the table or the paths, naming the
-link as written (ADR 0108); under `--strict` the command exits 1 then, and
+link's target as the Markdown parser reads it, without its fragment (ADR 0108);
+under `--strict` the command exits 1 then, and
 `--folder` prints no such warning. A file the note does not link never fails
 `--strict`.
 

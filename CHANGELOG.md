@@ -15,14 +15,19 @@ change in any release
 
 - `ntropy asset list` listed a file as linked when a Markdown link named a folder
   that carries the note's ULID but is not the note's asset folder, also when no
-  such folder exists. Such a link now shows as `broken`, with the link as written
-  in the FILE column, and the file of the folder with that name shows as `no`
-  unless another link names it. `reconcile` handles the same link as before. A link to a directory of the folder
-  is not broken.
+  such folder exists. Such a link now shows as `broken`, with the link's target as
+  the Markdown parser reads it, without its fragment, in the FILE column, and the
+  file of the folder with that name shows as `no` unless another link names it.
+  `reconcile` handles the same link as before. A link to a directory of the
+  folder is not broken.
+  [ADR 0107](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0107-asset-list-compares-a-links-folder-with-the-notes-folder.md)
+  records the comparison.
 - `ntropy asset list` prints a `warning:` line on stderr for each `broken` row, in
   the table and with `--path`, and `ntropy --strict asset list` now exits 1 when
   there is one. Without `--strict` the exit code is 0 as before. A file the note
-  does not link never fails it, and `--folder` prints no warning.
+  does not link never makes `--strict` fail, and `--folder` prints no warning.
+  [ADR 0108](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0108-asset-list-fails-under-strict-on-a-broken-link.md)
+  records the exit code.
 
 ## v2.14.0 - 2026-11-17
 

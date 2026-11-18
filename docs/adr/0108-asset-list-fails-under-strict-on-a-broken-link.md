@@ -7,8 +7,8 @@ Date: 2026-11-18
 Accepted
 
 Amends [ADR 0104](0104-asset-add-and-asset-list.md) and
-[ADR 0106](0106-asset-list-prints-file-paths-or-the-folder.md), which leave the
-exit code of `asset list` the same for every listing. Builds on
+[ADR 0106](0106-asset-list-prints-file-paths-or-the-folder.md), which decide what
+`asset list` prints. Builds on
 [ADR 0107](0107-asset-list-compares-a-links-folder-with-the-notes-folder.md).
 
 ## Context
@@ -23,8 +23,8 @@ For every `broken` row, `asset list` prints a `warning:` line on stderr, in the
 table form and with `--path`. A link into the note's folder whose file is
 missing reads `<link> is linked but is not in the note's asset folder`. A link
 that names another folder reads `<link> does not name the note's asset folder
-_assets/<folder>/`. Both name the link as it is written in the note, and the
-warnings come before the listing.
+_assets/<folder>/`. Both name the link's target as the Markdown parser reads it, without its fragment, and the warnings come before the
+listing.
 
 Under `--strict`, `asset list` exits 1 when it printed such a warning. Without
 `--strict` it exits 0 as before, so a script that does not pass `--strict` is not

@@ -106,8 +106,8 @@ pub enum AssetCommand {
     ///
     /// A file that raw HTML in the note names counts as linked. A file a
     /// Markdown link names in the note's folder and the folder lacks is listed as
-    /// `broken`, and so is a link that names another folder of the note, shown as
-    /// written. Hidden files are listed; only operating-system metadata such as
+    /// `broken`, and so is a link that names another folder that carries the
+    /// note's ULID, shown as the link's target without its fragment. Hidden files are listed; only operating-system metadata such as
     /// `.DS_Store` is left out.
     ///
     /// Each `broken` row also prints a warning on stderr, which `--strict`

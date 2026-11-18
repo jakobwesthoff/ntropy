@@ -241,22 +241,35 @@ note. Put them there with ntropy:
   `--force` and only the files to replace.
 - `ntropy asset list -n <id>` lists the files with their size and whether the
   note links them: `yes`, `no` for a file the note does not link, and `broken`
-  for a link to a file the folder lacks or to another folder name, shown as
-  written. `--path` prints the absolute path of
-  every file, one per line, and nothing when there is none. `--folder` prints
-  the folder, also when it does not exist yet. Each `broken` row also prints a
-  `warning:` line on stderr, in the table and with `--path`. Exit code 0 unless
-  `--strict` is given: then 1 when a row is `broken`. A `no` row never fails it,
-  and `--folder` ignores broken links.
+  for a link to a file the folder lacks, or for a link whose folder name carries
+  the note's ULID but is not the note's folder; that row shows the link's target,
+  without the fragment. A link into another note's folder or to a file elsewhere
+  in the vault makes no row and no warning here; `reconcile` reports it. `--path`
+  prints the absolute path of every file, one per line, and nothing when there is
+  none. `--folder` prints the folder, also when it does not exist yet. Each
+  `broken` row also prints a `warning:` line on stderr, in the table and with
+  `--path`. A listing exits 0 without `--strict`. Under `--strict` it exits 1
+  when a row is `broken`. A `no` row never fails it, and `--folder` ignores
+  broken links. For a row that shows a link's target, run `ntropy reconcile`: it
+  renames the folder or rewrites the link where it can, and warns about what it
+  cannot. A `broken` row with a bare file name needs the file added, or the link
+  corrected or removed.
 
 Both select exactly one note as `render` does; several matches are an error
 under `-n`. They refuse to work in an encrypted vault. A note created with
 `new --empty` and not written yet is no note to them (`no note matches`), so
-`write` the note first and add its files after.
+`write` the note first and add its files after. Then put the printed links into
+the body with a second `write` of the whole note (read it with `search -n -P
+<ulid>`). A link written before the file is added works as well once the file is
+there, if it names the folder of the path `write` printed and is written as
+`asset add` prints it, angle brackets included.
+Under `--strict` both commands also exit 1 when the vault holds a malformed
+note, after doing their work, so an `added` line means the file is in place
+whatever the exit code; the `warning:` lines tell the causes apart.
 
-No command removes one file from a note's folder. Delete the file itself (with
-`git rm` when the vault is a git repository); `asset list` no longer lists it,
-and a link to it reads `broken`.
+No command removes one file from a note's folder. Delete the file itself with
+`rm`; in a git vault, commit the deletion like any other change. `asset list` no
+longer lists it, and a link to it reads `broken`.
 
 A note links only its own folder. A link into another note's folder is refused
 by renders and exports and reported by `reconcile`, and `--strict` fails on it,

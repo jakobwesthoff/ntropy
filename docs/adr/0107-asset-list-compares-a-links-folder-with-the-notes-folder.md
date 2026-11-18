@@ -24,12 +24,12 @@ A Markdown link links a file of the note's folder when its target names the
 folder the note has: the one it owns under its present name, which is the old
 name between a retitle and the next `reconcile` (ADR 0104), or the note's file
 name when it owns none. The folder names are compared exactly, letter case
-included, and the target as written, without percent-decoding. A link that names
+included, and the target as the Markdown parser reads it, without percent-decoding. A link that names
 a directory of the folder is satisfied, as `reconcile` treats it.
 
 A link that carries the note's ULID and names another folder is a link to a file
 the folder lacks. It is listed as `broken`, with no size, and its FILE column
-holds the link as written, without its fragment, so that it cannot be taken for
+holds the link's target as the Markdown parser reads it, without its fragment, so that it cannot be taken for
 a file of the folder. The file of the folder with the same name is `no` unless
 another Markdown link or raw HTML names it. Links to one target are one row.
 `--path` prints no row without a size (ADR 0106).
