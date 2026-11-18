@@ -24,7 +24,8 @@ A Markdown link links a file of the note's folder when its target names the
 folder the note has: the one it owns under its present name, which is the old
 name between a retitle and the next `reconcile` (ADR 0104), or the note's file
 name when it owns none. The folder names are compared exactly, letter case
-included, and the target as written, without percent-decoding.
+included, and the target as written, without percent-decoding. A link that names
+a directory of the folder is satisfied, as `reconcile` treats it.
 
 A link that carries the note's ULID and names another folder is a link to a file
 the folder lacks. It is listed as `broken`, with no size, and its FILE column

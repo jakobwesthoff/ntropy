@@ -17,7 +17,8 @@ change in any release
   that carries the note's ULID but is not the note's asset folder, also when no
   such folder exists. Such a link now shows as `broken`, with the link as written
   in the FILE column, and the file of the folder with that name shows as `no`
-  unless another link names it. `reconcile` handles the same link as before.
+  unless another link names it. `reconcile` handles the same link as before. A link to a directory of the folder
+  is not broken.
 - `ntropy asset list` prints a `warning:` line on stderr for each `broken` row, in
   the table and with `--path`, and `ntropy --strict asset list` now exits 1 when
   there is one. Without `--strict` the exit code is 0 as before. A file the note

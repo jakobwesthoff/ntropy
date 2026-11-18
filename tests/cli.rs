@@ -8802,6 +8802,23 @@ fn asset_list_strict_passes_when_a_file_is_only_unlinked() {
 }
 
 #[test]
+fn asset_list_strict_passes_for_a_link_to_a_subfolder_of_the_folder() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "q3-planning",
+        &format!("---\ntitle: Q3 planning\n---\n[sub](_assets/{ULID_A}-q3-planning/sub/)\n"),
+    );
+    put_asset(dir.path(), "sub/in.png", b"png");
+
+    let out = asset_list_of_a(dir.path(), &["--strict"], &[]);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(out.stderr.is_empty(), "{}", rendered(&out));
+}
+
+#[test]
 fn asset_list_strict_passes_when_every_link_resolves() {
     let dir = setup_vault();
     write_note(

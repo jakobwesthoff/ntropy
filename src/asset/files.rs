@@ -591,7 +591,8 @@ pub enum Linked {
     Yes,
     No,
     /// A Markdown link of the note names this file in the note's folder and
-    /// the folder lacks it, or names a folder other than the note's.
+    /// the folder lacks it, or names another folder that carries the note's
+    /// ULID.
     Missing,
 }
 
@@ -661,13 +662,16 @@ fn entry_name(name: &std::ffi::OsStr, prefix: &str, non_utf8: &mut Vec<String>) 
 
 /// The files in the folder of `note`, operating-system metadata left out, and
 /// whether the note links each. Hidden files are listed: `delete` counts and
-/// removes them, so the listing names what a deletion would take. A file the note links in its own folder and the folder
-/// lacks is listed too, as missing. A symlink is listed with its own size and
-/// is never followed.
+/// removes them, so the listing names what a deletion would take. A Markdown
+/// link the folder does not satisfy is listed too, as missing: a file of its own
+/// folder the folder lacks, or any file in another folder that carries the
+/// note's ULID, named by the link. A symlink is listed with its own size and is
+/// never followed.
 pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
     let folder = folder_of(layout, note)?;
 
     let mut found: BTreeMap<String, u64> = BTreeMap::new();
+    let mut directories: BTreeSet<String> = BTreeSet::new();
     let mut non_utf8 = Vec::new();
     let mut pending = vec![(folder.clone(), String::new())];
     while let Some((dir, prefix)) = pending.pop() {
@@ -681,6 +685,7 @@ pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
                 .unwrap_or_default();
             let relative = format!("{prefix}{name}");
             if file_type.is_dir() {
+                directories.insert(relative.clone());
                 pending.push((path, format!("{relative}/")));
             } else {
                 let size = std::fs::symlink_metadata(&path).map_or(0, |metadata| metadata.len());
@@ -745,7 +750,11 @@ pub fn list(layout: &Layout, note: &Note) -> Result<Listing, AssetError> {
     files.extend(
         targets
             .into_iter()
-            .filter(|((folder, rest), _)| *folder != folder_name || !found.contains_key(rest))
+            // A link that names a directory of the folder resolves, as it does
+            // for `reconcile`, which asks the filesystem.
+            .filter(|((folder, rest), _)| {
+                *folder != folder_name || !(found.contains_key(rest) || directories.contains(rest))
+            })
             .map(|((folder, rest), written)| {
                 let names_own_folder = folder == folder_name;
                 ListedFile {
@@ -2250,6 +2259,22 @@ mod tests {
 
         assert_eq!(listing.files.len(), 2, "{:?}", listing.files);
         assert_eq!(listing.file_paths(), vec![folder.join("transkript.txt")]);
+    }
+
+    #[test]
+    fn a_link_to_a_subfolder_of_the_folder_is_not_broken() {
+        let (_g, session) = vault_with_view();
+        let (note, folder) = note_with_files(
+            &session,
+            &format!("[sub](_assets/{FOLDER}/sub/) [again](_assets/{FOLDER}/sub)"),
+            &[],
+        );
+        std::fs::create_dir_all(folder.join("sub")).expect("subfolder");
+        std::fs::write(folder.join("sub/in.png"), b"x").expect("file");
+
+        let listing = list(session.layout(), &note).expect("list");
+
+        assert_eq!(listed(&listing), [("sub/in.png", Some(1), Linked::No)]);
     }
 
     #[test]
