@@ -134,3 +134,4 @@ made.
 - [0105. Linked files are attached to the PDF](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0105-linked-files-are-attached-to-the-pdf.md)
 - [0106. asset list prints file paths or the folder](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0106-asset-list-prints-file-paths-or-the-folder.md)
 - [0107. asset list compares a link's folder with the note's folder](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0107-asset-list-compares-a-links-folder-with-the-notes-folder.md)
+- [0108. asset list fails under --strict on a broken link](https://github.com/jakobwesthoff/ntropy/blob/main/docs/adr/0108-asset-list-fails-under-strict-on-a-broken-link.md)

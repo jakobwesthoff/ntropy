@@ -8675,6 +8675,162 @@ fn asset_list_path_leaves_out_a_link_to_a_file_the_folder_lacks() {
         String::from_utf8_lossy(&out.stdout),
         format!("{}\n", folder.join("here.png").display())
     );
+    assert_eq!(
+        stderr_lines(&out),
+        [format!(
+            "warning: _assets/{ULID_A}-q3-planning/gone.png is linked but is not in the note's asset folder"
+        )]
+    );
+}
+
+/// Note A with a link to a file its folder lacks, a link into another folder of
+/// the note, and an unlinked file, so that `asset list` has a `broken` row of
+/// each kind and a `no` row.
+fn vault_with_broken_asset_links() -> tempfile::TempDir {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "q3-planning",
+        &format!(
+            "---\ntitle: Q3 planning\n---\n![x](_assets/{ULID_A}-q3-planning/gone.png)\n[y](_assets/{ULID_A}-wrong/y.pdf)\n"
+        ),
+    );
+    put_asset(dir.path(), "unlinked.png", b"png");
+    dir
+}
+
+/// A vault whose note has an unlinked file and no broken link.
+fn vault_with_an_unlinked_asset() -> tempfile::TempDir {
+    let dir = vault_for_assets();
+    put_asset(dir.path(), "unlinked.png", b"png");
+    dir
+}
+
+/// `ntropy -n <global> asset list <form> <note A>`.
+fn asset_list_of_a(vault: &Path, global: &[&str], form: &[&str]) -> std::process::Output {
+    ntropy(vault)
+        .arg("-n")
+        .args(global)
+        .args(["asset", "list"])
+        .args(form)
+        .arg(ULID_A)
+        .output()
+        .expect("run")
+}
+
+fn stderr_lines(out: &std::process::Output) -> Vec<String> {
+    String::from_utf8_lossy(&out.stderr)
+        .lines()
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn asset_list_warns_about_a_link_to_a_file_the_folder_lacks_and_still_succeeds() {
+    let dir = vault_with_broken_asset_links();
+
+    let out = asset_list_of_a(dir.path(), &[], &[]);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(
+        stderr_lines(&out).contains(&format!(
+            "warning: _assets/{ULID_A}-q3-planning/gone.png is linked but is not in the note's asset folder"
+        )),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn asset_list_warns_about_a_link_into_another_folder_of_the_note() {
+    let dir = vault_with_broken_asset_links();
+
+    let out = asset_list_of_a(dir.path(), &[], &[]);
+
+    assert!(
+        stderr_lines(&out).contains(&format!(
+            "warning: _assets/{ULID_A}-wrong/y.pdf does not name the note's asset folder _assets/{ULID_A}-q3-planning/"
+        )),
+        "{}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn asset_list_strict_fails_on_a_broken_link() {
+    let dir = vault_with_broken_asset_links();
+
+    let out = asset_list_of_a(dir.path(), &["--strict"], &[]);
+
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("broken"),
+        "the table is printed as before: {}",
+        rendered(&out)
+    );
+}
+
+#[test]
+fn asset_list_path_strict_fails_on_a_broken_link() {
+    let dir = vault_with_broken_asset_links();
+
+    let out = asset_list_of_a(dir.path(), &["--strict"], &["--path"]);
+
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
+    assert_eq!(stderr_lines(&out).len(), 2, "{}", rendered(&out));
+}
+
+#[test]
+fn asset_list_folder_ignores_broken_links_even_under_strict() {
+    let dir = vault_with_broken_asset_links();
+
+    let out = asset_list_of_a(dir.path(), &["--strict"], &["--folder"]);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(out.stderr.is_empty(), "{}", rendered(&out));
+}
+
+#[test]
+fn asset_list_strict_passes_when_a_file_is_only_unlinked() {
+    let dir = vault_with_an_unlinked_asset();
+
+    let out = asset_list_of_a(dir.path(), &["--strict"], &[]);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(out.stderr.is_empty(), "{}", rendered(&out));
+}
+
+#[test]
+fn asset_list_strict_passes_when_every_link_resolves() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "q3-planning",
+        &format!("---\ntitle: Q3 planning\n---\n![x](_assets/{ULID_A}-q3-planning/here.png)\n"),
+    );
+    put_asset(dir.path(), "here.png", b"png");
+
+    let out = asset_list_of_a(dir.path(), &["--strict"], &[]);
+
+    assert!(out.status.success(), "{}", rendered(&out));
+    assert!(out.stderr.is_empty(), "{}", rendered(&out));
+}
+
+#[test]
+fn asset_list_of_a_note_without_a_folder_warns_about_a_link_into_it() {
+    let dir = setup_vault();
+    write_note(
+        dir.path(),
+        ULID_A,
+        "q3-planning",
+        &format!("---\ntitle: Q3 planning\n---\n![x](_assets/{ULID_A}-q3-planning/gone.png)\n"),
+    );
+
+    let out = asset_list_of_a(dir.path(), &["--strict"], &[]);
+
+    assert_eq!(out.status.code(), Some(1), "{}", rendered(&out));
 }
 
 #[test]

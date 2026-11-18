@@ -20,3 +20,4 @@ gone.pdf       -         broken
 old-draft.png  40.0 KiB  no
 
 ----- stderr -----
+warning: _assets/[ULID....................]-q3-planning/gone.pdf is linked but is not in the note's asset folder

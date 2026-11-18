@@ -521,7 +521,11 @@ size, one per line in the table's order, and nothing for a note without files. A
 printed as its own path. It fails without printing when a name holds control or
 bidi characters or is not valid UTF-8. `--folder` prints the folder's absolute
 path, also when it does not exist, so a script can create it. The two flags
-exclude each other, and both count as `-p` for the picker.
+exclude each other, and both count as `-p` for the picker. Each `broken` row
+prints a `warning:` line on stderr before the table or the paths, naming the
+link as written (ADR 0108); under `--strict` the command exits 1 then, and
+`--folder` prints no such warning. A file the note does not link never fails
+`--strict`.
 
 ### `delete`
 

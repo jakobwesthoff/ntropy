@@ -13,6 +13,9 @@ prints the folder.
 Amended 2026-11-18 by
 [ADR 0107](0107-asset-list-compares-a-links-folder-with-the-notes-folder.md).
 
+Amended 2026-11-18 by
+[ADR 0108](0108-asset-list-fails-under-strict-on-a-broken-link.md).
+
 ## Context
 
 A script working on a note's assets needs the path of each file and the path of

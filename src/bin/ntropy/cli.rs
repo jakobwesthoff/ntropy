@@ -110,6 +110,9 @@ pub enum AssetCommand {
     /// written. Hidden files are listed; only operating-system metadata such as
     /// `.DS_Store` is left out.
     ///
+    /// Each `broken` row also prints a warning on stderr, which `--strict`
+    /// turns into exit code 1. `--folder` prints no such warning.
+    ///
     /// `--path` prints the path of each asset file instead, `--folder` the path
     /// of the folder.
     List {

@@ -15,7 +15,7 @@ use std::process::ExitCode;
 
 use anyhow::{Context, Result, bail};
 
-use ntropy::asset::{self, AddOptions};
+use ntropy::asset::{self, AddOptions, BrokenLink};
 use ntropy::ops::Selector;
 use ntropy::reconcile;
 use ntropy::session::VaultSession;
@@ -158,6 +158,22 @@ fn cmd_list(
     };
 
     let listing = asset::list(session.layout(), &note).context("while listing the assets")?;
+
+    // `--folder` prints a folder that may not exist yet, so that a script can
+    // create it, and shows nothing about links. The other forms show the
+    // links' outcome, and a link that leads nowhere counts for `--strict`.
+    // The warnings come before the listing so that a form that fails to print
+    // still reports them.
+    let mut extra = 0;
+    if form != ListForm::Folder {
+        for file in &listing.files {
+            if let Some(broken) = &file.broken {
+                output::warn(&broken_link_warning(&listing.folder, broken));
+                extra += 1;
+            }
+        }
+    }
+
     match form {
         ListForm::Folder => println!(
             "{}",
@@ -167,7 +183,24 @@ fn cmd_list(
         ListForm::Table if listing.files.is_empty() => eprintln!("no assets"),
         ListForm::Table => output::print_asset_listing(&listing)?,
     }
-    Ok(exit_for_warnings(global.strict, &warnings, 0))
+    Ok(exit_for_warnings(global.strict, &warnings, extra))
+}
+
+/// The warning for a link the folder does not satisfy: the file is not in the
+/// note's folder, or the link names a folder other than the note's.
+fn broken_link_warning(folder: &Path, broken: &BrokenLink) -> String {
+    if broken.names_own_folder {
+        format!(
+            "{} is linked but is not in the note's asset folder",
+            broken.written
+        )
+    } else {
+        let name = folder.file_name().unwrap_or_default().to_string_lossy();
+        format!(
+            "{} does not name the note's asset folder _assets/{name}/",
+            broken.written
+        )
+    }
 }
 
 /// Print the path of every file of `listing`, one per line.

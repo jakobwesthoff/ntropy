@@ -244,7 +244,10 @@ note. Put them there with ntropy:
   for a link to a file the folder lacks or to another folder name, shown as
   written. `--path` prints the absolute path of
   every file, one per line, and nothing when there is none. `--folder` prints
-  the folder, also when it does not exist yet.
+  the folder, also when it does not exist yet. Each `broken` row also prints a
+  `warning:` line on stderr, in the table and with `--path`. Exit code 0 unless
+  `--strict` is given: then 1 when a row is `broken`. A `no` row never fails it,
+  and `--folder` ignores broken links.
 
 Both select exactly one note as `render` does; several matches are an error
 under `-n`. They refuse to work in an encrypted vault. A note created with

@@ -16,6 +16,9 @@ Amended 2026-11-17 by
 Amended 2026-11-18 by
 [ADR 0107](0107-asset-list-compares-a-links-folder-with-the-notes-folder.md).
 
+Amended 2026-11-18 by
+[ADR 0108](0108-asset-list-fails-under-strict-on-a-broken-link.md).
+
 ## Context
 
 A note's assets live in `all-notes/_assets/<stem>/` (ADR 0098). Putting a file
