@@ -89,6 +89,8 @@ alone.
   (`src/query/`)
 - `view`: materialized views, reconcile and the vault `.gitignore`
   (`src/view/`, `src/reconcile.rs`, `src/gitignore.rs`)
+- `asset`: a note's asset folder: adding, listing, checking and moving
+  its files and the links into it (`src/asset/`)
 - `render`: the Typst and HTML render engines (`src/render/`)
 - `site`: the static site export and its theme (`src/site/`)
 - `crypto`: vault encryption and key handling (`src/crypto/`,
