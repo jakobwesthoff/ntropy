@@ -31,7 +31,7 @@ jobs:
         with:
           toolchain: stable
           components: clippy, rustfmt
-      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: just
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
@@ -39,7 +39,7 @@ jobs:
       # `just website` renders the theme test note to PDF, which takes the
       # typst binary. Its version is pinned like the actions, so a typst
       # release changes nothing here until this line does.
-      - uses: typst-community/setup-typst@6a2cfaf0b28d636b00148f965e315bae81079aaa # v5.3.1
+      - uses: typst-community/setup-typst@00ad6338f0b34724ea002136bfb701a6c18585b0 # v5.3.2
         with:
           typst-version: 0.15.1
       # The documentation vault under docs/website must export cleanly
@@ -60,7 +60,7 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version-file: site/.bun-version
-      - uses: taiki-e/install-action@86f7a0ffb25f40114606501a311ebcfaf882ea32 # v2.88.0
+      - uses: taiki-e/install-action@ab49d3c64680143e184118bed66a46419fc15519 # v2.90.5
         with:
           tool: just
       - run: just site-check
